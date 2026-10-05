@@ -49,18 +49,38 @@ pnpm start
 
 The build includes a manifest, 192px/512px/maskable/Apple Touch icons, app-shell caching, offline fallback, standalone metadata, and security headers.
 
-## Production deployment
+## Deployment otomatis untuk tim
 
-This repository is connected to the Vercel project `unified-financial-intelligence-agent` using the native GitHub integration:
+Versi sederhananya:
 
+`Perubahan kode → masuk ke main → Vercel membangun aplikasi → website production diperbarui`
+
+Yang perlu dilakukan anggota tim:
+
+1. Kerjakan perubahan di branch masing-masing.
+2. Push branch tersebut ke GitHub dan buat Pull Request.
+3. Setelah diperiksa, merge Pull Request ke `main`.
+4. Tunggu status **Vercel** di commit berubah menjadi hijau dengan tulisan **Deployment has completed**.
+
+Push langsung ke `main` juga memicu deployment jika anggota tersebut memang memiliki izin push. Push ke branch selain `main` hanya membuat Preview Deployment dan tidak mengubah website production.
+
+Anggota tim tidak perlu:
+
+- memakai akun atau token milik Zoe;
+- membuat dummy commit atau `vercel-sign.md`;
+- menjalankan deploy secara manual;
+- menjadi anggota berbayar di Vercel untuk repository public ini.
+
+Konfigurasi yang sudah terhubung:
+
+- Vercel Project: `unified-financial-intelligence-agent`
 - Root Directory: `apps/web`
 - Production Branch: `main`
 - Framework: Next.js
 - Node.js: 24.x
+- Production URL: <https://unified-financial-intelligence-agen.vercel.app>
 
-Every merge or push to `main` updates production automatically. Pull requests and other branches receive preview deployments. Because this is a public repository under a personal GitHub account, collaborators can trigger deployments without rewriting commit authors or creating dummy commits.
-
-Never put Vercel tokens, Deploy Hook URLs, or other secrets in the repository.
+Jika deployment gagal, buka status **Vercel** pada commit GitHub untuk melihat build log. Jangan pernah menyimpan token, Deploy Hook URL, atau secret lain di repository.
 
 ## Product scope
 
