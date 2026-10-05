@@ -49,6 +49,19 @@ pnpm start
 
 The build includes a manifest, 192px/512px/maskable/Apple Touch icons, app-shell caching, offline fallback, standalone metadata, and security headers.
 
+## Production deployment
+
+This repository is connected to the Vercel project `unified-financial-intelligence-agent` using the native GitHub integration:
+
+- Root Directory: `apps/web`
+- Production Branch: `main`
+- Framework: Next.js
+- Node.js: 24.x
+
+Every merge or push to `main` updates production automatically. Pull requests and other branches receive preview deployments. Because this is a public repository under a personal GitHub account, collaborators can trigger deployments without rewriting commit authors or creating dummy commits.
+
+Never put Vercel tokens, Deploy Hook URLs, or other secrets in the repository.
+
 ## Product scope
 
 Transactions are demo data. Changes live only in browser state and reset on reload. Gmail, OAuth, sync, and persistent storage are intentionally not included yet.
