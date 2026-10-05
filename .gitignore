@@ -1,0 +1,17 @@
+# Environment
+.env
+.env.*
+
+# JavaScript
+node_modules/
+.pnpm-store/
+.next/
+out/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
