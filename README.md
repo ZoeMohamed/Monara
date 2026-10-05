@@ -1,17 +1,45 @@
 # Unified Financial Intelligence Agent
 
-FIN adalah prototype personal-finance mobile-first yang dibuat sebagai installable Progressive Web App dengan Next.js. Untuk fase ini repo sengaja hanya berisi frontend—tanpa backend, Python, Docker, atau database.
+FIN is a mobile-first personal-finance PWA built with Next.js. This phase is frontend-only: no backend, Python, Docker, or database.
 
-## Menjalankan
+## Requirements
+
+- Node.js 20.9+
+- pnpm 10+
+
+## Run locally
 
 ```bash
+git clone https://github.com/ZoeMohamed/Unified-Financial-Intelligence-Agent.git
+cd Unified-Financial-Intelligence-Agent
+corepack enable
 pnpm install
 pnpm dev
 ```
 
-Buka `http://localhost:3000`.
+Open `http://localhost:3000`.
 
-## Verifikasi
+## Test on another phone or laptop
+
+Connect both devices to the same Wi-Fi. Find the computer's local IP, then open it on the other device:
+
+```bash
+# macOS
+ipconfig getifaddr en0
+
+# Linux
+hostname -I
+```
+
+Open `http://YOUR_LOCAL_IP:3000`, for example `http://192.168.1.20:3000`.
+
+If it does not load, allow Node.js/port `3000` through the computer firewall. `pnpm dev` already binds Next.js to the network interface.
+
+## PWA install and offline test
+
+Normal LAN HTTP is enough to preview the UI. Browser PWA install and service-worker offline behavior require `localhost` or HTTPS. For a real phone install test, use an HTTPS deployment. On iOS, use Safari → Share → Add to Home Screen.
+
+## Verify before sharing
 
 ```bash
 pnpm lint
@@ -19,16 +47,8 @@ pnpm build
 pnpm start
 ```
 
-Build production menyertakan:
+The build includes a manifest, 192px/512px/maskable/Apple Touch icons, app-shell caching, offline fallback, standalone metadata, and security headers.
 
-- web app manifest;
-- ikon 192px, 512px, maskable, dan Apple Touch;
-- service worker dengan app-shell caching dan offline fallback;
-- metadata standalone serta security headers dasar;
-- UI dashboard responsif dengan data demo lokal.
+## Product scope
 
-## Arah desain
-
-Referensi produk utamanya adalah Aiccountant Indonesia: mobile-first, angka pengeluaran yang cepat dipindai, daftar transaksi jelas, dan navigasi ala aplikasi. FIN memakai identitas serta fokusnya sendiri—privacy state, confidence review, dan pengalaman PWA.
-
-Seluruh transaksi saat ini adalah data contoh dan perubahan hanya hidup di state browser selama halaman terbuka.
+Transactions are demo data. Changes live only in browser state and reset on reload. Gmail, OAuth, sync, and persistent storage are intentionally not included yet.
