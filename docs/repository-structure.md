@@ -58,7 +58,7 @@ pnpm format
 pnpm build
 ```
 
-Use Node 24 (`.nvmrc`). `pnpm install` also installs the Husky git hooks.
+Use Node 24 (`.nvmrc`). `pnpm install` also installs the Husky git hooks. macOS and Windows are both supported: `.gitattributes` keeps LF line endings, the repository scripts are Node, and the git hooks run in Git Bash (included with Git for Windows). CI runs lint, typecheck, tests, and a worktree smoke test on Windows. Local Supabase needs a Docker-compatible runtime (OrbStack on macOS, Docker Desktop on Windows).
 
 Run web and agent dev commands in separate terminals. The main checkout listens on web port 3000 and agent port 8787; linked worktrees use their own ports (see Worktrees below). `GET /health` on the agent reports `status: scaffold`; other routes return 501. `pnpm build` builds Next.js and performs a Wrangler dry-run bundle without cloud deployment.
 
@@ -89,7 +89,7 @@ pnpm worktree:teardown   # destroy this worktree's stack and release its slot
 pnpm worktree:prune      # clear claims and stacks of worktrees that no longer exist
 ```
 
-Run `pnpm worktree:teardown` before removing a worktree. If a worktree was removed without it, `pnpm worktree:prune` cleans up. `.wt/config.toml` wires setup and teardown into the `wt` CLI. To run setup when T3 Code creates a worktree, add a project script with `runOnWorktreeCreate` enabled and the command `bash scripts/setup-worktree.sh`. See [the worktree environment decision](adr/0003-worktree-environments.md).
+Run `pnpm worktree:teardown` before removing a worktree. If a worktree was removed without it, `pnpm worktree:prune` cleans up. `.wt/config.toml` wires setup and teardown into the `wt` CLI. To run setup when T3 Code creates a worktree, add a project script with `runOnWorktreeCreate` enabled and the command `node scripts/worktree.mjs setup`. See [the worktree environment decision](adr/0003-worktree-environments.md).
 
 ## Quality gates
 

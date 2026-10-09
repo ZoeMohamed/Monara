@@ -111,6 +111,28 @@ jobs:
       - uses: ./.github/actions/install
       - run: pnpm build
 
+  windows:
+    name: Windows
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/install
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Worktree smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add --detach "$RUNNER_TEMP/smoke" HEAD
+          cd "$RUNNER_TEMP/smoke"
+          node scripts/worktree.mjs setup
+          grep -q '^WORKTREE_SLOT=1$' .worktree.env
+          grep -q '^MONARA_AGENT_URL=http://localhost:8788$' apps/web/.env.local
+          node scripts/worktree.mjs teardown
+
   react-doctor:
     name: React Doctor
     needs: changes

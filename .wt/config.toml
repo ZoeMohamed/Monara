@@ -1,10 +1,10 @@
 worktree_path = ".worktrees"
 
 setup = [
-  "bash scripts/setup-worktree.sh",
+  "node scripts/worktree.mjs setup",
   "pnpm install --frozen-lockfile",
 ]
 
 teardown = [
-  "bash scripts/teardown-worktree.sh",
+  "node scripts/worktree.mjs teardown",
 ]
