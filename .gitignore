@@ -1,6 +1,10 @@
 # Environment
 .env
 .env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
 
 # JavaScript
 node_modules/
@@ -9,6 +13,10 @@ node_modules/
 out/
 coverage/
 .turbo/
+dist/
+.wrangler/
+supabase/.temp/
+supabase/.branches/
 *.tsbuildinfo
 
 # IDE / OS

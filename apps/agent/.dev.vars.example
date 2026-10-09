@@ -1,0 +1,9 @@
+# Copy to .dev.vars for local development. Never commit real values.
+MONARA_BACKEND_URL=http://localhost:3000
+MONARA_AGENT_BACKEND_SECRET=
+COMPOSIO_API_KEY=
+KAPSO_API_KEY=
+KAPSO_WEBHOOK_SECRET=
+LLM_BASE_URL=
+LLM_API_KEY=
+LLM_MODEL=

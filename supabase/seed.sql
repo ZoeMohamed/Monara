@@ -1,0 +1,1 @@
+-- Synthetic development data only. Feature owners add seeds with their migrations.
