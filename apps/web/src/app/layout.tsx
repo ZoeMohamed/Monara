@@ -6,16 +6,16 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "FIN — Uangmu, lebih jelas",
-    template: "%s · FIN",
+    default: "FINCOUNTANT · UI Clone Demo",
+    template: "%s · FINCOUNTANT",
   },
-  description: "Catat dan pahami pengeluaran harian lewat pengalaman finansial yang privat dan ringan.",
-  applicationName: "FIN",
+  description: "Prototype PWA finansial dengan data demo lokal untuk pengujian antarmuka.",
+  applicationName: "FINCOUNTANT",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "FIN",
+    title: "FINCOUNTANT",
   },
   formatDetection: {
     telephone: false,
@@ -30,8 +30,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#173b2e",
-  colorScheme: "light",
+  themeColor: "#0d1510",
+  colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

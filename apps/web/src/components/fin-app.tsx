@@ -5,20 +5,26 @@ import { FormEvent, useMemo, useState, useSyncExternalStore } from "react";
 import { Icon, IconName } from "@/components/icon";
 import { InstallAppButton } from "@/components/install-app-button";
 import {
-  categories,
+  BudgetCategory,
+  compactRupiah,
   formatRupiah,
+  initialCategories,
   initialTransactions,
   Transaction,
 } from "@/data/sample-data";
 
-type Tab = "home" | "transactions" | "insights" | "account";
+type Tab = "home" | "transactions" | "tools" | "accounts";
+type TransactionFilter = "all" | "review";
 
 const tabs: Array<{ id: Tab; label: string; icon: IconName }> = [
   { id: "home", label: "Beranda", icon: "home" },
   { id: "transactions", label: "Transaksi", icon: "transactions" },
-  { id: "insights", label: "Analisis", icon: "insights" },
-  { id: "account", label: "Akun", icon: "account" },
+  { id: "tools", label: "Fitur", icon: "tools" },
+  { id: "accounts", label: "Akun", icon: "bank" },
 ];
+
+const months = ["Okt 26", "Sep 26", "Agt 26", "Jul 26", "Jun 26", "Mei 26", "Apr 26", "Mar 26", "Feb 26", "Jan 26", "Des 25"];
+const totalSpent = 4_735_200;
 
 function subscribeToConnection(callback: () => void) {
   window.addEventListener("online", callback);
@@ -35,639 +41,430 @@ function useOnlineStatus() {
 
 function Logo() {
   return (
-    <div className="flex items-center gap-3">
-      <span className="grid h-10 w-10 place-items-center rounded-[14px] bg-[#173b2e] text-sm font-black text-white shadow-[0_8px_20px_#173b2e33]">
-        F<span className="sr-only">IN</span>
+    <div className="brand" aria-label="FINCOUNTANT demo">
+      <span className="brand-bot" aria-hidden="true">
+        <span className="brand-bot-eye" />
+        <span className="brand-bot-eye" />
       </span>
-      <span className="text-xl font-black tracking-[-0.05em] text-[#173b2e]">FIN</span>
+      <span className="brand-word">FINCOUNTANT</span>
+      <span className="demo-tag">DEMO</span>
     </div>
   );
 }
 
-function TrendChart({ annual }: { annual: boolean }) {
+function HeaderActions() {
   return (
-    <svg aria-label="Grafik laju pengeluaran" className="h-28 w-full" viewBox="0 0 540 120">
-      <defs>
-        <linearGradient id="area" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#1b7a50" stopOpacity="0.22" />
-          <stop offset="1" stopColor="#1b7a50" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d="M8 106H532" stroke="#dce5de" />
-      <path
-        d={
-          annual
-            ? "M8 99 C65 90,95 72,145 80 S230 62,277 48 S366 59,412 33 S485 20,532 13 L532 106 L8 106Z"
-            : "M8 101 C42 94,58 85,91 87 S146 69,177 66 S225 51,265 54 S322 36,358 40 S417 28,450 25 S501 12,532 16 L532 106 L8 106Z"
-        }
-        fill="url(#area)"
-      />
-      <path
-        d={
-          annual
-            ? "M8 99 C65 90,95 72,145 80 S230 62,277 48 S366 59,412 33 S485 20,532 13"
-            : "M8 101 C42 94,58 85,91 87 S146 69,177 66 S225 51,265 54 S322 36,358 40 S417 28,450 25 S501 12,532 16"
-        }
-        fill="none"
-        stroke="#1b7a50"
-        strokeLinecap="round"
-        strokeWidth="3"
-      />
-      <path d="M8 101 532 8" fill="none" stroke="#92a39a" strokeDasharray="7 7" strokeWidth="1.5" />
-    </svg>
+    <div className="header-actions">
+      <button className="icon-action" aria-label="Buka notifikasi" type="button">
+        <Icon name="bell" />
+        <span className="notification-badge">1</span>
+      </button>
+      <button className="credit-action" aria-label="Lihat saldo kredit demo" type="button">
+        <Icon name="credit" />
+        <span>3</span>
+        <span className="warning-mark" aria-hidden="true">!</span>
+      </button>
+    </div>
   );
 }
 
-function TransactionRow({
-  transaction,
-  onClick,
-}: {
-  transaction: Transaction;
-  onClick: () => void;
-}) {
+function Sidebar({ activeTab, onChange, onAdd }: { activeTab: Tab; onChange: (tab: Tab) => void; onAdd: () => void }) {
   return (
-    <button
-      className="group flex w-full items-center gap-3 rounded-2xl px-1 py-3 text-left transition hover:bg-[#f3f6f2] sm:px-3"
-      onClick={onClick}
-      type="button"
-    >
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[15px] border border-[#e1e8e2] bg-[#f8faf7] text-lg">
-        {transaction.emoji}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-bold text-[#213b31] sm:text-[15px]">
-          {transaction.merchant}
-        </span>
-        <span className="mt-0.5 block truncate text-xs text-[#708079]">
-          {transaction.category} · {transaction.method}
-        </span>
-      </span>
-      <span className="shrink-0 text-right">
-        <span className="block text-sm font-bold text-[#213b31] sm:text-[15px]">
-          {formatRupiah(transaction.amount).replace("Rp", "Rp ")}
-        </span>
-        <span className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-[#78877f]">
-          {!transaction.reviewed ? <span className="h-1.5 w-1.5 rounded-full bg-[#dd9d57]" /> : null}
-          {transaction.time}
-        </span>
-      </span>
+    <aside className="sidebar">
+      <Logo />
+      <div className="sidebar-rule" />
+      <nav className="sidebar-nav" aria-label="Navigasi utama">
+        {tabs.map((tab) => (
+          <button
+            aria-current={activeTab === tab.id ? "page" : undefined}
+            className="sidebar-link"
+            data-active={activeTab === tab.id}
+            key={tab.id}
+            onClick={() => onChange(tab.id)}
+            type="button"
+          >
+            <Icon name={tab.icon} strokeWidth={activeTab === tab.id ? 2.1 : 1.7} />
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </nav>
+      <button className="sidebar-add" onClick={onAdd} type="button">
+        <Icon name="plus" />
+        <span>Tambah Transaksi</span>
+      </button>
+      <p className="demo-note">Prototype lokal · data contoh</p>
+    </aside>
+  );
+}
+
+function BottomNav({ activeTab, onChange, onAdd }: { activeTab: Tab; onChange: (tab: Tab) => void; onAdd: () => void }) {
+  return (
+    <nav className="bottom-nav" aria-label="Navigasi bawah">
+      {tabs.slice(0, 2).map((tab) => <BottomTab active={activeTab === tab.id} key={tab.id} onClick={() => onChange(tab.id)} tab={tab} />)}
+      <BottomTab active={activeTab === "tools"} onClick={() => onChange("tools")} tab={tabs[2]} />
+      <BottomTab active={activeTab === "accounts"} onClick={() => onChange("accounts")} tab={tabs[3]} />
+      <button className="bottom-tab bottom-add" onClick={onAdd} type="button">
+        <Icon name="plus" />
+        <span>Tambah</span>
+      </button>
+    </nav>
+  );
+}
+
+function BottomTab({ active, onClick, tab }: { active: boolean; onClick: () => void; tab: { label: string; icon: IconName } }) {
+  return (
+    <button aria-current={active ? "page" : undefined} className="bottom-tab" data-active={active} onClick={onClick} type="button">
+      <Icon name={tab.icon} strokeWidth={active ? 2.1 : 1.7} />
+      <span>{tab.label}</span>
     </button>
   );
 }
 
-function HomeView({
-  annual,
-  setAnnual,
-  transactions,
-  openTransaction,
-}: {
-  annual: boolean;
-  setAnnual: (value: boolean) => void;
-  transactions: Transaction[];
-  openTransaction: (transaction: Transaction) => void;
-}) {
-  const amount = annual ? 31840000 : 2840500;
-  const budget = annual ? 55200000 : 4600000;
-  const percentage = Math.round((amount / budget) * 100);
-
+function AppHeader({ compact }: { compact: boolean }) {
   return (
-    <div className="animate-[rise_.35s_ease-out]">
-      <div className="flex items-start justify-between gap-5">
-        <div>
-          <p className="text-sm font-semibold text-[#718078]">Selamat pagi, Zoe</p>
-          <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">
-            Uangmu hari ini.
-          </h1>
-        </div>
-        <div className="hidden sm:block">
-          <InstallAppButton />
-        </div>
+    <header className="app-header" data-compact={compact}>
+      <Logo />
+      <HeaderActions />
+    </header>
+  );
+}
+
+function NoticeCard() {
+  const [visible, setVisible] = useState(true);
+  if (!visible) return null;
+  return (
+    <section className="notice-card" aria-label="Pemberitahuan demo">
+      <span className="notice-icon"><Icon name="credit" /></span>
+      <div>
+        <h2>Kredit hampir habis</h2>
+        <p>Isi ulang segera agar transaksimu tetap diproses.</p>
       </div>
+      <button aria-label="Tutup notifikasi" onClick={() => setVisible(false)} type="button"><Icon name="close" /></button>
+    </section>
+  );
+}
 
-      <section className="mt-7 overflow-hidden rounded-[1.8rem] bg-[#173b2e] p-6 text-white shadow-[0_24px_60px_#173b2e26] sm:p-8">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#bcd0c5]">Pengeluaran</p>
-          <div className="flex rounded-full bg-white/10 p-1 text-xs font-bold">
-            <button
-              className={`rounded-full px-3 py-1.5 transition ${!annual ? "bg-white text-[#173b2e]" : "text-[#c9d8d0]"}`}
-              onClick={() => setAnnual(false)}
-              type="button"
-            >
-              30H
-            </button>
-            <button
-              className={`rounded-full px-3 py-1.5 transition ${annual ? "bg-white text-[#173b2e]" : "text-[#c9d8d0]"}`}
-              onClick={() => setAnnual(true)}
-              type="button"
-            >
-              12B
-            </button>
-          </div>
-        </div>
-        <p className="mt-4 text-[clamp(2.2rem,8vw,4rem)] font-black tracking-[-0.065em]">
-          {formatRupiah(amount)}
-        </p>
-        <div className="mt-3 flex items-center justify-between text-xs text-[#c3d2ca]">
-          <span>{percentage}% dari budget</span>
-          <span>{formatRupiah(budget - amount)} tersisa</span>
-        </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15">
-          <div className="h-full rounded-full bg-[#83c69e]" style={{ width: `${percentage}%` }} />
-        </div>
-        <div className="mt-7 -mb-2 rounded-2xl bg-white/[0.06] px-2 pt-4">
-          <TrendChart annual={annual} />
-        </div>
-      </section>
+function PeriodControls() {
+  const [period, setPeriod] = useState<"month" | "year">("month");
+  const [month, setMonth] = useState(months[0]);
+  return (
+    <>
+      <div className="period-switch" aria-label="Rentang laporan">
+        <button aria-pressed={period === "month"} onClick={() => setPeriod("month")} type="button">Bulan</button>
+        <button aria-pressed={period === "year"} onClick={() => setPeriod("year")} type="button">Tahun</button>
+      </div>
+      <div className="month-strip" aria-label="Pilih bulan">
+        {months.map((item) => (
+          <button aria-pressed={month === item} key={item} onClick={() => setMonth(item)} type="button">{item}</button>
+        ))}
+      </div>
+    </>
+  );
+}
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2">
-        <div className="rounded-[1.5rem] border border-[#dfe7e1] bg-white p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">Ritme belanja</p>
-              <p className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]">Rp94.700</p>
-              <p className="mt-1 text-xs text-[#718078]">rata-rata per hari</p>
-            </div>
-            <span className="rounded-full bg-[#e2f1e7] px-2.5 py-1 text-xs font-bold text-[#1b7a50]">↓ 12%</span>
-          </div>
-        </div>
-        <div className="rounded-[1.5rem] border border-[#dfe7e1] bg-white p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">Perlu ditinjau</p>
-              <p className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]">
-                {transactions.filter((item) => !item.reviewed).length} transaksi
-              </p>
-              <p className="mt-1 text-xs text-[#718078]">confidence di bawah 95%</p>
-            </div>
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#f9ead8] text-sm">✦</span>
-          </div>
-        </div>
-      </section>
+function SpendingChart() {
+  return (
+    <section className="chart-card" aria-labelledby="month-progress-title">
+      <div className="chart-card-head">
+        <h2 id="month-progress-title">BULAN BERJALAN</h2>
+        <div className="chart-range" aria-label="Rentang grafik"><button aria-pressed="true" type="button">30D</button><button type="button">12M</button></div>
+      </div>
+      <svg className="spending-chart" viewBox="0 0 960 230" role="img" aria-label="Grafik akumulasi pengeluaran demo bulan Oktober">
+        <defs>
+          <linearGradient id="chart-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="var(--accent)" stopOpacity=".36" />
+            <stop offset="1" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d="M2 197C52 194 70 187 92 170S112 119 136 114S161 114 177 74S186 32 214 25L214 205H2Z" fill="url(#chart-fill)" />
+        <path d="M2 197C52 194 70 187 92 170S112 119 136 114S161 114 177 74S186 32 214 25" fill="none" stroke="var(--accent)" strokeLinecap="round" strokeWidth="4" />
+        <path d="M2 202C144 202 193 204 274 201S410 191 503 187S630 181 700 163S814 152 958 140" fill="none" stroke="var(--chart-muted)" strokeDasharray="7 9" strokeLinecap="round" strokeWidth="3" />
+        <path d="M2 205H958" stroke="var(--line)" strokeWidth="2" />
+      </svg>
+      <div className="chart-dates"><span>1 Okt</span><span>30 Okt</span></div>
+      <FinBuddy />
+    </section>
+  );
+}
 
-      <section className="mt-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-black tracking-[-0.035em] text-[#173b2e]">Transaksi terbaru</h2>
-            <p className="mt-1 text-xs text-[#718078]">Tercatat otomatis dari email transaksi</p>
-          </div>
-        </div>
-        <div className="mt-4 divide-y divide-[#e5ebe6] rounded-[1.5rem] border border-[#dfe7e1] bg-white px-4 py-1 sm:px-5">
-          {transactions.slice(0, 4).map((transaction) => (
-            <TransactionRow
-              key={transaction.id}
-              onClick={() => openTransaction(transaction)}
-              transaction={transaction}
-            />
-          ))}
-        </div>
-      </section>
+function FinBuddy() {
+  return (
+    <div className="fin-buddy" aria-hidden="true">
+      <span className="buddy-antenna" />
+      <span className="buddy-head"><i /><i /></span>
+      <span className="buddy-body">F</span>
     </div>
   );
 }
 
-function TransactionsView({
-  transactions,
-  openTransaction,
-}: {
-  transactions: Transaction[];
-  openTransaction: (transaction: Transaction) => void;
-}) {
+function CategoryList({ categories }: { categories: BudgetCategory[] }) {
+  return (
+    <section className="category-block" aria-labelledby="category-title">
+      <select id="category-title" aria-label="Kelompok kategori" defaultValue="category"><option value="category">Kategori</option><option>Keinginan / Kebutuhan</option></select>
+      <div className="category-list">
+        {categories.map((category) => {
+          const percent = Math.round((category.amount / category.budget) * 100);
+          return (
+            <button className="category-row" key={category.id} type="button">
+              <span className="category-emoji" aria-hidden="true">{category.emoji}</span>
+              <span className="category-copy"><strong>{percent}% {category.name}</strong><span className="progress-track"><span style={{ width: `${Math.min(percent, 100)}%` }} /></span></span>
+              <span>{compactRupiah(category.amount)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ReviewList({ transactions, onSelect }: { transactions: Transaction[]; onSelect: (transaction: Transaction) => void }) {
+  return (
+    <section className="review-block" aria-labelledby="review-title">
+      <div className="section-title-row"><h2 id="review-title">UNTUK DITINJAU</h2><button type="button">LIHAT SEMUA</button></div>
+      <p className="review-date">JUM, 09 OKT 2026</p>
+      <div>
+        {transactions.filter((item) => !item.reviewed).slice(0, 3).map((transaction) => (
+          <button className="mini-transaction" key={transaction.id} onClick={() => onSelect(transaction)} type="button">
+            <span className="transaction-emoji">{transaction.emoji}</span>
+            <span><strong>{transaction.merchant}</strong><small>{transaction.category}</small></span>
+            <span>{formatRupiah(transaction.amount)}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function HomeView({ categories, transactions, onSelect }: { categories: BudgetCategory[]; transactions: Transaction[]; onSelect: (transaction: Transaction) => void }) {
+  return (
+    <div className="view-enter home-view">
+      <h1 className="sr-only">Ringkasan keuangan</h1>
+      <NoticeCard />
+      <PeriodControls />
+      <section className="spending-hero" aria-label="Ringkasan pengeluaran demo">
+        <p>{formatRupiah(totalSpent)}</p>
+        <span><strong>↑ 620rb lebih</strong> vs laju bulan lalu</span>
+      </section>
+      <SpendingChart />
+      <CategoryList categories={categories} />
+      <div className="comparison-card"><span>Weekday <strong>186K/hari</strong></span><span className="weekday-bar"><i /><i /></span><span>Weekend <strong>142K/hari</strong></span></div>
+      <ReviewList onSelect={onSelect} transactions={transactions} />
+    </div>
+  );
+}
+
+function TransactionsView({ transactions, onSelect }: { transactions: Transaction[]; onSelect: (transaction: Transaction) => void }) {
+  const [queryOpen, setQueryOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const visible = useMemo(
-    () =>
-      transactions.filter((transaction) =>
-        `${transaction.merchant} ${transaction.category}`.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [query, transactions],
-  );
+  const [filter, setFilter] = useState<TransactionFilter>("all");
+  const visible = useMemo(() => transactions.filter((transaction) => {
+    const matchQuery = `${transaction.merchant} ${transaction.category}`.toLowerCase().includes(query.toLowerCase());
+    return matchQuery && (filter === "all" || !transaction.reviewed);
+  }), [filter, query, transactions]);
+  const groups = useMemo(() => [
+    { label: "JUMAT, 9 OKT", total: 173_500, rows: visible.slice(0, 3) },
+    { label: "KAMIS, 8 OKT", total: 286_000, rows: visible.slice(3) },
+  ].filter((group) => group.rows.length > 0), [visible]);
 
   return (
-    <div className="animate-[rise_.35s_ease-out]">
-      <p className="text-sm font-semibold text-[#718078]">Semua catatan</p>
-      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">Transaksi</h1>
-      <label className="mt-7 flex items-center gap-3 rounded-2xl border border-[#dbe4dd] bg-white px-4 py-3.5 shadow-sm">
-        <Icon className="h-5 w-5 text-[#76857d]" name="search" />
-        <span className="sr-only">Cari transaksi</span>
-        <input
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#93a099]"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Cari merchant atau kategori"
-          value={query}
-        />
-      </label>
-      <div className="mt-6">
-        <div className="flex items-center justify-between px-1">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">Oktober 2026</p>
-          <p className="text-sm font-bold text-[#173b2e]">{formatRupiah(2840500)}</p>
+    <div className="view-enter transactions-view">
+      <div className="page-title-row">
+        <h1>Transaksi</h1>
+        <div>
+          <button aria-label="Cari transaksi" className="round-control" onClick={() => setQueryOpen((value) => !value)} type="button"><Icon name="search" /></button>
+          <button aria-label="Filter transaksi" aria-pressed={filter === "review"} className="round-control" onClick={() => setFilter((value) => value === "all" ? "review" : "all")} type="button"><Icon name="filter" /></button>
         </div>
-        <div className="mt-3 divide-y divide-[#e5ebe6] rounded-[1.5rem] border border-[#dfe7e1] bg-white px-4 py-1 sm:px-5">
-          {visible.map((transaction) => (
-            <TransactionRow
-              key={transaction.id}
-              onClick={() => openTransaction(transaction)}
-              transaction={transaction}
-            />
-          ))}
-          {visible.length === 0 ? (
-            <p className="py-12 text-center text-sm text-[#718078]">Tidak ada transaksi yang cocok.</p>
-          ) : null}
-        </div>
+      </div>
+      {queryOpen ? <label className="search-field"><Icon name="search" /><span className="sr-only">Cari transaksi</span><input autoFocus onChange={(event) => setQuery(event.target.value)} placeholder="Cari transaksi" value={query} /></label> : null}
+      <div className="transaction-groups">
+        {groups.map((group) => (
+          <section key={group.label}>
+            <div className="transaction-group-head"><h2>{group.label}</h2><span>IDR {group.total.toLocaleString("id-ID")}</span></div>
+            {group.rows.map((transaction) => <TransactionRow key={transaction.id} onClick={() => onSelect(transaction)} transaction={transaction} />)}
+          </section>
+        ))}
+        {groups.length === 0 ? <div className="empty-state"><Icon name="search" /><h2>Transaksi tidak ditemukan</h2><p>Coba kata kunci atau filter lain.</p></div> : null}
       </div>
     </div>
   );
 }
 
-function InsightsView() {
+function TransactionRow({ transaction, onClick }: { transaction: Transaction; onClick: () => void }) {
   return (
-    <div className="animate-[rise_.35s_ease-out]">
-      <p className="text-sm font-semibold text-[#718078]">Oktober 2026</p>
-      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">Analisis</h1>
-      <section className="mt-7 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">Insight bulan ini</p>
-        <p className="mt-4 max-w-xl text-2xl font-black leading-tight tracking-[-0.04em] text-[#173b2e] sm:text-3xl">
-          Kamu menghemat 12% dibanding ritme bulan lalu.
-        </p>
-        <p className="mt-3 text-sm leading-6 text-[#65756d]">
-          Pengeluaran transportasi turun paling besar. Makan & minum masih mendekati batas budget.
-        </p>
-      </section>
-      <section className="mt-6 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <h2 className="text-lg font-black tracking-[-0.03em] text-[#173b2e]">Budget per kategori</h2>
-        <div className="mt-5 space-y-6">
-          {categories.map((category) => {
-            const percentage = Math.round((category.amount / category.budget) * 100);
-            return (
-              <div key={category.name}>
-                <div className="flex items-center gap-3">
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#f2f5f1]">{category.emoji}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-bold text-[#213b31]">{category.name}</p>
-                      <p className="shrink-0 text-xs font-semibold text-[#65756d]">
-                        {formatRupiah(category.amount)} / {formatRupiah(category.budget)}
-                      </p>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#edf1ed]">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ backgroundColor: category.color, width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
+    <button className="transaction-row" onClick={onClick} type="button">
+      <span className="transaction-emoji">{transaction.emoji}</span>
+      <span className="transaction-main"><strong>{transaction.merchant}</strong><small>{transaction.category} {!transaction.reviewed ? <em><Icon name="clock" /> Perlu tinjau</em> : null}</small></span>
+      <span className="transaction-amount"><strong>IDR {transaction.amount.toLocaleString("id-ID")}</strong><small>{transaction.method}<i>{transaction.method.slice(0, 1)}</i></small></span>
+    </button>
+  );
+}
+
+function ToolsView({ onBudget }: { onBudget: () => void }) {
+  return (
+    <div className="view-enter simple-view">
+      <h1>Fitur</h1>
+      <div className="tool-grid">
+        <button className="tool-card" onClick={onBudget} type="button">
+          <span className="tool-icon"><Icon name="insights" /></span>
+          <span className="tool-copy"><strong>Anggaran</strong><small>Atur anggaran per kategori</small><span>Buka: <i>Anggaran Terpakai</i><i>Keinginan / Kebutuhan</i></span></span>
+          <em>Atur</em>
+        </button>
+        <button className="tool-card" type="button">
+          <span className="tool-icon"><Icon name="sparkles" /></span>
+          <span className="tool-copy"><strong>Net Worth</strong><small>Pantau nilai aset dan liabilitas</small><span>Buka: <i>Net Worth</i><i>Runway</i></span></span>
+          <em>Atur</em>
+        </button>
+      </div>
     </div>
   );
 }
 
-function AccountView({ online }: { online: boolean }) {
+function AccountsView() {
   return (
-    <div className="animate-[rise_.35s_ease-out]">
-      <p className="text-sm font-semibold text-[#718078]">Profil & keamanan</p>
-      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">Akun</h1>
-      <section className="mt-7 rounded-[1.75rem] bg-[#173b2e] p-6 text-white sm:p-7">
-        <div className="flex items-center gap-4">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/10 text-xl font-black">ZM</span>
-          <div>
-            <h2 className="text-lg font-bold">Zoe Mohamed</h2>
-            <p className="mt-0.5 text-sm text-[#bfd0c7]">zoe@example.com</p>
-          </div>
-        </div>
+    <div className="view-enter simple-view account-view">
+      <h1>Akun</h1>
+      <section className="account-card">
+        <div><span className="account-bank"><Icon name="bank" /></span><span><strong>Bank Demo</strong><small>Terhubung · sinkronisasi lokal</small></span></div>
+        <span>Aktif</span>
       </section>
-      <section className="mt-6 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <div className="flex items-start gap-4">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e1f0e6] text-[#1b7a50]">
-            <Icon name="shield" />
-          </span>
-          <div>
-            <h2 className="font-bold text-[#173b2e]">Privacy status</h2>
-            <p className="mt-1 text-sm leading-6 text-[#65756d]">
-              Gmail belum terhubung. Prototype ini hanya memakai data demo lokal.
-            </p>
-          </div>
-        </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          {["Read-only OAuth", "Raw email dibuang", "AI tanpa tools"].map((item) => (
-            <div className="rounded-2xl bg-[#f2f6f2] px-4 py-3 text-xs font-semibold text-[#365247]" key={item}>
-              <span className="mr-2 text-[#1b7a50]">✓</span>{item}
-            </div>
-          ))}
-        </div>
+      <section className="privacy-card">
+        <Icon name="shield" />
+        <div><h2>Data demo, bukan akun asli</h2><p>Branch ini hanya meniru struktur antarmuka. Tidak ada data finansial, kredensial, atau koneksi bank yang disalin.</p></div>
       </section>
-      <section className="mt-6 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="font-bold text-[#173b2e]">Status aplikasi</h2>
-            <p className="mt-1 text-sm text-[#65756d]">{online ? "Online dan siap dipakai" : "Offline · app shell tetap tersedia"}</p>
-          </div>
-          <span className={`h-3 w-3 rounded-full ${online ? "bg-[#2d9b68]" : "bg-[#d29a58]"}`} />
-        </div>
-        <div className="mt-5 sm:hidden">
-          <InstallAppButton />
-        </div>
-      </section>
+      <section className="install-card"><div><h2>Pasang sebagai aplikasi</h2><p>Akses lebih cepat dari home screen dan gunakan shell saat offline.</p></div><InstallAppButton /></section>
     </div>
   );
+}
+
+function BudgetIntentModal({ onClose, onContinue }: { onClose: () => void; onContinue: () => void }) {
+  return (
+    <ModalFrame label="Atur Anggaran" onClose={onClose}>
+      <div className="modal-heading"><h2>Atur Anggaran</h2><CloseButton onClose={onClose} /></div>
+      <div className="budget-intents">
+        <button onClick={onContinue} type="button"><span>✨</span><strong>Anggaran Cerdas <em>REKOMENDASI</em></strong><small>Mulai anggaran berdasarkan pengeluaran terbaru Anda</small></button>
+        <button onClick={onContinue} type="button"><span>✏️</span><strong>Anggaran Manual</strong><small>Mulai anggaran dari awal per kategori</small></button>
+      </div>
+    </ModalFrame>
+  );
+}
+
+function BudgetEditorModal({ categories, onClose, onSave }: { categories: BudgetCategory[]; onClose: () => void; onSave: (categories: BudgetCategory[]) => void }) {
+  const [draft, setDraft] = useState(categories);
+  const update = (id: string, value: number) => setDraft((items) => items.map((item) => item.id === id ? { ...item, budget: value } : item));
+  return (
+    <ModalFrame label="Anggaran per kategori" onClose={onClose} wide>
+      <div className="modal-heading"><div><p className="eyebrow">OKTOBER 2026</p><h2>Anggaran per kategori</h2></div><CloseButton onClose={onClose} /></div>
+      <div className="budget-editor-list">
+        {draft.map((category) => (
+          <label key={category.id}><span className="category-emoji">{category.emoji}</span><span><strong>{category.name}</strong><small>Terpakai {compactRupiah(category.amount)}</small></span><span className="budget-input"><i>Rp</i><input min={category.amount} onChange={(event) => update(category.id, Number(event.target.value))} type="number" value={category.budget} /></span></label>
+        ))}
+      </div>
+      <button className="primary-button" onClick={() => onSave(draft)} type="button">Simpan anggaran <Icon name="arrow" /></button>
+    </ModalFrame>
+  );
+}
+
+function TransactionModal({ transaction, onClose, onReview }: { transaction: Transaction; onClose: () => void; onReview: () => void }) {
+  return (
+    <ModalFrame label={`Detail transaksi ${transaction.merchant}`} onClose={onClose}>
+      <div className="modal-heading"><div><p className="eyebrow">DETAIL TRANSAKSI</p><h2>{transaction.merchant}</h2></div><CloseButton onClose={onClose} /></div>
+      <div className="transaction-detail-amount">{formatRupiah(transaction.amount)}</div>
+      <dl className="detail-list"><div><dt>Kategori</dt><dd>{transaction.category}</dd></div><div><dt>Metode</dt><dd>{transaction.method}</dd></div><div><dt>Tanggal</dt><dd>{transaction.date}, {transaction.time}</dd></div><div><dt>Sumber</dt><dd>{transaction.source}</dd></div></dl>
+      {!transaction.reviewed ? <button className="primary-button" onClick={onReview} type="button"><Icon name="check" /> Tandai sudah ditinjau</button> : <p className="reviewed-state"><Icon name="check" /> Sudah ditinjau</p>}
+    </ModalFrame>
+  );
+}
+
+function AddTransactionModal({ categories, onClose, onSubmit }: { categories: BudgetCategory[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <ModalFrame label="Tambah transaksi" onClose={onClose}>
+      <form onSubmit={onSubmit}>
+        <div className="modal-heading"><div><p className="eyebrow">MANUAL</p><h2>Tambah Transaksi</h2></div><CloseButton onClose={onClose} /></div>
+        <label className="field-label">Merchant<input autoFocus name="merchant" placeholder="Contoh: Kopi Sudut" required /></label>
+        <label className="field-label">Jumlah<span className="currency-field"><i>Rp</i><input inputMode="numeric" min="1" name="amount" placeholder="0" required type="number" /></span></label>
+        <label className="field-label">Kategori<select name="category">{categories.map((category) => <option key={category.id}>{category.name}</option>)}</select></label>
+        <button className="primary-button" type="submit">Simpan transaksi <Icon name="arrow" /></button>
+      </form>
+    </ModalFrame>
+  );
+}
+
+function ModalFrame({ children, label, onClose, wide = false }: { children: React.ReactNode; label: string; onClose: () => void; wide?: boolean }) {
+  return (
+    <div aria-label={label} aria-modal="true" className="modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }} role="dialog">
+      <div className="modal-card" data-wide={wide}>{children}</div>
+    </div>
+  );
+}
+
+function CloseButton({ onClose }: { onClose: () => void }) {
+  return <button aria-label="Tutup" className="modal-close" onClick={onClose} type="button"><Icon name="close" /></button>;
 }
 
 export function FinApp() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [annual, setAnnual] = useState(false);
   const [transactions, setTransactions] = useState(initialTransactions);
+  const [categories, setCategories] = useState(initialCategories);
   const [selected, setSelected] = useState<Transaction | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [budgetIntentOpen, setBudgetIntentOpen] = useState(false);
+  const [budgetEditorOpen, setBudgetEditorOpen] = useState(false);
   const online = useOnlineStatus();
 
-  const review = (id: number) => {
-    setTransactions((items) => items.map((item) => (item.id === id ? { ...item, reviewed: true } : item)));
-    setSelected(null);
+  const changeTab = (tab: Tab) => {
+    setActiveTab(tab);
+    window.scrollTo({ top: 0 });
   };
 
   const addTransaction = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const amount = Number(data.get("amount"));
-    const merchant = String(data.get("merchant") || "Transaksi baru");
-    setTransactions((items) => [
-      {
-        id: Date.now(),
-        merchant,
-        category: "Lainnya",
-        amount: Number.isFinite(amount) ? amount : 0,
-        date: "Hari ini",
-        time: new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
-        method: "Manual",
-        emoji: "✦",
-        confidence: 100,
-        reviewed: true,
-      },
-      ...items,
-    ]);
+    const category = categories.find((item) => item.name === String(data.get("category"))) ?? categories[0];
+    setTransactions((items) => [{
+      id: Date.now(),
+      merchant: String(data.get("merchant") || "Transaksi baru"),
+      category: category.name,
+      amount: Number(data.get("amount")) || 0,
+      date: "Hari ini",
+      isoDate: "2026-10-09",
+      time: "Sekarang",
+      method: "Tunai",
+      source: "Manual",
+      sourceDetail: "Ditambahkan secara manual pada prototype ini.",
+      icon: category.icon,
+      emoji: category.emoji,
+      confidence: 100,
+      reviewed: true,
+    }, ...items]);
     setAddOpen(false);
-    setActiveTab("transactions");
+    changeTab("transactions");
+  };
+
+  const markReviewed = () => {
+    if (!selected) return;
+    setTransactions((items) => items.map((item) => item.id === selected.id ? { ...item, reviewed: true } : item));
+    setSelected(null);
   };
 
   return (
-    <div className="min-h-dvh bg-[#edf2ec] text-[#213b31] lg:p-4">
-      <div className="mx-auto min-h-dvh max-w-[1500px] overflow-hidden bg-[#f8faf7] lg:grid lg:min-h-[calc(100dvh-2rem)] lg:grid-cols-[248px_minmax(0,1fr)] lg:rounded-[2rem] lg:border lg:border-[#d9e3db] lg:shadow-[0_30px_90px_#173b2e17]">
-        <aside className="hidden border-r border-[#dce5de] bg-[#f1f5f0] p-6 lg:flex lg:flex-col">
-          <Logo />
-          <nav aria-label="Navigasi utama" className="mt-12 space-y-2">
-            {tabs.map((tab) => (
-              <button
-                aria-current={activeTab === tab.id ? "page" : undefined}
-                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition ${
-                  activeTab === tab.id
-                    ? "bg-[#173b2e] text-white shadow-[0_10px_24px_#173b2e24]"
-                    : "text-[#607168] hover:bg-white hover:text-[#173b2e]"
-                }`}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                type="button"
-              >
-                <Icon name={tab.icon} /> {tab.label}
-              </button>
-            ))}
-          </nav>
-          <div className="mt-auto rounded-2xl border border-[#d8e2da] bg-white p-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-[#1b7a50]">
-              <Icon className="h-4 w-4" name="shield" /> Private by design
-            </div>
-            <p className="mt-2 text-xs leading-5 text-[#718078]">Data demo tersimpan lokal selama sesi ini.</p>
-          </div>
-        </aside>
-
-        <div className="min-w-0">
-          <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-[#e1e8e2] bg-[#f8faf7e8] px-5 backdrop-blur-xl sm:px-8 lg:hidden">
-            <Logo />
-            <div className="flex items-center gap-2">
-              <InstallAppButton />
-              <button
-                aria-label="Notifikasi"
-                className="relative grid h-10 w-10 place-items-center rounded-full border border-[#d8e2da] bg-white text-[#365247]"
-                type="button"
-              >
-                <Icon name="bell" />
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#d58d4d] ring-2 ring-white" />
-              </button>
-            </div>
-          </header>
-
-          {!online ? (
-            <div className="bg-[#f4dfc6] px-5 py-2 text-center text-xs font-bold text-[#774d25]" role="status">
-              Kamu sedang offline. FIN tetap bisa dibuka dari cache.
-            </div>
-          ) : null}
-
-          <main className="mx-auto w-full max-w-[920px] px-5 pb-32 pt-7 sm:px-8 sm:pt-10 lg:px-12 lg:pb-16 lg:pt-12">
-            {activeTab === "home" ? (
-              <HomeView
-                annual={annual}
-                openTransaction={setSelected}
-                setAnnual={setAnnual}
-                transactions={transactions}
-              />
-            ) : null}
-            {activeTab === "transactions" ? (
-              <TransactionsView openTransaction={setSelected} transactions={transactions} />
-            ) : null}
-            {activeTab === "insights" ? <InsightsView /> : null}
-            {activeTab === "account" ? <AccountView online={online} /> : null}
-          </main>
-        </div>
+    <div className="app-shell">
+      <Sidebar activeTab={activeTab} onAdd={() => setAddOpen(true)} onChange={changeTab} />
+      <div className="app-main">
+        <AppHeader compact={activeTab !== "home"} />
+        {!online ? <div className="offline-banner" role="status">Kamu sedang offline. Data demo tetap tersedia.</div> : null}
+        <main className="content-shell">
+          {activeTab === "home" ? <HomeView categories={categories} onSelect={setSelected} transactions={transactions} /> : null}
+          {activeTab === "transactions" ? <TransactionsView onSelect={setSelected} transactions={transactions} /> : null}
+          {activeTab === "tools" ? <ToolsView onBudget={() => setBudgetIntentOpen(true)} /> : null}
+          {activeTab === "accounts" ? <AccountsView /> : null}
+        </main>
       </div>
+      <BottomNav activeTab={activeTab} onAdd={() => setAddOpen(true)} onChange={changeTab} />
 
-      <nav
-        aria-label="Navigasi bawah"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-[#dce5de] bg-white/95 px-2 pb-[calc(.6rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_35px_#173b2e12] backdrop-blur-xl lg:hidden"
-      >
-        <div className="mx-auto grid max-w-lg grid-cols-5 items-end">
-          {tabs.slice(0, 2).map((tab) => (
-            <MobileTab active={activeTab === tab.id} key={tab.id} onClick={() => setActiveTab(tab.id)} tab={tab} />
-          ))}
-          <button
-            aria-label="Tambah transaksi"
-            className="mx-auto -mt-7 grid h-14 w-14 place-items-center rounded-2xl bg-[#1b7a50] text-white shadow-[0_12px_30px_#1b7a5050] transition active:scale-95"
-            onClick={() => setAddOpen(true)}
-            type="button"
-          >
-            <Icon className="h-7 w-7" name="plus" strokeWidth={2.2} />
-          </button>
-          {tabs.slice(2).map((tab) => (
-            <MobileTab active={activeTab === tab.id} key={tab.id} onClick={() => setActiveTab(tab.id)} tab={tab} />
-          ))}
-        </div>
-      </nav>
-
-      <button
-        aria-label="Tambah transaksi"
-        className="fixed bottom-8 right-8 z-30 hidden items-center gap-2 rounded-2xl bg-[#1b7a50] px-5 py-4 text-sm font-bold text-white shadow-[0_15px_35px_#1b7a5045] transition hover:-translate-y-0.5 lg:flex"
-        onClick={() => setAddOpen(true)}
-        type="button"
-      >
-        <Icon name="plus" /> Tambah transaksi
-      </button>
-
-      {selected ? (
-        <TransactionSheet onClose={() => setSelected(null)} onReview={() => review(selected.id)} transaction={selected} />
-      ) : null}
-      {addOpen ? <AddTransactionSheet onClose={() => setAddOpen(false)} onSubmit={addTransaction} /> : null}
-    </div>
-  );
-}
-
-function MobileTab({
-  tab,
-  active,
-  onClick,
-}: {
-  tab: { id: Tab; label: string; icon: IconName };
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      aria-current={active ? "page" : undefined}
-      className={`flex flex-col items-center gap-1 py-1 text-[10px] font-bold ${active ? "text-[#1b7a50]" : "text-[#849088]"}`}
-      onClick={onClick}
-      type="button"
-    >
-      <Icon className="h-5 w-5" name={tab.icon} strokeWidth={active ? 2.3 : 1.8} />
-      {tab.label}
-    </button>
-  );
-}
-
-function TransactionSheet({
-  transaction,
-  onClose,
-  onReview,
-}: {
-  transaction: Transaction;
-  onClose: () => void;
-  onReview: () => void;
-}) {
-  return (
-    <div
-      aria-labelledby="transaction-title"
-      aria-modal="true"
-      className="fixed inset-0 z-[70] grid place-items-end bg-[#10271fb3] p-3 backdrop-blur-sm sm:place-items-center"
-      onMouseDown={(event) => {
-        if (event.currentTarget === event.target) onClose();
-      }}
-      role="dialog"
-    >
-      <div className="w-full max-w-md rounded-[1.8rem] bg-white p-6 shadow-2xl sm:p-8">
-        <div className="flex items-start justify-between">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#f0f4ef] text-2xl">{transaction.emoji}</span>
-          <button
-            aria-label="Tutup detail transaksi"
-            className="grid h-10 w-10 place-items-center rounded-full border border-[#dfe7e1] text-[#718078]"
-            onClick={onClose}
-            type="button"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-        <h2 className="mt-5 text-2xl font-black tracking-[-0.04em] text-[#173b2e]" id="transaction-title">
-          {transaction.merchant}
-        </h2>
-        <p className="mt-1 text-sm text-[#718078]">{transaction.category} · {transaction.method}</p>
-        <p className="mt-6 text-4xl font-black tracking-[-0.055em] text-[#173b2e]">
-          {formatRupiah(transaction.amount)}
-        </p>
-        <div className="mt-6 flex items-center justify-between rounded-2xl bg-[#f1f5f1] px-4 py-3 text-sm">
-          <span className="text-[#66766e]">AI confidence</span>
-          <span className="font-bold text-[#1b7a50]">{transaction.confidence}%</span>
-        </div>
-        {!transaction.reviewed ? (
-          <button
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1b7a50] px-5 py-3.5 text-sm font-bold text-white"
-            onClick={onReview}
-            type="button"
-          >
-            <Icon name="check" /> Konfirmasi transaksi
-          </button>
-        ) : (
-          <p className="mt-5 flex items-center justify-center gap-2 text-sm font-bold text-[#1b7a50]">
-            <Icon name="check" /> Sudah ditinjau
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AddTransactionSheet({
-  onClose,
-  onSubmit,
-}: {
-  onClose: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  return (
-    <div
-      aria-labelledby="add-title"
-      aria-modal="true"
-      className="fixed inset-0 z-[70] grid place-items-end bg-[#10271fb3] p-3 backdrop-blur-sm sm:place-items-center"
-      onMouseDown={(event) => {
-        if (event.currentTarget === event.target) onClose();
-      }}
-      role="dialog"
-    >
-      <form className="w-full max-w-md rounded-[1.8rem] bg-white p-6 shadow-2xl sm:p-8" onSubmit={onSubmit}>
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1b7a50]">Catat manual</p>
-            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]" id="add-title">
-              Transaksi baru
-            </h2>
-          </div>
-          <button
-            aria-label="Tutup form transaksi"
-            className="grid h-10 w-10 place-items-center rounded-full border border-[#dfe7e1] text-[#718078]"
-            onClick={onClose}
-            type="button"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-        <label className="mt-6 block text-xs font-bold uppercase tracking-[0.12em] text-[#718078]">
-          Merchant
-          <input
-            autoFocus
-            className="mt-2 w-full rounded-2xl border border-[#d9e3db] px-4 py-3.5 text-base font-semibold normal-case tracking-normal outline-none focus:border-[#1b7a50]"
-            name="merchant"
-            placeholder="Contoh: Warung Bu Tini"
-            required
-          />
-        </label>
-        <label className="mt-4 block text-xs font-bold uppercase tracking-[0.12em] text-[#718078]">
-          Jumlah
-          <div className="mt-2 flex items-center rounded-2xl border border-[#d9e3db] px-4 focus-within:border-[#1b7a50]">
-            <span className="font-bold text-[#718078]">Rp</span>
-            <input
-              className="min-w-0 flex-1 bg-transparent px-2 py-3.5 text-base font-semibold normal-case tracking-normal outline-none"
-              inputMode="numeric"
-              min="1"
-              name="amount"
-              placeholder="0"
-              required
-              type="number"
-            />
-          </div>
-        </label>
-        <button
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1b7a50] px-5 py-3.5 text-sm font-bold text-white"
-          type="submit"
-        >
-          Simpan transaksi <Icon name="arrow" />
-        </button>
-      </form>
+      {selected ? <TransactionModal onClose={() => setSelected(null)} onReview={markReviewed} transaction={selected} /> : null}
+      {addOpen ? <AddTransactionModal categories={categories} onClose={() => setAddOpen(false)} onSubmit={addTransaction} /> : null}
+      {budgetIntentOpen ? <BudgetIntentModal onClose={() => setBudgetIntentOpen(false)} onContinue={() => { setBudgetIntentOpen(false); setBudgetEditorOpen(true); }} /> : null}
+      {budgetEditorOpen ? <BudgetEditorModal categories={categories} onClose={() => setBudgetEditorOpen(false)} onSave={(next) => { setCategories(next); setBudgetEditorOpen(false); }} /> : null}
     </div>
   );
 }

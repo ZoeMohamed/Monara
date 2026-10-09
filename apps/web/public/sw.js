@@ -1,4 +1,4 @@
-const CACHE_NAME = "fin-shell-v1";
+const CACHE_NAME = "fin-shell-v2";
 const CORE_ASSETS = [
   "/",
   "/manifest.webmanifest",

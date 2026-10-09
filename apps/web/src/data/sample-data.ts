@@ -1,102 +1,58 @@
+import type { IconName } from "@/components/icon";
+
 export type Transaction = {
   id: number;
   merchant: string;
   category: string;
   amount: number;
   date: string;
+  isoDate: string;
   time: string;
   method: string;
+  source: string;
+  sourceDetail: string;
+  icon: IconName;
   emoji: string;
   confidence: number;
   reviewed: boolean;
 };
 
+export type BudgetCategory = {
+  id: string;
+  name: string;
+  amount: number;
+  budget: number;
+  color: string;
+  tint: string;
+  icon: IconName;
+  emoji: string;
+};
+
 export const initialTransactions: Transaction[] = [
-  {
-    id: 1,
-    merchant: "Grab · GrabCar",
-    category: "Transportasi",
-    amount: 67000,
-    date: "Hari ini",
-    time: "09.42",
-    method: "GoPay",
-    emoji: "🚕",
-    confidence: 98,
-    reviewed: true,
-  },
-  {
-    id: 2,
-    merchant: "Kopi Kenangan",
-    category: "Makan & Minum",
-    amount: 28000,
-    date: "Hari ini",
-    time: "08.15",
-    method: "BCA",
-    emoji: "☕",
-    confidence: 94,
-    reviewed: false,
-  },
-  {
-    id: 3,
-    merchant: "Alfamart",
-    category: "Belanja",
-    amount: 89500,
-    date: "Kemarin",
-    time: "18.20",
-    method: "BCA",
-    emoji: "🏪",
-    confidence: 97,
-    reviewed: true,
-  },
-  {
-    id: 4,
-    merchant: "Spotify Premium",
-    category: "Digital",
-    amount: 54990,
-    date: "Kemarin",
-    time: "07.02",
-    method: "Jago",
-    emoji: "🎧",
-    confidence: 99,
-    reviewed: true,
-  },
-  {
-    id: 5,
-    merchant: "Sate Khas Senayan",
-    category: "Makan & Minum",
-    amount: 156000,
-    date: "2 Okt 2026",
-    time: "19.34",
-    method: "Mandiri",
-    emoji: "🍽️",
-    confidence: 91,
-    reviewed: false,
-  },
-  {
-    id: 6,
-    merchant: "Netflix",
-    category: "Digital",
-    amount: 186000,
-    date: "1 Okt 2026",
-    time: "06.00",
-    method: "Jago",
-    emoji: "📺",
-    confidence: 99,
-    reviewed: true,
-  },
+  { id: 1, merchant: "PLN", category: "Tagihan", amount: 53_500, date: "9 Okt 2026", isoDate: "2026-10-09", time: "09.42", method: "Bank Demo", source: "Email transaksi demo", sourceDetail: "Terdeteksi dari notifikasi pembayaran contoh.", icon: "budget", emoji: "⚡", confidence: 98, reviewed: false },
+  { id: 2, merchant: "Kopi Sudut", category: "Makan & Minum", amount: 46_200, date: "9 Okt 2026", isoDate: "2026-10-09", time: "08.15", method: "Bank Demo", source: "Email transaksi demo", sourceDetail: "Nama merchant dan kategori adalah data contoh.", icon: "food", emoji: "🍽️", confidence: 94, reviewed: false },
+  { id: 3, merchant: "Toko Harian", category: "Belanja", amount: 73_800, date: "9 Okt 2026", isoDate: "2026-10-09", time: "07.52", method: "Bank Demo", source: "Email transaksi demo", sourceDetail: "Prototype tidak terhubung dengan akun bank.", icon: "shopping", emoji: "🛍️", confidence: 97, reviewed: false },
+  { id: 4, merchant: "Transport Online", category: "Transportasi", amount: 39_000, date: "8 Okt 2026", isoDate: "2026-10-08", time: "21.20", method: "Dompet Demo", source: "Notifikasi transaksi demo", sourceDetail: "Data dibuat untuk pengujian antarmuka.", icon: "car", emoji: "🚕", confidence: 99, reviewed: true },
+  { id: 5, merchant: "Streaming Plus", category: "Entertainment", amount: 59_000, date: "8 Okt 2026", isoDate: "2026-10-08", time: "18.04", method: "Bank Demo", source: "Email transaksi demo", sourceDetail: "Pembayaran berulang contoh.", icon: "phone", emoji: "🙂", confidence: 96, reviewed: true },
+  { id: 6, merchant: "Apotek Sehat", category: "Perawatan", amount: 86_500, date: "8 Okt 2026", isoDate: "2026-10-08", time: "15.13", method: "Bank Demo", source: "Email transaksi demo", sourceDetail: "Kategori diprediksi dari data contoh.", icon: "health", emoji: "✚", confidence: 91, reviewed: true },
+  { id: 7, merchant: "Mini Market", category: "Rumah", amount: 64_000, date: "8 Okt 2026", isoDate: "2026-10-08", time: "11.08", method: "Dompet Demo", source: "Notifikasi transaksi demo", sourceDetail: "Data dibuat untuk pengujian antarmuka.", icon: "shopping", emoji: "🏠", confidence: 96, reviewed: true },
+  { id: 8, merchant: "Laundry Kita", category: "Lainnya", amount: 37_500, date: "8 Okt 2026", isoDate: "2026-10-08", time: "09.22", method: "Tunai", source: "Manual", sourceDetail: "Ditambahkan manual pada prototype.", icon: "more", emoji: "?", confidence: 100, reviewed: true },
 ];
 
-export const categories = [
-  { name: "Makan & Minum", amount: 1180000, budget: 1500000, color: "#1b7a50", emoji: "🍽️" },
-  { name: "Transportasi", amount: 620000, budget: 900000, color: "#d39455", emoji: "🚕" },
-  { name: "Belanja", amount: 548000, budget: 1000000, color: "#7c79bf", emoji: "🛍️" },
-  { name: "Digital", amount: 492500, budget: 700000, color: "#4d8fa5", emoji: "📱" },
+export const initialCategories: BudgetCategory[] = [
+  { id: "entertainment", name: "Entertainment", amount: 1_865_000, budget: 2_800_000, color: "#91c59c", tint: "#1e2b22", icon: "phone", emoji: "🙂" },
+  { id: "others", name: "Lainnya", amount: 995_000, budget: 2_000_000, color: "#91c59c", tint: "#1e2b22", icon: "more", emoji: "?" },
+  { id: "food", name: "Makan & Minum", amount: 789_000, budget: 1_600_000, color: "#91c59c", tint: "#1e2b22", icon: "food", emoji: "🍽️" },
+  { id: "home", name: "Rumah", amount: 620_000, budget: 1_500_000, color: "#91c59c", tint: "#1e2b22", icon: "home", emoji: "🏠" },
+  { id: "shopping", name: "Belanja", amount: 466_200, budget: 1_200_000, color: "#91c59c", tint: "#1e2b22", icon: "shopping", emoji: "🛍️" },
 ];
 
 export function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
+}
+
+export function compactRupiah(value: number) {
+  if (value >= 1_000_000) return `Rp ${(value / 1_000_000).toLocaleString("id-ID", { maximumFractionDigits: 1 })}jt`;
+  if (value >= 1_000) return `Rp ${Math.round(value / 1_000).toLocaleString("id-ID")}rb`;
+  return formatRupiah(value).replace("Rp", "Rp ");
 }

@@ -3,15 +3,15 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "FIN — Uangmu, lebih jelas",
-    short_name: "FIN",
-    description: "Catat dan pahami pengeluaran harian lewat pengalaman finansial yang privat dan ringan.",
+    name: "FINCOUNTANT · UI Clone Demo",
+    short_name: "FINCOUNTANT",
+    description: "Prototype PWA finansial dengan data demo lokal untuk pengujian antarmuka.",
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait-primary",
-    background_color: "#f8faf7",
-    theme_color: "#173b2e",
+    background_color: "#0d1510",
+    theme_color: "#0d1510",
     lang: "id-ID",
     categories: ["finance", "productivity"],
     icons: [
