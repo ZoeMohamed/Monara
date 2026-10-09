@@ -24,3 +24,7 @@ supabase/.branches/
 .idea/
 .vscode/
 .vercel/
+
+# Per-worktree local environment
+.worktree.env
+.worktrees/

@@ -1,16 +1,14 @@
 # Local development only. No hosted project is linked.
+# Stack mode assigns ports per worktree, so this file must not set fixed ports.
 project_id = "monara"
 
 [api]
 enabled = true
-port = 54321
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-port = 54322
-shadow_port = 54320
 health_timeout = "2m"
 major_version = 17
 
@@ -24,12 +22,10 @@ sql_paths = ["./seed.sql"]
 
 [studio]
 enabled = true
-port = 54323
 api_url = "http://127.0.0.1"
 
 [local_smtp]
 enabled = true
-port = 54324
 
 [auth]
 enabled = true
@@ -57,3 +53,6 @@ enabled = false
 
 [edge_runtime]
 enabled = false
+
+[experimental]
+stack = true
