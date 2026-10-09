@@ -60,7 +60,7 @@ pnpm build
 
 Use Node 24 (`.nvmrc`). `pnpm install` also installs the Husky git hooks.
 
-Run web and agent dev commands in separate terminals. The web app listens on port 3000; the local agent listens on port 8787. `GET /health` on the agent reports `status: scaffold`; other routes return 501. `pnpm build` builds Next.js and performs a Wrangler dry-run bundle without cloud deployment.
+Run web and agent dev commands in separate terminals. The main checkout listens on web port 3000 and agent port 8787; linked worktrees use their own ports (see Worktrees below). `GET /health` on the agent reports `status: scaffold`; other routes return 501. `pnpm build` builds Next.js and performs a Wrangler dry-run bundle without cloud deployment.
 
 Supabase local development is optional until database implementation begins. It requires OrbStack running on this Mac:
 
@@ -71,7 +71,25 @@ pnpm db:types
 pnpm db:stop
 ```
 
-`pnpm db:types` generates `packages/db/src/types/database.types.ts` only after a successful local schema read. Never hand-author generated schema types. Local startup can display local credentials; do not paste them into committed docs or logs. The scaffold does not start containers, configure a hosted project, or apply remote migrations.
+`pnpm db:start` starts this checkout's own Supabase stack and writes its URL and keys into `apps/web/.env.local`. `pnpm db:types` generates `packages/db/src/types/database.types.ts` only after a successful local schema read. Never hand-author generated schema types. Local startup can display local credentials; do not paste them into committed docs or logs. The scaffold does not configure a hosted project or apply remote migrations.
+
+## Worktrees
+
+Every linked worktree gets an isolated local environment. `pnpm install` runs `scripts/worktree.mjs setup` through the `prepare` script, so any tool that creates a worktree and installs dependencies is covered. A Husky `post-checkout` hook cannot do this, because `.husky/_` does not exist in a fresh worktree until the first install.
+
+| Resource | How it is isolated |
+| --- | --- |
+| Web, agent, and inspector ports | A numbered slot `n` from a locked registry in git's common directory: web `3000+n`, agent `8787+n`, inspector `9229+n`. The main checkout is slot 0. The slot is written to the ignored `.worktree.env`, and `pnpm dev` and `pnpm dev:agent` read it. |
+| Env files | `apps/web/.env.local` and `apps/agent/.dev.vars` are copied from the main checkout (or from the `.example` templates), with `MONARA_AGENT_URL` and `MONARA_BACKEND_URL` pointed at the worktree's ports. The Supabase values are left blank so the worktree cannot reach another checkout's database. |
+| Supabase | Stack mode (`supabase stack`) gives each worktree its own containers, data, and ports. `supabase/config.toml` sets no fixed ports. Stack mode is experimental, so the CLI version is pinned exactly. |
+
+```bash
+pnpm worktree:status     # slots in use
+pnpm worktree:teardown   # destroy this worktree's stack and release its slot
+pnpm worktree:prune      # clear claims and stacks of worktrees that no longer exist
+```
+
+Run `pnpm worktree:teardown` before removing a worktree. If a worktree was removed without it, `pnpm worktree:prune` cleans up. `.wt/config.toml` wires setup and teardown into the `wt` CLI. To run setup when T3 Code creates a worktree, add a project script with `runOnWorktreeCreate` enabled and the command `bash scripts/setup-worktree.sh`. See [the worktree environment decision](adr/0003-worktree-environments.md).
 
 ## Quality gates
 

@@ -60,6 +60,11 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 - apps/web keeps a react-doctor score of at least 95. Fix the findings at their cause; waived rules or a lower threshold need the user's approval.
 - Let hooks run on every commit and push, and fix the failure they report. The workspace targets Node 24 (`.nvmrc`).
 
+## Local environments
+
+- Each linked worktree has its own ports, env files, and Supabase stack, set up by `pnpm install`. Start servers with `pnpm dev` and `pnpm dev:agent`, and the database with `pnpm db:start`, so they use the worktree's ports.
+- Run `pnpm worktree:teardown` before removing a worktree; `pnpm worktree:prune` clears leftovers.
+
 ## Verification and Git
 
 Match checks to the change:

@@ -34,6 +34,23 @@ const log = (message) => {
 
 const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
+function canonical(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+function registeredWorktrees(cwd) {
+  return new Set(
+    git(["worktree", "list", "--porcelain"], cwd)
+      .split("\n")
+      .filter((line) => line.startsWith("worktree "))
+      .map((line) => canonical(line.slice("worktree ".length))),
+  );
+}
+
 function resolveContext() {
   const root = realpathSync(git(["rev-parse", "--show-toplevel"], process.cwd()));
   const commonDir = resolve(root, git(["rev-parse", "--git-common-dir"], root));
@@ -45,6 +62,7 @@ function resolveContext() {
     root,
     main,
     isMain: root === main,
+    isLive: (path) => existsSync(path) && registeredWorktrees(root).has(canonical(path)),
     registry: join(commonDir, "monara-worktree-ports.json"),
   };
 }
@@ -120,7 +138,7 @@ async function setup(context) {
     const allocation = await allocateSlot({
       claims: readClaims(context.registry),
       worktreePath: context.root,
-      isLive: existsSync,
+      isLive: context.isLive,
     });
     writeClaims(context.registry, allocation.claims);
     return allocation.slot;
@@ -175,14 +193,16 @@ async function teardown(context) {
 async function prune(context) {
   await withLock(context.registry, async () => {
     const claims = readClaims(context.registry);
-    const live = Object.fromEntries(Object.entries(claims).filter(([path]) => existsSync(path)));
+    const live = Object.fromEntries(
+      Object.entries(claims).filter(([path]) => context.isLive(path)),
+    );
     writeClaims(context.registry, live);
     log(`Dropped ${Object.keys(claims).length - Object.keys(live).length} dead slot claim(s).`);
   });
   const bin = supabaseBin(context);
   if (!bin) return;
   for (const stack of listStacks(bin, context.main)) {
-    if (!existsSync(stack.project_root) && destroyStack(bin, context.main, stack.id)) {
+    if (!context.isLive(stack.project_root) && destroyStack(bin, context.main, stack.id)) {
       log(`Destroyed orphaned Supabase stack for ${stack.project_root}.`);
     }
   }
