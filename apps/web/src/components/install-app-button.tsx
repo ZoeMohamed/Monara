@@ -70,7 +70,7 @@ export function InstallAppButton() {
         type="button"
       >
         <Icon className="h-4 w-4" name="download" />
-        <span className="hidden sm:inline">Install FIN</span>
+        <span className="hidden sm:inline">Install Monara</span>
         <span className="sm:hidden">Install</span>
       </button>
 
@@ -89,7 +89,7 @@ export function InstallAppButton() {
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1b7a50]">Install PWA</p>
                 <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em]" id="install-title">
-                  Taruh FIN di layar utama.
+                  Taruh Monara di layar utama.
                 </h2>
               </div>
               <button

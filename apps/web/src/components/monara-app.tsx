@@ -37,9 +37,9 @@ function Logo() {
   return (
     <div className="flex items-center gap-3">
       <span className="grid h-10 w-10 place-items-center rounded-[14px] bg-[#173b2e] text-sm font-black text-white shadow-[0_8px_20px_#173b2e33]">
-        F<span className="sr-only">IN</span>
+        M
       </span>
-      <span className="text-xl font-black tracking-[-0.05em] text-[#173b2e]">FIN</span>
+      <span className="text-xl font-black tracking-[-0.05em] text-[#173b2e]">Monara</span>
     </div>
   );
 }
@@ -374,7 +374,7 @@ function AccountView({ online }: { online: boolean }) {
   );
 }
 
-export function FinApp() {
+export function MonaraApp() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [annual, setAnnual] = useState(false);
   const [transactions, setTransactions] = useState(initialTransactions);
@@ -459,7 +459,7 @@ export function FinApp() {
 
           {!online ? (
             <div className="bg-[#f4dfc6] px-5 py-2 text-center text-xs font-bold text-[#774d25]" role="status">
-              Kamu sedang offline. FIN tetap bisa dibuka dari cache.
+              Kamu sedang offline. Monara tetap bisa dibuka dari cache.
             </div>
           ) : null}
 

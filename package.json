@@ -1,5 +1,5 @@
 {
-  "name": "fin",
+  "name": "monara",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.30.3",
@@ -8,10 +8,10 @@
     "pnpm": ">=10"
   },
   "scripts": {
-    "dev": "pnpm --filter @fin/web dev",
-    "build": "pnpm --filter @fin/web build",
-    "start": "pnpm --filter @fin/web start",
-    "lint": "pnpm --filter @fin/web lint"
+    "dev": "pnpm --filter @monara/web dev",
+    "build": "pnpm --filter @monara/web build",
+    "start": "pnpm --filter @monara/web start",
+    "lint": "pnpm --filter @monara/web lint"
   },
   "devDependencies": {
     "playwright-core": "1.63.0"

@@ -1,6 +1,6 @@
-# Unified Financial Intelligence Agent
+# Monara
 
-FIN is a mobile-first personal-finance PWA built with Next.js. This phase is frontend-only: no backend, Python, Docker, or database.
+Monara is a mobile-first personal-finance PWA built with Next.js. This phase is frontend-only: no backend, Python, Docker, or database.
 
 ## Requirements
 
@@ -10,8 +10,8 @@ FIN is a mobile-first personal-finance PWA built with Next.js. This phase is fro
 ## Run locally
 
 ```bash
-git clone https://github.com/ZoeMohamed/Unified-Financial-Intelligence-Agent.git
-cd Unified-Financial-Intelligence-Agent
+git clone https://github.com/ZoeMohamed/Monara.git
+cd Monara
 corepack enable
 pnpm install
 pnpm dev
@@ -73,12 +73,12 @@ Anggota tim tidak perlu:
 
 Konfigurasi yang sudah terhubung:
 
-- Vercel Project: `unified-financial-intelligence-agent`
+- Vercel Project: `monara`
 - Root Directory: `apps/web`
 - Production Branch: `main`
 - Framework: Next.js
 - Node.js: 24.x
-- Production URL: <https://unified-financial-intelligence-agen.vercel.app>
+- Production URL: <https://monara.vercel.app>
 
 Jika deployment gagal, buka status **Vercel** pada commit GitHub untuk melihat build log. Jangan pernah menyimpan token, Deploy Hook URL, atau secret lain di repository.
 

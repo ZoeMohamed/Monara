@@ -6,16 +6,16 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "FIN — Uangmu, lebih jelas",
-    template: "%s · FIN",
+    default: "Monara — Uangmu, lebih jelas",
+    template: "%s · Monara",
   },
   description: "Catat dan pahami pengeluaran harian lewat pengalaman finansial yang privat dan ringan.",
-  applicationName: "FIN",
+  applicationName: "Monara",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "FIN",
+    title: "Monara",
   },
   formatDetection: {
     telephone: false,
