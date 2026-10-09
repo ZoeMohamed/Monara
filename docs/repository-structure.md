@@ -58,7 +58,7 @@ pnpm format
 pnpm build
 ```
 
-Use Node 24 (`.nvmrc`). `pnpm install` also installs the Husky git hooks. macOS and Windows are both supported: `.gitattributes` keeps LF line endings, the repository scripts are Node, and the git hooks run in Git Bash (included with Git for Windows). CI runs lint, typecheck, tests, and a worktree smoke test on Windows. Local Supabase needs a Docker-compatible runtime (OrbStack on macOS, Docker Desktop on Windows).
+Use Node 24 (`.nvmrc`). `pnpm install` also installs the Husky git hooks. macOS and Windows are both supported: `.gitattributes` keeps LF line endings, the repository scripts are Node, and the git hooks run in Git Bash (included with Git for Windows). CI runs lint, typecheck, tests, a worktree smoke test, and a git hook smoke test on Windows. Local Supabase needs a Docker-compatible runtime (OrbStack on macOS, Docker Desktop on Windows).
 
 Run web and agent dev commands in separate terminals. The main checkout listens on web port 3000 and agent port 8787; linked worktrees use their own ports (see Worktrees below). `GET /health` on the agent reports `status: scaffold`; other routes return 501. `pnpm build` builds Next.js and performs a Wrangler dry-run bundle without cloud deployment.
 
@@ -108,7 +108,7 @@ The react-doctor gate (`pnpm doctor`) fails below a score of 95 or on any error-
 
 GitHub reads `.git-blame-ignore-revs` automatically; locally run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to skip the Biome formatting commit in `git blame`.
 
-Branch protection and required checks are GitHub repository settings and are not configured by the repository. Deployment stays outside CI. See [the development harness decision](adr/0002-development-harness.md).
+Direct pushes to `main` stay allowed, so the strictness lives in the PR checks and the local hooks; branch protection and required checks are GitHub repository settings and are not configured by the repository. CI runner images are pinned (`ubuntu-24.04`, `windows-2025`) so a GitHub `-latest` migration cannot break the gates; bump them deliberately. Deployment stays outside CI. See [the development harness decision](adr/0002-development-harness.md).
 
 ## Environment configuration
 
