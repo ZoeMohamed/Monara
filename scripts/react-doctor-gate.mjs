@@ -1,4 +1,4 @@
-// Fails when react-doctor reports an error or scores apps/web below the minimum.
+// Fails when react-doctor reports any finding (warnings included) or scores apps/web below the minimum.
 // Only diagnostics (no source code) are sent to the score API; telemetry stays off.
 import { spawnSync } from "node:child_process";
 
@@ -13,11 +13,11 @@ const run = (extraArgs) =>
     shell: process.platform === "win32",
   });
 
-const findings = run(["--no-score", "--blocking", "error"]);
+const findings = run(["--no-score", "--blocking", "warning"]);
 if (findings.status !== 0) {
   console.error(findings.stdout);
   console.error(findings.stderr);
-  console.error(`react-doctor reported error-level findings in ${TARGET}.`);
+  console.error(`react-doctor reported findings in ${TARGET}.`);
   process.exit(1);
 }
 

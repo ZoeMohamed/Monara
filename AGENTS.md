@@ -57,7 +57,7 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 - Husky hooks run the gates on commit, commit message, and push; `.github/workflows/ci.yml` runs them again on every PR. `pnpm check` runs everything the pre-push hook and CI run.
 - Biome owns formatting and linting; run `pnpm lint:fix` to apply fixes. ESLint adds the Next.js rules for apps/web only. Knip and Sherif own dead code and workspace dependency consistency.
 - Commit messages and PR titles follow Conventional Commits.
-- apps/web keeps a react-doctor score of at least 95. Fix the findings at their cause; waived rules or a lower threshold need the user's approval.
+- apps/web keeps a react-doctor score of at least 95 with no findings, warnings included. Fix findings at their cause; waived rules or a lower threshold need the user's approval.
 - Let hooks run on every commit and push, and fix the failure they report. The workspace targets Node 24 (`.nvmrc`).
 
 ## Local environments
