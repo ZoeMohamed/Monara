@@ -40,7 +40,7 @@ jobs:
               [ -n "$file" ] || continue
               case "$file" in
                 .github/workflows/*|.github/actions/*) workflows=true; code=true ;;
-                docs/*|*.md|.github/pull_request_template.md) ;;
+                docs/*|*.md) ;;
                 *) code=true ;;
               esac
             done <<< "$files"
