@@ -52,6 +52,14 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 - Local configuration does not authorize cloud provisioning, migrations against a remote database, deployment, messaging, or other external writes.
 - Keep credentials supplied for a task local to that task. Do not rotate them merely because they were supplied in plaintext.
 
+## Quality gates
+
+- Husky hooks run the gates on commit, commit message, and push; `.github/workflows/ci.yml` runs them again on every PR. `pnpm check` runs everything the pre-push hook and CI run.
+- Biome owns formatting and linting; run `pnpm lint:fix` to apply fixes. ESLint adds the Next.js rules for apps/web only. Knip and Sherif own dead code and workspace dependency consistency.
+- Commit messages and PR titles follow Conventional Commits.
+- apps/web keeps a react-doctor score of at least 95. Fix the findings at their cause; waived rules or a lower threshold need the user's approval.
+- Let hooks run on every commit and push, and fix the failure they report. The workspace targets Node 24 (`.nvmrc`).
+
 ## Verification and Git
 
 Match checks to the change:
@@ -60,7 +68,7 @@ Match checks to the change:
 - Database work: local migrations, ownership/RLS checks, and regenerated types.
 - Web: lint, typecheck, and build; browser verification when behavior changes.
 - Agent: typecheck and local Wrangler dry-run build; integration evidence when a real provider is involved.
-- Workspace changes: pnpm typecheck, pnpm lint, and pnpm build.
+- Workspace changes: pnpm check and pnpm build.
 
 Do not confuse a passing local build with deployed functionality. Report what was actually tested and what remains scaffolded.
 

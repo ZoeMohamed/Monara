@@ -1,10 +1,18 @@
 "use client";
 
-import { FormEvent, useMemo, useState, useSyncExternalStore } from "react";
+import { type FormEvent, useMemo, useState, useSyncExternalStore } from "react";
 
-import { Icon, IconName } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
 import { InstallAppButton } from "@/components/install-app-button";
-import { categories, formatRupiah, initialTransactions, Transaction } from "@/data/sample-data";
+import { ModalDialog } from "@/components/modal-dialog";
+import {
+  categories,
+  formatRupiah,
+  initialTransactions,
+  type Transaction,
+} from "@/data/sample-data";
+
+const timeFormatter = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit" });
 
 type Tab = "home" | "transactions" | "insights" | "account";
 
@@ -440,9 +448,7 @@ export function MonaraApp() {
         category: "Lainnya",
         amount: Number.isFinite(amount) ? amount : 0,
         date: "Hari ini",
-        time: new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit" }).format(
-          new Date(),
-        ),
+        time: timeFormatter.format(new Date()),
         method: "Manual",
         emoji: "✦",
         confidence: 100,
@@ -616,15 +622,7 @@ function TransactionSheet({
   onReview: () => void;
 }) {
   return (
-    <div
-      aria-labelledby="transaction-title"
-      aria-modal="true"
-      className="fixed inset-0 z-[70] grid place-items-end bg-[#10271fb3] p-3 backdrop-blur-sm sm:place-items-center"
-      onMouseDown={(event) => {
-        if (event.currentTarget === event.target) onClose();
-      }}
-      role="dialog"
-    >
+    <ModalDialog labelledBy="transaction-title" onClose={onClose}>
       <div className="w-full max-w-md rounded-[1.8rem] bg-white p-6 shadow-2xl sm:p-8">
         <div className="flex items-start justify-between">
           <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#f0f4ef] text-2xl">
@@ -669,7 +667,7 @@ function TransactionSheet({
           </p>
         )}
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -681,15 +679,7 @@ function AddTransactionSheet({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <div
-      aria-labelledby="add-title"
-      aria-modal="true"
-      className="fixed inset-0 z-[70] grid place-items-end bg-[#10271fb3] p-3 backdrop-blur-sm sm:place-items-center"
-      onMouseDown={(event) => {
-        if (event.currentTarget === event.target) onClose();
-      }}
-      role="dialog"
-    >
+    <ModalDialog labelledBy="add-title" onClose={onClose}>
       <form
         className="w-full max-w-md rounded-[1.8rem] bg-white p-6 shadow-2xl sm:p-8"
         onSubmit={onSubmit}
@@ -718,10 +708,10 @@ function AddTransactionSheet({
         <label className="mt-6 block text-xs font-bold uppercase tracking-[0.12em] text-[#718078]">
           Merchant
           <input
-            autoFocus
             className="mt-2 w-full rounded-2xl border border-[#d9e3db] px-4 py-3.5 text-base font-semibold normal-case tracking-normal outline-none focus:border-[#1b7a50]"
             name="merchant"
             placeholder="Contoh: Warung Bu Tini"
+            data-autofocus
             required
           />
         </label>
@@ -747,6 +737,6 @@ function AddTransactionSheet({
           Simpan transaksi <Icon name="arrow" />
         </button>
       </form>
-    </div>
+    </ModalDialog>
   );
 }

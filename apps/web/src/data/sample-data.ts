@@ -93,10 +93,12 @@ export const categories = [
   { name: "Digital", amount: 492500, budget: 700000, color: "#4d8fa5", emoji: "📱" },
 ];
 
+const rupiahFormatter = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  maximumFractionDigits: 0,
+});
+
 export function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
+  return rupiahFormatter.format(value);
 }

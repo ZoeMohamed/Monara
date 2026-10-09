@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Icon } from "@/components/icon";
+import { ModalDialog } from "@/components/modal-dialog";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -20,7 +21,7 @@ function getStandaloneMode() {
 }
 
 export function InstallAppButton() {
-  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const installEvent = useRef<BeforeInstallPromptEvent | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [wasInstalled, setWasInstalled] = useState(false);
   const isStandalone = useSyncExternalStore(subscribeToDisplayMode, getStandaloneMode, () => false);
@@ -29,10 +30,10 @@ export function InstallAppButton() {
   useEffect(() => {
     const onInstallPrompt = (event: Event) => {
       event.preventDefault();
-      setInstallEvent(event as BeforeInstallPromptEvent);
+      installEvent.current = event as BeforeInstallPromptEvent;
     };
     const onInstalled = () => {
-      setInstallEvent(null);
+      installEvent.current = null;
       setWasInstalled(true);
     };
 
@@ -53,13 +54,14 @@ export function InstallAppButton() {
   }
 
   const install = async () => {
-    if (!installEvent) {
+    const promptEvent = installEvent.current;
+    if (!promptEvent) {
       setShowHelp(true);
       return;
     }
-    await installEvent.prompt();
-    const choice = await installEvent.userChoice;
-    if (choice.outcome === "accepted") setInstallEvent(null);
+    await promptEvent.prompt();
+    const choice = await promptEvent.userChoice;
+    if (choice.outcome === "accepted") installEvent.current = null;
   };
 
   return (
@@ -75,15 +77,7 @@ export function InstallAppButton() {
       </button>
 
       {showHelp ? (
-        <div
-          aria-labelledby="install-title"
-          aria-modal="true"
-          className="fixed inset-0 z-[80] grid place-items-end bg-[#10271fb3] p-3 backdrop-blur-sm sm:place-items-center"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) setShowHelp(false);
-          }}
-          role="dialog"
-        >
+        <ModalDialog labelledBy="install-title" onClose={() => setShowHelp(false)}>
           <div className="w-full max-w-md rounded-[1.75rem] bg-white p-6 shadow-2xl sm:p-8">
             <div className="flex items-start justify-between gap-6">
               <div>
@@ -116,7 +110,7 @@ export function InstallAppButton() {
               Mengerti
             </button>
           </div>
-        </div>
+        </ModalDialog>
       ) : null}
     </>
   );

@@ -52,10 +52,13 @@ Run commands from the repository root:
 pnpm install
 pnpm dev
 pnpm dev:agent
-pnpm typecheck
-pnpm lint
+pnpm check
+pnpm lint:fix
+pnpm format
 pnpm build
 ```
+
+Use Node 24 (`.nvmrc`). `pnpm install` also installs the Husky git hooks.
 
 Run web and agent dev commands in separate terminals. The web app listens on port 3000; the local agent listens on port 8787. `GET /health` on the agent reports `status: scaffold`; other routes return 501. `pnpm build` builds Next.js and performs a Wrangler dry-run bundle without cloud deployment.
 
@@ -69,6 +72,25 @@ pnpm db:stop
 ```
 
 `pnpm db:types` generates `packages/db/src/types/database.types.ts` only after a successful local schema read. Never hand-author generated schema types. Local startup can display local credentials; do not paste them into committed docs or logs. The scaffold does not start containers, configure a hosted project, or apply remote migrations.
+
+## Quality gates
+
+`pnpm check` runs lint (Biome, plus ESLint for apps/web), typecheck, Knip, Sherif, tests, and the react-doctor gate. The same checks run at three points:
+
+| Stage | What runs |
+| --- | --- |
+| `pre-commit` | `biome check --write` on staged files, re-staged afterward. The react-doctor gate also runs when staged files touch apps/web. |
+| `commit-msg` | commitlint enforces Conventional Commits. Scopes are free-form. |
+| `pre-push` | `pnpm check` |
+| CI (`.github/workflows/ci.yml`) | Format and lint, typecheck, Sherif and Knip, tests, build, react-doctor, PR title, and actionlint when workflows change. |
+
+Pre-commit refuses to auto-fix a file that has both staged and unstaged edits; stage or stash the rest first. Hooks run in a non-interactive shell, so if `pnpm` is not found, put your version-manager activation in `~/.config/husky/init.sh`.
+
+The react-doctor gate (`pnpm doctor`) fails below a score of 95 or on any error-level finding in apps/web. Scoring calls react-doctor's API with diagnostics only: source context is removed and file paths are redacted. Telemetry and the supply-chain check are off. Offline, local hooks warn and skip the score check, and CI fails closed. Add `packages/ui` to the gate target in `scripts/react-doctor-gate.mjs` once it holds components.
+
+GitHub reads `.git-blame-ignore-revs` automatically; locally run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to skip the Biome formatting commit in `git blame`.
+
+Branch protection and required checks are GitHub repository settings and are not configured by the repository. Deployment stays outside CI. See [the development harness decision](adr/0002-development-harness.md).
 
 ## Environment configuration
 
