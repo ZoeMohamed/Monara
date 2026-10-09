@@ -1,0 +1,10 @@
+worktree_path = ".worktrees"
+
+setup = [
+  "bash scripts/setup-worktree.sh",
+  "pnpm install --frozen-lockfile",
+]
+
+teardown = [
+  "bash scripts/teardown-worktree.sh",
+]

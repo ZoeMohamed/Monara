@@ -1,0 +1,5 @@
+# Worktree environments
+
+Teammates and agents work in parallel git worktrees, so each linked worktree needs its own ports, env files, and local database instead of fighting over 3000, 8787, and Supabase's fixed 54321 range. Each worktree claims a numbered slot from a locked registry in git's common directory, which keeps the web and agent ports unique, and `pnpm install` runs setup through `prepare` because a Husky `post-checkout` hook cannot fire before the first install. For the database we use Supabase's experimental stack mode, which gives every worktree its own containers, data, and ports with no config rewriting, instead of generating a per-worktree `config.toml`.
+
+Stack mode is experimental, and it requires `supabase/config.toml` to set no fixed ports, which changes the main checkout's ports too. We accept that and pin the Supabase CLI exactly so changes arrive through a deliberate version bump. Starting the stack stays on demand (`pnpm db:start`), and teardown destroys it, because each stack holds real memory and no migrations exist yet.

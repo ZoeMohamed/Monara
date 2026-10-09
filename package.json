@@ -8,8 +8,8 @@
     "pnpm": ">=10"
   },
   "scripts": {
-    "prepare": "husky",
-    "dev": "pnpm --filter @monara/web dev",
+    "prepare": "husky && node scripts/worktree.mjs setup --quiet",
+    "dev": "node scripts/dev.mjs web",
     "build": "pnpm -r --if-present build",
     "start": "pnpm --filter @monara/web start",
     "lint": "biome check && pnpm -r --if-present lint",
@@ -18,14 +18,19 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "knip": "knip --no-progress",
     "sherif": "sherif",
-    "test": "pnpm -r --if-present test",
+    "test": "pnpm -r --if-present test && node --test scripts/*.test.mjs",
     "doctor": "node scripts/react-doctor-gate.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm knip && pnpm sherif && pnpm test && pnpm doctor",
-    "dev:web": "pnpm --filter @monara/web dev",
-    "dev:agent": "pnpm --filter @monara/agent dev",
-    "db:start": "supabase start",
-    "db:stop": "supabase stop",
-    "db:types": "node scripts/generate-db-types.mjs"
+    "dev:web": "node scripts/dev.mjs web",
+    "dev:agent": "node scripts/dev.mjs agent",
+    "db:start": "node scripts/db.mjs start",
+    "db:stop": "node scripts/db.mjs stop",
+    "db:types": "node scripts/generate-db-types.mjs",
+    "db:status": "node scripts/db.mjs status",
+    "worktree:setup": "node scripts/worktree.mjs setup",
+    "worktree:teardown": "node scripts/worktree.mjs teardown",
+    "worktree:prune": "node scripts/worktree.mjs prune",
+    "worktree:status": "node scripts/worktree.mjs status"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

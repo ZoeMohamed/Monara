@@ -9,3 +9,6 @@ onlyBuiltDependencies:
   - esbuild
   - supabase
   - workerd
+
+ignoredBuiltDependencies:
+  - unrs-resolver
