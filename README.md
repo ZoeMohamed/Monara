@@ -1,6 +1,8 @@
 # Monara
 
-Monara is a mobile-first personal-finance PWA built with Next.js. This phase is frontend-only: no backend, Python, Docker, or database.
+Monara is a mobile-first personal-finance PWA built with Next.js. The UI currently uses sample data and browser state. The repository now includes scaffolding for a Next.js backend, Supabase, a Cloudflare agent, shared packages, and LLM experiments. Those integrations are not implemented or connected yet.
+
+See [repository structure and team ownership](docs/repository-structure.md), [architecture decisions](docs/adr/0001-initial-runtime-boundaries.md), and [agent instructions](AGENTS.md).
 
 ## Requirements
 
@@ -43,11 +45,12 @@ Normal LAN HTTP is enough to preview the UI. Browser PWA install and service-wor
 
 ```bash
 pnpm lint
+pnpm typecheck
 pnpm build
 pnpm start
 ```
 
-The build includes a manifest, 192px/512px/maskable/Apple Touch icons, app-shell caching, offline fallback, standalone metadata, and security headers.
+The web build includes a manifest, 192px/512px/maskable/Apple Touch icons, app-shell caching, offline fallback, standalone metadata, and security headers. The agent build is a local Wrangler dry run and does not deploy anything.
 
 ## Deployment otomatis untuk tim
 
@@ -84,4 +87,4 @@ Jika deployment gagal, buka status **Vercel** pada commit GitHub untuk melihat b
 
 ## Product scope
 
-Transactions are demo data. Changes live only in browser state and reset on reload. Gmail, OAuth, sync, and persistent storage are intentionally not included yet.
+Transactions are demo data. Changes live only in browser state and reset on reload. The next implementation scope is Google sign-in, financial accounts, transaction tracking, dashboard, Gmail ingestion through Composio, and a WhatsApp agent through Kapso. Other features remain placeholders. See the architecture decision for the agreed runtime, review, and ownership boundaries.

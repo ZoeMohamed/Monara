@@ -1,6 +1,11 @@
 packages:
   - apps/*
+  - packages/*
+  - playground/*
 
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - sharp
+  - esbuild
+  - supabase
+  - workerd

@@ -9,11 +9,18 @@
   },
   "scripts": {
     "dev": "pnpm --filter @monara/web dev",
-    "build": "pnpm --filter @monara/web build",
+    "build": "pnpm -r --if-present build",
     "start": "pnpm --filter @monara/web start",
-    "lint": "pnpm --filter @monara/web lint"
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "dev:web": "pnpm --filter @monara/web dev",
+    "dev:agent": "pnpm --filter @monara/agent dev",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:types": "node scripts/generate-db-types.mjs"
   },
   "devDependencies": {
-    "playwright-core": "1.63.0"
+    "playwright-core": "1.63.0",
+    "supabase": "2.120.0"
   }
 }
