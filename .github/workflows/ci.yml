@@ -132,6 +132,19 @@ jobs:
           grep -q '^WORKTREE_SLOT=1$' .worktree.env
           grep -q '^MONARA_AGENT_URL=http://localhost:8788$' apps/web/.env.local
           node scripts/worktree.mjs teardown
+      - name: Git hook smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name ci
+          git config user.email ci@example.com
+          echo >> README.md
+          git add README.md
+          if git commit -q -m "not conventional"; then
+            echo "commit-msg hook accepted a bad message" >&2
+            exit 1
+          fi
+          git commit -q -m "chore: windows hook smoke test"
 
   react-doctor:
     name: React Doctor
