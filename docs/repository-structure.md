@@ -104,7 +104,7 @@ Run `pnpm worktree:teardown` before removing a worktree. If a worktree was remov
 
 Pre-commit refuses to auto-fix a file that has both staged and unstaged edits; stage or stash the rest first. Hooks run in a non-interactive shell, so if `pnpm` is not found, put your version-manager activation in `~/.config/husky/init.sh`.
 
-The react-doctor gate (`pnpm doctor`) fails below a score of 95 or on any error-level finding in apps/web. Scoring calls react-doctor's API with diagnostics only: source context is removed and file paths are redacted. Telemetry and the supply-chain check are off. Offline, local hooks warn and skip the score check, and CI fails closed. Add `packages/ui` to the gate target in `scripts/react-doctor-gate.mjs` once it holds components.
+The react-doctor gate (`pnpm doctor`) fails below a score of 95 or on any finding, warnings included, in apps/web. Scoring calls react-doctor's API with diagnostics only: source context is removed and file paths are redacted. Telemetry and the supply-chain check are off. Offline, local hooks warn and skip the score check, and CI fails closed. Add `packages/ui` to the gate target in `scripts/react-doctor-gate.mjs` once it holds components.
 
 GitHub reads `.git-blame-ignore-revs` automatically; locally run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to skip the Biome formatting commit in `git blame`.
 
