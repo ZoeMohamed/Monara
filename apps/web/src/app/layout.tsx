@@ -9,7 +9,8 @@ export const metadata: Metadata = {
     default: "Monara — Uangmu, lebih jelas",
     template: "%s · Monara",
   },
-  description: "Catat dan pahami pengeluaran harian lewat pengalaman finansial yang privat dan ringan.",
+  description:
+    "Catat dan pahami pengeluaran harian lewat pengalaman finansial yang privat dan ringan.",
   applicationName: "Monara",
   manifest: "/manifest.webmanifest",
   appleWebApp: {

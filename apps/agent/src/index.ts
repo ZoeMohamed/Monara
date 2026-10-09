@@ -15,9 +15,6 @@ export default {
     if (request.method === "GET" && path === "/health") {
       return Response.json({ service: "monara-agent", status: "scaffold" });
     }
-    return Response.json(
-      { error: "Agent workflows are not implemented yet." },
-      { status: 501 },
-    );
+    return Response.json({ error: "Agent workflows are not implemented yet." }, { status: 501 });
   },
 } satisfies ExportedHandler<Env>;

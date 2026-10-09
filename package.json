@@ -4,15 +4,23 @@
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "engines": {
-    "node": ">=20.9.0",
+    "node": ">=24",
     "pnpm": ">=10"
   },
   "scripts": {
+    "prepare": "husky",
     "dev": "pnpm --filter @monara/web dev",
     "build": "pnpm -r --if-present build",
     "start": "pnpm --filter @monara/web start",
-    "lint": "pnpm -r --if-present lint",
+    "lint": "biome check && pnpm -r --if-present lint",
+    "lint:fix": "biome check --write",
+    "format": "biome format --write",
     "typecheck": "pnpm -r --if-present typecheck",
+    "knip": "knip --no-progress",
+    "sherif": "sherif",
+    "test": "pnpm -r --if-present test",
+    "doctor": "node scripts/react-doctor-gate.mjs",
+    "check": "pnpm lint && pnpm typecheck && pnpm knip && pnpm sherif && pnpm test && pnpm doctor",
     "dev:web": "pnpm --filter @monara/web dev",
     "dev:agent": "pnpm --filter @monara/agent dev",
     "db:start": "supabase start",
@@ -20,7 +28,15 @@
     "db:types": "node scripts/generate-db-types.mjs"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@commitlint/cli": "21.2.3",
+    "@commitlint/config-conventional": "21.2.3",
+    "husky": "9.1.7",
+    "knip": "6.41.0",
     "playwright-core": "1.63.0",
-    "supabase": "2.120.0"
+    "react-doctor": "0.9.17",
+    "sherif": "1.13.0",
+    "supabase": "2.120.0",
+    "typescript": "5.9.3"
   }
 }

@@ -5,7 +5,8 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "Monara — Uangmu, lebih jelas",
     short_name: "Monara",
-    description: "Catat dan pahami pengeluaran harian lewat pengalaman finansial yang privat dan ringan.",
+    description:
+      "Catat dan pahami pengeluaran harian lewat pengalaman finansial yang privat dan ringan.",
     start_url: "/",
     scope: "/",
     display: "standalone",

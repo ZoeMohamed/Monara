@@ -1,0 +1,21 @@
+staged=$(git diff --cached --name-only --diff-filter=d)
+[ -z "$staged" ] && exit 0
+
+# Auto-fixing re-stages files, which would sweep unstaged edits into the commit.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+printf '%s\n' "$staged" | sort > "$tmp/staged"
+git diff --name-only | sort > "$tmp/unstaged"
+overlap=$(comm -12 "$tmp/staged" "$tmp/unstaged")
+if [ -n "$overlap" ]; then
+  echo "These files have staged and unstaged changes. Stage or stash the rest first:" >&2
+  echo "$overlap" >&2
+  exit 1
+fi
+
+pnpm exec biome check --write --staged --no-errors-on-unmatched
+printf '%s\n' "$staged" | xargs git add --
+
+if printf '%s\n' "$staged" | grep -Eq '^apps/web/.*\.(ts|tsx|js|mjs|css)$'; then
+  pnpm doctor
+fi

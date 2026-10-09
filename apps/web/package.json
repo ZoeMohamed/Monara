@@ -10,8 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@monara/core": "workspace:*",
     "@monara/contracts": "workspace:*",
+    "@monara/core": "workspace:*",
     "@monara/db": "workspace:*",
     "@monara/integrations": "workspace:*",
     "@monara/ui": "workspace:*",

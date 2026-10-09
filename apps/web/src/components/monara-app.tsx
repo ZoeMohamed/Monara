@@ -1,15 +1,18 @@
 "use client";
 
-import { FormEvent, useMemo, useState, useSyncExternalStore } from "react";
+import { type FormEvent, useMemo, useState, useSyncExternalStore } from "react";
 
-import { Icon, IconName } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
 import { InstallAppButton } from "@/components/install-app-button";
+import { ModalDialog } from "@/components/modal-dialog";
 import {
   categories,
   formatRupiah,
   initialTransactions,
-  Transaction,
+  type Transaction,
 } from "@/data/sample-data";
+
+const timeFormatter = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit" });
 
 type Tab = "home" | "transactions" | "insights" | "account";
 
@@ -30,7 +33,11 @@ function subscribeToConnection(callback: () => void) {
 }
 
 function useOnlineStatus() {
-  return useSyncExternalStore(subscribeToConnection, () => navigator.onLine, () => true);
+  return useSyncExternalStore(
+    subscribeToConnection,
+    () => navigator.onLine,
+    () => true,
+  );
 }
 
 function Logo() {
@@ -107,7 +114,9 @@ function TransactionRow({
           {formatRupiah(transaction.amount).replace("Rp", "Rp ")}
         </span>
         <span className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-[#78877f]">
-          {!transaction.reviewed ? <span className="h-1.5 w-1.5 rounded-full bg-[#dd9d57]" /> : null}
+          {!transaction.reviewed ? (
+            <span className="h-1.5 w-1.5 rounded-full bg-[#dd9d57]" />
+          ) : null}
           {transaction.time}
         </span>
       </span>
@@ -146,7 +155,9 @@ function HomeView({
 
       <section className="mt-7 overflow-hidden rounded-[1.8rem] bg-[#173b2e] p-6 text-white shadow-[0_24px_60px_#173b2e26] sm:p-8">
         <div className="flex items-center justify-between gap-4">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#bcd0c5]">Pengeluaran</p>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#bcd0c5]">
+            Pengeluaran
+          </p>
           <div className="flex rounded-full bg-white/10 p-1 text-xs font-bold">
             <button
               className={`rounded-full px-3 py-1.5 transition ${!annual ? "bg-white text-[#173b2e]" : "text-[#c9d8d0]"}`}
@@ -183,23 +194,31 @@ function HomeView({
         <div className="rounded-[1.5rem] border border-[#dfe7e1] bg-white p-5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">Ritme belanja</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">
+                Ritme belanja
+              </p>
               <p className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]">Rp94.700</p>
               <p className="mt-1 text-xs text-[#718078]">rata-rata per hari</p>
             </div>
-            <span className="rounded-full bg-[#e2f1e7] px-2.5 py-1 text-xs font-bold text-[#1b7a50]">↓ 12%</span>
+            <span className="rounded-full bg-[#e2f1e7] px-2.5 py-1 text-xs font-bold text-[#1b7a50]">
+              ↓ 12%
+            </span>
           </div>
         </div>
         <div className="rounded-[1.5rem] border border-[#dfe7e1] bg-white p-5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">Perlu ditinjau</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">
+                Perlu ditinjau
+              </p>
               <p className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]">
                 {transactions.filter((item) => !item.reviewed).length} transaksi
               </p>
               <p className="mt-1 text-xs text-[#718078]">confidence di bawah 95%</p>
             </div>
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#f9ead8] text-sm">✦</span>
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#f9ead8] text-sm">
+              ✦
+            </span>
           </div>
         </div>
       </section>
@@ -207,7 +226,9 @@ function HomeView({
       <section className="mt-8">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-black tracking-[-0.035em] text-[#173b2e]">Transaksi terbaru</h2>
+            <h2 className="text-xl font-black tracking-[-0.035em] text-[#173b2e]">
+              Transaksi terbaru
+            </h2>
             <p className="mt-1 text-xs text-[#718078]">Tercatat otomatis dari email transaksi</p>
           </div>
         </div>
@@ -236,7 +257,9 @@ function TransactionsView({
   const visible = useMemo(
     () =>
       transactions.filter((transaction) =>
-        `${transaction.merchant} ${transaction.category}`.toLowerCase().includes(query.toLowerCase()),
+        `${transaction.merchant} ${transaction.category}`
+          .toLowerCase()
+          .includes(query.toLowerCase()),
       ),
     [query, transactions],
   );
@@ -244,7 +267,9 @@ function TransactionsView({
   return (
     <div className="animate-[rise_.35s_ease-out]">
       <p className="text-sm font-semibold text-[#718078]">Semua catatan</p>
-      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">Transaksi</h1>
+      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">
+        Transaksi
+      </h1>
       <label className="mt-7 flex items-center gap-3 rounded-2xl border border-[#dbe4dd] bg-white px-4 py-3.5 shadow-sm">
         <Icon className="h-5 w-5 text-[#76857d]" name="search" />
         <span className="sr-only">Cari transaksi</span>
@@ -257,7 +282,9 @@ function TransactionsView({
       </label>
       <div className="mt-6">
         <div className="flex items-center justify-between px-1">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">Oktober 2026</p>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">
+            Oktober 2026
+          </p>
           <p className="text-sm font-bold text-[#173b2e]">{formatRupiah(2840500)}</p>
         </div>
         <div className="mt-3 divide-y divide-[#e5ebe6] rounded-[1.5rem] border border-[#dfe7e1] bg-white px-4 py-1 sm:px-5">
@@ -269,7 +296,9 @@ function TransactionsView({
             />
           ))}
           {visible.length === 0 ? (
-            <p className="py-12 text-center text-sm text-[#718078]">Tidak ada transaksi yang cocok.</p>
+            <p className="py-12 text-center text-sm text-[#718078]">
+              Tidak ada transaksi yang cocok.
+            </p>
           ) : null}
         </div>
       </div>
@@ -281,9 +310,13 @@ function InsightsView() {
   return (
     <div className="animate-[rise_.35s_ease-out]">
       <p className="text-sm font-semibold text-[#718078]">Oktober 2026</p>
-      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">Analisis</h1>
+      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">
+        Analisis
+      </h1>
       <section className="mt-7 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">Insight bulan ini</p>
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">
+          Insight bulan ini
+        </p>
         <p className="mt-4 max-w-xl text-2xl font-black leading-tight tracking-[-0.04em] text-[#173b2e] sm:text-3xl">
           Kamu menghemat 12% dibanding ritme bulan lalu.
         </p>
@@ -292,14 +325,18 @@ function InsightsView() {
         </p>
       </section>
       <section className="mt-6 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <h2 className="text-lg font-black tracking-[-0.03em] text-[#173b2e]">Budget per kategori</h2>
+        <h2 className="text-lg font-black tracking-[-0.03em] text-[#173b2e]">
+          Budget per kategori
+        </h2>
         <div className="mt-5 space-y-6">
           {categories.map((category) => {
             const percentage = Math.round((category.amount / category.budget) * 100);
             return (
               <div key={category.name}>
                 <div className="flex items-center gap-3">
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#f2f5f1]">{category.emoji}</span>
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#f2f5f1]">
+                    {category.emoji}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
                       <p className="truncate text-sm font-bold text-[#213b31]">{category.name}</p>
@@ -328,10 +365,14 @@ function AccountView({ online }: { online: boolean }) {
   return (
     <div className="animate-[rise_.35s_ease-out]">
       <p className="text-sm font-semibold text-[#718078]">Profil & keamanan</p>
-      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">Akun</h1>
+      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">
+        Akun
+      </h1>
       <section className="mt-7 rounded-[1.75rem] bg-[#173b2e] p-6 text-white sm:p-7">
         <div className="flex items-center gap-4">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/10 text-xl font-black">ZM</span>
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/10 text-xl font-black">
+            ZM
+          </span>
           <div>
             <h2 className="text-lg font-bold">Zoe Mohamed</h2>
             <p className="mt-0.5 text-sm text-[#bfd0c7]">zoe@example.com</p>
@@ -352,8 +393,12 @@ function AccountView({ online }: { online: boolean }) {
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           {["Read-only OAuth", "Raw email dibuang", "AI tanpa tools"].map((item) => (
-            <div className="rounded-2xl bg-[#f2f6f2] px-4 py-3 text-xs font-semibold text-[#365247]" key={item}>
-              <span className="mr-2 text-[#1b7a50]">✓</span>{item}
+            <div
+              className="rounded-2xl bg-[#f2f6f2] px-4 py-3 text-xs font-semibold text-[#365247]"
+              key={item}
+            >
+              <span className="mr-2 text-[#1b7a50]">✓</span>
+              {item}
             </div>
           ))}
         </div>
@@ -362,7 +407,9 @@ function AccountView({ online }: { online: boolean }) {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="font-bold text-[#173b2e]">Status aplikasi</h2>
-            <p className="mt-1 text-sm text-[#65756d]">{online ? "Online dan siap dipakai" : "Offline · app shell tetap tersedia"}</p>
+            <p className="mt-1 text-sm text-[#65756d]">
+              {online ? "Online dan siap dipakai" : "Offline · app shell tetap tersedia"}
+            </p>
           </div>
           <span className={`h-3 w-3 rounded-full ${online ? "bg-[#2d9b68]" : "bg-[#d29a58]"}`} />
         </div>
@@ -383,7 +430,9 @@ export function MonaraApp() {
   const online = useOnlineStatus();
 
   const review = (id: number) => {
-    setTransactions((items) => items.map((item) => (item.id === id ? { ...item, reviewed: true } : item)));
+    setTransactions((items) =>
+      items.map((item) => (item.id === id ? { ...item, reviewed: true } : item)),
+    );
     setSelected(null);
   };
 
@@ -399,7 +448,7 @@ export function MonaraApp() {
         category: "Lainnya",
         amount: Number.isFinite(amount) ? amount : 0,
         date: "Hari ini",
-        time: new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
+        time: timeFormatter.format(new Date()),
         method: "Manual",
         emoji: "✦",
         confidence: 100,
@@ -437,7 +486,9 @@ export function MonaraApp() {
             <div className="flex items-center gap-2 text-xs font-bold text-[#1b7a50]">
               <Icon className="h-4 w-4" name="shield" /> Private by design
             </div>
-            <p className="mt-2 text-xs leading-5 text-[#718078]">Data demo tersimpan lokal selama sesi ini.</p>
+            <p className="mt-2 text-xs leading-5 text-[#718078]">
+              Data demo tersimpan lokal selama sesi ini.
+            </p>
           </div>
         </aside>
 
@@ -458,7 +509,10 @@ export function MonaraApp() {
           </header>
 
           {!online ? (
-            <div className="bg-[#f4dfc6] px-5 py-2 text-center text-xs font-bold text-[#774d25]" role="status">
+            <div
+              className="bg-[#f4dfc6] px-5 py-2 text-center text-xs font-bold text-[#774d25]"
+              role="status"
+            >
               Kamu sedang offline. Monara tetap bisa dibuka dari cache.
             </div>
           ) : null}
@@ -487,7 +541,12 @@ export function MonaraApp() {
       >
         <div className="mx-auto grid max-w-lg grid-cols-5 items-end">
           {tabs.slice(0, 2).map((tab) => (
-            <MobileTab active={activeTab === tab.id} key={tab.id} onClick={() => setActiveTab(tab.id)} tab={tab} />
+            <MobileTab
+              active={activeTab === tab.id}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              tab={tab}
+            />
           ))}
           <button
             aria-label="Tambah transaksi"
@@ -498,7 +557,12 @@ export function MonaraApp() {
             <Icon className="h-7 w-7" name="plus" strokeWidth={2.2} />
           </button>
           {tabs.slice(2).map((tab) => (
-            <MobileTab active={activeTab === tab.id} key={tab.id} onClick={() => setActiveTab(tab.id)} tab={tab} />
+            <MobileTab
+              active={activeTab === tab.id}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              tab={tab}
+            />
           ))}
         </div>
       </nav>
@@ -513,9 +577,15 @@ export function MonaraApp() {
       </button>
 
       {selected ? (
-        <TransactionSheet onClose={() => setSelected(null)} onReview={() => review(selected.id)} transaction={selected} />
+        <TransactionSheet
+          onClose={() => setSelected(null)}
+          onReview={() => review(selected.id)}
+          transaction={selected}
+        />
       ) : null}
-      {addOpen ? <AddTransactionSheet onClose={() => setAddOpen(false)} onSubmit={addTransaction} /> : null}
+      {addOpen ? (
+        <AddTransactionSheet onClose={() => setAddOpen(false)} onSubmit={addTransaction} />
+      ) : null}
     </div>
   );
 }
@@ -552,18 +622,12 @@ function TransactionSheet({
   onReview: () => void;
 }) {
   return (
-    <div
-      aria-labelledby="transaction-title"
-      aria-modal="true"
-      className="fixed inset-0 z-[70] grid place-items-end bg-[#10271fb3] p-3 backdrop-blur-sm sm:place-items-center"
-      onMouseDown={(event) => {
-        if (event.currentTarget === event.target) onClose();
-      }}
-      role="dialog"
-    >
+    <ModalDialog labelledBy="transaction-title" onClose={onClose}>
       <div className="w-full max-w-md rounded-[1.8rem] bg-white p-6 shadow-2xl sm:p-8">
         <div className="flex items-start justify-between">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#f0f4ef] text-2xl">{transaction.emoji}</span>
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#f0f4ef] text-2xl">
+            {transaction.emoji}
+          </span>
           <button
             aria-label="Tutup detail transaksi"
             className="grid h-10 w-10 place-items-center rounded-full border border-[#dfe7e1] text-[#718078]"
@@ -573,10 +637,15 @@ function TransactionSheet({
             <Icon name="close" />
           </button>
         </div>
-        <h2 className="mt-5 text-2xl font-black tracking-[-0.04em] text-[#173b2e]" id="transaction-title">
+        <h2
+          className="mt-5 text-2xl font-black tracking-[-0.04em] text-[#173b2e]"
+          id="transaction-title"
+        >
           {transaction.merchant}
         </h2>
-        <p className="mt-1 text-sm text-[#718078]">{transaction.category} · {transaction.method}</p>
+        <p className="mt-1 text-sm text-[#718078]">
+          {transaction.category} · {transaction.method}
+        </p>
         <p className="mt-6 text-4xl font-black tracking-[-0.055em] text-[#173b2e]">
           {formatRupiah(transaction.amount)}
         </p>
@@ -598,7 +667,7 @@ function TransactionSheet({
           </p>
         )}
       </div>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -610,20 +679,20 @@ function AddTransactionSheet({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <div
-      aria-labelledby="add-title"
-      aria-modal="true"
-      className="fixed inset-0 z-[70] grid place-items-end bg-[#10271fb3] p-3 backdrop-blur-sm sm:place-items-center"
-      onMouseDown={(event) => {
-        if (event.currentTarget === event.target) onClose();
-      }}
-      role="dialog"
-    >
-      <form className="w-full max-w-md rounded-[1.8rem] bg-white p-6 shadow-2xl sm:p-8" onSubmit={onSubmit}>
+    <ModalDialog labelledBy="add-title" onClose={onClose}>
+      <form
+        className="w-full max-w-md rounded-[1.8rem] bg-white p-6 shadow-2xl sm:p-8"
+        onSubmit={onSubmit}
+      >
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1b7a50]">Catat manual</p>
-            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]" id="add-title">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1b7a50]">
+              Catat manual
+            </p>
+            <h2
+              className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]"
+              id="add-title"
+            >
               Transaksi baru
             </h2>
           </div>
@@ -639,10 +708,10 @@ function AddTransactionSheet({
         <label className="mt-6 block text-xs font-bold uppercase tracking-[0.12em] text-[#718078]">
           Merchant
           <input
-            autoFocus
             className="mt-2 w-full rounded-2xl border border-[#d9e3db] px-4 py-3.5 text-base font-semibold normal-case tracking-normal outline-none focus:border-[#1b7a50]"
             name="merchant"
             placeholder="Contoh: Warung Bu Tini"
+            data-autofocus
             required
           />
         </label>
@@ -668,6 +737,6 @@ function AddTransactionSheet({
           Simpan transaksi <Icon name="arrow" />
         </button>
       </form>
-    </div>
+    </ModalDialog>
   );
 }

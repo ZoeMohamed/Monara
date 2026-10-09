@@ -1,0 +1,5 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "share": false,
+  "supplyChain": { "enabled": false }
+}

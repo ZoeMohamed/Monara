@@ -1,0 +1,186 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**",
+      "!**/.next",
+      "!**/.wrangler",
+      "!**/dist",
+      "!**/next-env.d.ts",
+      "!**/*.tsbuildinfo",
+      "!**/database.types.ts",
+      "!**/public",
+      "!**/*.svg",
+      "!pnpm-lock.yaml"
+    ]
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "formatter": {
+    "enabled": true,
+    "useEditorconfig": true,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "domains": {
+      "next": "recommended",
+      "react": "recommended"
+    },
+    "rules": {
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      },
+      "style": {
+        "useImportType": "error",
+        "useExportType": "error",
+        "useNodejsImportProtocol": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": "warn"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // Contracts must stay browser and worker safe.
+      "includes": ["packages/contracts/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*", "next", "next/*", "react", "react-dom", "react/*"],
+                    "message": "packages/contracts must stay free of Node, Next.js, and React imports."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // Cloudflare runtime code cannot use unsupported Node APIs.
+      "includes": ["apps/agent/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "apps/agent runs on Cloudflare Workers; avoid unsupported Node APIs."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // Backend and shared packages must not depend on the web framework or React.
+      "includes": ["packages/core/src/**", "packages/db/src/**", "packages/integrations/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["next", "next/*", "react", "react-dom", "react/*"],
+                    "message": "Backend packages must not import Next.js or React."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // Production code never imports the playground.
+      "includes": ["apps/**", "packages/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@monara/llm-playground*", "**/playground/**"],
+                    "message": "Production code must not import playground/llm."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // Icon SVGs are decorative: the shared props set aria-hidden, which the rule cannot see through a spread.
+      "includes": ["apps/web/src/components/icon.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noSvgWithoutTitle": "off"
+          }
+        }
+      }
+    },
+    {
+      // The reduced-motion reset must override component animation and transition declarations.
+      "includes": ["apps/web/src/app/globals.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    },
+    {
+      // Scripts and the playground are CLI tools where console output is expected.
+      "includes": ["scripts/**", "playground/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ]
+}
