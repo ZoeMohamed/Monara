@@ -36,7 +36,7 @@ const git = (args, cwd) => execFileSync("git", args, { cwd, encoding: "utf8" }).
 
 function canonical(path) {
   try {
-    return realpathSync(path);
+    return realpathSync.native(path);
   } catch {
     return path;
   }
@@ -52,12 +52,12 @@ function registeredWorktrees(cwd) {
 }
 
 function resolveContext() {
-  const root = realpathSync(git(["rev-parse", "--show-toplevel"], process.cwd()));
+  const root = canonical(git(["rev-parse", "--show-toplevel"], process.cwd()));
   const commonDir = resolve(root, git(["rev-parse", "--git-common-dir"], root));
   const mainLine = git(["worktree", "list", "--porcelain"], root)
     .split("\n")
     .find((line) => line.startsWith("worktree "));
-  const main = realpathSync(mainLine.slice("worktree ".length));
+  const main = canonical(mainLine.slice("worktree ".length));
   return {
     root,
     main,
@@ -101,17 +101,23 @@ function seedEnvFile({ destination, mainSource, template, values, blankKeys = []
   return true;
 }
 
-function supabaseBin({ root, main }) {
-  return [root, main]
-    .map((dir) => join(dir, "node_modules/.bin/supabase"))
-    .find((path) => existsSync(path));
+const isWindows = process.platform === "win32";
+
+// Returns a checkout that has the Supabase CLI installed, preferring this worktree.
+function supabaseHome({ root, main }) {
+  return [root, main].find((dir) => existsSync(join(dir, "node_modules/.bin/supabase")));
 }
 
-function listStacks(bin, cwd) {
-  const result = spawnSync(bin, ["stack", "list", "--output-format", "json"], {
-    cwd,
+function supabase(home, args) {
+  return spawnSync("pnpm", ["exec", "supabase", ...args], {
+    cwd: home,
     encoding: "utf8",
+    shell: isWindows,
   });
+}
+
+function listStacks(home) {
+  const result = supabase(home, ["stack", "list", "--output-format", "json"]);
   if (result.status !== 0) return [];
   try {
     return JSON.parse(result.stdout).stacks ?? [];
@@ -120,11 +126,8 @@ function listStacks(bin, cwd) {
   }
 }
 
-function destroyStack(bin, cwd, id) {
-  const result = spawnSync(bin, ["stack", "destroy", "--stack-id", id, "--yes"], {
-    cwd,
-    encoding: "utf8",
-  });
+function destroyStack(home, id) {
+  const result = supabase(home, ["stack", "destroy", "--stack-id", id, "--yes"]);
   if (result.status !== 0) console.warn(`Could not destroy Supabase stack ${id.slice(0, 12)}.`);
   return result.status === 0;
 }
@@ -174,10 +177,10 @@ async function teardown(context) {
     log("Refusing to tear down the main checkout.");
     return;
   }
-  const bin = supabaseBin(context);
-  if (bin) {
-    for (const stack of listStacks(bin, context.root)) {
-      if (stack.project_root === context.root && destroyStack(bin, context.root, stack.id)) {
+  const home = supabaseHome(context);
+  if (home) {
+    for (const stack of listStacks(home)) {
+      if (canonical(stack.project_root) === context.root && destroyStack(home, stack.id)) {
         log(`Destroyed Supabase stack ${stack.id.slice(0, 12)}.`);
       }
     }
@@ -199,10 +202,10 @@ async function prune(context) {
     writeClaims(context.registry, live);
     log(`Dropped ${Object.keys(claims).length - Object.keys(live).length} dead slot claim(s).`);
   });
-  const bin = supabaseBin(context);
-  if (!bin) return;
-  for (const stack of listStacks(bin, context.main)) {
-    if (!context.isLive(stack.project_root) && destroyStack(bin, context.main, stack.id)) {
+  const home = supabaseHome(context);
+  if (!home) return;
+  for (const stack of listStacks(home)) {
+    if (!context.isLive(stack.project_root) && destroyStack(home, stack.id)) {
       log(`Destroyed orphaned Supabase stack for ${stack.project_root}.`);
     }
   }

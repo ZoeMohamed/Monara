@@ -7,6 +7,7 @@ const result = spawnSync("pnpm", ["exec", "supabase", "gen", "types", "typescrip
   cwd: root,
   encoding: "utf8",
   maxBuffer: 10 * 1024 * 1024,
+  shell: process.platform === "win32",
 });
 
 if (result.error || result.status !== 0 || !result.stdout?.trim()) {
