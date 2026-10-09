@@ -6,16 +6,16 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "FINCOUNTANT · UI Clone Demo",
-    template: "%s · FINCOUNTANT",
+    default: "Monara · UI Demo",
+    template: "%s · Monara",
   },
   description: "Prototype PWA finansial dengan data demo lokal untuk pengujian antarmuka.",
-  applicationName: "FINCOUNTANT",
+  applicationName: "Monara",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "FINCOUNTANT",
+    title: "Monara",
   },
   formatDetection: {
     telephone: false,

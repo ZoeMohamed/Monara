@@ -1,4 +1,4 @@
-const CACHE_NAME = "fin-shell-v2";
+const CACHE_NAME = "monara-shell-v3";
 const CORE_ASSETS = [
   "/",
   "/manifest.webmanifest",

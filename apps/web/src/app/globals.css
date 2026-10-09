@@ -553,7 +553,7 @@ select:focus-visible {
   font-size: 12px;
 }
 
-.fin-buddy {
+.monara-buddy {
   position: absolute;
   right: 11%;
   bottom: 28px;
@@ -1632,7 +1632,7 @@ select:focus-visible {
     left: 16px;
   }
 
-  .fin-buddy {
+  .monara-buddy {
     right: 16%;
     transform: scale(.88);
     transform-origin: bottom center;

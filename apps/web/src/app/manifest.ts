@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "FINCOUNTANT · UI Clone Demo",
-    short_name: "FINCOUNTANT",
+    name: "Monara · UI Demo",
+    short_name: "Monara",
     description: "Prototype PWA finansial dengan data demo lokal untuk pengujian antarmuka.",
     start_url: "/",
     scope: "/",

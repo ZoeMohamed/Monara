@@ -1,5 +1,5 @@
-import { FinApp } from "@/components/fin-app";
+import { MonaraApp } from "@/components/monara-app";
 
 export default function Home() {
-  return <FinApp />;
+  return <MonaraApp />;
 }

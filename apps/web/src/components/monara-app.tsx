@@ -41,12 +41,12 @@ function useOnlineStatus() {
 
 function Logo() {
   return (
-    <div className="brand" aria-label="FINCOUNTANT demo">
+    <div className="brand" aria-label="Monara demo">
       <span className="brand-bot" aria-hidden="true">
         <span className="brand-bot-eye" />
         <span className="brand-bot-eye" />
       </span>
-      <span className="brand-word">FINCOUNTANT</span>
+      <span className="brand-word">Monara</span>
       <span className="demo-tag">DEMO</span>
     </div>
   );
@@ -189,7 +189,7 @@ function SpendingChart() {
 
 function FinBuddy() {
   return (
-    <div className="fin-buddy" aria-hidden="true">
+    <div className="monara-buddy" aria-hidden="true">
       <span className="buddy-antenna" />
       <span className="buddy-head"><i /><i /></span>
       <span className="buddy-body">F</span>
@@ -401,7 +401,7 @@ function CloseButton({ onClose }: { onClose: () => void }) {
   return <button aria-label="Tutup" className="modal-close" onClick={onClose} type="button"><Icon name="close" /></button>;
 }
 
-export function FinApp() {
+export function MonaraApp() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [transactions, setTransactions] = useState(initialTransactions);
   const [categories, setCategories] = useState(initialCategories);

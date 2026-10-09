@@ -13,7 +13,7 @@ export function PwaRegister() {
           updateViaCache: "none",
         });
       } catch (error) {
-        console.error("FIN service worker registration failed", error);
+        console.error("Monara service worker registration failed", error);
       }
     };
 
