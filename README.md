@@ -78,7 +78,7 @@ Konfigurasi yang sudah terhubung:
 - Production Branch: `main`
 - Framework: Next.js
 - Node.js: 24.x
-- Production URL: <https://monara.vercel.app>
+- Production URL: <https://monara-finance.vercel.app>
 
 Jika deployment gagal, buka status **Vercel** pada commit GitHub untuk melihat build log. Jangan pernah menyimpan token, Deploy Hook URL, atau secret lain di repository.
 
