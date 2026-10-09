@@ -87,7 +87,9 @@ export function InstallAppButton() {
           <div className="w-full max-w-md rounded-[1.75rem] bg-white p-6 shadow-2xl sm:p-8">
             <div className="flex items-start justify-between gap-6">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1b7a50]">Install PWA</p>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1b7a50]">
+                  Install PWA
+                </p>
                 <h2 className="mt-2 text-2xl font-bold tracking-[-0.04em]" id="install-title">
                   Taruh Monara di layar utama.
                 </h2>
