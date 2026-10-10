@@ -14,7 +14,6 @@
 | 010 | Home shows only the selected month's essential financial information. | Total spending, remaining budget, spending pace, category breakdown, recent transactions, and active alerts. |
 | 011 | Users create weekly or monthly category budgets with one warning threshold, defaulting to 80%. | Budget limit, used amount, remaining amount, progress, and an in-app threshold warning. |
 | 012 | AI may suggest recurring bills, but users must confirm them. | Bills list showing merchant, expected amount, cadence, next due date, and status. |
-| 013 | Hackathon notifications stay inside the app. | Budget warning and upcoming-bill alert on Home and the related detail screen. |
+| 013 | Budget and bill alerts appear only when the user opens Monara. No phone push, email, or WhatsApp notification. | Alert cards for exceeded budgets and upcoming bills on Home. |
 | 014 | Composio owns Gmail credentials. Monara stores only normalized product data. | No raw email body, Gmail OAuth token, bank PIN, OTP, or server secret stored in the browser or product tables. |
 | 015 | Every user's data is private. | Supabase RLS isolates all user-owned records and server secrets remain server-side. |
-| 016 | WhatsApp, WeChat, asset tracking, debt, risk profiling, crypto, direct bank connections, and automatic subscription cancellation are outside the hackathon MVP. | No screens, database tables, or integrations for deferred features. |
