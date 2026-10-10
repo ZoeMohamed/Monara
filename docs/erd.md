@@ -1,26 +1,57 @@
-# Monara ERD
+# Monara MVP ERD
 
-Status: design only. This document does not create or migrate any database.
+Status: design only. No SQL or database migration is created by this document.
 
-## Scope
+## Hackathon scope
 
-Monara is single-user personal finance software. Supabase team members are project collaborators, not tenants inside the product. Every financial row belongs to one authenticated user.
+Build the shortest complete loop:
 
-The design is split into three delivery phases so the MVP can ship without carrying asset-management complexity.
+1. User signs in with Google through Supabase Auth.
+2. User separately connects one or more Gmail accounts through Composio.
+3. Composio reads finance-related emails and the extractor creates pending transactions.
+4. User confirms or rejects each transaction.
+5. Confirmed transactions power the dashboard, budgets, recurring bills, and reminders.
 
-## Phase 1 — automatic expense tracking
+Asset allocation, risk profiling, crypto positions, WhatsApp/WeChat bookkeeping, shared households, and receipt storage are after the hackathon core.
+
+## Two separate Google connections
+
+```mermaid
+flowchart LR
+    U[User] -->|Sign in with Google| SA[Supabase Auth]
+    SA --> AU[auth.users]
+    U -->|Connect Gmail| CO[Composio OAuth]
+    CO --> GC[gmail_connections]
+    CO -->|Read selected Gmail data| EX[Transaction extractor]
+    EX --> TX[Pending transactions]
+```
+
+- **Google login** authenticates the Monara user. Request only `openid`, `email`, and `profile` through Supabase Auth.
+- **Connect Gmail** authorizes inbox access through Composio. It is a different consent flow and may use a different Google account.
+- Use the Supabase `auth.users.id` as the Composio user ID.
+- Store only the Composio connected-account ID in Monara. Composio stores and refreshes Gmail credentials.
+- Never reuse Supabase's Google provider token for Gmail ingestion.
+
+References: [Supabase Google login](https://supabase.com/docs/guides/auth/social-login/auth-google) and [Composio authentication](https://docs.composio.dev/docs/authentication).
+
+## MVP ERD
 
 ```mermaid
 erDiagram
     AUTH_USERS ||--|| PROFILES : has
-    AUTH_USERS ||--o{ CATEGORIES : owns
+    AUTH_USERS ||--o{ GMAIL_CONNECTIONS : connects
     AUTH_USERS ||--o{ FINANCIAL_ACCOUNTS : owns
-    AUTH_USERS ||--o{ DATA_CONNECTIONS : authorizes
+    AUTH_USERS ||--o{ CATEGORIES : owns
     AUTH_USERS ||--o{ TRANSACTIONS : owns
-    DATA_CONNECTIONS ||--o{ INGESTION_RECORDS : receives
-    INGESTION_RECORDS o|--o{ TRANSACTIONS : produces
+    AUTH_USERS ||--o{ BUDGETS : sets
+    AUTH_USERS ||--o{ RECURRING_BILLS : tracks
+
+    GMAIL_CONNECTIONS o|--o{ TRANSACTIONS : imports
     FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : contains
+    FINANCIAL_ACCOUNTS o|--o{ RECURRING_BILLS : charges
     CATEGORIES o|--o{ TRANSACTIONS : classifies
+    CATEGORIES o|--o{ BUDGETS : limits
+    RECURRING_BILLS o|--o{ TRANSACTIONS : matches
 
     AUTH_USERS {
         uuid id PK
@@ -35,14 +66,15 @@ erDiagram
         timestamptz updated_at
     }
 
-    CATEGORIES {
+    GMAIL_CONNECTIONS {
         bigint id PK
         uuid user_id FK
-        text name
-        text slug
-        text icon
-        text color
-        boolean is_archived
+        text composio_connected_account_id
+        text gmail_address
+        text status
+        timestamptz last_synced_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     FINANCIAL_ACCOUNTS {
@@ -56,40 +88,29 @@ erDiagram
         timestamptz balance_as_of
         text last_four
         boolean is_active
-    }
-
-    DATA_CONNECTIONS {
-        bigint id PK
-        uuid user_id FK
-        text connection_type
-        text provider
-        text provider_connection_id
-        text display_label
-        text status
-        timestamptz last_synced_at
         timestamptz created_at
+        timestamptz updated_at
     }
 
-    INGESTION_RECORDS {
+    CATEGORIES {
         bigint id PK
         uuid user_id FK
-        bigint data_connection_id FK
-        text external_id
-        text source_type
-        text sender
-        text subject
-        text payload_hash
-        timestamptz occurred_at
-        text processing_status
-        timestamptz processed_at
+        text name
+        text slug
+        text icon
+        text color
+        boolean is_archived
     }
 
     TRANSACTIONS {
         bigint id PK
         uuid user_id FK
+        bigint gmail_connection_id FK
         bigint financial_account_id FK
         bigint category_id FK
-        bigint ingestion_record_id FK
+        bigint recurring_bill_id FK
+        text source_type
+        text source_ref
         text transaction_type
         text merchant_name
         numeric amount
@@ -99,34 +120,9 @@ erDiagram
         text location
         numeric ai_confidence
         text review_status
-        text dedupe_key
         timestamptz created_at
         timestamptz updated_at
     }
-```
-
-Important constraints:
-
-- `data_connections (user_id, provider, provider_connection_id)` is unique.
-- `ingestion_records (data_connection_id, external_id)` is unique so one email or provider event is processed once.
-- `transactions (user_id, dedupe_key)` is unique when `dedupe_key` is present.
-- `amount` is positive and exact; `transaction_type` carries `expense`, `income`, or `transfer`.
-- Imported transactions start as `pending`. Only `confirmed` transactions count toward totals and budgets.
-- OAuth tokens and raw email bodies are not stored in public tables. Keep credentials in the provider/backend secret store.
-
-## Phase 2 — budgets, bills, reminders, and chat agents
-
-```mermaid
-erDiagram
-    AUTH_USERS ||--o{ BUDGETS : owns
-    AUTH_USERS ||--o{ RECURRING_BILLS : owns
-    AUTH_USERS ||--o{ CHANNEL_CONNECTIONS : verifies
-    AUTH_USERS ||--o{ NOTIFICATIONS : receives
-    CATEGORIES o|--o{ BUDGETS : limits
-    FINANCIAL_ACCOUNTS o|--o{ RECURRING_BILLS : charges
-    RECURRING_BILLS o|--o{ TRANSACTIONS : matches
-    CHANNEL_CONNECTIONS ||--o{ AGENT_ACTIONS : submits
-    CHANNEL_CONNECTIONS o|--o{ NOTIFICATIONS : delivers
 
     BUDGETS {
         bigint id PK
@@ -138,8 +134,10 @@ erDiagram
         char currency
         smallint warning_percent
         date starts_on
-        date ends_on
         boolean is_active
+        timestamptz last_reminded_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     RECURRING_BILLS {
@@ -147,7 +145,6 @@ erDiagram
         uuid user_id FK
         bigint financial_account_id FK
         text merchant_name
-        text description
         numeric expected_amount
         char currency
         smallint interval_count
@@ -155,119 +152,51 @@ erDiagram
         date next_due_on
         text status
         text cancellation_url
+        timestamptz last_reminded_at
         timestamptz created_at
         timestamptz updated_at
     }
-
-    CHANNEL_CONNECTIONS {
-        bigint id PK
-        uuid user_id FK
-        text provider
-        text provider_contact_id
-        text handle_hmac
-        text handle_last_four
-        text status
-        timestamptz verified_at
-    }
-
-    AGENT_ACTIONS {
-        bigint id PK
-        uuid user_id FK
-        bigint channel_connection_id FK
-        text action
-        text entity_type
-        text entity_id
-        text idempotency_key
-        text status
-        text failure_code
-        timestamptz created_at
-        timestamptz completed_at
-    }
-
-    NOTIFICATIONS {
-        bigint id PK
-        uuid user_id FK
-        bigint channel_connection_id FK
-        text notification_type
-        text entity_type
-        text entity_id
-        text channel
-        text status
-        timestamptz scheduled_for
-        timestamptz delivered_at
-    }
 ```
 
-Budget usage is derived from confirmed transactions. Do not create a mutable `budget_spent` column. A recurring bill may be detected automatically, but the user confirms it before reminders become active.
+## Functional rules
 
-Phase 2 adds nullable `transactions.recurring_bill_id`. Keep `(user_id, idempotency_key)` unique on `agent_actions` so provider retries cannot repeat a write.
+- A user may connect multiple Gmail accounts. Login email and connected Gmail email do not have to match.
+- `gmail_connections (user_id, gmail_address)` and `composio_connected_account_id` are unique.
+- Gmail imports store only normalized transaction data. Do not store raw email bodies or OAuth tokens.
+- `transactions (gmail_connection_id, source_ref)` is unique when both values exist. `source_ref` is the Gmail message ID plus item index when one email contains multiple transactions.
+- Imported transactions start as `pending`; only `confirmed` rows affect totals, budgets, and recurring-bill matching.
+- `amount` is positive and exact. `transaction_type` is `expense`, `income`, or `transfer`.
+- Budget spending is calculated from confirmed transactions. Do not store a mutable `budget_spent` value.
+- Reminder state stays on `budgets.last_reminded_at` and `recurring_bills.last_reminded_at`; there is no notification-log table.
+- A detected recurring bill remains `pending` until the user confirms it.
 
-`agent_actions` is an audit and idempotency record for WhatsApp/WeChat CRUD. It stores the interpreted action, not raw conversation content.
+## Deliberately omitted
 
-## Phase 3 — assets and risk profile
+No `auth_logs`, `sync_logs`, `agent_logs`, `raw_emails`, `oauth_tokens`, `notifications`, or generic provider framework.
 
-```mermaid
-erDiagram
-    AUTH_USERS ||--o{ POSITIONS : owns
-    AUTH_USERS ||--o{ RISK_ASSESSMENTS : owns
-    FINANCIAL_ACCOUNTS o|--o{ POSITIONS : holds
-    POSITIONS ||--o{ POSITION_VALUATIONS : valued_by
+For the hackathon:
 
-    POSITIONS {
-        bigint id PK
-        uuid user_id FK
-        bigint financial_account_id FK
-        text name
-        text position_type
-        text asset_class
-        text symbol
-        numeric quantity
-        char currency
-        text source
-        boolean is_active
-    }
+- Composio owns Gmail credentials and connection lifecycle.
+- Supabase Auth owns login sessions.
+- Monara stores only product state visible or necessary to users.
+- Operational failures are returned to the UI directly; add durable job history only when background retries become real.
 
-    POSITION_VALUATIONS {
-        bigint id PK
-        uuid user_id FK
-        bigint position_id FK
-        numeric value_amount
-        char currency
-        text valuation_source
-        timestamptz valued_at
-    }
+## Security and integrity
 
-    RISK_ASSESSMENTS {
-        bigint id PK
-        uuid user_id FK
-        smallint risk_score
-        text risk_level
-        jsonb answers
-        jsonb allocation_snapshot
-        text model_version
-        timestamptz assessed_at
-    }
-```
-
-Assets and liabilities share `positions`; `position_type` distinguishes them. Bank, brokerage, exchange, and crypto-wallet holdings reuse `financial_accounts` instead of introducing provider-specific account tables. On-chain transactions reuse the Phase 1 transaction pipeline; the provider event or transaction hash lives in `ingestion_records.external_id`.
-
-## Security and integrity rules
-
-- Every public table enables RLS and checks `user_id = (select auth.uid())`.
-- Every `user_id` used by RLS is indexed.
-- Child references must belong to the same user; enforce this with composite foreign keys such as `(financial_account_id, user_id)`.
-- Foreign-key columns are indexed.
-- Money uses `numeric`, time uses `timestamptz`, and currencies use uppercase ISO 4217 codes.
-- Public clients use only the Supabase publishable key. Secret/service-role keys never enter the PWA.
-- Never use profile metadata supplied by the user for authorization.
+- Enable RLS on every public table.
+- Every policy checks `user_id = (select auth.uid())` for authenticated users.
+- Index every `user_id` and foreign-key column.
+- Enforce same-user relationships with composite foreign keys such as `(financial_account_id, user_id)`.
+- Use `numeric` for money, `timestamptz` for events, and uppercase ISO 4217 currency codes.
+- The PWA receives only the Supabase URL and publishable key. Composio, Supabase secret/service-role, and Google OAuth secrets stay server-side.
 
 ## Build order
 
-1. Profiles, categories, financial accounts.
-2. Email connection metadata and ingestion deduplication.
-3. Pending/confirmed transactions.
-4. Budgets and recurring bills.
-5. Notifications and verified WhatsApp/WeChat actions.
-6. Positions, valuations, and risk assessments.
+1. Supabase Google login and `profiles`.
+2. Composio Gmail connect/disconnect and `gmail_connections`.
+3. Import recent emails into pending `transactions` with deduplication.
+4. Confirm/reject UI, categories, accounts, and dashboard totals.
+5. Budgets with one warning threshold.
+6. Recurring-bill detection and due reminder.
 
-Do not add merchant normalization, shared households, exchange-specific tables, receipt storage, or materialized dashboard totals until real usage proves they are needed.
+Stop there for the hackathon. Add assets, risk scoring, crypto, and chat channels only after this loop works end to end.
