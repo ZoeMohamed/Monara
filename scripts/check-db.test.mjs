@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { checkDb, validateMigrations } from "./check-db.mjs";
@@ -171,6 +171,58 @@ describe("local database gate", () => {
     assert.throws(() => checkDb({ ...context, run, reset: true }), /checkout is running/);
     assert.ok(
       context.calls.every(({ args }) => !args.includes("db:start") && !args.includes("db:stop")),
+    );
+  });
+
+  it("recognizes running stacks reported through existing symlink or dot-segment aliases", (t) => {
+    const context = fixture(t);
+    const aliases = fixture(t, false);
+    const link = join(aliases.root, "checkout-link");
+    symlinkSync(context.root, link, process.platform === "win32" ? "junction" : "dir");
+    for (const projectRoot of [link, `${context.root}${sep}.`]) {
+      assert.notEqual(projectRoot, context.root);
+      const run = (command, args, options) => {
+        const result = context.run(command, args, options);
+        if (args.includes("list")) {
+          result.stdout = JSON.stringify({
+            stacks: [{ project_root: projectRoot, owner: "reachable", runtime: "docker" }],
+          });
+        }
+        return result;
+      };
+      assert.throws(() => checkDb({ ...context, run, reset: true }), /checkout is running/);
+    }
+    assert.ok(
+      context.calls.every(
+        ({ args }) =>
+          !args.includes("db:start") && !args.includes("reset") && !args.includes("db:stop"),
+      ),
+    );
+  });
+
+  it("refuses an unverifiable registry path before starting, resetting, or stopping a stack", (t) => {
+    const context = fixture(t);
+    const run = (command, args, options) => {
+      const result = context.run(command, args, options);
+      if (args.includes("list")) {
+        result.stdout = JSON.stringify({
+          stacks: [
+            {
+              project_root: join(context.root, "missing-checkout"),
+              owner: "unavailable",
+              runtime: "docker",
+            },
+          ],
+        });
+      }
+      return result;
+    };
+    assert.throws(() => checkDb({ ...context, run, reset: true }), /stack path; refusing to reset/);
+    assert.ok(
+      context.calls.every(
+        ({ args }) =>
+          !args.includes("db:start") && !args.includes("reset") && !args.includes("db:stop"),
+      ),
     );
   });
 
