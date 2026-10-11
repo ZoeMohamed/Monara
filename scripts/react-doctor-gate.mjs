@@ -16,13 +16,20 @@ const run = (target, extraArgs) =>
 for (const target of TARGETS) {
   const findings = run(target, ["--no-score", "--blocking", "warning"]);
   if (findings.status !== 0) {
-    console.error(findings.stdout);
-    console.error(findings.stderr);
-    console.error(`react-doctor reported findings in ${target}.`);
+    if (findings.error) console.error(findings.error.message);
+    console.error(findings.stdout ?? "");
+    console.error(findings.stderr ?? "");
+    console.error(`react-doctor failed or reported findings in ${target}.`);
     process.exit(1);
   }
 
-  const lastLine = run(target, ["--score"]).stdout.trim().split("\n").at(-1) ?? "";
+  const scored = run(target, ["--score"]);
+  if (scored.error || scored.signal) {
+    console.error(scored.error?.message ?? `react-doctor terminated by ${scored.signal}.`);
+    console.error(`react-doctor could not run the score check for ${target}.`);
+    process.exit(1);
+  }
+  const lastLine = (scored.stdout ?? "").trim().split("\n").at(-1) ?? "";
   const score = Number(lastLine);
 
   if (!Number.isFinite(score) || lastLine === "") {
@@ -33,6 +40,12 @@ for (const target of TARGETS) {
     }
     console.warn(`${message} Skipping the score check locally; CI enforces it.`);
     continue;
+  }
+
+  if (scored.status !== 0) {
+    console.error(scored.stderr ?? "");
+    console.error(`react-doctor failed the score check for ${target}.`);
+    process.exit(1);
   }
 
   if (score < MIN_SCORE) {

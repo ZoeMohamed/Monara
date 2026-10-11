@@ -133,7 +133,13 @@ export function checkDb({ root, reset = false, run = spawnSync, log = console.lo
   ) {
     throw new Error("Could not verify the local Supabase stack list; refusing to reset.");
   }
-  const checkoutStacks = stacks.filter((stack) => stack.project_root === root);
+  const checkoutStacks = stacks.filter((stack) => {
+    try {
+      return realpathSync(stack.project_root) === root;
+    } catch {
+      throw new Error("Could not verify a local Supabase stack path; refusing to reset.");
+    }
+  });
   if (checkoutStacks.some((stack) => stack.owner !== "unavailable")) {
     throw new Error(
       "A Supabase stack in this checkout is running. Stop it first only if its data is disposable (pnpm db:stop), or use a separate worktree.",
