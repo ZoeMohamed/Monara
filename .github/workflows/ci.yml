@@ -103,6 +103,18 @@ jobs:
       - uses: ./.github/actions/install
       - run: pnpm test
 
+  database:
+    name: Local database migrations
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/install
+      - name: Replay migrations and verify ownership, RLS, and generated types
+        run: pnpm db:check --reset
+
   build:
     name: Build
     needs: changes
@@ -156,7 +168,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/install
-      - run: pnpm doctor
+      - run: pnpm run doctor
 
   actionlint:
     name: Lint workflows

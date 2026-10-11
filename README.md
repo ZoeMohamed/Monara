@@ -2,11 +2,11 @@
 
 Monara is a mobile-first personal-finance PWA built with Next.js. The UI currently uses sample data and browser state. The repository now includes scaffolding for a Next.js backend, Supabase, a Cloudflare agent, shared packages, and LLM experiments. Those integrations are not implemented or connected yet.
 
-See [repository structure and team ownership](docs/repository-structure.md), [architecture decisions](docs/adr/0001-initial-runtime-boundaries.md), and [agent instructions](AGENTS.md).
+See [repository structure and team ownership](docs/repository-structure.md), [architecture decisions](docs/adr/0001-initial-runtime-boundaries.md), [Supabase workflow](docs/supabase-workflow.md), and [agent instructions](AGENTS.md).
 
 ## Requirements
 
-- Node.js 20.9+
+- Node.js 24 (`.nvmrc`)
 - pnpm 10+
 
 ## Run locally
@@ -87,4 +87,4 @@ Jika deployment gagal, buka status **Vercel** pada commit GitHub untuk melihat b
 
 ## Product scope
 
-Transactions are demo data. Changes live only in browser state and reset on reload. The next implementation scope is Google sign-in, financial accounts, transaction tracking, dashboard, Gmail ingestion through Composio, and a WhatsApp agent through Kapso. Other features remain placeholders. See the architecture decision for the agreed runtime, review, and ownership boundaries.
+Transactions are demo data. Changes live only in browser state and reset on reload. Database CI checks migration prerequisites and skips until SQL migrations exist; `pnpm db:check --reset` runs the local database gate once the schema, ownership tests, and generated types are added. The next implementation scope is Google sign-in, financial accounts, transaction tracking, dashboard, Gmail ingestion through Composio, and a WhatsApp agent through Kapso. Other features remain placeholders. See the architecture decision for the agreed runtime, review, and ownership boundaries.
