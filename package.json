@@ -20,7 +20,7 @@
     "sherif": "sherif",
     "test": "pnpm -r --if-present test && node --test scripts/*.test.mjs",
     "doctor": "node scripts/react-doctor-gate.mjs",
-    "check": "pnpm lint && pnpm typecheck && pnpm knip && pnpm sherif && pnpm test && pnpm doctor",
+    "check": "pnpm lint && pnpm typecheck && pnpm knip && pnpm sherif && pnpm test && pnpm doctor && pnpm docs:check",
     "dev:web": "node scripts/dev.mjs web",
     "dev:agent": "node scripts/dev.mjs agent",
     "db:start": "node scripts/db.mjs start",
@@ -30,7 +30,8 @@
     "worktree:setup": "node scripts/worktree.mjs setup",
     "worktree:teardown": "node scripts/worktree.mjs teardown",
     "worktree:prune": "node scripts/worktree.mjs prune",
-    "worktree:status": "node scripts/worktree.mjs status"
+    "worktree:status": "node scripts/worktree.mjs status",
+    "docs:check": "node scripts/docs-check.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

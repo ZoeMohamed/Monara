@@ -65,6 +65,10 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 - Each linked worktree has its own ports, env files, and Supabase stack, set up by `pnpm install`. Start servers with `pnpm dev` and `pnpm dev:agent`, and the database with `pnpm db:start`, so they use the worktree's ports.
 - Run `pnpm worktree:teardown` before removing a worktree; `pnpm worktree:prune` clears leftovers.
 
+## Technical documentation
+
+- The hackathon technical documentation lives in docs/tech, one file per area, written by its owner. When asked to write or update it, follow .agents/skills/tech-doc/SKILL.md and run `pnpm docs:check`.
+
 ## Verification and Git
 
 Match checks to the change:
