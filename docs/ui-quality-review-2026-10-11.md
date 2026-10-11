@@ -12,10 +12,12 @@ Owner: Erdafa / Daptek. Scope: ER1–ER12 presentation and supporting local gate
 | Demo lifetime | Session wording could imply persistence after navigating away | Explicit leave/reload reset disclaimer |
 | Date validation | Manual/editor path imposed a future-date rule absent from shared validation | Both paths use the same accepted calendar-date validation |
 | Reminder documentation | Snapshot could be confused with delivery or crossing history | Current eligibility only; both threshold crossings, rearming, dedupe and delivery remain backend work |
+| Database reset guard | Registry paths compared with raw spelling | Canonical filesystem paths; unverifiable paths refuse start/reset/stop |
+| React Doctor subprocesses | Missing stdout could throw; failed process could emit a score | Explicit spawn diagnostics, null-safe parsing and failed-process rejection |
 
 ## Verified locally
 
-- `pnpm check`: 64 passing tests, zero failures or skipped tests; React Doctor 100/100 with no findings for both `apps/web` and `packages/ui`; lint, typecheck, workspace/dead-code checks and documentation gate pass.
+- `pnpm check`: 71 passing tests, zero failures or skipped tests, including seven regressions added after CodeRabbit's CI review; React Doctor 100/100 with no findings for both `apps/web` and `packages/ui`; lint, typecheck, workspace/dead-code checks and documentation gate pass.
 - `pnpm build`: Next.js production build and Cloudflare dry-run build pass. No deployment performed.
 - Browser interactions: confirmed coffee adds Rp28,000 to spending; salary adds Rp8,000,000 income; transfer leaves spending unchanged; month switching reaches the empty state; bill tracking changes the session; Chat failure retains the draft; keyboard tab activation resets focus/scroll; transaction form Escape restores opener focus.
 - Rendered-layout checks at 320px and 390px: Home, Transactions/Review Queue, Budgets, Chat, Profile, sign-in and Gmail fit without horizontal page overflow. Forms retain labelled 44px inputs. Header stays sticky; Chat composer remains above bottom navigation.
