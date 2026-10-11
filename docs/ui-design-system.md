@@ -70,7 +70,7 @@ Verification on 11 October: full checks and builds passed; browser inspection co
 
 ## Compact mobile layout and Review Queue
 
-Mobile is the primary layout. Use 16px page gutters and card padding, compact section gaps and headings, and paired summary cards where text remains readable. Preserve a 44px minimum for buttons and input controls. Input boundaries have at least 3:1 contrast against white; retain the blue keyboard focus ring. The user requested density similar to [Aiccountant](https://aiccountant.id/en), keeping Monara’s English light blue theme. Do not use desktop whitespace as the mobile baseline.
+Mobile is the primary layout. Use 16px page gutters and card padding, compact section gaps and headings, and paired summary cards where text remains readable. Preserve a 44px minimum for buttons, text inputs and select controls. Input boundaries have at least 3:1 contrast against white; retain the blue keyboard focus ring. The user requested density similar to [Aiccountant](https://aiccountant.id/en), keeping Monara’s English light blue theme. Do not use desktop whitespace as the mobile baseline.
 
 The Review Queue supports pending-only records, editing without confirmation, validated confirmation, explicit rejection, and incomplete-field flags. Demo summaries use confirmed expense/income records only and omit transfers. These are synthetic session interactions; backend ownership, persistence and rejected-email dedup remain required. See [the UI technical draft](tech/ui.md).
 
