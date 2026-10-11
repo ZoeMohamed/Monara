@@ -33,7 +33,7 @@ playground/llm -> contracts, integrations
 
 Apps never import another app. Backend services own financial writes; the agent requests those operations through an authenticated backend API. Contracts must remain browser/worker safe. UI must remain presentation-only. Production code never imports the playground.
 
-The UI package is a reserved entry point, not a HeroUI migration. Supabase helpers re-export explicit-config SDK constructors without automatically creating a client. Generated database types will be added after migrations exist. Starter contracts cover identifiers, review state, Gmail jobs, and verified WhatsApp message input; they do not finalize the financial schema.
+The UI package exports HeroUI primitives and the shared light theme used by the web prototype. HeroUI v3 uses CSS themes without a provider; see the [UI design system](ui-design-system.md). Supabase helpers re-export explicit-config SDK constructors without automatically creating a client. Generated database types will be added after migrations exist. Starter contracts cover identifiers, review state, Gmail jobs, and verified WhatsApp message input; they do not finalize the financial schema.
 
 ## Agreed flows
 

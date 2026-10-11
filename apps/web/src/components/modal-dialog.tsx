@@ -1,5 +1,6 @@
 "use client";
 
+import { Modal } from "@monara/ui";
 import type { ReactNode } from "react";
 
 type ModalDialogProps = {
@@ -8,27 +9,30 @@ type ModalDialogProps = {
   children: ReactNode;
 };
 
-// Mount it while the modal is open. Mark one child with data-autofocus to receive initial focus.
+// Mount while open; HeroUI contains focus and restores it to the opening control.
 export function ModalDialog({ labelledBy, onClose, children }: ModalDialogProps) {
   return (
-    <dialog
-      aria-labelledby={labelledBy}
-      className="m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-3 backdrop:bg-[#10271fb3] backdrop:backdrop-blur-sm open:grid open:place-items-end sm:open:place-items-center"
-      onClose={onClose}
-      ref={(node) => {
-        if (!node || node.open) return;
-        node.showModal();
-        node.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+    <Modal.Backdrop
+      className="backdrop-blur-sm"
+      isOpen
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onClose();
       }}
+      variant="blur"
     >
-      <div className="relative z-10 w-full max-w-md">{children}</div>
-      <button
-        aria-label="Tutup"
-        className="absolute inset-0 cursor-default"
-        onClick={onClose}
-        tabIndex={-1}
-        type="button"
-      />
-    </dialog>
+      <Modal.Container
+        className="p-3 pt-[max(.75rem,env(safe-area-inset-top,0px))] pb-[max(.75rem,env(safe-area-inset-bottom,0px))] pl-[max(.75rem,env(safe-area-inset-left,0px))] pr-[max(.75rem,env(safe-area-inset-right,0px))]"
+        placement="auto"
+        scroll="inside"
+        size="md"
+      >
+        <Modal.Dialog
+          aria-labelledby={labelledBy}
+          className="max-h-full overflow-y-auto overscroll-contain rounded-[1.75rem] p-0"
+        >
+          {children}
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
   );
 }
