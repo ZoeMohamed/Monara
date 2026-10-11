@@ -3,17 +3,17 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Monara — Uangmu, lebih jelas",
+    name: "Monara — No More Scattered Spending",
     short_name: "Monara",
     description:
-      "Catat dan pahami pengeluaran harian lewat pengalaman finansial yang privat dan ringan.",
+      "Track and understand your everyday spending with a private, simple finance experience.",
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait-primary",
-    background_color: "#f8faf7",
-    theme_color: "#173b2e",
-    lang: "id-ID",
+    background_color: "#f5fbff",
+    theme_color: "#f5fbff",
+    lang: "en",
     categories: ["finance", "productivity"],
     icons: [
       {
