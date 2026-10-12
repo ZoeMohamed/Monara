@@ -1,3 +1,28 @@
+do $$
+begin
+  if exists (select 1 from auth.users limit 1)
+    or exists (select 1 from public.profiles limit 1)
+    or exists (select 1 from public.financial_accounts limit 1)
+    or exists (select 1 from public.gmail_connections limit 1)
+    or exists (select 1 from public.gmail_messages limit 1)
+    or exists (select 1 from public.transactions limit 1)
+    or exists (select 1 from public.whatsapp_links limit 1)
+  then
+    raise exception using
+      errcode = '55000',
+      message = 'Legacy Monara schema contains user data; refusing destructive replacement.';
+  end if;
+end;
+$$;
+
+drop table public.transactions;
+drop table public.gmail_messages;
+drop table public.gmail_connections;
+drop table public.financial_accounts;
+drop table public.whatsapp_links;
+drop table public.profiles;
+drop function private.set_updated_at();
+
 create schema if not exists private;
 
 revoke all on schema private from public, anon, authenticated;
