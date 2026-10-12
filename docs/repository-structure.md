@@ -42,7 +42,7 @@ The UI package is a reserved entry point, not a HeroUI migration. Supabase helpe
 - Deduplicate email imports using the User, Gmail Connection, and source message identity. Enforce uniqueness durably when implementing persistence.
 - Extracted transactions remain pending review until confirmed. Pending transactions do not contribute to confirmed totals.
 - The signed-in User explicitly links and verifies their WhatsApp number. Kapso provides transport into the shared agent runtime.
-- Keep PWA installation and offline app-shell support. Real data operations require connectivity initially.
+- Keep PWA installation and a static, privacy-safe offline fallback. App navigation and real data operations require connectivity initially; do not cache application HTML or Next.js chunks.
 
 ## Local commands
 

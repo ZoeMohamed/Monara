@@ -10,7 +10,7 @@ Use Supabase Auth with Google sign-in. Connecting Gmail through Composio is a se
 
 Adlyn owns Gmail connectivity and transaction extraction. Argya owns conversational finance logic and budgeting experiments. Farrel owns Kapso WhatsApp transport and connects it to the shared agent runtime.
 
-The Next.js backend owns financial writes and their validation and ownership checks. The Cloudflare agent calls defined backend operations rather than writing financial data directly to Supabase. Keep PWA installation and offline app-shell behavior, but require connectivity for real data operations initially.
+The Next.js backend owns financial writes and their validation and ownership checks. The Cloudflare agent calls defined backend operations rather than writing financial data directly to Supabase. Keep PWA installation and a standalone, static offline fallback, but require connectivity for application navigation and real data operations initially. The service worker must not cache the personalized app document or framework chunks; it caches only the generic fallback and explicitly allowlisted public assets.
 
 Use apps/web and apps/agent as the deployment boundaries, packages/core, contracts, db, integrations, and ui for shared code, supabase for database configuration and migrations, and playground/llm for isolated experiments. Organize folders by responsibility and document team ownership separately.
 

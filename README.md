@@ -50,7 +50,7 @@ pnpm build
 pnpm start
 ```
 
-The web build includes a manifest, 192px/512px/maskable/Apple Touch icons, app-shell caching, offline fallback, standalone metadata, and security headers. The agent build is a local Wrangler dry run and does not deploy anything.
+The web build includes a manifest, 192px/512px/maskable/Apple Touch icons, a standalone static offline fallback, standalone metadata, and security headers. The service worker caches only that fallback and explicitly allowlisted public assets; navigation remains network-first, and it does not cache app HTML, Next.js chunks, authentication, or financial responses. The agent build is a local Wrangler dry run and does not deploy anything.
 
 ## Deployment otomatis untuk tim
 
