@@ -39,7 +39,7 @@ describe("Supabase connectivity", () => {
     let observed;
     const result = await checkSupabaseConnectivity(config, async (input, init) => {
       observed = { input, init };
-      return new Response(null, { status: 200 });
+      return Response.json({ external: { google: true } });
     });
     assert.deepEqual(result, { connected: true });
     assert.equal(observed.input, "https://example.supabase.co/auth/v1/settings");
@@ -51,6 +51,17 @@ describe("Supabase connectivity", () => {
     await assert.rejects(
       checkSupabaseConnectivity(config, async () => new Response(null, { status: 503 })),
       /status 503/,
+    );
+  });
+
+  it("rejects a successful response that is not Supabase Auth settings", async () => {
+    await assert.rejects(
+      checkSupabaseConnectivity(config, async () => new Response("<html>fallback</html>")),
+      /invalid JSON/,
+    );
+    await assert.rejects(
+      checkSupabaseConnectivity(config, async () => Response.json({ connected: true })),
+      /unexpected Auth settings response/,
     );
   });
 });

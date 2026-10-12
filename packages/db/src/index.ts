@@ -12,6 +12,7 @@ export interface SupabaseConnectivity {
 
 type ConnectivityFetch = (input: string, init: RequestInit) => Promise<Response>;
 
+/** Returns a trimmed required configuration value or fails closed. */
 function requireValue(name: string, value: string | undefined): string {
   const normalized = value?.trim();
   if (!normalized) {
@@ -20,6 +21,7 @@ function requireValue(name: string, value: string | undefined): string {
   return normalized;
 }
 
+/** Validates the browser-safe URL and publishable key used by Supabase clients. */
 export function parsePublicSupabaseConfig(values: {
   publishableKey: string | undefined;
   url: string | undefined;
@@ -45,10 +47,12 @@ export function parsePublicSupabaseConfig(values: {
   return { publishableKey, url: parsedUrl.origin };
 }
 
+/** Creates a browser Supabase client from already validated public configuration. */
 export function createMonaraBrowserClient(config: PublicSupabaseConfig) {
   return createBrowserClient(config.url, config.publishableKey);
 }
 
+/** Creates a cookie-aware server Supabase client without reading ambient secrets. */
 export function createMonaraServerClient(
   config: PublicSupabaseConfig,
   cookies: CookieMethodsServer,
@@ -56,6 +60,7 @@ export function createMonaraServerClient(
   return createServerClient(config.url, config.publishableKey, { cookies });
 }
 
+/** Verifies that the configured endpoint returns the public Supabase Auth settings shape. */
 export async function checkSupabaseConnectivity(
   config: PublicSupabaseConfig,
   fetcher: ConnectivityFetch = fetch,
@@ -71,5 +76,23 @@ export async function checkSupabaseConnectivity(
   if (!response.ok) {
     throw new Error(`Supabase health check failed with status ${response.status}.`);
   }
+
+  let settings: unknown;
+  try {
+    settings = await response.json();
+  } catch {
+    throw new Error("Supabase health check returned invalid JSON.");
+  }
+  if (
+    typeof settings !== "object" ||
+    settings === null ||
+    !("external" in settings) ||
+    typeof settings.external !== "object" ||
+    settings.external === null ||
+    Array.isArray(settings.external)
+  ) {
+    throw new Error("Supabase health check returned an unexpected Auth settings response.");
+  }
+
   return { connected: true };
 }

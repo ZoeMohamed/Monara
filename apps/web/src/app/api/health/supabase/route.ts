@@ -3,6 +3,7 @@ import { publicSupabaseConfig } from "@/lib/supabase/config";
 
 const noStoreHeaders = { "Cache-Control": "no-store" };
 
+/** Reports only public Supabase Auth reachability and never exposes provider details. */
 export async function GET() {
   try {
     await checkSupabaseConnectivity(publicSupabaseConfig());
