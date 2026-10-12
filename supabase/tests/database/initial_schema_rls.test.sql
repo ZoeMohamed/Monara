@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(44);
+select plan(45);
 
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'financial_accounts', 'financial_accounts exists');
@@ -21,6 +21,31 @@ select has_table('public', 'reminder_deliveries', 'reminder_deliveries exists');
 select has_table('public', 'whatsapp_links', 'whatsapp_links exists');
 select has_table('public', 'agent_action_logs', 'agent_action_logs exists');
 select has_table('public', 'agent_action_states', 'agent_action_states exists');
+
+select is(
+  (
+    select count(*)
+    from pg_constraint
+    where conname = any(array[
+      'processed_gmail_messages_gmail_connection_id_user_id_fkey',
+      'transactions_processed_gmail_message_id_user_id_fkey',
+      'transactions_financial_account_id_user_id_fkey',
+      'transactions_from_financial_account_id_user_id_fkey',
+      'transactions_to_financial_account_id_user_id_fkey',
+      'transactions_category_id_user_id_fkey',
+      'transactions_recurring_bill_id_user_id_fkey',
+      'budgets_category_id_user_id_fkey',
+      'recurring_bills_financial_account_id_user_id_fkey',
+      'reminders_budget_id_user_id_fkey',
+      'reminders_recurring_bill_id_user_id_fkey',
+      'agent_action_logs_reversed_action_id_user_id_fkey'
+    ])
+      and condeferrable
+      and condeferred
+  ),
+  12::bigint,
+  'owned composite references defer checks until the cascade transaction ends'
+);
 
 select is(
   (
