@@ -560,7 +560,7 @@ function BottomNav({
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pl-[max(.5rem,env(safe-area-inset-left,0px))] pr-[max(.5rem,env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pt-1.5 lg:hidden"
     >
       <div className="mx-auto grid max-w-lg grid-cols-5 items-end">
-        {tabs.slice(0, 2).map((tab) => (
+        {tabs.slice(0, 4).map((tab) => (
           <MobileTab
             active={activeTab === tab.id}
             key={tab.id}
@@ -568,24 +568,12 @@ function BottomNav({
             tab={tab}
           />
         ))}
-        <Button
-          isIconOnly
-          variant="primary"
-          aria-label="Add transaction"
-          className="mx-auto -mt-6 grid h-13 w-13 place-items-center rounded-2xl bg-brand text-white"
-          onPress={() => onAdd()}
-          type="button"
-        >
-          <Icon className="h-6 w-6" name="plus" strokeWidth={2.2} />
-        </Button>
-        {tabs.slice(2, 4).map((tab) => (
-          <MobileTab
-            active={activeTab === tab.id}
-            key={tab.id}
-            onClick={() => onSelect(tab.id)}
-            tab={tab}
-          />
-        ))}
+        <MobileTab
+          active={false}
+          ariaLabel="Add transaction"
+          onClick={onAdd}
+          tab={{ icon: "plus", label: "Add" }}
+        />
       </div>
     </nav>
   );
@@ -826,14 +814,17 @@ function MobileTab({
   tab,
   active,
   onClick,
+  ariaLabel,
 }: {
-  tab: TabItem;
+  tab: Pick<TabItem, "icon" | "label">;
   active: boolean;
   onClick: () => void;
+  ariaLabel?: string;
 }) {
   return (
     <Button
       variant="ghost"
+      aria-label={ariaLabel}
       aria-current={active ? "page" : undefined}
       className={`h-auto min-h-11 w-full flex-col items-center gap-1 px-1 py-1 text-[10px] font-bold ${active ? "text-accent" : "text-muted"}`}
       onPress={onClick}

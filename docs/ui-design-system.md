@@ -37,7 +37,7 @@ Use compound components such as `Card.Content`, `Modal.Dialog`, and `ProgressBar
 
 ## Color and interaction conventions
 
-Change shared colors in [the theme](../packages/ui/src/theme.css), then use semantic tokens in new UI. Use white surfaces, blue actions, and pale cyan highlighted panels throughout the light-only interface. On 12 October the User approved `#3171FD` as the exact brand blue, the supplied SVG lockup for interface branding, and the supplied Apple artwork for installation and favicons. Use `#2865E5` for small blue text and buttons with white labels: the exact brand blue has only 4.28:1 contrast against white, while the darker action blue reaches 5.14:1. Graphical highlights and focus rings use the exact brand blue. See [asset provenance and icon sizing](../apps/web/public/icons/README.md). Reserve status colors for their meaning, and retain text labels alongside them.
+Change shared colors in [the theme](../packages/ui/src/theme.css), then use semantic tokens in new UI. Use white surfaces, blue actions, and pale cyan highlighted panels throughout the light-only interface. On 12 October the User approved `#3171FD` as the exact brand blue, the supplied SVG lockup for interface branding, and the supplied Apple artwork for installation. Website favicons use the separate blue cat symbol. Use `#2865E5` for small blue text and buttons with white labels: the exact brand blue has only 4.28:1 contrast against white, while the darker action blue reaches 5.14:1. Graphical highlights and focus rings use the exact brand blue. See [asset provenance and icon sizing](../apps/web/public/icons/README.md). Reserve status colors for their meaning, and retain text labels alongside them.
 
 | Purpose | Token | Monara color |
 | --- | --- | --- |
@@ -55,9 +55,9 @@ Keep native document landmarks, headings, and SVG charts where they express the 
 
 ## Typography and branding
 
-Nunito Sans is the approved typeface for all interface text, headings, controls, and the standalone offline screen. It is distinct from Nunito. Local variable WOFF2 files provide normal and italic styles at weights 200 to 900; Next.js loads them through `next/font/local`, and the offline screen references the same public files directly. Browsers make no Google Fonts requests. The font license and source links live in [the font directory](../apps/web/public/fonts/README.md). Service worker v6 allowlists only those two public font paths in addition to the existing public assets; application HTML, auth responses, and financial data stay outside its caches.
+Nunito Sans is the approved typeface for all interface text, headings, controls, and the standalone offline screen. It is distinct from Nunito. Local variable WOFF2 files provide normal and italic styles at weights 200 to 900; Next.js loads them through `next/font/local`, and the offline screen references the same public files directly. Browsers make no Google Fonts requests. The font license and source links live in [the font directory](../apps/web/public/fonts/README.md). Service worker v7 allowlists only those two public font paths and the blue SVG favicon in addition to the existing public assets; application HTML, auth responses, and financial data stay outside its caches.
 
-The header, sidebar, and sign-in use the supplied blue `monara-lockup-light.svg` on the current light surfaces. The white `monara-lockup-dark.svg` is retained for dark surfaces, but no dark theme is introduced. Each lockup includes both the cat symbol and the Monara wordmark, so it replaces the separate symbol and text. Preserve the wordmark paths and proportions; Nunito Sans applies to interface text, while the supplied lockup artwork remains unchanged. Installed icons and favicons use the supplied Apple artwork rather than the interface lockup.
+The header, sidebar, and sign-in use the supplied blue `monara-lockup-light.svg` on the current light surfaces. The white `monara-lockup-dark.svg` is retained for dark surfaces, but no dark theme is introduced. Each lockup includes both the cat symbol and the Monara wordmark, so it replaces the separate symbol and text. Preserve the wordmark paths and proportions; Nunito Sans applies to interface text, while the supplied lockup artwork remains unchanged. Installed PWA icons use the supplied Apple artwork. Website favicons use the blue `logo-light.svg` cat mark, with PNG and ICO fallbacks derived from that same SVG. Browser icon links do not point to the installed-app artwork; Apple touch-icon metadata and manifest icons remain separate.
 
 ## Verification
 
@@ -70,7 +70,7 @@ Run `pnpm check` and `pnpm build` for shared dependency changes. React Doctor mu
 
 `SignInScreen` accepts an explicit action, progress, and error state. `GmailConnectionsScreen` accepts loading, unavailable, sign-in-required, error, or ready presentation data, plus action callbacks. Ready data supports three-mailbox limits, reconnect status, sync progress/results, and disconnect confirmation. These local props are not transport contracts: validate and authorize provider/backend data before adapting it into them. The backend must enforce limits and ownership independently.
 
-The v6 service worker caches only the standalone static offline fallback, manifest, named icons, and two public font files. Application navigation and Next.js chunks stay on the network; navigation failures show the generic fallback. It never caches app HTML or provides an offline financial ledger. Tests in `scripts/sw.test.mjs` cover the cache boundary and old-cache cleanup.
+The v7 service worker caches only the standalone static offline fallback, manifest, named PWA icons, the blue SVG favicon, and two public font files. Application navigation and Next.js chunks stay on the network; navigation failures show the generic fallback. It never caches app HTML or provides an offline financial ledger. Tests in `scripts/sw.test.mjs` cover the cache boundary and old-cache cleanup.
 
 Verification on 11 October: full checks and builds passed; browser inspection covered the two unavailable routes and actual public cache contents. Synthetic connected, disconnect, mailbox-limit, sync-result and progress/error interactions have now been browser-verified. Live integration remains pending.
 
@@ -93,7 +93,7 @@ Controls use `touch-action: manipulation`; only controls suppress text selection
 
 ## Navigation and screen patterns
 
-Mobile navigation follows Oyen and Aiccountant: Home, Transactions, a central Add button, Budgets, and Chat in the bottom bar. Profile and Reminders sit in the header. Desktop uses the sidebar with the same destinations. Keep a single headline number per screen, list rows inside one bordered card with separators, and secondary text in `--muted`.
+Mobile navigation has five equal-size items in this order: Home, Transactions, Budgets, Chat, and Add. Every item uses the same icon size, labelled layout, padding, and button shape. Add is an action that opens the transaction form, not a selected page; it sits at the far right without a raised or oversized treatment. Profile and Reminders sit in the header. Desktop uses the sidebar with the same destinations. Keep a single headline number per screen, list rows inside one bordered card with separators, and secondary text in `--muted`.
 
 Budget states use the semantic tokens with a text label: accent for on track, `warning` with "Near limit" from the Budget's warning percent, and `danger` with "Over budget" at 100%. Long amounts and names wrap rather than truncate unless the full value is one tap away (transaction rows open a detail sheet). Check 320px after layout changes. Unavailable services say what is missing and what still works; they never simulate a reply or a saved change.
 
