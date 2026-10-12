@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(43);
+select plan(44);
 
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'financial_accounts', 'financial_accounts exists');
@@ -21,6 +21,19 @@ select has_table('public', 'reminder_deliveries', 'reminder_deliveries exists');
 select has_table('public', 'whatsapp_links', 'whatsapp_links exists');
 select has_table('public', 'agent_action_logs', 'agent_action_logs exists');
 select has_table('public', 'agent_action_states', 'agent_action_states exists');
+
+select is(
+  (
+    select count(*)
+    from auth.users
+    where id in (
+      '10000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000002'
+    )
+  ),
+  2::bigint,
+  'both synthetic Auth users are seeded'
+);
 
 select is(
   (
