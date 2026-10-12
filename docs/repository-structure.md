@@ -89,7 +89,9 @@ pnpm worktree:teardown   # destroy this worktree's stack and release its slot
 pnpm worktree:prune      # clear claims and stacks of worktrees that no longer exist
 ```
 
-Run `pnpm worktree:teardown` before removing a worktree. If a worktree was removed without it, `pnpm worktree:prune` cleans up. `.wt/config.toml` wires setup and teardown into the `wt` CLI. To run setup when T3 Code creates a worktree, add a project script with `runOnWorktreeCreate` enabled and the command `node scripts/worktree.mjs setup`. See [the worktree environment decision](adr/0003-worktree-environments.md).
+Run `pnpm worktree:teardown` before removing a worktree. If a worktree was removed without it, `pnpm worktree:prune` cleans up. `.wt/config.toml` wires setup and teardown into the `wt` CLI.
+
+The root `t3.json` defines T3 Code's **Setup worktree** action. It runs `pnpm install --frozen-lockfile`, which installs dependencies and runs environment setup through `prepare`. `runOnWorktreeCreate: true` runs it for each new T3 worktree, and `async: false` holds the agent until setup exits. For an existing T3 project, import the actions from `t3.json` in **Settings → Project → Actions** and verify **Setup worktree** appears with automatic worktree execution enabled. The file must be present in the checkout used to create the worktree; adding it on a feature branch does not update the project's main checkout. See [T3 project settings](https://github.com/pingdotgg/t3code/blob/main/docs/user/project-settings.md) and [the worktree environment decision](adr/0003-worktree-environments.md).
 
 ## Quality gates
 
