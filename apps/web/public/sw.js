@@ -1,4 +1,4 @@
-const CACHE_NAME = "monara-shell-v5";
+const CACHE_NAME = "monara-shell-v6";
 const PUBLIC_ASSETS = new Map([
   ["/offline.html", "text/html"],
   ["/manifest.webmanifest", "application/manifest+json"],
@@ -6,6 +6,8 @@ const PUBLIC_ASSETS = new Map([
   ["/icons/icon-512.png", "image/png"],
   ["/icons/icon-maskable-512.png", "image/png"],
   ["/icons/apple-touch-icon.png", "image/png"],
+  ["/fonts/nunito-sans-latin-variable.woff2", "font/woff2"],
+  ["/fonts/nunito-sans-latin-variable-italic.woff2", "font/woff2"],
 ]);
 
 function isPublicResponse(response, path) {

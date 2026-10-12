@@ -39,6 +39,7 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 - Keep Cloudflare runtime code free of unsupported Node APIs. Share only runtime-compatible code with the worker.
 - Keep errors simple and explicit. Incomplete handlers must fail clearly rather than returning fake success.
 - Preserve existing product language and UI conventions unless the task changes them. Do not introduce an i18n framework solely because Aiccountant has one.
+- Always use a mobile viewport when developing, previewing, verifying, or taking screenshots of the UI. Default to portrait 390 × 844 CSS pixels (iPhone 12 Pro); use another mobile size only when the task requires it.
 - Keep diffs task-scoped. You are sharing the repository with teammates; preserve their changes.
 - Do not auto-invoke skills. Only use explicitly requested skills or skills chained by an already invoked skill.
 

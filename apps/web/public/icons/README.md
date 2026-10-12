@@ -1,21 +1,24 @@
-# Monara selected logo
+# Monara app icons
 
-The User selected [logo-1](https://cloud.abhipraya.dev/s/o5rjWg3JsYN4Zdg). `logo-1.png` preserves the downloaded artwork byte for byte: a white cat on its original royal blue and pale cyan tile. The artwork was resized without redrawing, recoloring, or adding effects.
+The User supplied `Monara-iOS-Default-1024@1x.png` on 12 October 2026 for the installed PWA and website favicon. `app-icon-source.png` preserves that file byte for byte. It is a 1024 × 1024 RGBA PNG with rounded blue/cyan tile artwork, transparent corners, and a white cat.
 
-Original: 501 × 498 pixels, RGBA PNG. SHA-256:
+Source SHA-256:
 
 ```text
-a16b6f4015eae14d288845e8aa56f6647f0f9ddd8528f90d1daaaaf7449fb972
+3ad49f72f4e2dc35ad94832dd42071cc204fcdd3e58b90242904b4f4a40d5047
 ```
-
-The primary brand color is royal blue `#0b33fd`, with white and the pale cyan tones already present in the original gradient.
 
 | Asset | Size | Preparation |
 | --- | --- | --- |
-| `icon-192.png` | 192 × 192 | Original artwork contained in a transparent square |
-| `icon-512.png` | 512 × 512 | Original artwork contained in a transparent square |
-| `apple-touch-icon.png` | 180 × 180 | Original artwork contained in a transparent square |
-| `icon-maskable-512.png` | 512 × 512 | Opaque `#0b33fd` background; artwork contained within 360 × 360 and centered so the cat stays inside the central safe circle |
-| `../../src/app/icon.png` | 64 × 64 | Next.js file-based browser icon; original artwork contained in a transparent square |
+| `icon-192.png` | 192 × 192 | Supplied artwork resized for the PWA manifest |
+| `icon-512.png` | 512 × 512 | Supplied artwork resized for the PWA manifest |
+| `apple-touch-icon.png` | 180 × 180 | Supplied artwork resized for iOS home-screen installation |
+| `icon-maskable-512.png` | 512 × 512 | Opaque `#3171FD` canvas, with the same artwork centered at 360 × 360 to protect the cat from launcher masks |
+| `../../src/app/icon.png` | 64 × 64 | Next.js file-based browser icon |
+| `../../src/app/favicon.ico` | 16, 32, and 48 pixels | Browser favicon containing three sizes |
 
-All derived assets preserve the original aspect ratio and use Lanczos resampling. The previous placeholder M SVGs were removed. Public icon filenames used by the manifest and service worker remain unchanged.
+Derived PNGs use Lanczos resampling, with no redrawing or recoloring of the supplied artwork. Layout metadata supplies the Apple touch icon; the manifest supplies ordinary and maskable PWA icons. Service worker v6 replaces v5's cached icons using the existing public asset filenames. Installed-device icon refresh remains controlled by the platform and must be checked on a phone.
+
+The header, sidebar, and sign-in use the supplied complete lockups in `../logos`: `monara-lockup-light.svg` is blue `#3171FD` for light surfaces, and `monara-lockup-dark.svg` is white for dark surfaces. Their cat and wordmark are already part of the artwork, so no additional “Monara” text is rendered. Both files preserve the supplied `0 20.0 703.68 142.22` viewBox and paths byte for byte. Monara remains a light-only interface. The earlier standalone `logo-light.svg` and `logo-dark.svg` cat marks are retained as source assets.
+
+`logo-1.png` is retained as the previous artwork; it is no longer used by the interface or installed icons.

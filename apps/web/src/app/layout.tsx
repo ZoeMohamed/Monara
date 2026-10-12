@@ -1,9 +1,27 @@
 import { I18nProvider } from "@monara/ui";
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 
 import { PwaRegister } from "@/components/pwa-register";
 
 import "./globals.css";
+
+const nunitoSans = localFont({
+  src: [
+    {
+      path: "../../public/fonts/nunito-sans-latin-variable.woff2",
+      weight: "200 900",
+      style: "normal",
+    },
+    {
+      path: "../../public/fonts/nunito-sans-latin-variable-italic.woff2",
+      weight: "200 900",
+      style: "italic",
+    },
+  ],
+  variable: "--font-nunito-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -42,7 +60,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html className="light h-full antialiased" data-theme="light" lang="en">
+    <html
+      className={`${nunitoSans.variable} light h-full antialiased`}
+      data-theme="light"
+      lang="en"
+    >
       <body className="min-h-full">
         <I18nProvider locale="en-US">{children}</I18nProvider>
         <PwaRegister />
