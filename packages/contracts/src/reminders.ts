@@ -22,6 +22,7 @@ const reminderBaseShape = {
   updatedAt: isoDateTimeSchema,
 } as const;
 
+/** Keeps a Reminder's read timestamp consistent with its user-facing status. */
 function validateReadState(
   value: { status: z.infer<typeof reminderStatusSchema>; readAt: string | null },
   context: z.RefinementCtx,

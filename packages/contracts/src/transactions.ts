@@ -43,6 +43,7 @@ const transactionValuesShape = {
 
 export const transactionValuesSchema = z.object(transactionValuesShape).strict();
 
+/** Adds cross-field issues that cannot be expressed by individual transaction fields. */
 function validateTransactionValues(
   value: z.infer<typeof transactionValuesSchema> & { reviewStatus?: string },
   context: z.RefinementCtx,
@@ -129,8 +130,8 @@ export const transactionSchema = z
   .strict()
   .superRefine(validateTransactionValues);
 
-const confirmedTransactionValuesSchema = transactionValuesSchema.superRefine((value, context) =>
-  validateTransactionValues({ ...value, reviewStatus: "confirmed" }, context),
+export const confirmedTransactionValuesSchema = transactionValuesSchema.superRefine(
+  (value, context) => validateTransactionValues({ ...value, reviewStatus: "confirmed" }, context),
 );
 
 export const createTransactionInputSchema = confirmedTransactionValuesSchema
@@ -156,6 +157,14 @@ export const createTransactionInputSchema = confirmedTransactionValuesSchema
   });
 
 const editableTransactionFieldsSchema = transactionValuesSchema.partial().strict();
+const editableConfirmedTransactionFieldsSchema = transactionValuesSchema
+  .extend({
+    kind: transactionKindSchema,
+    money: positiveMoneySchema,
+    occurredOn: calendarDateSchema,
+  })
+  .partial()
+  .strict();
 
 export const updatePendingTransactionInputSchema = z
   .object({
@@ -178,7 +187,7 @@ export const updateTransactionInputSchema = z
   .object({
     transactionId: transactionIdSchema,
     expectedUpdatedAt: isoDateTimeSchema,
-    changes: editableTransactionFieldsSchema,
+    changes: editableConfirmedTransactionFieldsSchema,
   })
   .strict()
   .superRefine((value, context) => {

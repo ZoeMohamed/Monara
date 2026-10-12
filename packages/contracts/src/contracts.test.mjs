@@ -5,6 +5,7 @@ import {
   budgetThresholdReminderSchema,
   calendarDateSchema,
   confirmDestructiveActionInputSchema,
+  confirmedTransactionValuesSchema,
   confirmRecurringBillInputSchema,
   confirmTransactionInputSchema,
   createBudgetInputSchema,
@@ -221,6 +222,43 @@ describe("transaction contracts", () => {
       changes: { money: { amountMinor: "38000", currency: "IDR" } },
     });
     assert.equal(result.success, true);
+  });
+
+  it("does not let a confirmed transaction patch clear required values", () => {
+    for (const changes of [{ kind: null }, { money: null }, { occurredOn: null }]) {
+      assert.equal(
+        updateTransactionInputSchema.safeParse({
+          transactionId: ids.transaction,
+          expectedUpdatedAt: timestamp,
+          changes,
+        }).success,
+        false,
+      );
+    }
+  });
+
+  it("validates the merged confirmed transaction after applying a patch", () => {
+    const persisted = {
+      ...nullableValues,
+      kind: "expense",
+      money,
+      occurredOn: "2026-10-12",
+      financialAccountId: ids.accountA,
+    };
+    const patch = { kind: "transfer", financialAccountId: null };
+
+    assert.equal(
+      updateTransactionInputSchema.safeParse({
+        transactionId: ids.transaction,
+        expectedUpdatedAt: timestamp,
+        changes: patch,
+      }).success,
+      true,
+    );
+    assert.equal(
+      confirmedTransactionValuesSchema.safeParse({ ...persisted, ...patch }).success,
+      false,
+    );
   });
 
   it("applies pagination defaults without making them required at input", () => {
