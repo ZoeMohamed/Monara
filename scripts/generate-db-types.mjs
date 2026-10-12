@@ -3,6 +3,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+/** Generates database types atomically, or checks them without changing the working tree. */
 export function generateDbTypes({ root, check = false, run = spawnSync }) {
   const result = run("pnpm", ["exec", "supabase", "gen", "types", "typescript", "--local"], {
     cwd: root,

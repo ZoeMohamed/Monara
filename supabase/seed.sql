@@ -10,7 +10,14 @@ insert into auth.users (
   raw_app_meta_data,
   raw_user_meta_data,
   created_at,
-  updated_at
+  updated_at,
+  confirmation_token,
+  recovery_token,
+  email_change,
+  email_change_token_new,
+  email_change_token_current,
+  phone_change,
+  phone_change_token
 )
 values
   (
@@ -24,7 +31,14 @@ values
     '{"provider":"email","providers":["email"]}'::jsonb,
     '{"full_name":"Zoe Demo"}'::jsonb,
     statement_timestamp(),
-    statement_timestamp()
+    statement_timestamp(),
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    ''
   ),
   (
     '00000000-0000-0000-0000-000000000000',
@@ -37,7 +51,14 @@ values
     '{"provider":"email","providers":["email"]}'::jsonb,
     '{"full_name":"Teammate Demo"}'::jsonb,
     statement_timestamp(),
-    statement_timestamp()
+    statement_timestamp(),
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    ''
   );
 
 insert into public.financial_accounts (

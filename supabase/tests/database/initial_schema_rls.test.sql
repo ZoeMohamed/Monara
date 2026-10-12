@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(41);
+select plan(43);
 
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'financial_accounts', 'financial_accounts exists');
@@ -21,6 +21,28 @@ select has_table('public', 'reminder_deliveries', 'reminder_deliveries exists');
 select has_table('public', 'whatsapp_links', 'whatsapp_links exists');
 select has_table('public', 'agent_action_logs', 'agent_action_logs exists');
 select has_table('public', 'agent_action_states', 'agent_action_states exists');
+
+select is(
+  (
+    select count(*)
+    from auth.users
+    where id in (
+      '10000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000002'
+    )
+      and (
+        confirmation_token is null
+        or recovery_token is null
+        or email_change is null
+        or email_change_token_new is null
+        or email_change_token_current is null
+        or phone_change is null
+        or phone_change_token is null
+      )
+  ),
+  0::bigint,
+  'seeded Auth users use non-null GoTrue token placeholders'
+);
 
 select col_type_is('public', 'transactions', 'amount', 'numeric', 'transaction amount uses exact numeric');
 select col_type_is('public', 'budgets', 'limit_amount', 'numeric', 'budget amount uses exact numeric');
@@ -447,6 +469,11 @@ select throws_ok(
   '23505'::char(5),
   null::text,
   'a budget threshold creates one Reminder per period'::text
+);
+
+select lives_ok(
+  $$delete from auth.users where id = 'a0000000-0000-4000-8000-000000000001'$$,
+  'deleting a User cascades through all owned product data'
 );
 
 select * from finish();
