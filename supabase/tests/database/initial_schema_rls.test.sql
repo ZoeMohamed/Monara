@@ -302,6 +302,8 @@ select is_empty(
 
 reset role;
 
+set constraints transactions_financial_account_id_user_id_fkey immediate;
+
 select throws_ok(
   $$insert into public.transactions (
       user_id, client_request_id, financial_account_id, source_type,
@@ -315,6 +317,8 @@ select throws_ok(
   null::text,
   'a transaction cannot reference another user account'::text
 );
+
+set constraints transactions_financial_account_id_user_id_fkey deferred;
 
 select throws_ok(
   $$insert into public.transactions (
