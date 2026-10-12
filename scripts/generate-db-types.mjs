@@ -15,9 +15,10 @@ export function generateDbTypes({ root, check = false, run = spawnSync }) {
       result.stderr?.trim() || result.error?.message || "Database type generation failed.",
     );
   }
+  const output = `${result.stdout.replace(/[\t ]+$/gm, "").trimEnd()}\n`;
   const target = join(root, "packages/db/src/types/database.types.ts");
   if (check) {
-    if (!existsSync(target) || readFileSync(target, "utf8") !== result.stdout) {
+    if (!existsSync(target) || readFileSync(target, "utf8") !== output) {
       throw new Error(
         "Generated database types differ from packages/db/src/types/database.types.ts. Regenerate with pnpm db:types against the migrated local schema and review the diff.",
       );
@@ -25,7 +26,7 @@ export function generateDbTypes({ root, check = false, run = spawnSync }) {
     return;
   }
   const temporary = `${target}.tmp`;
-  writeFileSync(temporary, result.stdout);
+  writeFileSync(temporary, output);
   renameSync(temporary, target);
 }
 

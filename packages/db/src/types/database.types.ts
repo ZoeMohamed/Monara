@@ -1,0 +1,438 @@
+
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
+export type Database = {
+
+  "graphql_public": {
+          Tables: {
+            [_ in never]: never
+          }
+          Views: {
+            [_ in never]: never
+          }
+          Functions: {
+            "graphql":
+{ Args: { "extensions"?: Json,"operationName"?: string,"query"?: string,"variables"?: Json }; Returns: Json
+                           }
+          }
+          Enums: {
+            [_ in never]: never
+          }
+          CompositeTypes: {
+            [_ in never]: never
+          }
+        },"public": {
+          Tables: {
+            "agent_action_logs": {
+                  Row: {
+                    "channel": string,"confirmation_expires_at": string | null,"created_at": string,"event_type": string,"id": string,"permission_tier": string | null,"request_fingerprint": string | null,"resource_id": string | null,"resource_type": string | null,"result_status": string,"reversed_action_id": string | null,"tool_name": string | null,"undo_expires_at": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "channel": string,"confirmation_expires_at"?: string | null,"created_at"?: string,"event_type": string,"id"?: string,"permission_tier"?: string | null,"request_fingerprint"?: string | null,"resource_id"?: string | null,"resource_type"?: string | null,"result_status": string,"reversed_action_id"?: string | null,"tool_name"?: string | null,"undo_expires_at"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "channel"?: string,"confirmation_expires_at"?: string | null,"created_at"?: string,"event_type"?: string,"id"?: string,"permission_tier"?: string | null,"request_fingerprint"?: string | null,"resource_id"?: string | null,"resource_type"?: string | null,"result_status"?: string,"reversed_action_id"?: string | null,"tool_name"?: string | null,"undo_expires_at"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "agent_action_logs_reversed_action_id_user_id_fkey"
+      columns: ["reversed_action_id","user_id"]
+isOneToOne: false
+      referencedRelation: "agent_action_logs"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"agent_action_states": {
+                  Row: {
+                    "action_id": string,"consumed_at": string | null,"created_at": string,"expires_at": string,"operation_state": NonNullable<Json>,"purpose": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "action_id": string,"consumed_at"?: string | null,"created_at"?: string,"expires_at": string,"operation_state": NonNullable<Json>,"purpose": string,"user_id": string
+                  }
+                  Update: {
+                    "action_id"?: string,"consumed_at"?: string | null,"created_at"?: string,"expires_at"?: string,"operation_state"?: NonNullable<Json>,"purpose"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "agent_action_states_action_id_user_id_fkey"
+      columns: ["action_id","user_id"]
+isOneToOne: false
+      referencedRelation: "agent_action_logs"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"budgets": {
+                  Row: {
+                    "cadence": string,"category_id": string,"client_request_id": string,"created_at": string,"currency": string,"deleted_at": string | null,"id": string,"is_active": boolean,"limit_amount": number,"name": string,"starts_on": string,"updated_at": string,"user_id": string,"warning_percent": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cadence": string,"category_id": string,"client_request_id": string,"created_at"?: string,"currency"?: string,"deleted_at"?: string | null,"id"?: string,"is_active"?: boolean,"limit_amount": number,"name": string,"starts_on": string,"updated_at"?: string,"user_id": string,"warning_percent"?: number
+                  }
+                  Update: {
+                    "cadence"?: string,"category_id"?: string,"client_request_id"?: string,"created_at"?: string,"currency"?: string,"deleted_at"?: string | null,"id"?: string,"is_active"?: boolean,"limit_amount"?: number,"name"?: string,"starts_on"?: string,"updated_at"?: string,"user_id"?: string,"warning_percent"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "budgets_category_id_user_id_fkey"
+      columns: ["category_id","user_id"]
+isOneToOne: false
+      referencedRelation: "categories"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"categories": {
+                  Row: {
+                    "color": string,"created_at": string,"icon": string,"id": string,"is_archived": boolean,"is_default": boolean,"name": string,"slug": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "color": string,"created_at"?: string,"icon": string,"id"?: string,"is_archived"?: boolean,"is_default"?: boolean,"name": string,"slug": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "color"?: string,"created_at"?: string,"icon"?: string,"id"?: string,"is_archived"?: boolean,"is_default"?: boolean,"name"?: string,"slug"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
+                },"financial_accounts": {
+                  Row: {
+                    "account_type": string,"client_request_id": string,"created_at": string,"currency": string,"id": string,"institution": string | null,"is_active": boolean,"last_four": string | null,"name": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_type": string,"client_request_id": string,"created_at"?: string,"currency"?: string,"id"?: string,"institution"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "account_type"?: string,"client_request_id"?: string,"created_at"?: string,"currency"?: string,"id"?: string,"institution"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
+                },"gmail_connections": {
+                  Row: {
+                    "composio_connected_account_id": string,"created_at": string,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "composio_connected_account_id": string,"created_at"?: string,"gmail_address": string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "composio_connected_account_id"?: string,"created_at"?: string,"gmail_address"?: string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
+                },"processed_gmail_messages": {
+                  Row: {
+                    "created_at": string,"gmail_connection_id": string,"gmail_message_id": string,"id": string,"processed_at": string | null,"processing_status": string,"received_at": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"gmail_connection_id": string,"gmail_message_id": string,"id"?: string,"processed_at"?: string | null,"processing_status"?: string,"received_at": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"gmail_connection_id"?: string,"gmail_message_id"?: string,"id"?: string,"processed_at"?: string | null,"processing_status"?: string,"received_at"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "processed_gmail_messages_gmail_connection_id_user_id_fkey"
+      columns: ["gmail_connection_id","user_id"]
+isOneToOne: false
+      referencedRelation: "gmail_connections"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"profiles": {
+                  Row: {
+                    "created_at": string,"currency": string,"display_name": string,"id": string,"timezone": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"currency"?: string,"display_name": string,"id": string,"timezone"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"currency"?: string,"display_name"?: string,"id"?: string,"timezone"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+
+                  ]
+                },"recurring_bills": {
+                  Row: {
+                    "ai_confidence": number | null,"cancellation_url": string | null,"client_request_id": string,"created_at": string,"currency": string,"deleted_at": string | null,"expected_amount": number,"financial_account_id": string | null,"id": string,"interval_count": number,"interval_unit": string,"merchant_name": string,"next_due_on": string,"status": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ai_confidence"?: number | null,"cancellation_url"?: string | null,"client_request_id": string,"created_at"?: string,"currency"?: string,"deleted_at"?: string | null,"expected_amount": number,"financial_account_id"?: string | null,"id"?: string,"interval_count": number,"interval_unit": string,"merchant_name": string,"next_due_on": string,"status"?: string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "ai_confidence"?: number | null,"cancellation_url"?: string | null,"client_request_id"?: string,"created_at"?: string,"currency"?: string,"deleted_at"?: string | null,"expected_amount"?: number,"financial_account_id"?: string | null,"id"?: string,"interval_count"?: number,"interval_unit"?: string,"merchant_name"?: string,"next_due_on"?: string,"status"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "recurring_bills_financial_account_id_user_id_fkey"
+      columns: ["financial_account_id","user_id"]
+isOneToOne: false
+      referencedRelation: "financial_accounts"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"reminder_deliveries": {
+                  Row: {
+                    "attempted_at": string | null,"channel": string,"created_at": string,"failure_code": string | null,"id": string,"provider_message_id": string | null,"reminder_id": string,"sent_at": string | null,"status": string,"template_name": string | null,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempted_at"?: string | null,"channel": string,"created_at"?: string,"failure_code"?: string | null,"id"?: string,"provider_message_id"?: string | null,"reminder_id": string,"sent_at"?: string | null,"status": string,"template_name"?: string | null,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "attempted_at"?: string | null,"channel"?: string,"created_at"?: string,"failure_code"?: string | null,"id"?: string,"provider_message_id"?: string | null,"reminder_id"?: string,"sent_at"?: string | null,"status"?: string,"template_name"?: string | null,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "reminder_deliveries_reminder_id_user_id_fkey"
+      columns: ["reminder_id","user_id"]
+isOneToOne: false
+      referencedRelation: "reminders"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"reminder_preferences": {
+                  Row: {
+                    "created_at": string,"updated_at": string,"user_id": string,"whatsapp_enabled": boolean
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"updated_at"?: string,"user_id": string,"whatsapp_enabled"?: boolean
+                  }
+                  Update: {
+                    "created_at"?: string,"updated_at"?: string,"user_id"?: string,"whatsapp_enabled"?: boolean
+                  }
+                  Relationships: [
+
+                  ]
+                },"reminders": {
+                  Row: {
+                    "budget_id": string | null,"created_at": string,"dedupe_key": string,"id": string,"kind": string,"message": string,"offset_days": number | null,"read_at": string | null,"recurring_bill_id": string | null,"scheduled_for": string,"status": string,"threshold_percent": number | null,"title": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key": string,"id"?: string,"kind": string,"message": string,"offset_days"?: number | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for": string,"status"?: string,"threshold_percent"?: number | null,"title": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key"?: string,"id"?: string,"kind"?: string,"message"?: string,"offset_days"?: number | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for"?: string,"status"?: string,"threshold_percent"?: number | null,"title"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "reminders_budget_id_user_id_fkey"
+      columns: ["budget_id","user_id"]
+isOneToOne: false
+      referencedRelation: "budgets"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "reminders_recurring_bill_id_user_id_fkey"
+      columns: ["recurring_bill_id","user_id"]
+isOneToOne: false
+      referencedRelation: "recurring_bills"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"transactions": {
+                  Row: {
+                    "account_hint": string | null,"ai_confidence": number | null,"amount": number | null,"category_id": string | null,"client_request_id": string | null,"created_at": string,"currency": string | null,"deleted_at": string | null,"description": string | null,"financial_account_id": string | null,"from_financial_account_id": string | null,"id": string,"location": string | null,"merchant_name": string | null,"occurred_on": string | null,"occurred_time": string | null,"processed_gmail_message_id": string | null,"recurring_bill_id": string | null,"review_status": string,"source_item_index": number | null,"source_type": string,"to_financial_account_id": string | null,"transaction_type": string | null,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"from_financial_account_id"?: string | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status": string,"source_item_index"?: number | null,"source_type": string,"to_financial_account_id"?: string | null,"transaction_type"?: string | null,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"from_financial_account_id"?: string | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status"?: string,"source_item_index"?: number | null,"source_type"?: string,"to_financial_account_id"?: string | null,"transaction_type"?: string | null,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "transactions_category_id_user_id_fkey"
+      columns: ["category_id","user_id"]
+isOneToOne: false
+      referencedRelation: "categories"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "transactions_financial_account_id_user_id_fkey"
+      columns: ["financial_account_id","user_id"]
+isOneToOne: false
+      referencedRelation: "financial_accounts"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "transactions_from_financial_account_id_user_id_fkey"
+      columns: ["from_financial_account_id","user_id"]
+isOneToOne: false
+      referencedRelation: "financial_accounts"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "transactions_processed_gmail_message_id_user_id_fkey"
+      columns: ["processed_gmail_message_id","user_id"]
+isOneToOne: false
+      referencedRelation: "processed_gmail_messages"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "transactions_recurring_bill_id_user_id_fkey"
+      columns: ["recurring_bill_id","user_id"]
+isOneToOne: false
+      referencedRelation: "recurring_bills"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "transactions_to_financial_account_id_user_id_fkey"
+      columns: ["to_financial_account_id","user_id"]
+isOneToOne: false
+      referencedRelation: "financial_accounts"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"whatsapp_links": {
+                  Row: {
+                    "created_at": string,"id": string,"kapso_contact_id": string | null,"last_inbound_at": string | null,"phone_e164_hmac": string,"phone_last_four": string,"status": string,"updated_at": string,"user_id": string,"verification_attempts": number,"verification_code_digest": string | null,"verification_expires_at": string | null,"verified_at": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_hmac": string,"phone_last_four": string,"status"?: string,"updated_at"?: string,"user_id": string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_hmac"?: string,"phone_last_four"?: string,"status"?: string,"updated_at"?: string,"user_id"?: string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
+                  }
+                  Relationships: [
+
+                  ]
+                }
+          }
+          Views: {
+            [_ in never]: never
+          }
+          Functions: {
+            [_ in never]: never
+          }
+          Enums: {
+            [_ in never]: never
+          }
+          CompositeTypes: {
+            [_ in never]: never
+          }
+        }
+}
+
+type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+  ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never
+> = DefaultSchemaEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  : never
+
+export const Constants = {
+  "graphql_public": {
+          Enums: {
+
+          }
+        },"public": {
+          Enums: {
+
+          }
+        }
+} as const

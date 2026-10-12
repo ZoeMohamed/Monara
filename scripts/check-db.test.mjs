@@ -313,9 +313,9 @@ describe("generated types", () => {
   it("writes a successful schema read atomically when check mode is off", (t) => {
     const context = fixture(t);
     const target = join(context.root, "packages/db/src/types/database.types.ts");
-    const stdout = "export type Database = { synthetic: true };\n";
+    const stdout = "export type Database = { synthetic: true };  \n   \n";
     generateDbTypes({ root: context.root, run: () => ({ status: 0, stdout }) });
-    assert.equal(readFileSync(target, "utf8"), stdout);
+    assert.equal(readFileSync(target, "utf8"), "export type Database = { synthetic: true };\n");
     assert.equal(existsSync(`${target}.tmp`), false);
   });
 });
