@@ -155,8 +155,15 @@ describe("migration history", () => {
 
   it("checks real Git history and working-tree changes before any stack command", (t) => {
     const context = fixture(t, false);
+    // Hooks export GIT_DIR/GIT_INDEX_FILE for the real checkout. Never let fixtures inherit them.
+    const isolatedEnv = (env) =>
+      Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith("GIT_")));
     const git = (args) => {
-      const result = spawnSync("git", args, { cwd: context.root, encoding: "utf8" });
+      const result = spawnSync("git", args, {
+        cwd: context.root,
+        encoding: "utf8",
+        env: isolatedEnv(process.env),
+      });
       assert.equal(result.status, 0, result.stderr);
       return result.stdout.trim();
     };
@@ -180,7 +187,7 @@ describe("migration history", () => {
     const run = (command, args, options) => {
       assert.equal(command, "git");
       assert.equal(options.shell, false); // Preserve ^{commit} on Windows without cmd escaping.
-      return spawnSync(command, args, options);
+      return spawnSync(command, args, { ...options, env: isolatedEnv(options.env) });
     };
     const check = () => checkDb({ ...context, run, baseRef, validateOnly: true });
     check();
