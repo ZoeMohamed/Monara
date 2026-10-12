@@ -1,27 +1,63 @@
 "use client";
 
-import { type FormEvent, useMemo, useState, useSyncExternalStore } from "react";
+import { Alert, Button, Card, InputGroup, Label, TextField } from "@monara/ui";
 
+import Image from "next/image";
+
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+
+import { BudgetsScreen } from "@/components/budgets-screen";
+import { ChatScreen } from "@/components/chat-screen";
 import { Icon, type IconName } from "@/components/icon";
-import { InstallAppButton } from "@/components/install-app-button";
 import { ModalDialog } from "@/components/modal-dialog";
+import { ProfileScreen } from "@/components/profile-screen";
+import { ReviewQueue } from "@/components/review-queue";
+import { TransactionEditor } from "@/components/transaction-editor";
 import {
-  categories,
+  daysInMonth,
+  demoMonth,
+  demoReminders,
+  demoSummary,
+  demoToday,
+  formatDay,
+  formatMonth,
+  newestFirst,
+  type Reminder,
+  rejectPendingTransaction,
+  shiftMonth,
+  type TransactionValues,
+  transactionErrors,
+  updatePendingTransaction,
+} from "@/data/demo-ledger";
+import {
+  budgets,
   formatRupiah,
+  initialBills,
   initialTransactions,
   type Transaction,
 } from "@/data/sample-data";
 
-const timeFormatter = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit" });
+type Tab = "home" | "transactions" | "budgets" | "chat" | "account";
+type TabItem = { id: Tab; label: string; icon: IconName };
 
-type Tab = "home" | "transactions" | "insights" | "account";
-
-const tabs: Array<{ id: Tab; label: string; icon: IconName }> = [
-  { id: "home", label: "Beranda", icon: "home" },
-  { id: "transactions", label: "Transaksi", icon: "transactions" },
-  { id: "insights", label: "Analisis", icon: "insights" },
-  { id: "account", label: "Akun", icon: "account" },
+const tabs: TabItem[] = [
+  { id: "home", label: "Home", icon: "home" },
+  { id: "transactions", label: "Transactions", icon: "transactions" },
+  { id: "budgets", label: "Budgets", icon: "budgets" },
+  { id: "chat", label: "Chat", icon: "chat" },
+  { id: "account", label: "Profile", icon: "account" },
 ];
+
+const typeNames = { expense: "Expense", income: "Income", transfer: "Transfer" } as const;
+
+const budgetTotal = budgets.reduce((sum, budget) => sum + BigInt(budget.limit), BigInt(0));
+const oldestMonth = shiftMonth(demoMonth, -12);
+
+// No agent endpoint exists yet (AR1). Fail clearly rather than inventing a reply.
+const sendToAgent = (): Promise<string> =>
+  Promise.reject(
+    new Error("The Monara Agent isn't connected in this preview yet. Nothing was changed."),
+  );
 
 function subscribeToConnection(callback: () => void) {
   window.addEventListener("online", callback);
@@ -42,46 +78,18 @@ function useOnlineStatus() {
 
 function Logo() {
   return (
-    <div className="flex items-center gap-3">
-      <span className="grid h-10 w-10 place-items-center rounded-[14px] bg-[#173b2e] text-sm font-black text-white shadow-[0_8px_20px_#173b2e33]">
-        M
+    <div className="flex items-center gap-2 sm:gap-3">
+      <Image
+        src="/icons/icon-192.png"
+        alt=""
+        width={40}
+        height={40}
+        className="h-8 w-8 shrink-0 sm:h-10 sm:w-10"
+      />
+      <span className="text-lg font-black tracking-[-0.05em] text-foreground sm:text-xl">
+        Monara
       </span>
-      <span className="text-xl font-black tracking-[-0.05em] text-[#173b2e]">Monara</span>
     </div>
-  );
-}
-
-function TrendChart({ annual }: { annual: boolean }) {
-  return (
-    <svg aria-label="Grafik laju pengeluaran" className="h-28 w-full" viewBox="0 0 540 120">
-      <defs>
-        <linearGradient id="area" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#1b7a50" stopOpacity="0.22" />
-          <stop offset="1" stopColor="#1b7a50" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d="M8 106H532" stroke="#dce5de" />
-      <path
-        d={
-          annual
-            ? "M8 99 C65 90,95 72,145 80 S230 62,277 48 S366 59,412 33 S485 20,532 13 L532 106 L8 106Z"
-            : "M8 101 C42 94,58 85,91 87 S146 69,177 66 S225 51,265 54 S322 36,358 40 S417 28,450 25 S501 12,532 16 L532 106 L8 106Z"
-        }
-        fill="url(#area)"
-      />
-      <path
-        d={
-          annual
-            ? "M8 99 C65 90,95 72,145 80 S230 62,277 48 S366 59,412 33 S485 20,532 13"
-            : "M8 101 C42 94,58 85,91 87 S146 69,177 66 S225 51,265 54 S322 36,358 40 S417 28,450 25 S501 12,532 16"
-        }
-        fill="none"
-        stroke="#1b7a50"
-        strokeLinecap="round"
-        strokeWidth="3"
-      />
-      <path d="M8 101 532 8" fill="none" stroke="#92a39a" strokeDasharray="7 7" strokeWidth="1.5" />
-    </svg>
   );
 }
 
@@ -93,154 +101,221 @@ function TransactionRow({
   onClick: () => void;
 }) {
   return (
-    <button
-      className="group flex w-full items-center gap-3 rounded-2xl px-1 py-3 text-left transition hover:bg-[#f3f6f2] sm:px-3"
-      onClick={onClick}
+    <Button
+      variant="ghost"
+      className="group h-auto min-h-11 w-full justify-start gap-3 rounded-xl px-0 py-2.5 text-left sm:px-3"
+      onPress={onClick}
       type="button"
     >
-      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[15px] border border-[#e1e8e2] bg-[#f8faf7] text-lg">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-surface-secondary text-base">
         {transaction.emoji}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-bold text-[#213b31] sm:text-[15px]">
-          {transaction.merchant}
+        <span className="block truncate text-sm font-bold text-foreground">
+          {transaction.merchant ?? "Merchant or source missing"}
         </span>
-        <span className="mt-0.5 block truncate text-xs text-[#708079]">
-          {transaction.category} · {transaction.method}
+        <span className="mt-0.5 block truncate text-xs font-normal text-muted">
+          {transaction.category ?? "Category not assigned"} ·{" "}
+          {transaction.method ?? "Account not assigned"}
         </span>
       </span>
       <span className="shrink-0 text-right">
-        <span className="block text-sm font-bold text-[#213b31] sm:text-[15px]">
-          {formatRupiah(transaction.amount).replace("Rp", "Rp ")}
+        <span
+          className={`block text-sm font-bold tabular-nums ${transaction.kind === "income" ? "text-success" : "text-foreground"}`}
+        >
+          {transaction.amount === null
+            ? "Amount missing"
+            : `${transaction.kind === "income" ? "+" : ""}${formatRupiah(transaction.amount)}`}
         </span>
-        <span className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-[#78877f]">
-          {!transaction.reviewed ? (
-            <span className="h-1.5 w-1.5 rounded-full bg-[#dd9d57]" />
-          ) : null}
+        <span className="mt-0.5 flex items-center justify-end gap-1 text-[11px] font-normal text-muted">
+          {transaction.kind === "transfer" ? "Transfer · " : null}
           {transaction.time}
         </span>
       </span>
-    </button>
+    </Button>
+  );
+}
+
+function ReminderList({ reminders }: { reminders: Reminder[] }) {
+  return (
+    <ul className="divide-y divide-separator">
+      {reminders.map((reminder) => (
+        <li className="flex gap-2.5 py-3 text-sm" key={reminder.id}>
+          <Icon
+            className="mt-0.5 h-4 w-4 shrink-0 text-accent"
+            name={reminder.kind === "budget" ? "budgets" : "bell"}
+          />
+          {reminder.message}
+        </li>
+      ))}
+    </ul>
   );
 }
 
 function HomeView({
-  annual,
-  setAnnual,
+  month,
+  setMonth,
   transactions,
+  reminders,
   openTransaction,
+  openReview,
+  openReminders,
 }: {
-  annual: boolean;
-  setAnnual: (value: boolean) => void;
+  month: string;
+  setMonth: (month: string) => void;
   transactions: Transaction[];
+  reminders: Reminder[];
   openTransaction: (transaction: Transaction) => void;
+  openReview: () => void;
+  openReminders: () => void;
 }) {
-  const amount = annual ? 31840000 : 2840500;
-  const budget = annual ? 55200000 : 4600000;
-  const percentage = Math.round((amount / budget) * 100);
+  const summary = demoSummary(transactions, month);
+  const percent =
+    budgetTotal > BigInt(0) ? Number((summary.spending * BigInt(100)) / budgetTotal) : 0;
+  const left = budgetTotal - summary.spending;
+  const daysCounted = month === demoMonth ? Number(demoToday.slice(8, 10)) : daysInMonth(month);
+  const pendingCount = transactions.filter((item) => item.status === "pending").length;
+  const recent = [...summary.confirmed].sort(newestFirst).slice(0, 5);
 
   return (
-    <div className="animate-[rise_.35s_ease-out]">
-      <div className="flex items-start justify-between gap-5">
+    <div>
+      <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-semibold text-[#718078]">Selamat pagi, Zoe</p>
-          <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">
-            Uangmu hari ini.
+          <p className="text-xs font-semibold text-muted">Monthly overview</p>
+          <h1 aria-live="polite" className="text-xl font-black tracking-[-0.04em] sm:text-3xl">
+            {formatMonth(month)}
           </h1>
         </div>
-        <div className="hidden sm:block">
-          <InstallAppButton />
+        <div className="flex gap-1">
+          <Button
+            aria-label="Previous month"
+            className="rounded-full"
+            isDisabled={month === oldestMonth}
+            isIconOnly
+            onPress={() => setMonth(shiftMonth(month, -1))}
+            variant="ghost"
+          >
+            <Icon name="chevron-left" />
+          </Button>
+          <Button
+            aria-label="Next month"
+            className="rounded-full"
+            isDisabled={month === demoMonth}
+            isIconOnly
+            onPress={() => setMonth(shiftMonth(month, 1))}
+            variant="ghost"
+          >
+            <Icon name="chevron-right" />
+          </Button>
         </div>
       </div>
 
-      <section className="mt-7 overflow-hidden rounded-[1.8rem] bg-[#173b2e] p-6 text-white shadow-[0_24px_60px_#173b2e26] sm:p-8">
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#bcd0c5]">
-            Pengeluaran
-          </p>
-          <div className="flex rounded-full bg-white/10 p-1 text-xs font-bold">
-            <button
-              className={`rounded-full px-3 py-1.5 transition ${!annual ? "bg-white text-[#173b2e]" : "text-[#c9d8d0]"}`}
-              onClick={() => setAnnual(false)}
-              type="button"
-            >
-              30H
-            </button>
-            <button
-              className={`rounded-full px-3 py-1.5 transition ${annual ? "bg-white text-[#173b2e]" : "text-[#c9d8d0]"}`}
-              onClick={() => setAnnual(true)}
-              type="button"
-            >
-              12B
-            </button>
-          </div>
-        </div>
-        <p className="mt-4 text-[clamp(2.2rem,8vw,4rem)] font-black tracking-[-0.065em]">
-          {formatRupiah(amount)}
+      <Card className="mt-3 block gap-0 rounded-2xl bg-accent-soft p-4 text-foreground">
+        <p className="text-xs font-semibold text-accent-soft-foreground">Spent</p>
+        <p className="mt-0.5 [overflow-wrap:anywhere] text-[clamp(1.875rem,9vw,2.5rem)] font-black leading-tight tracking-[-0.055em] tabular-nums">
+          {formatRupiah(summary.spending)}
         </p>
-        <div className="mt-3 flex items-center justify-between text-xs text-[#c3d2ca]">
-          <span>{percentage}% dari budget</span>
-          <span>{formatRupiah(budget - amount)} tersisa</span>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-accent-soft-foreground tabular-nums [overflow-wrap:anywhere]">
+          <span>
+            {percent}% of {formatRupiah(budgetTotal)}
+          </span>
+          <span>
+            {left >= BigInt(0)
+              ? `${formatRupiah(left)} left`
+              : `${formatRupiah(-left)} over budget`}
+          </span>
         </div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/15">
-          <div className="h-full rounded-full bg-[#83c69e]" style={{ width: `${percentage}%` }} />
+        <div
+          aria-label="Monthly budget used"
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={Math.min(percent, 100)}
+          className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-accent/15"
+          role="progressbar"
+        >
+          <div
+            className={`h-full rounded-full ${percent >= 100 ? "bg-danger" : "bg-accent"}`}
+            style={{ width: `${Math.min(percent, 100)}%` }}
+          />
         </div>
-        <div className="mt-7 -mb-2 rounded-2xl bg-white/[0.06] px-2 pt-4">
-          <TrendChart annual={annual} />
-        </div>
-      </section>
-
-      <section className="mt-6 grid gap-4 sm:grid-cols-2">
-        <div className="rounded-[1.5rem] border border-[#dfe7e1] bg-white p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">
-                Ritme belanja
-              </p>
-              <p className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]">Rp94.700</p>
-              <p className="mt-1 text-xs text-[#718078]">rata-rata per hari</p>
-            </div>
-            <span className="rounded-full bg-[#e2f1e7] px-2.5 py-1 text-xs font-bold text-[#1b7a50]">
-              ↓ 12%
-            </span>
+        <dl className="mt-3 grid grid-cols-2 gap-2 border-t border-accent/15 pt-3 tabular-nums">
+          <div className="min-w-0">
+            <dt className="text-xs text-accent-soft-foreground">Income</dt>
+            <dd className="mt-0.5 [overflow-wrap:anywhere] text-sm font-bold">
+              {formatRupiah(summary.income)}
+            </dd>
           </div>
-        </div>
-        <div className="rounded-[1.5rem] border border-[#dfe7e1] bg-white p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">
-                Perlu ditinjau
-              </p>
-              <p className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]">
-                {transactions.filter((item) => !item.reviewed).length} transaksi
-              </p>
-              <p className="mt-1 text-xs text-[#718078]">confidence di bawah 95%</p>
-            </div>
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#f9ead8] text-sm">
-              ✦
-            </span>
+          <div className="min-w-0">
+            <dt className="text-xs text-accent-soft-foreground">Income − spending</dt>
+            <dd className="mt-0.5 [overflow-wrap:anywhere] text-sm font-bold">
+              {formatRupiah(summary.difference)}
+            </dd>
           </div>
-        </div>
-      </section>
+          <div className="col-span-2 text-xs text-accent-soft-foreground">
+            {formatRupiah(summary.spending / BigInt(daysCounted))} a day on average over{" "}
+            {daysCounted} days
+          </div>
+        </dl>
+      </Card>
 
-      <section className="mt-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-black tracking-[-0.035em] text-[#173b2e]">
-              Transaksi terbaru
+      {pendingCount > 0 ? (
+        <Button
+          className="mt-2 h-auto min-h-14 w-full justify-start gap-3 rounded-2xl border border-border bg-surface px-4 py-3 text-left"
+          onPress={openReview}
+          variant="ghost"
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-warning-soft text-sm font-bold text-warning-soft-foreground tabular-nums">
+            {pendingCount}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold">
+              {pendingCount === 1 ? "Import needs review" : "Imports need review"}
+            </span>
+            <span className="block text-xs font-normal text-muted">
+              Nothing counts until you confirm it
+            </span>
+          </span>
+          <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+        </Button>
+      ) : null}
+
+      {month === demoMonth && reminders.length > 0 ? (
+        <section aria-labelledby="home-reminders" className="mt-5">
+          <div className="flex items-center justify-between">
+            <h2 id="home-reminders" className="text-base font-black tracking-[-0.03em]">
+              Reminders
             </h2>
-            <p className="mt-1 text-xs text-[#718078]">Tercatat otomatis dari email transaksi</p>
+            <Button className="-mr-2 text-accent" onPress={openReminders} size="sm" variant="ghost">
+              See all
+            </Button>
           </div>
-        </div>
-        <div className="mt-4 divide-y divide-[#e5ebe6] rounded-[1.5rem] border border-[#dfe7e1] bg-white px-4 py-1 sm:px-5">
-          {transactions.slice(0, 4).map((transaction) => (
-            <TransactionRow
-              key={transaction.id}
-              onClick={() => openTransaction(transaction)}
-              transaction={transaction}
-            />
-          ))}
-        </div>
+          <Card className="mt-1 block gap-0 rounded-2xl border border-border px-4 py-1">
+            <ReminderList reminders={reminders.slice(0, 2)} />
+          </Card>
+        </section>
+      ) : null}
+
+      <section aria-labelledby="recent-transactions" className="mt-5">
+        <h2 id="recent-transactions" className="text-base font-black tracking-[-0.03em]">
+          Recent transactions
+        </h2>
+        <Card className="mt-2 block gap-0 rounded-2xl border border-border bg-surface px-4 py-0.5 sm:px-2">
+          {recent.length > 0 ? (
+            <div className="divide-y divide-separator">
+              {recent.map((transaction) => (
+                <TransactionRow
+                  key={transaction.id}
+                  onClick={() => openTransaction(transaction)}
+                  transaction={transaction}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="py-6 text-center text-sm text-muted">
+              No confirmed transactions in {formatMonth(month)}.
+            </p>
+          )}
+        </Card>
       </section>
     </div>
   );
@@ -249,343 +324,505 @@ function HomeView({
 function TransactionsView({
   transactions,
   openTransaction,
+  reviewOpen,
+  setReviewOpen,
+  onEdit,
+  onConfirm,
+  onReject,
 }: {
   transactions: Transaction[];
   openTransaction: (transaction: Transaction) => void;
+  reviewOpen: boolean;
+  setReviewOpen: (value: boolean) => void;
+  onEdit: (id: string) => void;
+  onConfirm: (id: string) => void;
+  onReject: (id: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const pendingCount = transactions.filter((item) => item.status === "pending").length;
   const visible = useMemo(
     () =>
-      transactions.filter((transaction) =>
-        `${transaction.merchant} ${transaction.category}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-      ),
+      transactions
+        .filter(
+          (transaction) =>
+            transaction.status === "confirmed" &&
+            `${transaction.merchant ?? ""} ${transaction.category ?? ""}`
+              .toLowerCase()
+              .includes(query.toLowerCase()),
+        )
+        .sort(newestFirst),
     [query, transactions],
   );
 
   return (
-    <div className="animate-[rise_.35s_ease-out]">
-      <p className="text-sm font-semibold text-[#718078]">Semua catatan</p>
-      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">
-        Transaksi
-      </h1>
-      <label className="mt-7 flex items-center gap-3 rounded-2xl border border-[#dbe4dd] bg-white px-4 py-3.5 shadow-sm">
-        <Icon className="h-5 w-5 text-[#76857d]" name="search" />
-        <span className="sr-only">Cari transaksi</span>
-        <input
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#93a099]"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Cari merchant atau kategori"
-          value={query}
+    <div>
+      <h1 className="text-2xl font-black tracking-[-0.05em] sm:text-4xl">Transactions</h1>
+      <fieldset
+        aria-label="Transaction view"
+        className="mt-3 grid grid-cols-2 gap-1 rounded-2xl bg-surface-secondary p-1"
+      >
+        <Button
+          aria-pressed={!reviewOpen}
+          className={`min-h-11 rounded-xl ${reviewOpen ? "text-muted" : "bg-surface text-foreground"}`}
+          onPress={() => setReviewOpen(false)}
+          variant="ghost"
+        >
+          Confirmed
+        </Button>
+        <Button
+          aria-pressed={reviewOpen}
+          className={`min-h-11 rounded-xl ${reviewOpen ? "bg-surface text-foreground" : "text-muted"}`}
+          onPress={() => setReviewOpen(true)}
+          variant="ghost"
+        >
+          Review Queue · {pendingCount}
+        </Button>
+      </fieldset>
+      {reviewOpen ? (
+        <ReviewQueue
+          transactions={transactions}
+          onEdit={onEdit}
+          onConfirm={onConfirm}
+          onReject={onReject}
         />
-      </label>
-      <div className="mt-6">
-        <div className="flex items-center justify-between px-1">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">
-            Oktober 2026
-          </p>
-          <p className="text-sm font-bold text-[#173b2e]">{formatRupiah(2840500)}</p>
+      ) : (
+        <>
+          <TextField className="mt-3" onChange={setQuery} value={query}>
+            <Label className="sr-only">Search transactions</Label>
+            <InputGroup className="rounded-2xl">
+              <InputGroup.Prefix>
+                <Icon name="search" />
+              </InputGroup.Prefix>
+              <InputGroup.Input
+                className="text-base"
+                enterKeyHint="search"
+                placeholder="Search merchants or categories"
+              />
+            </InputGroup>
+          </TextField>
+          <Card className="mt-3 block gap-0 rounded-2xl border border-border bg-surface px-4 py-0.5 sm:px-2">
+            {visible.length > 0 ? (
+              <div className="divide-y divide-separator">
+                {visible.map((transaction) => (
+                  <TransactionRow
+                    key={transaction.id}
+                    onClick={() => openTransaction(transaction)}
+                    transaction={transaction}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-sm text-muted">No matching transactions.</p>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+function RemindersSheet({ reminders, onClose }: { reminders: Reminder[]; onClose: () => void }) {
+  return (
+    <ModalDialog labelledBy="reminders-title" onClose={onClose}>
+      <div className="p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="reminders-title" className="text-lg font-black tracking-[-0.03em]">
+            Reminders
+          </h2>
+          <Button
+            aria-label="Close reminders"
+            className="rounded-full"
+            isIconOnly
+            onPress={onClose}
+            variant="ghost"
+          >
+            <Icon name="close" />
+          </Button>
         </div>
-        <div className="mt-3 divide-y divide-[#e5ebe6] rounded-[1.5rem] border border-[#dfe7e1] bg-white px-4 py-1 sm:px-5">
-          {visible.map((transaction) => (
-            <TransactionRow
-              key={transaction.id}
-              onClick={() => openTransaction(transaction)}
-              transaction={transaction}
-            />
-          ))}
-          {visible.length === 0 ? (
-            <p className="py-12 text-center text-sm text-[#718078]">
-              Tidak ada transaksi yang cocok.
-            </p>
+        {reminders.length > 0 ? (
+          <div className="mt-2">
+            <ReminderList reminders={reminders} />
+          </div>
+        ) : (
+          <p className="py-6 text-center text-sm text-muted">You’re all caught up.</p>
+        )}
+        <p className="mt-2 text-xs text-muted">
+          Budgets alert at 80% and 100%. Bills remind 3 days before and on the due date.
+        </p>
+      </div>
+    </ModalDialog>
+  );
+}
+
+function DesktopSidebar({
+  activeTab,
+  onSelect,
+  reminderCount,
+  onOpenReminders,
+}: {
+  activeTab: Tab;
+  onSelect: (tab: Tab) => void;
+  reminderCount: number;
+  onOpenReminders: () => void;
+}) {
+  return (
+    <aside className="hidden border-r border-border bg-surface-secondary p-6 lg:flex lg:flex-col">
+      <Logo />
+      <nav aria-label="Main navigation" className="mt-12 space-y-2">
+        {tabs.map((tab) => (
+          <Button
+            variant="ghost"
+            aria-current={activeTab === tab.id ? "page" : undefined}
+            className={`h-auto w-full justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-bold ${
+              activeTab === tab.id
+                ? "bg-accent text-white"
+                : "text-muted hover:bg-surface hover:text-foreground"
+            }`}
+            key={tab.id}
+            onPress={() => onSelect(tab.id)}
+            type="button"
+          >
+            <Icon name={tab.icon} /> {tab.label}
+          </Button>
+        ))}
+      </nav>
+      <Button
+        variant="ghost"
+        className="mt-4 h-auto w-full justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-muted hover:bg-surface hover:text-foreground"
+        onPress={() => onOpenReminders()}
+      >
+        <Icon name="bell" /> Reminders
+        {reminderCount > 0 ? (
+          <span className="ml-auto rounded-full bg-warning-soft px-2 text-xs text-warning-soft-foreground tabular-nums">
+            {reminderCount}
+          </span>
+        ) : null}
+      </Button>
+      <p className="mt-auto flex items-start gap-2 text-xs leading-5 text-muted">
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-accent" name="shield" />
+        Demo data stays local during this session.
+      </p>
+    </aside>
+  );
+}
+
+function MobileHeader({
+  activeTab,
+  reminderCount,
+  onOpenReminders,
+  onOpenProfile,
+}: {
+  activeTab: Tab;
+  reminderCount: number;
+  onOpenReminders: () => void;
+  onOpenProfile: () => void;
+}) {
+  return (
+    <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top,0px))] items-center justify-between border-b border-border bg-background pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(.5rem,env(safe-area-inset-right,0px))] pt-[env(safe-area-inset-top,0px)] sm:pl-[max(2rem,env(safe-area-inset-left,0px))] sm:pr-[max(2rem,env(safe-area-inset-right,0px))] lg:hidden">
+      <Logo />
+      <div className="flex items-center">
+        <Button
+          isIconOnly
+          variant="ghost"
+          aria-label={reminderCount > 0 ? `Reminders, ${reminderCount} active` : "Reminders"}
+          className="relative rounded-full text-foreground"
+          onPress={() => onOpenReminders()}
+          type="button"
+        >
+          <Icon name="bell" />
+          {reminderCount > 0 ? (
+            <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-warning ring-2 ring-background" />
           ) : null}
+        </Button>
+        <Button
+          isIconOnly
+          variant="ghost"
+          aria-current={activeTab === "account" ? "page" : undefined}
+          aria-label="Profile and settings"
+          className={`rounded-full ${activeTab === "account" ? "text-accent" : "text-foreground"}`}
+          onPress={() => onOpenProfile()}
+          type="button"
+        >
+          <Icon name="account" />
+        </Button>
+      </div>
+    </header>
+  );
+}
+
+function BottomNav({
+  activeTab,
+  onSelect,
+  onAdd,
+}: {
+  activeTab: Tab;
+  onSelect: (tab: Tab) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <nav
+      aria-label="Bottom navigation"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pl-[max(.5rem,env(safe-area-inset-left,0px))] pr-[max(.5rem,env(safe-area-inset-right,0px))] pb-[calc(.5rem+env(safe-area-inset-bottom,0px))] pt-1.5 lg:hidden"
+    >
+      <div className="mx-auto grid max-w-lg grid-cols-5 items-end">
+        {tabs.slice(0, 2).map((tab) => (
+          <MobileTab
+            active={activeTab === tab.id}
+            key={tab.id}
+            onClick={() => onSelect(tab.id)}
+            tab={tab}
+          />
+        ))}
+        <Button
+          isIconOnly
+          variant="primary"
+          aria-label="Add transaction"
+          className="mx-auto -mt-6 grid h-13 w-13 place-items-center rounded-2xl bg-accent text-white"
+          onPress={() => onAdd()}
+          type="button"
+        >
+          <Icon className="h-6 w-6" name="plus" strokeWidth={2.2} />
+        </Button>
+        {tabs.slice(2, 4).map((tab) => (
+          <MobileTab
+            active={activeTab === tab.id}
+            key={tab.id}
+            onClick={() => onSelect(tab.id)}
+            tab={tab}
+          />
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function RejectDialog({
+  transaction,
+  onCancel,
+  onReject,
+}: {
+  transaction: Transaction;
+  onCancel: () => void;
+  onReject: () => void;
+}) {
+  return (
+    <ModalDialog labelledBy="reject-title" onClose={onCancel}>
+      <div className="p-4 sm:p-5">
+        <h2 id="reject-title" className="text-xl font-bold">
+          Reject this transaction?
+        </h2>
+        <p className="mt-3 break-words text-sm leading-6 text-muted">
+          {transaction.merchant ?? "This transaction"} will leave the Review Queue and stay out of
+          totals. Rejection is retained for this demo session.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-end gap-2 sm:mt-6 sm:gap-3">
+          <Button variant="secondary" className="min-h-11" onPress={onCancel}>
+            Keep pending
+          </Button>
+          <Button variant="danger" className="min-h-11" onPress={onReject}>
+            Reject transaction
+          </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function InsightsView() {
-  return (
-    <div className="animate-[rise_.35s_ease-out]">
-      <p className="text-sm font-semibold text-[#718078]">Oktober 2026</p>
-      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">
-        Analisis
-      </h1>
-      <section className="mt-7 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#718078]">
-          Insight bulan ini
-        </p>
-        <p className="mt-4 max-w-xl text-2xl font-black leading-tight tracking-[-0.04em] text-[#173b2e] sm:text-3xl">
-          Kamu menghemat 12% dibanding ritme bulan lalu.
-        </p>
-        <p className="mt-3 text-sm leading-6 text-[#65756d]">
-          Pengeluaran transportasi turun paling besar. Makan & minum masih mendekati batas budget.
-        </p>
-      </section>
-      <section className="mt-6 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <h2 className="text-lg font-black tracking-[-0.03em] text-[#173b2e]">
-          Budget per kategori
-        </h2>
-        <div className="mt-5 space-y-6">
-          {categories.map((category) => {
-            const percentage = Math.round((category.amount / category.budget) * 100);
-            return (
-              <div key={category.name}>
-                <div className="flex items-center gap-3">
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#f2f5f1]">
-                    {category.emoji}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-bold text-[#213b31]">{category.name}</p>
-                      <p className="shrink-0 text-xs font-semibold text-[#65756d]">
-                        {formatRupiah(category.amount)} / {formatRupiah(category.budget)}
-                      </p>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#edf1ed]">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ backgroundColor: category.color, width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function AccountView({ online }: { online: boolean }) {
-  return (
-    <div className="animate-[rise_.35s_ease-out]">
-      <p className="text-sm font-semibold text-[#718078]">Profil & keamanan</p>
-      <h1 className="mt-1 text-3xl font-black tracking-[-0.055em] text-[#173b2e] sm:text-4xl">
-        Akun
-      </h1>
-      <section className="mt-7 rounded-[1.75rem] bg-[#173b2e] p-6 text-white sm:p-7">
-        <div className="flex items-center gap-4">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/10 text-xl font-black">
-            ZM
-          </span>
-          <div>
-            <h2 className="text-lg font-bold">Zoe Mohamed</h2>
-            <p className="mt-0.5 text-sm text-[#bfd0c7]">zoe@example.com</p>
-          </div>
-        </div>
-      </section>
-      <section className="mt-6 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <div className="flex items-start gap-4">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e1f0e6] text-[#1b7a50]">
-            <Icon name="shield" />
-          </span>
-          <div>
-            <h2 className="font-bold text-[#173b2e]">Privacy status</h2>
-            <p className="mt-1 text-sm leading-6 text-[#65756d]">
-              Gmail belum terhubung. Prototype ini hanya memakai data demo lokal.
-            </p>
-          </div>
-        </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          {["Read-only OAuth", "Raw email dibuang", "AI tanpa tools"].map((item) => (
-            <div
-              className="rounded-2xl bg-[#f2f6f2] px-4 py-3 text-xs font-semibold text-[#365247]"
-              key={item}
-            >
-              <span className="mr-2 text-[#1b7a50]">✓</span>
-              {item}
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="mt-6 rounded-[1.75rem] border border-[#dfe7e1] bg-white p-5 sm:p-7">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="font-bold text-[#173b2e]">Status aplikasi</h2>
-            <p className="mt-1 text-sm text-[#65756d]">
-              {online ? "Online dan siap dipakai" : "Offline · app shell tetap tersedia"}
-            </p>
-          </div>
-          <span className={`h-3 w-3 rounded-full ${online ? "bg-[#2d9b68]" : "bg-[#d29a58]"}`} />
-        </div>
-        <div className="mt-5 sm:hidden">
-          <InstallAppButton />
-        </div>
-      </section>
-    </div>
+    </ModalDialog>
   );
 }
 
 export function MonaraApp() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [annual, setAnnual] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const previousTab = useRef<Tab>("home");
+  useEffect(() => {
+    if (previousTab.current === activeTab) return;
+    previousTab.current = activeTab;
+    window.scrollTo({ top: 0, behavior: "instant" });
+    mainRef.current?.focus({ preventScroll: true });
+  }, [activeTab]);
+  const [month, setMonth] = useState(demoMonth);
   const [transactions, setTransactions] = useState(initialTransactions);
-  const [selected, setSelected] = useState<Transaction | null>(null);
+  const [bills, setBills] = useState(initialBills);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [remindersOpen, setRemindersOpen] = useState(false);
+  const [notice, setNotice] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const online = useOnlineStatus();
-
-  const review = (id: number) => {
-    setTransactions((items) =>
-      items.map((item) => (item.id === id ? { ...item, reviewed: true } : item)),
-    );
-    setSelected(null);
+  const reminders = demoReminders(transactions, budgets, bills);
+  const selected = transactions.find(
+    (item) => item.id === selectedId && item.status !== "rejected",
+  );
+  const editing = transactions.find((item) => item.id === editId && item.status === "pending");
+  const rejecting = transactions.find((item) => item.id === rejectId && item.status === "pending");
+  const openTransaction = (transaction: Transaction) => setSelectedId(transaction.id);
+  const openReview = () => {
+    setActiveTab("transactions");
+    setReviewOpen(true);
   };
-
-  const addTransaction = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const amount = Number(data.get("amount"));
-    const merchant = String(data.get("merchant") || "Transaksi baru");
+  const confirm = (id: string) => {
+    const item = transactions.find(
+      (transaction) => transaction.id === id && transaction.status === "pending",
+    );
+    if (!item) return;
+    if (Object.keys(transactionErrors(item)).length > 0) {
+      setEditId(id);
+      return;
+    }
+    setTransactions((items) => updatePendingTransaction(items, id, item, "confirm"));
+    setSelectedId(null);
+    setNotice(`${item.merchant ?? "Transaction"} confirmed. Sample totals updated.`);
+  };
+  const save = (values: TransactionValues, action: "edit" | "confirm") => {
+    if (!editing) return;
+    setTransactions((items) => updatePendingTransaction(items, editing.id, values, action));
+    setEditId(null);
+    setSelectedId(null);
+    setNotice(
+      action === "confirm"
+        ? "Transaction confirmed. Sample totals updated."
+        : "Changes saved. Transaction is still pending review.",
+    );
+  };
+  const add = (values: TransactionValues) => {
     setTransactions((items) => [
-      {
-        id: Date.now(),
-        merchant,
-        category: "Lainnya",
-        amount: Number.isFinite(amount) ? amount : 0,
-        date: "Hari ini",
-        time: timeFormatter.format(new Date()),
-        method: "Manual",
-        emoji: "✦",
-        confidence: 100,
-        reviewed: true,
-      },
+      { ...values, id: crypto.randomUUID(), emoji: "✦", confidence: null, status: "confirmed" },
       ...items,
     ]);
     setAddOpen(false);
     setActiveTab("transactions");
+    setReviewOpen(false);
+    setNotice("Sample transaction saved and confirmed for this session.");
+  };
+  const confirmBill = (id: string) => {
+    setBills((items) =>
+      items.map((bill) => (bill.id === id ? { ...bill, status: "active" } : bill)),
+    );
+    setNotice("Recurring bill tracked for this session.");
+  };
+  const dismissBill = (id: string) => {
+    setBills((items) => items.filter((bill) => bill.id !== id));
+    setNotice("Suggestion dismissed. It won't be tracked.");
   };
 
   return (
-    <div className="min-h-dvh bg-[#edf2ec] text-[#213b31] lg:p-4">
-      <div className="mx-auto min-h-dvh max-w-[1500px] overflow-hidden bg-[#f8faf7] lg:grid lg:min-h-[calc(100dvh-2rem)] lg:grid-cols-[248px_minmax(0,1fr)] lg:rounded-[2rem] lg:border lg:border-[#d9e3db] lg:shadow-[0_30px_90px_#173b2e17]">
-        <aside className="hidden border-r border-[#dce5de] bg-[#f1f5f0] p-6 lg:flex lg:flex-col">
-          <Logo />
-          <nav aria-label="Navigasi utama" className="mt-12 space-y-2">
-            {tabs.map((tab) => (
-              <button
-                aria-current={activeTab === tab.id ? "page" : undefined}
-                className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition ${
-                  activeTab === tab.id
-                    ? "bg-[#173b2e] text-white shadow-[0_10px_24px_#173b2e24]"
-                    : "text-[#607168] hover:bg-white hover:text-[#173b2e]"
-                }`}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                type="button"
-              >
-                <Icon name={tab.icon} /> {tab.label}
-              </button>
-            ))}
-          </nav>
-          <div className="mt-auto rounded-2xl border border-[#d8e2da] bg-white p-4">
-            <div className="flex items-center gap-2 text-xs font-bold text-[#1b7a50]">
-              <Icon className="h-4 w-4" name="shield" /> Private by design
-            </div>
-            <p className="mt-2 text-xs leading-5 text-[#718078]">
-              Data demo tersimpan lokal selama sesi ini.
-            </p>
-          </div>
-        </aside>
+    <div className="min-h-dvh bg-surface-tertiary text-foreground lg:p-4">
+      <div className="mx-auto min-h-dvh max-w-[1500px] overflow-clip bg-background lg:grid lg:min-h-[calc(100dvh-2rem)] lg:grid-cols-[248px_minmax(0,1fr)] lg:rounded-[2rem] lg:border lg:border-border">
+        <DesktopSidebar
+          activeTab={activeTab}
+          onOpenReminders={() => setRemindersOpen(true)}
+          onSelect={setActiveTab}
+          reminderCount={reminders.length}
+        />
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-[#e1e8e2] bg-[#f8faf7e8] px-5 backdrop-blur-xl sm:px-8 lg:hidden">
-            <Logo />
-            <div className="flex items-center gap-2">
-              <InstallAppButton />
-              <button
-                aria-label="Notifikasi"
-                className="relative grid h-10 w-10 place-items-center rounded-full border border-[#d8e2da] bg-white text-[#365247]"
-                type="button"
-              >
-                <Icon name="bell" />
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#d58d4d] ring-2 ring-white" />
-              </button>
-            </div>
-          </header>
+          <MobileHeader
+            activeTab={activeTab}
+            onOpenProfile={() => setActiveTab("account")}
+            onOpenReminders={() => setRemindersOpen(true)}
+            reminderCount={reminders.length}
+          />
 
           {!online ? (
-            <div
-              className="bg-[#f4dfc6] px-5 py-2 text-center text-xs font-bold text-[#774d25]"
-              role="status"
-            >
-              Kamu sedang offline. Monara tetap bisa dibuka dari cache.
-            </div>
+            <Alert className="rounded-none px-4 py-2 sm:px-5" role="status" status="warning">
+              <Alert.Content>
+                <Alert.Title className="text-center text-xs">
+                  You’re offline. Reconnect for sign-in, sync, and real financial operations.
+                </Alert.Title>
+              </Alert.Content>
+            </Alert>
           ) : null}
 
-          <main className="mx-auto w-full max-w-[920px] px-5 pb-32 pt-7 sm:px-8 sm:pt-10 lg:px-12 lg:pb-16 lg:pt-12">
+          <p
+            role="status"
+            className={`mx-auto max-w-[920px] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pt-2 text-xs sm:pl-[max(2rem,env(safe-area-inset-left,0px))] sm:pr-[max(2rem,env(safe-area-inset-right,0px))] sm:pt-4 lg:px-12 ${notice ? "font-semibold text-accent" : "text-muted"}`}
+          >
+            {notice || "Demo · synthetic data · changes reset when you leave or reload"}
+          </p>
+          <main
+            ref={mainRef}
+            tabIndex={-1}
+            aria-label={tabs.find((tab) => tab.id === activeTab)?.label}
+            className="mx-auto w-full max-w-[920px] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[calc(6rem+env(safe-area-inset-bottom,0px))] pt-3 sm:pl-[max(2rem,env(safe-area-inset-left,0px))] sm:pr-[max(2rem,env(safe-area-inset-right,0px))] sm:pt-6 lg:px-12 lg:pb-16 lg:pt-8"
+          >
             {activeTab === "home" ? (
               <HomeView
-                annual={annual}
-                openTransaction={setSelected}
-                setAnnual={setAnnual}
+                month={month}
+                openReminders={() => setRemindersOpen(true)}
+                openReview={openReview}
+                openTransaction={openTransaction}
+                reminders={reminders}
+                setMonth={setMonth}
                 transactions={transactions}
               />
             ) : null}
             {activeTab === "transactions" ? (
-              <TransactionsView openTransaction={setSelected} transactions={transactions} />
+              <TransactionsView
+                openTransaction={openTransaction}
+                transactions={transactions}
+                reviewOpen={reviewOpen}
+                setReviewOpen={setReviewOpen}
+                onEdit={setEditId}
+                onConfirm={confirm}
+                onReject={setRejectId}
+              />
             ) : null}
-            {activeTab === "insights" ? <InsightsView /> : null}
-            {activeTab === "account" ? <AccountView online={online} /> : null}
+            {activeTab === "budgets" ? (
+              <BudgetsScreen
+                bills={bills}
+                budgets={budgets}
+                onConfirmBill={confirmBill}
+                onDismissBill={dismissBill}
+                transactions={transactions}
+              />
+            ) : null}
+            {activeTab === "chat" ? <ChatScreen onSend={sendToAgent} /> : null}
+            {activeTab === "account" ? <ProfileScreen online={online} /> : null}
           </main>
         </div>
       </div>
 
-      <nav
-        aria-label="Navigasi bawah"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-[#dce5de] bg-white/95 px-2 pb-[calc(.6rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_35px_#173b2e12] backdrop-blur-xl lg:hidden"
-      >
-        <div className="mx-auto grid max-w-lg grid-cols-5 items-end">
-          {tabs.slice(0, 2).map((tab) => (
-            <MobileTab
-              active={activeTab === tab.id}
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              tab={tab}
-            />
-          ))}
-          <button
-            aria-label="Tambah transaksi"
-            className="mx-auto -mt-7 grid h-14 w-14 place-items-center rounded-2xl bg-[#1b7a50] text-white shadow-[0_12px_30px_#1b7a5050] transition active:scale-95"
-            onClick={() => setAddOpen(true)}
-            type="button"
-          >
-            <Icon className="h-7 w-7" name="plus" strokeWidth={2.2} />
-          </button>
-          {tabs.slice(2).map((tab) => (
-            <MobileTab
-              active={activeTab === tab.id}
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              tab={tab}
-            />
-          ))}
-        </div>
-      </nav>
+      <BottomNav activeTab={activeTab} onAdd={() => setAddOpen(true)} onSelect={setActiveTab} />
 
-      <button
-        aria-label="Tambah transaksi"
-        className="fixed bottom-8 right-8 z-30 hidden items-center gap-2 rounded-2xl bg-[#1b7a50] px-5 py-4 text-sm font-bold text-white shadow-[0_15px_35px_#1b7a5045] transition hover:-translate-y-0.5 lg:flex"
-        onClick={() => setAddOpen(true)}
-        type="button"
-      >
-        <Icon name="plus" /> Tambah transaksi
-      </button>
+      {activeTab !== "chat" ? (
+        <Button
+          variant="primary"
+          aria-label="Add transaction"
+          className="fixed bottom-8 right-8 z-30 hidden h-auto items-center gap-2 rounded-2xl bg-accent px-5 py-4 text-sm font-bold text-white lg:flex"
+          onPress={() => setAddOpen(true)}
+          type="button"
+        >
+          <Icon name="plus" /> Add transaction
+        </Button>
+      ) : null}
 
       {selected ? (
-        <TransactionSheet
-          onClose={() => setSelected(null)}
-          onReview={() => review(selected.id)}
-          transaction={selected}
+        <TransactionSheet onClose={() => setSelectedId(null)} transaction={selected} />
+      ) : null}
+      {editing && (
+        <TransactionEditor
+          key={editing.id}
+          transaction={editing}
+          onClose={() => setEditId(null)}
+          onSave={save}
+        />
+      )}
+      {rejecting ? (
+        <RejectDialog
+          onCancel={() => setRejectId(null)}
+          onReject={() => {
+            setTransactions((items) => rejectPendingTransaction(items, rejecting.id));
+            setRejectId(null);
+            setSelectedId(null);
+            setNotice("Transaction rejected and removed from the Review Queue.");
+          }}
+          transaction={rejecting}
         />
       ) : null}
-      {addOpen ? (
-        <AddTransactionSheet onClose={() => setAddOpen(false)} onSubmit={addTransaction} />
+      {remindersOpen ? (
+        <RemindersSheet onClose={() => setRemindersOpen(false)} reminders={reminders} />
       ) : null}
+      {addOpen ? <TransactionEditor onClose={() => setAddOpen(false)} onSave={add} /> : null}
     </div>
   );
 }
@@ -595,148 +832,77 @@ function MobileTab({
   active,
   onClick,
 }: {
-  tab: { id: Tab; label: string; icon: IconName };
+  tab: TabItem;
   active: boolean;
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
+      variant="ghost"
       aria-current={active ? "page" : undefined}
-      className={`flex flex-col items-center gap-1 py-1 text-[10px] font-bold ${active ? "text-[#1b7a50]" : "text-[#849088]"}`}
-      onClick={onClick}
+      className={`h-auto min-h-11 w-full flex-col items-center gap-1 px-1 py-1 text-[10px] font-bold ${active ? "text-accent" : "text-muted"}`}
+      onPress={onClick}
       type="button"
     >
       <Icon className="h-5 w-5" name={tab.icon} strokeWidth={active ? 2.3 : 1.8} />
       {tab.label}
-    </button>
+    </Button>
   );
 }
 
 function TransactionSheet({
   transaction,
   onClose,
-  onReview,
 }: {
   transaction: Transaction;
   onClose: () => void;
-  onReview: () => void;
 }) {
   return (
     <ModalDialog labelledBy="transaction-title" onClose={onClose}>
-      <div className="w-full max-w-md rounded-[1.8rem] bg-white p-6 shadow-2xl sm:p-8">
+      <Card className="block gap-0 w-full max-w-md rounded-2xl bg-surface p-4 sm:rounded-[1.8rem] sm:p-5">
         <div className="flex items-start justify-between">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[#f0f4ef] text-2xl">
+          <span className="grid h-12 w-12 place-items-center rounded-xl bg-surface-secondary text-xl sm:h-14 sm:w-14 sm:rounded-2xl sm:text-2xl">
             {transaction.emoji}
           </span>
-          <button
-            aria-label="Tutup detail transaksi"
-            className="grid h-10 w-10 place-items-center rounded-full border border-[#dfe7e1] text-[#718078]"
-            onClick={onClose}
+          <Button
+            isIconOnly
+            variant="ghost"
+            aria-label="Close transaction details"
+            className="grid h-11 w-11 place-items-center rounded-full border border-border text-muted"
+            onPress={onClose}
             type="button"
           >
             <Icon name="close" />
-          </button>
+          </Button>
         </div>
         <h2
-          className="mt-5 text-2xl font-black tracking-[-0.04em] text-[#173b2e]"
+          className="mt-3 text-xl font-black tracking-[-0.04em] text-foreground sm:mt-5 sm:text-2xl"
           id="transaction-title"
         >
-          {transaction.merchant}
+          {transaction.merchant ?? "Merchant or source missing"}
         </h2>
-        <p className="mt-1 text-sm text-[#718078]">
-          {transaction.category} · {transaction.method}
+        <p className="mt-1 text-sm text-muted">
+          {transaction.category ?? "Category not assigned"} ·{" "}
+          {transaction.method ?? "Account not assigned"}
         </p>
-        <p className="mt-6 text-4xl font-black tracking-[-0.055em] text-[#173b2e]">
-          {formatRupiah(transaction.amount)}
+        <p className="mt-1 text-sm text-muted">
+          {transaction.kind ? typeNames[transaction.kind] : "Type missing"}
+          {transaction.date ? ` · ${formatDay(transaction.date)}` : ""}
+          {transaction.time ? `, ${transaction.time}` : ""}
         </p>
-        <div className="mt-6 flex items-center justify-between rounded-2xl bg-[#f1f5f1] px-4 py-3 text-sm">
-          <span className="text-[#66766e]">AI confidence</span>
-          <span className="font-bold text-[#1b7a50]">{transaction.confidence}%</span>
+        <p className="mt-4 break-words text-3xl font-black tracking-[-0.055em] text-foreground sm:mt-6 sm:text-4xl">
+          {transaction.amount === null ? "Amount missing" : formatRupiah(transaction.amount)}
+        </p>
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-surface-secondary px-3 py-2 text-sm sm:mt-6 sm:rounded-2xl sm:px-4 sm:py-3">
+          <span className="text-muted">AI confidence</span>
+          <span className="font-bold text-accent">
+            {transaction.confidence === null ? "Not applicable" : `${transaction.confidence}%`}
+          </span>
         </div>
-        {!transaction.reviewed ? (
-          <button
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1b7a50] px-5 py-3.5 text-sm font-bold text-white"
-            onClick={onReview}
-            type="button"
-          >
-            <Icon name="check" /> Konfirmasi transaksi
-          </button>
-        ) : (
-          <p className="mt-5 flex items-center justify-center gap-2 text-sm font-bold text-[#1b7a50]">
-            <Icon name="check" /> Sudah ditinjau
-          </p>
-        )}
-      </div>
-    </ModalDialog>
-  );
-}
-
-function AddTransactionSheet({
-  onClose,
-  onSubmit,
-}: {
-  onClose: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  return (
-    <ModalDialog labelledBy="add-title" onClose={onClose}>
-      <form
-        className="w-full max-w-md rounded-[1.8rem] bg-white p-6 shadow-2xl sm:p-8"
-        onSubmit={onSubmit}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1b7a50]">
-              Catat manual
-            </p>
-            <h2
-              className="mt-2 text-2xl font-black tracking-[-0.04em] text-[#173b2e]"
-              id="add-title"
-            >
-              Transaksi baru
-            </h2>
-          </div>
-          <button
-            aria-label="Tutup form transaksi"
-            className="grid h-10 w-10 place-items-center rounded-full border border-[#dfe7e1] text-[#718078]"
-            onClick={onClose}
-            type="button"
-          >
-            <Icon name="close" />
-          </button>
-        </div>
-        <label className="mt-6 block text-xs font-bold uppercase tracking-[0.12em] text-[#718078]">
-          Merchant
-          <input
-            className="mt-2 w-full rounded-2xl border border-[#d9e3db] px-4 py-3.5 text-base font-semibold normal-case tracking-normal outline-none focus:border-[#1b7a50]"
-            name="merchant"
-            placeholder="Contoh: Warung Bu Tini"
-            data-autofocus
-            required
-          />
-        </label>
-        <label className="mt-4 block text-xs font-bold uppercase tracking-[0.12em] text-[#718078]">
-          Jumlah
-          <div className="mt-2 flex items-center rounded-2xl border border-[#d9e3db] px-4 focus-within:border-[#1b7a50]">
-            <span className="font-bold text-[#718078]">Rp</span>
-            <input
-              className="min-w-0 flex-1 bg-transparent px-2 py-3.5 text-base font-semibold normal-case tracking-normal outline-none"
-              inputMode="numeric"
-              min="1"
-              name="amount"
-              placeholder="0"
-              required
-              type="number"
-            />
-          </div>
-        </label>
-        <button
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1b7a50] px-5 py-3.5 text-sm font-bold text-white"
-          type="submit"
-        >
-          Simpan transaksi <Icon name="arrow" />
-        </button>
-      </form>
+        <p className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-accent sm:mt-5">
+          <Icon name="check" /> Confirmed
+        </p>
+      </Card>
     </ModalDialog>
   );
 }

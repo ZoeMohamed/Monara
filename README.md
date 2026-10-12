@@ -2,11 +2,11 @@
 
 Monara is a mobile-first personal-finance PWA built with Next.js. The UI currently uses sample data and browser state. The repository now includes scaffolding for a Next.js backend, Supabase, a Cloudflare agent, shared packages, and LLM experiments. Those integrations are not implemented or connected yet.
 
-See [repository structure and team ownership](docs/repository-structure.md), [architecture decisions](docs/adr/0001-initial-runtime-boundaries.md), and [agent instructions](AGENTS.md).
+See [repository structure and team ownership](docs/repository-structure.md), [architecture decisions](docs/adr/0001-initial-runtime-boundaries.md), [UI design system](docs/ui-design-system.md), [Supabase workflow](docs/supabase-workflow.md), and [agent instructions](AGENTS.md).
 
 ## Requirements
 
-- Node.js 20.9+
+- Node.js 24 (`.nvmrc`)
 - pnpm 10+
 
 ## Run locally
@@ -50,7 +50,7 @@ pnpm build
 pnpm start
 ```
 
-The web build includes a manifest, 192px/512px/maskable/Apple Touch icons, app-shell caching, offline fallback, standalone metadata, and security headers. The agent build is a local Wrangler dry run and does not deploy anything.
+The web build includes a manifest, 192px/512px/maskable/Apple Touch icons, a standalone static offline fallback, standalone metadata, and security headers. The service worker caches only that fallback and explicitly allowlisted public assets; navigation remains network-first, and it does not cache app HTML, Next.js chunks, authentication, or financial responses. The agent build is a local Wrangler dry run and does not deploy anything.
 
 ## Deployment otomatis untuk tim
 
@@ -87,4 +87,4 @@ Jika deployment gagal, buka status **Vercel** pada commit GitHub untuk melihat b
 
 ## Product scope
 
-Transactions are demo data. Changes live only in browser state and reset on reload. The next implementation scope is Google sign-in, financial accounts, transaction tracking, dashboard, Gmail ingestion through Composio, and a WhatsApp agent through Kapso. Other features remain placeholders. See the architecture decision for the agreed runtime, review, and ownership boundaries.
+The UI uses shared HeroUI components and a light theme from `packages/ui`. Transactions are demo data. Changes live only in browser state and reset on reload. Database CI checks migration prerequisites and skips until SQL migrations exist; `pnpm db:check --reset` runs the local database gate once the schema, ownership tests, and generated types are added. The next implementation scope is Google sign-in, financial accounts, transaction tracking, dashboard, Gmail ingestion through Composio, and a WhatsApp agent through Kapso. Other features remain placeholders. See the architecture decision for the agreed runtime, review, and ownership boundaries.

@@ -10,10 +10,6 @@ const config: KnipConfig = {
         "playwright-core",
       ],
     },
-    "apps/web": {
-      // Registered by string path from src/components/pwa-register.tsx.
-      ignore: ["public/sw.js"],
-    },
     "apps/agent": {
       // Feature owners wire these module entry points into the worker as they implement them.
       entry: ["src/*/index.ts"],

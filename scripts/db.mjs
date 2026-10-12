@@ -1,4 +1,4 @@
-// Local Supabase stack for this checkout. Usage: node scripts/db.mjs <start|stop|status>
+// Local Supabase stack for this checkout. start optionally requires --runtime docker.
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -7,7 +7,11 @@ import { parseEnv, setEnvValues } from "./lib/worktree.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const command = process.argv[2];
+const args = process.argv.slice(3);
+const dockerRuntime =
+  command === "start" && args.length === 2 && args[0] === "--runtime" && args[1] === "docker";
 const shell = process.platform === "win32";
+const usage = "Usage: node scripts/db.mjs start [--runtime docker] | stop | status";
 
 const supabase = (args, options = {}) =>
   spawnSync("pnpm", ["exec", "supabase", ...args], { cwd: root, shell, ...options });
@@ -50,14 +54,18 @@ function parseStatus(output) {
   }
 }
 
+if (args.length > 0 && !dockerRuntime) fail(usage);
+
 if (command === "start") {
-  const started = supabase(["start"], { stdio: ["inherit", "ignore", "inherit"] });
-  if (started.status !== 0) fail("supabase start failed. Is OrbStack running?");
+  const started = supabase(dockerRuntime ? ["start", "--runtime", "docker"] : ["start"], {
+    stdio: ["inherit", "ignore", "inherit"],
+  });
+  if (started.status !== 0) fail("supabase start failed. Is Docker or OrbStack running?");
   writeWebEnv();
 } else if (command === "stop") {
   process.exit(supabase(["stop"], { stdio: "inherit" }).status ?? 1);
 } else if (command === "status") {
   process.exit(supabase(["status"], { stdio: "inherit" }).status ?? 1);
 } else {
-  fail("Usage: node scripts/db.mjs <start|stop|status>");
+  fail(usage);
 }

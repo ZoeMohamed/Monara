@@ -33,7 +33,7 @@ playground/llm -> contracts, integrations
 
 Apps never import another app. Backend services own financial writes; the agent requests those operations through an authenticated backend API. Contracts must remain browser/worker safe. UI must remain presentation-only. Production code never imports the playground.
 
-The UI package is a reserved entry point, not a HeroUI migration. Supabase helpers re-export explicit-config SDK constructors without automatically creating a client. Generated database types will be added after migrations exist. Starter contracts cover identifiers, review state, Gmail jobs, and verified WhatsApp message input; they do not finalize the financial schema.
+The UI package exports HeroUI primitives and the shared light theme used by the web prototype. HeroUI v3 uses CSS themes without a provider; see the [UI design system](ui-design-system.md). Supabase helpers re-export explicit-config SDK constructors without automatically creating a client. Generated database types will be added after migrations exist. Starter contracts cover identifiers, review state, Gmail jobs, and verified WhatsApp message input; they do not finalize the financial schema.
 
 ## Agreed flows
 
@@ -42,7 +42,7 @@ The UI package is a reserved entry point, not a HeroUI migration. Supabase helpe
 - Deduplicate email imports using the User, Gmail Connection, and source message identity. Enforce uniqueness durably when implementing persistence.
 - Extracted transactions remain pending review until confirmed. Pending transactions do not contribute to confirmed totals.
 - The signed-in User explicitly links and verifies their WhatsApp number. Kapso provides transport into the shared agent runtime.
-- Keep PWA installation and offline app-shell support. Real data operations require connectivity initially.
+- Keep PWA installation and a static, privacy-safe offline fallback. App navigation and real data operations require connectivity initially; do not cache application HTML or Next.js chunks.
 
 ## Local commands
 
@@ -93,18 +93,20 @@ Run `pnpm worktree:teardown` before removing a worktree. If a worktree was remov
 
 ## Quality gates
 
-`pnpm check` runs lint (Biome, plus ESLint for apps/web), typecheck, Knip, Sherif, tests, and the react-doctor gate. The same checks run at three points:
+`pnpm check` runs lint (Biome, plus ESLint for apps/web), typecheck, Knip, Sherif, tests, the react-doctor gate, and `docs:check`. The same checks run at three points:
 
 | Stage | What runs |
 | --- | --- |
-| `pre-commit` | `biome check --write` on staged files, re-staged afterward. The react-doctor gate also runs when staged files touch apps/web. |
+| `pre-commit` | `biome check --write` on staged files, re-staged afterward. The react-doctor gate also runs when staged files touch apps/web or packages/ui. |
 | `commit-msg` | commitlint enforces Conventional Commits. Scopes are free-form. |
 | `pre-push` | `pnpm check` |
 | CI (`.github/workflows/ci.yml`) | Format and lint, typecheck, Sherif and Knip, tests, build, react-doctor, PR title, and actionlint when workflows change. |
 
 Pre-commit refuses to auto-fix a file that has both staged and unstaged edits; stage or stash the rest first. Hooks run in a non-interactive shell, so if `pnpm` is not found, put your version-manager activation in `~/.config/husky/init.sh`.
 
-The react-doctor gate (`pnpm doctor`) fails below a score of 95 or on any finding, warnings included, in apps/web. Scoring calls react-doctor's API with diagnostics only: source context is removed and file paths are redacted. Telemetry and the supply-chain check are off. Offline, local hooks warn and skip the score check, and CI fails closed. Add `packages/ui` to the gate target in `scripts/react-doctor-gate.mjs` once it holds components.
+The react-doctor gate (`pnpm run doctor`) fails below a score of 95 or on any finding, warnings included, in `apps/web` and `packages/ui`. Use the explicit `run`: `pnpm doctor` invokes pnpm's own diagnostic command. Scoring calls react-doctor's API with diagnostics only: source context is removed and file paths are redacted. Telemetry and the supply-chain check are off. Offline, local hooks warn and skip the score check, and CI fails closed.
+
+Database validation runs separately through `pnpm db:check --reset` and the local database CI job. It skips clearly while no SQL migrations exist. Once migrations arrive, it requires ownership/RLS tests and generated types, replays the local schema, runs SQL lint and database tests, and checks type drift. The reset flag is an explicit opt-in for disposable local data; see the [Supabase workflow](supabase-workflow.md).
 
 GitHub reads `.git-blame-ignore-revs` automatically; locally run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to skip the Biome formatting commit in `git blame`.
 

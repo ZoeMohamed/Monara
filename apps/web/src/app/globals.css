@@ -1,22 +1,15 @@
 @import "tailwindcss";
-
-:root {
-  --canvas: #f5f7f2;
-  --ink: #183129;
-  --muted: #62716b;
-  --line: #dfe6df;
-  --line-strong: #bdc9c0;
-  --accent: #167652;
-  --accent-strong: #0f6042;
-  --mint: #d5ebdf;
-  --wash: #f0f5f0;
-}
+@import "@monara/ui/theme.css";
 
 @theme inline {
-  --color-background: var(--canvas);
-  --color-foreground: var(--ink);
   --font-sans: Arial, Helvetica, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, monospace;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
 }
 
 body {
@@ -28,34 +21,34 @@ body {
 }
 
 button,
-a {
-  -webkit-tap-highlight-color: transparent;
+a,
+[role="button"] {
+  touch-action: manipulation;
 }
 
 button,
-input {
-  font: inherit;
+[role="button"],
+[role="tab"] {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 button {
   cursor: pointer;
 }
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: 1rem;
   }
 }
 
 ::selection {
-  background: #bfe0ca;
-  color: #173b2e;
+  background: var(--accent-soft);
+  color: var(--accent-soft-foreground);
 }
 
 @media (prefers-reduced-motion: reduce) {

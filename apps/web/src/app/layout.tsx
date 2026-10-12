@@ -1,3 +1,4 @@
+import { I18nProvider } from "@monara/ui";
 import type { Metadata, Viewport } from "next";
 
 import { PwaRegister } from "@/components/pwa-register";
@@ -6,11 +7,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Monara — Uangmu, lebih jelas",
+    default: "Monara — No More Scattered Spending",
     template: "%s · Monara",
   },
   description:
-    "Catat dan pahami pengeluaran harian lewat pengalaman finansial yang privat dan ringan.",
+    "Track and understand your everyday spending with a private, simple finance experience.",
   applicationName: "Monara",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -31,18 +32,19 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#173b2e",
+  themeColor: "#f5fbff",
   colorScheme: "light",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html className="h-full antialiased" lang="id">
+    <html className="light h-full antialiased" data-theme="light" lang="en">
       <body className="min-h-full">
-        {children}
+        <I18nProvider locale="en-US">{children}</I18nProvider>
         <PwaRegister />
       </body>
     </html>

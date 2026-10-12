@@ -1,0 +1,124 @@
+@import "@heroui/styles";
+
+/* Import after Tailwind, and apply class="light" data-theme="light" to the app root. */
+@layer base {
+  :root,
+  .light,
+  [data-theme="light"] {
+    color-scheme: light;
+
+    --background: #f5fbff;
+    --foreground: #192d52;
+    --surface: #ffffff;
+    --surface-foreground: var(--foreground);
+    --surface-secondary: #edf7ff;
+    --surface-secondary-foreground: var(--foreground);
+    --surface-tertiary: #e2f1fc;
+    --surface-tertiary-foreground: var(--foreground);
+    --overlay: #ffffff;
+    --overlay-foreground: var(--foreground);
+    --muted: #566b83;
+
+    --default: #edf7ff;
+    --default-foreground: var(--foreground);
+    --accent: #0b33fd;
+    --accent-foreground: #ffffff;
+    --accent-hover: #0829d6;
+    --accent-soft: #e2f4ff;
+    --accent-soft-foreground: #143db8;
+    --accent-soft-hover: #d2edff;
+    --success: #1b7a50;
+    --success-foreground: #ffffff;
+    --success-soft: #e1efe5;
+    --success-soft-foreground: #17603f;
+    --warning: #e8b748;
+    --warning-foreground: #483216;
+    --warning-soft: #fff5df;
+    --warning-soft-foreground: #745219;
+    --danger: #b33b47;
+    --danger-foreground: #ffffff;
+    --danger-soft: #fbe9ec;
+    --danger-soft-foreground: #943642;
+
+    --border: #dae8f3;
+    --separator: #dae8f3;
+    --focus: var(--accent);
+    --link: #0829d6;
+    --backdrop: #192d5280;
+    --field-background: #ffffff;
+    --field-foreground: var(--foreground);
+    --field-placeholder: var(--muted);
+    --field-border: #7b8da3;
+    --field-border-hover: #6e829c;
+    --field-border-focus: var(--accent);
+    --field-border-width: 1px;
+    /* Transparent shadows keep HeroUI's composed focus rings intact. */
+    --surface-shadow: 0 0 #0000;
+    --overlay-shadow: 0 0 #0000;
+    --field-shadow: 0 0 #0000;
+    --radius: 0.75rem;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --field-radius: 1rem;
+    --segment: #ffffff;
+    --segment-foreground: var(--foreground);
+
+    /* Existing product tokens share the same semantic palette. */
+    --canvas: var(--background);
+    --ink: var(--foreground);
+    --line: var(--border);
+    --line-strong: #a4b9d1;
+    --accent-strong: var(--accent-hover);
+    --mint: var(--accent-soft);
+    --wash: var(--surface-secondary);
+  }
+}
+
+@layer components {
+  .button {
+    min-height: 2.75rem;
+    transition:
+      transform 120ms var(--ease-out),
+      background-color 100ms var(--ease-out),
+      box-shadow 100ms var(--ease-out);
+  }
+
+  .button--icon-only {
+    min-width: 2.75rem;
+  }
+
+  .input,
+  .input-group__input {
+    min-height: 2.75rem;
+  }
+
+  .select__popover {
+    border: 1px solid var(--border);
+  }
+
+  .select__trigger:has(.select__clear-button) {
+    min-height: 2.75rem;
+    padding-inline-end: 4.5rem;
+  }
+
+  .select__clear-button {
+    position: absolute;
+    inset-inline-end: 1.5rem;
+    top: 50%;
+    translate: 0 -50%;
+    width: 2.75rem;
+    height: 2.75rem;
+  }
+
+  .select__clear-button::after {
+    inset: 0;
+  }
+
+  .list-box-item {
+    min-height: 2.75rem;
+  }
+
+  .button,
+  .chip__label {
+    font-weight: 600;
+  }
+}

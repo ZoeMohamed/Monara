@@ -16,6 +16,6 @@ fi
 pnpm exec biome check --write --staged --no-errors-on-unmatched
 printf '%s\n' "$staged" | xargs git add --
 
-if printf '%s\n' "$staged" | grep -Eq '^apps/web/.*\.(ts|tsx|js|mjs|css)$'; then
-  pnpm doctor
+if printf '%s\n' "$staged" | grep -Eq '^(apps/web|packages/ui)/.*\.(ts|tsx|js|mjs|css)$'; then
+  pnpm run doctor
 fi
