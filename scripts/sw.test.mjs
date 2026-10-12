@@ -89,7 +89,7 @@ test("offline navigation returns only the generic fallback, never an old cached 
     throw new Error("offline");
   });
   await h.cache("monara-shell-v3").put("/", new Response("old private page"));
-  await h.cache("monara-shell-v5").put("/offline.html", new Response("generic offline"));
+  await h.cache("monara-shell-v6").put("/offline.html", new Response("generic offline"));
   const response = await h.dispatch("fetch", request("/", { mode: "navigate" }));
   assert.equal(await response.text(), "generic offline");
 });
@@ -114,6 +114,8 @@ test("auth, financial API, RSC and unauthorized asset paths bypass worker caches
     "/api/transactions",
     "/?_rsc=x",
     "/icons/private.png",
+    "/fonts/private.woff2",
+    "/fonts/nunito-sans-latin-variable.woff2?user=1",
     "/icons/icon-192.png?user=1",
     "/_next/static/example.js",
   ]) {
@@ -154,7 +156,7 @@ test("public network assets remain usable when cache storage fails", async () =>
     assert.equal(await response.text(), "public image", failure);
     assert.equal(h.requests.length, 1, failure);
     assert.equal(h.requests[0][1].credentials, "omit", failure);
-    if (failure === "put") assert.equal(h.stores.get("monara-shell-v5").size, 0);
+    if (failure === "put") assert.equal(h.stores.get("monara-shell-v6").size, 0);
   }
 });
 
@@ -169,7 +171,7 @@ test("private, no-store, wrong MIME and failed assets pass through but never ent
       const h = harness(async () => new Response("sensitive", options), failure);
       const response = await h.dispatch("fetch", request("/icons/icon-192.png"));
       assert.equal(response.status, options.status ?? 200);
-      assert.equal(h.stores.get("monara-shell-v5")?.size ?? 0, 0);
+      assert.equal(h.stores.get("monara-shell-v6")?.size ?? 0, 0);
     }
   }
 });
@@ -180,9 +182,10 @@ test("activation removes old Monara caches and preserves unrelated caches", asyn
   h.cache("monara-shell-v3");
   h.cache("monara-shell-v4");
   h.cache("monara-shell-v5");
+  h.cache("monara-shell-v6");
   h.cache("other-app");
   await h.dispatch("activate");
-  assert.deepEqual([...h.stores.keys()], ["monara-shell-v5", "other-app"]);
+  assert.deepEqual([...h.stores.keys()], ["monara-shell-v6", "other-app"]);
 });
 
 test("installation never requests application HTML and requires an offline fallback", async () => {
@@ -195,13 +198,16 @@ test("installation never requests application HTML and requires an offline fallb
               ? "text/html"
               : path.endsWith(".png")
                 ? "image/png"
-                : "application/manifest+json",
+                : path.endsWith(".woff2")
+                  ? "font/woff2"
+                  : "application/manifest+json",
         },
       }),
   );
   await h.dispatch("install");
   assert.ok(h.requests.every(([path, options]) => path !== "/" && options.credentials === "omit"));
-  assert.ok(h.stores.get("monara-shell-v5").has("/offline.html"));
+  assert.ok(h.stores.get("monara-shell-v6").has("/offline.html"));
+  assert.ok(h.stores.get("monara-shell-v6").has("/fonts/nunito-sans-latin-variable.woff2"));
   const failing = harness(
     async () =>
       new Response("private", {
@@ -214,4 +220,28 @@ test("installation never requests application HTML and requires an offline fallb
     "put",
   );
   await assert.rejects(full.dispatch("install"), /QuotaExceededError/);
+});
+
+test("only public font responses with the expected MIME can be retained offline", async () => {
+  const path = "/fonts/nunito-sans-latin-variable.woff2";
+  for (const headers of [
+    { "Content-Type": "font/woff2" },
+    { "Content-Type": "text/html" },
+    { "Content-Type": "font/woff2", "Cache-Control": "private" },
+  ]) {
+    const h = harness(async () => new Response("font", { headers }));
+    assert.equal(await (await h.dispatch("fetch", request(path))).text(), "font");
+    assert.equal(
+      h.stores.get("monara-shell-v6").has(path),
+      headers["Content-Type"] === "font/woff2" && !headers["Cache-Control"],
+    );
+    assert.equal(h.requests[0][1].credentials, "omit");
+    assert.equal(
+      await h.dispatch(
+        "fetch",
+        request(path, { headers: new Headers({ authorization: "synthetic" }) }),
+      ),
+      undefined,
+    );
+  }
 });

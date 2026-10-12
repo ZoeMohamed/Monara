@@ -2,7 +2,7 @@
 @import "@monara/ui/theme.css";
 
 @theme inline {
-  --font-sans: Arial, Helvetica, sans-serif;
+  --font-sans: var(--font-nunito-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, monospace;
 }
 
@@ -15,7 +15,7 @@ html {
 body {
   background: var(--canvas);
   color: var(--ink);
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   min-width: 320px;
   overscroll-behavior-y: none;
 }

@@ -14,9 +14,14 @@ export function SignInScreen({ onSignIn, isSigningIn = false, error }: SignInScr
   return (
     <main className="mx-auto grid min-h-svh max-w-5xl items-center gap-6 pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pt-[calc(1.5rem+env(safe-area-inset-top,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] lg:grid-cols-2 lg:px-10">
       <div>
-        <Link className="inline-flex items-center gap-3 text-xl font-bold" href="/">
-          <Image src="/icons/icon-192.png" width={48} height={48} alt="" />
-          Monara
+        <Link className="inline-flex items-center" href="/">
+          <Image
+            src="/logos/monara-lockup-light.svg"
+            width={704}
+            height={142}
+            className="h-10 w-auto object-contain"
+            alt="Monara"
+          />
         </Link>
         <p className="mt-6 text-sm font-semibold text-accent">Your money, together.</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-5xl">
