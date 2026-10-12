@@ -6,7 +6,7 @@ Status: implementation contract for the hackathon schema. This document defines 
 
 - `auth.users.id` is the Monara User identity. Google sign-in through Supabase Auth and Gmail authorization through Composio are separate consent flows.
 - Every product row is owned by one User. Caller-supplied `user_id` is never accepted as authorization; the backend resolves identity and checks ownership.
-- All product IDs are UUIDs. Every multirow owned table whose primary key is `id` also has `unique (id, user_id)` so composite foreign keys enforce same-User relationships. One-to-one Profile and Reminder Preferences rows use `user_id` as the primary key; short-lived Agent Action State uses `action_id` and references `(agent_action_logs.id, user_id)`.
+- All product IDs are UUIDs. Every multirow owned table whose primary key is `id` also has `unique (id, user_id)` so composite foreign keys enforce same-User relationships. The one-to-one Profile row uses `id`, equal to `auth.users.id`; Reminder Preferences uses `user_id` as its primary key. Short-lived Agent Action State uses `action_id` and references `(agent_action_logs.id, user_id)`.
 - The Next.js backend owns financial writes. Agent and provider adapters call authenticated backend operations instead of writing financial rows directly.
 - Composio stores Gmail credentials. Monara does not store OAuth tokens or raw email bodies.
 - A WhatsApp number becomes an identity signal only after the signed-in User explicitly verifies a WhatsApp Link.
@@ -31,7 +31,7 @@ erDiagram
     AUTH_USERS ||--o{ AGENT_ACTION_STATES : owns
 
     GMAIL_CONNECTIONS ||--o{ PROCESSED_GMAIL_MESSAGES : contains
-    PROCESSED_GMAIL_MESSAGES ||--o{ TRANSACTIONS : yields
+    PROCESSED_GMAIL_MESSAGES o|--o{ TRANSACTIONS : yields
     FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : records
     FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : transfer_from
     FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : transfer_to
@@ -52,7 +52,7 @@ erDiagram
         uuid id PK_FK
         text display_name
         text timezone
-        char currency
+        text currency
         timestamptz created_at
         timestamptz updated_at
     }
@@ -64,7 +64,7 @@ erDiagram
         text name
         text institution
         text account_type
-        char currency
+        text currency
         text last_four
         boolean is_active
         timestamptz created_at
@@ -122,7 +122,7 @@ erDiagram
         text transaction_type
         text merchant_name
         numeric amount
-        char currency
+        text currency
         date occurred_on
         time occurred_time
         text description
@@ -143,7 +143,7 @@ erDiagram
         text name
         text cadence
         numeric limit_amount
-        char currency
+        text currency
         smallint warning_percent
         date starts_on
         boolean is_active
@@ -159,7 +159,7 @@ erDiagram
         text client_request_id
         text merchant_name
         numeric expected_amount
-        char currency
+        text currency
         smallint interval_count
         text interval_unit
         date next_due_on
