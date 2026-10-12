@@ -20,7 +20,7 @@ Monara's mobile finance interface lets the User review imports before they affec
 
 **Chat (F11).** [ChatScreen](../../apps/web/src/components/chat-screen.tsx) has suggested prompts, a message log, sending/error states, and an explicitly unavailable Agent. Failed sends preserve the draft for retry. It never invents a reply or financial action. **Planned:** the authenticated Agent endpoint, action receipts with undo, and explicit high-risk confirmations.
 
-**PWA (F15).** The [manifest](../../apps/web/src/app/manifest.ts) and [install control](../../apps/web/src/components/install-app-button.tsx) provide icons and installation guidance. The production [worker](../../apps/web/public/sw.js) caches only a generic offline page, manifest, and allowlisted public icons. App HTML, auth/API responses, and React Server Component payloads use the network. Runtime storage failures do not invalidate successful network responses; unavailable offline storage returns a generic message.
+**PWA (F15).** The [manifest](../../apps/web/src/app/manifest.ts) and [install control](../../apps/web/src/components/install-app-button.tsx) provide icons and installation guidance. The production [worker](../../apps/web/public/sw.js) caches only a standalone static offline fallback, manifest, and allowlisted public icons. App HTML, Next.js chunks, auth/API responses, and React Server Component payloads use the network; the app itself is not available offline. Runtime storage failures do not invalidate successful network responses; unavailable offline storage returns a generic message.
 
 ## Key decisions
 - Review all imports rather than auto-confirming by confidence; approval belongs to the User.
@@ -28,7 +28,7 @@ Monara's mobile finance interface lets the User review imports before they affec
 - Use selected calendar months rather than rolling windows, matching F6.
 - Show unavailable services rather than simulate successful operations.
 - Keep writes in the backend rather than components; presentation types do not replace authorized contracts.
-- Cache public assets rather than personalized pages, avoiding offline retention of financial or identity data.
+- Cache only the static offline fallback and explicitly allowlisted public branding assets. Keep application HTML, Next.js chunks, and personalized pages on the network to avoid offline retention of financial or identity data.
 
 ## Security and risks
 **Planned:** server-verified identity, ownership, validated input, RLS, and idempotent provider processing. UI limits and disabled buttons are not authorization. Sample account labels must become verified resource IDs; [the backend handoff](../ui-backend-handoff.md) records outstanding decisions.

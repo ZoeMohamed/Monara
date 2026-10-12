@@ -63,7 +63,7 @@ Run `pnpm check` and `pnpm build` for shared dependency changes. React Doctor mu
 
 `SignInScreen` accepts an explicit action, progress, and error state. `GmailConnectionsScreen` accepts loading, unavailable, sign-in-required, error, or ready presentation data, plus action callbacks. Ready data supports three-mailbox limits, reconnect status, sync progress/results, and disconnect confirmation. These local props are not transport contracts: validate and authorize provider/backend data before adapting it into them. The backend must enforce limits and ownership independently.
 
-The v5 service worker caches only the generic offline page, manifest, and named icons. Application navigation stays on the network; failures show the generic fallback. It never provides an offline financial ledger. Tests in `scripts/sw.test.mjs` cover the cache boundary and old-cache cleanup.
+The v5 service worker caches only the standalone static offline fallback, manifest, and named icons. Application navigation and Next.js chunks stay on the network; navigation failures show the generic fallback. It never caches app HTML or provides an offline financial ledger. Tests in `scripts/sw.test.mjs` cover the cache boundary and old-cache cleanup.
 
 Verification on 11 October: full checks and builds passed; browser inspection covered the two unavailable routes and actual public cache contents. Synthetic connected, disconnect, mailbox-limit, sync-result and progress/error interactions have now been browser-verified. Live integration remains pending.
 
