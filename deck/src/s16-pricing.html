@@ -11,7 +11,7 @@
 </style></head><body><div class="card"></div><div id="root"></div>
 <script>
 // [label, flag, usd, kind]  kind: hl = Monara, bm = benchmark (hatched bar)
-const rows=[["Monara Premium","",1.60,"hl"],["Rekafin Personal","🇮🇩",29000/17899,""],["Money Lover","🇻🇳",2.49,""],["Median app subscription*","",3.75,"bm"],["Oyenza Pro","🇮🇩",99000/17899,""],["Spendee Premium","🌐",5.99,""],["Moneko Plus","🌐",6.67,""]];
+const rows=[["Monara Premium","",1.50,"hl"],["Rekafin Personal","🇮🇩",29000/17899,""],["Money Lover","🇻🇳",2.49,""],["Median app subscription*","",3.75,"bm"],["Oyenza Pro","🇮🇩",99000/17899,""],["Spendee Premium","🌐",5.99,""],["Moneko Plus","🌐",6.67,""]];
 const FX=6.7313,MAX=8,W=420;let h='';
 rows.forEach((r,i)=>{const w=Math.max(r[2]/MAX*W,8);
  h+=`<div class="r ${r[3]}" style="top:${14+i*30}px"><div class="lb">${r[1]?`<span class="fl">${r[1]}</span>`:''}${r[0]}</div><div class="bar" style="width:${w}px"></div><div class="v">US$${r[2].toFixed(2)}<i>≈ RMB ${(r[2]*FX).toFixed(2)}</i></div></div>`});

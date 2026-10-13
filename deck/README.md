@@ -27,7 +27,7 @@ The script needs Google Chrome (set `CHROME` to override the path) and network a
 | `tiers` | 13 Permission tiers |
 | `competitor` | 14 Competitors |
 | `waves` | 15 Market (expansion waves) |
-| `capital`, `revenue`, `chart` | 16 Business model |
+| `s16-pricing`, `s16-c1`, `s16-outlook`, `s16-kpis`, `s16-bar-l`, `s16-bar-r` | 16 Business model |
 | `gap` | 3 Research chart |
 | `attack` | 18 Safety under attack |
 | `risk` | 19 Privacy and operations risks |
