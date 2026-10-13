@@ -1,5 +1,8 @@
 import {
   budgetPageSchema,
+  budgetSuggestionInputSchema,
+  budgetSuggestionSchema,
+  calendarMonthSchema,
   categoryPageSchema,
   financialAccountPageSchema,
   listBudgetsInputSchema,
@@ -12,8 +15,8 @@ import {
   reminderPageSchema,
   transactionPageSchema,
 } from "@monara/contracts";
-import type { z } from "zod";
-import type { AgentTool } from "./tools.ts";
+import { z } from "zod";
+import type { AgentTool, ToolContext } from "./tools.ts";
 
 /**
  * A T0 tool that forwards to one backend list operation. The result is parsed
@@ -39,10 +42,104 @@ function readTool<Input extends z.ZodType>(config: {
 
 const PAGING = "Results are paged: pass the returned nextCursor as cursor to get more.";
 
+const idr = (amount: bigint) => ({ amountMinor: amount.toString(), currency: "IDR" as const });
+
+// 2,000 confirmed transactions in one month is far beyond a personal ledger.
+const MAX_SUMMARY_PAGES = 20;
+
+/** Adds up one month in exact integer rupiah, reading every page of confirmed transactions. */
+async function summariseMonth(month: string, context: ToolContext) {
+  let income = 0n;
+  let spending = 0n;
+  let transactionCount = 0;
+  const byCategory = new Map<string | null, bigint>();
+  let cursor: string | null = null;
+  for (let page = 0; page < MAX_SUMMARY_PAGES; page++) {
+    const result = transactionPageSchema.parse(
+      await context.callOperation("list_transactions", context, {
+        month,
+        reviewStatus: "confirmed",
+        limit: 100,
+        cursor,
+      }),
+    );
+    for (const transaction of result.items) {
+      // Transfers move money between the User's own accounts, so they are not counted.
+      if (!transaction.money || transaction.deletedAt || transaction.kind === "transfer") continue;
+      const amount = BigInt(transaction.money.amountMinor);
+      transactionCount += 1;
+      if (transaction.kind === "income") {
+        income += amount;
+      } else if (transaction.kind === "expense") {
+        spending += amount;
+        const category = transaction.categoryId;
+        byCategory.set(category, (byCategory.get(category) ?? 0n) + amount);
+      }
+    }
+    cursor = result.nextCursor;
+    if (!cursor) {
+      return { month, income, spending, transactionCount, byCategory };
+    }
+  }
+  throw new Error("Too many transactions to summarise.");
+}
+
+const getSummaryInputSchema = z
+  .object({ months: z.array(calendarMonthSchema).min(1).max(12) })
+  .strict();
+
+const getSummary: AgentTool<typeof getSummaryInputSchema> = {
+  name: "get_summary",
+  description:
+    "Adds up the User's confirmed income and spending for each given month (YYYY-MM): totals, the difference, the savings rate, and spending by Category, plus the totals and average monthly spending across all the months given. Transfers are not counted. Use this for every total or average.",
+  tier: "T0",
+  input: getSummaryInputSchema,
+  async run(input, context) {
+    const months = [];
+    for (const month of [...new Set(input.months)].sort()) {
+      months.push(await summariseMonth(month, context));
+    }
+    const income = months.reduce((sum, month) => sum + month.income, 0n);
+    const spending = months.reduce((sum, month) => sum + month.spending, 0n);
+    const count = BigInt(months.length);
+    return {
+      months: months.map((month) => ({
+        month: month.month,
+        income: idr(month.income),
+        spending: idr(month.spending),
+        difference: idr(month.income - month.spending),
+        // One decimal place, worked out in integers so it is exact.
+        savingsRatePercent:
+          month.income > 0n
+            ? Number(((month.income - month.spending) * 1000n) / month.income) / 10
+            : null,
+        transactionCount: month.transactionCount,
+        spendingByCategory: [...month.byCategory]
+          .sort((a, b) => (a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0))
+          .map(([categoryId, total]) => ({ categoryId, total: idr(total) })),
+      })),
+      allMonths: {
+        income: idr(income),
+        spending: idr(spending),
+        difference: idr(income - spending),
+        averageMonthlySpending: idr((spending + count / 2n) / count),
+      },
+    };
+  },
+};
+
 export const readTools = [
+  getSummary,
+  readTool({
+    name: "suggest_budget",
+    description:
+      "Proposes a Budget limit for one Category and cadence from the User's confirmed history, and shows the figures it is based on. It creates nothing.",
+    input: budgetSuggestionInputSchema,
+    output: budgetSuggestionSchema,
+  }),
   readTool({
     name: "list_transactions",
-    description: `Lists the User's transactions, newest first. Filter by month (YYYY-MM), kind (expense, income, transfer), or reviewStatus. Only confirmed transactions count towards totals, so pass reviewStatus confirmed when adding amounts up; pending ones are still waiting in the Review Queue. ${PAGING}`,
+    description: `Lists the User's transactions, newest first. Filter by month (YYYY-MM), kind (expense, income, transfer), or reviewStatus. Pending ones are still waiting in the Review Queue and do not count towards totals. ${PAGING}`,
     input: listTransactionsInputSchema,
     output: transactionPageSchema,
   }),

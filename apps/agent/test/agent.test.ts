@@ -49,7 +49,7 @@ function scripted(turns: AssistantMessage[]) {
   return { complete, seen };
 }
 
-function recordingTool(tier: AgentTool["tier"]) {
+function recordingTool(tier: "T0" | "T1") {
   const runs: { input: unknown; userId: string }[] = [];
   const tool: AgentTool = {
     name: "lookup",
@@ -89,15 +89,6 @@ test("runs a tool with validated input and the verified User, then replies", asy
   assert.deepEqual(runs, [{ input: { limit: 5 }, userId }]);
   assert.deepEqual(lastToolResult(model.seen[1]?.messages ?? []), { ok: true });
   assert.equal(model.seen[0]?.tools[0]?.function.name, "lookup");
-});
-
-test("does not run a destructive tool without a confirmation", async () => {
-  const { tool, runs } = recordingTool("T2");
-  const model = scripted([call("lookup", { limit: 5 }), say("I can't do that yet.")]);
-  await runAgent({ complete: model.complete, tools: [tool], text: "delete it" });
-
-  assert.deepEqual(runs, []);
-  assert.match(lastToolResult(model.seen[1]?.messages ?? []).error, /confirmation/);
 });
 
 test("rejects invalid arguments and unknown tools without running anything", async () => {

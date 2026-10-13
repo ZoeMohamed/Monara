@@ -1,10 +1,6 @@
 import { type AgentChatResponse, agentChatRequestSchema } from "@monara/contracts";
 import type { Env } from "../env.ts";
-import { runAgent } from "./agent.ts";
-import { createCallOperation } from "./backend.ts";
-import { createComplete } from "./llm.ts";
-import { readTools } from "./read-tools.ts";
-import { writeTools } from "./write-tools.ts";
+import { createRespond } from "./respond.ts";
 
 const encoder = new TextEncoder();
 
@@ -29,20 +25,14 @@ async function secretsMatch(received: string, expected: string): Promise<boolean
  * Agent stores no conversation; the caller sends the earlier turns each time.
  */
 export async function handleChatRequest(request: Request, env: Env): Promise<Response> {
-  const { MONARA_BACKEND_URL, MONARA_AGENT_BACKEND_SECRET, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL } =
-    env;
-  if (
-    !MONARA_BACKEND_URL ||
-    !MONARA_AGENT_BACKEND_SECRET ||
-    !LLM_BASE_URL ||
-    !LLM_API_KEY ||
-    !LLM_MODEL
-  ) {
+  const respond = createRespond(env);
+  const secret = env.MONARA_AGENT_BACKEND_SECRET;
+  if (!respond || !secret) {
     return Response.json({ error: "The Agent is not configured." }, { status: 503 });
   }
 
   const token = request.headers.get("Authorization")?.match(/^Bearer (.+)$/)?.[1];
-  if (!token || !(await secretsMatch(token, MONARA_AGENT_BACKEND_SECRET))) {
+  if (!token || !(await secretsMatch(token, secret))) {
     return Response.json({ error: "Unauthorized." }, { status: 401 });
   }
 
@@ -52,20 +42,13 @@ export async function handleChatRequest(request: Request, env: Env): Promise<Res
   }
 
   try {
-    const { reply, actions } = await runAgent({
-      complete: createComplete({ baseUrl: LLM_BASE_URL, apiKey: LLM_API_KEY, model: LLM_MODEL }),
-      tools: [...readTools, ...writeTools],
-      callOperation: createCallOperation({
-        baseUrl: MONARA_BACKEND_URL,
-        secret: MONARA_AGENT_BACKEND_SECRET,
-      }),
+    const response = await respond({
       // Only the web backend holds the secret checked above, so this is in-app chat.
       caller: { userId: body.data.userId, channel: "web" },
       history: body.data.history,
       text: body.data.text,
-      now: new Date(),
     });
-    return Response.json({ reply, actions } satisfies AgentChatResponse);
+    return Response.json(response satisfies AgentChatResponse);
   } catch {
     return Response.json({ error: "The Agent could not respond." }, { status: 502 });
   }

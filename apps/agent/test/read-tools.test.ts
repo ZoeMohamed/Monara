@@ -76,6 +76,8 @@ test("every read tool is T0 and has a schema the model can be given", () => {
   assert.deepEqual(
     definitions.map((definition) => definition.function.name),
     [
+      "get_summary",
+      "suggest_budget",
       "list_transactions",
       "list_financial_accounts",
       "list_categories",
@@ -164,4 +166,94 @@ test("the backend caller authenticates, sends the User and Channel, and hides er
       return true;
     },
   );
+});
+
+test("get_summary adds every page up exactly and leaves transfers out", async () => {
+  const row = (kind: string, amountMinor: string, categoryId: string | null) => ({
+    ...coffee,
+    kind,
+    categoryId,
+    money: { amountMinor, currency: "IDR" },
+    ...(kind === "transfer"
+      ? {
+          financialAccountId: null,
+          fromFinancialAccountId: "5e5f6a6b-7c7d-4e8f-9a9b-0c0d1e1f2a2b",
+          toFinancialAccountId: "5e5f6a6b-7c7d-4e8f-9a9b-0c0d1e1f2a2c",
+        }
+      : {}),
+  });
+  const food = "c0c0c0c0-0000-4000-8000-000000000001";
+  const pages: Record<string, unknown> = {
+    "2026-09|": { items: [row("expense", "900000", food)], nextCursor: null },
+    "2026-10|": {
+      items: [row("income", "9000000000000000", null), row("expense", "25000", food)],
+      nextCursor: "next",
+    },
+    "2026-10|next": {
+      items: [row("expense", "48500", null), row("transfer", "500000", null)],
+      nextCursor: null,
+    },
+  };
+  const inputs: unknown[] = [];
+  const done: AssistantMessage = { role: "assistant", content: "Done." };
+  const turns = [callTool("get_summary", { months: ["2026-10", "2026-09", "2026-10"] }), done];
+  const seen: ChatMessage[][] = [];
+  await runAgent({
+    complete: async (messages) => {
+      seen.push([...messages]);
+      return turns[seen.length - 1] ?? done;
+    },
+    tools: readTools,
+    caller: { userId, channel: "web" },
+    history: [],
+    text: "go",
+    now,
+    callOperation: async (_operation, _caller, input) => {
+      inputs.push(input);
+      const { month, cursor } = input as { month: string; cursor: string | null };
+      return pages[`${month}|${cursor ?? ""}`];
+    },
+  });
+  const result = seen[1]?.filter((message) => message.role === "tool").at(-1);
+
+  assert.deepEqual(inputs[0], {
+    month: "2026-09",
+    reviewStatus: "confirmed",
+    limit: 100,
+    cursor: null,
+  });
+  assert.equal(inputs.length, 3);
+  assert.deepEqual(JSON.parse(String(result?.content)), {
+    months: [
+      {
+        month: "2026-09",
+        income: { amountMinor: "0", currency: "IDR" },
+        spending: { amountMinor: "900000", currency: "IDR" },
+        difference: { amountMinor: "-900000", currency: "IDR" },
+        savingsRatePercent: null,
+        transactionCount: 1,
+        spendingByCategory: [
+          { categoryId: food, total: { amountMinor: "900000", currency: "IDR" } },
+        ],
+      },
+      {
+        month: "2026-10",
+        income: { amountMinor: "9000000000000000", currency: "IDR" },
+        spending: { amountMinor: "73500", currency: "IDR" },
+        difference: { amountMinor: "8999999999926500", currency: "IDR" },
+        savingsRatePercent: 99.9,
+        transactionCount: 3,
+        spendingByCategory: [
+          { categoryId: null, total: { amountMinor: "48500", currency: "IDR" } },
+          { categoryId: food, total: { amountMinor: "25000", currency: "IDR" } },
+        ],
+      },
+    ],
+    allMonths: {
+      income: { amountMinor: "9000000000000000", currency: "IDR" },
+      spending: { amountMinor: "973500", currency: "IDR" },
+      difference: { amountMinor: "8999999999026500", currency: "IDR" },
+      averageMonthlySpending: { amountMinor: "486750", currency: "IDR" },
+    },
+  });
 });
