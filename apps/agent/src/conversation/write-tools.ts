@@ -49,7 +49,7 @@ const addTransactionInputSchema = transactionValuesSchema.partial().strict();
 const addTransaction: AgentTool<typeof addTransactionInputSchema> = {
   name: "add_transaction",
   description:
-    "Records a confirmed transaction. Needs kind, money, occurredOn, a merchantName or description, and a Financial Account: financialAccountId for an expense or income, fromFinancialAccountId and toFinancialAccountId for a transfer. Leave out anything the User did not give.",
+    "Records a confirmed transaction. Needs kind, money, occurredOn, a merchantName or description, and a Financial Account: financialAccountId for an expense or income, fromFinancialAccountId and toFinancialAccountId for a transfer. A transfer needs a description too: use the words the User used. Leave out anything the User did not give.",
   tier: "T1",
   input: addTransactionInputSchema,
   async run(input, context) {
@@ -89,7 +89,7 @@ const setReminderPreferencesToolInputSchema = z.object({ whatsAppEnabled: z.bool
 const setReminderPreferences: AgentTool<typeof setReminderPreferencesToolInputSchema> = {
   name: "set_reminder_preferences",
   description:
-    'Turns Reminders on WhatsApp on or off, for example when the User says "stop reminders". Reminders in the app always stay on.',
+    'Turns Reminders on WhatsApp on or off, for example when the User says "stop reminders". Reminders in the app always stay on. It does not unlink WhatsApp, and is only for a User who asks about Reminders.',
   tier: "T1",
   input: setReminderPreferencesToolInputSchema,
   async run(input, context) {

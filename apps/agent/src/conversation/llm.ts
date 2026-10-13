@@ -29,11 +29,16 @@ const MAX_ATTEMPTS = 2;
 const FILTERED_REPLY =
   "I can't help with that request. I can help you track spending, income, budgets, and bills.";
 
-// The provider's safety filter rejects some prompts outright, typically attempts
-// to override the Agent's instructions. That is a refusal, not an outage.
-async function isContentFiltered(response: Response): Promise<boolean> {
-  const body = (await response.json().catch(() => null)) as { error?: { code?: unknown } } | null;
-  return body?.error?.code === "content_filter";
+const FILTER_CODES = new Set(["content_filter", "ResponsibleAIPolicyViolation"]);
+
+/** Reads the provider's error codes from a failed response. Codes carry no conversation text. */
+async function errorCodes(response: Response): Promise<string[]> {
+  const body = (await response.json().catch(() => null)) as {
+    error?: { code?: unknown; innererror?: { code?: unknown } };
+  } | null;
+  return [body?.error?.code, body?.error?.innererror?.code].filter(
+    (code): code is string => typeof code === "string",
+  );
 }
 
 /** Calls an OpenAI-compatible chat completions endpoint. */
@@ -45,6 +50,7 @@ export function createComplete(config: {
   const url = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
   return async (messages, tools) => {
     let status = 0;
+    let codes: string[] = [];
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       const response = await fetch(url, {
         method: "POST",
@@ -69,12 +75,16 @@ export function createComplete(config: {
         };
       }
       status = response.status;
-      if (status === 400 && (await isContentFiltered(response))) {
+      codes = await errorCodes(response);
+      // The provider's safety filter rejects some prompts outright, typically attempts
+      // to override the Agent's instructions. That is a refusal, not an outage.
+      if (status === 400 && codes.some((code) => FILTER_CODES.has(code))) {
         return { role: "assistant", content: FILTERED_REPLY };
       }
       if (status !== 429 && status < 500) break;
     }
-    // The response body can echo the conversation, so only the status is reported.
-    throw new Error(`The model request failed with status ${status}.`);
+    // The response body can echo the conversation, so only the status and codes are reported.
+    const detail = codes.length > 0 ? ` (${codes.join(", ")})` : "";
+    throw new Error(`The model request failed with status ${status}${detail}.`);
   };
 }

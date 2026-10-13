@@ -5,5 +5,5 @@
     "types": ["node", "@cloudflare/workers-types"],
     "allowImportingTsExtensions": true
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts", "../sandbox/**/*.ts"]
 }
