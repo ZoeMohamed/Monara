@@ -1,0 +1,10 @@
+/* Monara blue: bright blue, navy text accents, pale blue surfaces. Copy to <deck>/src/theme.css. */
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap");
+:root{
+  --brand:#3171FD; --brand-dark:#1f4fc4; --navy:#14307f;
+  --pale:#dce7ff; --paler:#eef3ff;
+  --ink:#1b1b1b; --muted:#4d5160; --faint:#8a90a2;
+  --line:#e6ecfa; --card-border:#c9d9ff; --on-brand:#ffffff;
+  --accent:#f26b4f;          /* contrasting series colour, e.g. a shortfall */
+  --font:'Montserrat',sans-serif;
+}

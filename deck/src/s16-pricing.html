@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="base.css">
+<style>html,body{width:850px;height:296px}
+.r{position:absolute;left:14px;right:14px;height:29px}
+.hl{background:var(--paler);border-radius:10px}
+.lb{position:absolute;left:12px;top:5px;font-size:16px;font-weight:600;white-space:nowrap}.lb .fl{font-size:16px;margin-right:6px}
+.hl .lb{font-weight:800;color:var(--brand-dark)}
+.bar{position:absolute;left:236px;top:8px;height:15px;border-radius:8px;background:#b9c8e8}
+.hl .bar{background:var(--brand)}.bm .bar{background:repeating-linear-gradient(90deg,#b9c8e8 0 10px,#dbe4f6 10px 16px)}
+.v{position:absolute;right:12px;top:5px;font-size:16px;font-weight:800;color:var(--navy);white-space:nowrap}.v i{font-style:normal;font-weight:600;color:var(--muted);font-size:14px;margin-left:6px}
+.src{position:absolute;left:22px;right:22px;bottom:12px;font-size:11.5px;line-height:1.3;color:var(--muted)}
+</style></head><body><div class="card"></div><div id="root"></div>
+<script>
+// [label, flag, usd, kind]  kind: hl = Monara, bm = benchmark (hatched bar)
+const rows=[["Monara Premium","",1.60,"hl"],["Rekafin Personal","🇮🇩",29000/17899,""],["Money Lover","🇻🇳",2.49,""],["Median app subscription*","",3.75,"bm"],["Oyenza Pro","🇮🇩",99000/17899,""],["Spendee Premium","🌐",5.99,""],["Moneko Plus","🌐",6.67,""]];
+const FX=6.7313,MAX=8,W=420;let h='';
+rows.forEach((r,i)=>{const w=Math.max(r[2]/MAX*W,8);
+ h+=`<div class="r ${r[3]}" style="top:${14+i*30}px"><div class="lb">${r[1]?`<span class="fl">${r[1]}</span>`:''}${r[0]}</div><div class="bar" style="width:${w}px"></div><div class="v">US$${r[2].toFixed(2)}<i>≈ RMB ${(r[2]*FX).toFixed(2)}</i></div></div>`});
+h+='<div class="src">🌐 Global app, 🇮🇩 Indonesian, 🇻🇳 Vietnamese. Monthly list prices, Oct 2026. Rekafin Personal Rp29,000 (billing period not stated, shown monthly) and Oyenza Pro Rp99,000 (payments not yet open) at Rp17,899 per US$ (JISDOR, 12 Oct 2026). Money Lover Budget+ US$2.49 (Angola App Store; US store US$2.99). *Median app subscription: RevenueCat 2026, India + SEA, all categories. Moneko: US$79.99 a year ÷ 12.</div>';
+document.getElementById('root').innerHTML=h;
+</script></body></html>

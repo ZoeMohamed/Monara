@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="base.css">
+<style>html,body{width:850px;height:296px}
+.r{position:absolute;left:14px;right:14px;height:28px}
+.hl{background:var(--paler);border-radius:14px}
+.nm{position:absolute;left:12px;top:3px;font-size:16px;font-weight:600;color:var(--ink);white-space:nowrap}
+.nm .fl{font-size:16px;margin-right:6px}.nm small{font-size:12.5px;font-weight:600;color:var(--muted);margin-left:8px}
+.hl .nm{font-weight:800;color:var(--brand-dark)}
+.tr{position:absolute;left:236px;top:12px;height:3px;background:#c9d6f3}
+.d{position:absolute;top:4px;width:20px;height:20px;margin-left:-10px;border-radius:50%;background:#7f9bdc}
+.d.m{background:var(--brand);width:24px;height:24px;margin-left:-12px;top:2px}
+.d.bm{background:#f8f7f1;border:3px dashed #5f7fc9;width:20px;height:20px}
+.v{position:absolute;right:12px;top:3px;font-size:16px;font-weight:800;color:var(--navy);white-space:nowrap}.v i{font-style:normal;font-weight:600;color:var(--muted);font-size:14px;margin-left:6px}
+.pill{position:absolute;top:2px;background:var(--brand-dark);color:#fff;font-weight:800;font-size:13px;border-radius:12px;padding:3px 11px;white-space:nowrap}
+.gl{position:absolute;top:10px;height:204px;width:2px;background:rgba(111,143,214,.25)}
+.tk{position:absolute;top:214px;font-size:12.5px;font-weight:600;color:var(--muted);width:60px;margin-left:-30px;text-align:center}
+.src{position:absolute;left:22px;right:22px;bottom:12px;font-size:11.5px;line-height:1.3;color:var(--muted)}
+</style></head><body><div class="card"></div><div id="root"></div><script>
+const FX=6.7313,X0=250,W=380,MAX=8,px=v=>X0+v/MAX*W;
+const R=[["Monara Premium","",1.60,"m"],["Rekafin Personal","🇮🇩",29000/17899,""],["Money Lover","🇻🇳",2.49,""],["Median app subscription*","",3.75,"bm"],["Oyenza Pro","🇮🇩",99000/17899,""],["Spendee Premium","🌐",5.99,""],["Moneko Plus","🌐",6.67,""]];
+let h=[2,4,6,8].map(t=>`<div class="gl" style="left:${px(t)+14}px"></div><div class="tk" style="left:${px(t)+14}px">US$${t}</div>`).join('');
+R.forEach(([n,f,v,k,sub],i)=>{const hl=k=='m';
+ h+=`<div class="r ${hl?'hl':''}" style="top:${14+i*28}px"><div class="nm">${f?`<span class="fl">${f}</span>`:''}${n}${sub?`<small>${sub}</small>`:''}</div>`+
+ `<div class="tr" style="width:${px(v)-X0}px"></div><div class="d ${k=='m'?'m':''} ${k=='bm'?'bm':''}" style="left:${px(v)}px"></div>`+
+ (k=='bm'?`<div class="pill" style="left:${px(v)+20}px">2.3x Monara</div>`:'')+
+ `<div class="v">US$${v.toFixed(2)}<i>≈ RMB ${(v*FX).toFixed(2)}</i></div></div>`});
+h+='<div class="src">🌐 Global app, 🇮🇩 Indonesian, 🇻🇳 Vietnamese. Monthly list prices, Oct 2026. Rekafin Personal Rp29,000 (billing period not stated, shown monthly) and Oyenza Pro Rp99,000 (payments not yet open) at Rp17,899 per US$ (JISDOR, 12 Oct 2026). Money Lover Budget+ US$2.49 (Angola App Store; US store US$2.99). *RevenueCat 2026, India + SEA, all app categories. Moneko: US$79.99 a year ÷ 12.</div>';
+document.getElementById('root').innerHTML=h;
+</script></body></html>
