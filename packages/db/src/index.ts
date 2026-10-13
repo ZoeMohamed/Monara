@@ -1,6 +1,8 @@
 import type { CookieMethodsServer } from "@supabase/ssr";
 import { createBrowserClient, createServerClient } from "@supabase/ssr";
 
+export type { Database } from "./types/database.types.ts";
+
 export interface PublicSupabaseConfig {
   publishableKey: string;
   url: string;

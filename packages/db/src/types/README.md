@@ -1,3 +1,3 @@
 # Generated database types
 
-Do not write a fake Database type or copy Aiccountant's schema types. Once local migrations exist and Supabase is running, use `pnpm db:types` to generate `database.types.ts` here. Export the generated type from the package when it exists.
+`database.types.ts` is generated from the migrated local Supabase schema. Do not edit it by hand. After changing a migration, run `pnpm db:types`, review the diff, and verify it with `pnpm db:types --check`.

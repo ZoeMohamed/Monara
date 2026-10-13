@@ -1,6 +1,10 @@
 import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
+  ignoreIssues: {
+    // Supabase generates reusable public helpers that may not have consumers yet.
+    "packages/db/src/types/database.types.ts": ["exports", "types"],
+  },
   workspaces: {
     ".": {
       entry: ["scripts/*.mjs"],
