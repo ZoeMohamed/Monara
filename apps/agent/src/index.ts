@@ -2,6 +2,8 @@ import { handleChatRequest } from "./conversation/index.ts";
 import type { Env } from "./env.ts";
 import { handleKapsoWebhook } from "./whatsapp/index.ts";
 
+export { WhatsAppConversation } from "./whatsapp/conversation.ts";
+
 export default {
   fetch(request: Request, env: Env) {
     const path = new URL(request.url).pathname;

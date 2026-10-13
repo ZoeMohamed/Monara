@@ -1,4 +1,9 @@
-import type { UserId } from "@monara/contracts";
+import {
+  type ResolveWhatsAppSenderInput,
+  type ResolveWhatsAppSenderResult,
+  resolveWhatsAppSenderResultSchema,
+  type UserId,
+} from "@monara/contracts";
 
 /** The Channels a User can talk to the Agent through. */
 type Channel = "web" | "whatsapp";
@@ -34,5 +39,24 @@ export function createCallOperation(config: { baseUrl: string; secret: string })
     // The body can carry financial records, so only the status is reported.
     if (!response.ok) throw new Error(`${operation} failed with status ${response.status}.`);
     return response.json();
+  };
+}
+
+/** Asks the backend who a WhatsApp sender is. Only a verified WhatsApp Link names a User. */
+export type ResolveSender = (
+  input: ResolveWhatsAppSenderInput,
+) => Promise<ResolveWhatsAppSenderResult>;
+
+export function createResolveSender(config: { baseUrl: string; secret: string }): ResolveSender {
+  const url = `${config.baseUrl.replace(/\/+$/, "")}/api/agent/whatsapp/resolve-sender`;
+  return async (input) => {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${config.secret}`, "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`resolve-sender failed with status ${response.status}.`);
+    return resolveWhatsAppSenderResultSchema.parse(await response.json());
   };
 }

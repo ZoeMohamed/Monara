@@ -3,5 +3,10 @@
   "name": "monara-agent",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-09",
-  "workers_dev": false
+  "workers_dev": false,
+  // One object per User holds their WhatsApp conversation. See src/whatsapp/conversation.ts.
+  "durable_objects": {
+    "bindings": [{ "name": "CONVERSATIONS", "class_name": "WhatsAppConversation" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WhatsAppConversation"] }]
 }

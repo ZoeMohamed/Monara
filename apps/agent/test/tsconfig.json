@@ -1,8 +1,8 @@
 {
-  // Tests run on Node, so they are checked against Node's types instead of the Workers runtime's.
+  // Tests run on Node. The Workers types are included because the source under test names them.
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"],
+    "types": ["node", "@cloudflare/workers-types"],
     "allowImportingTsExtensions": true
   },
   "include": ["**/*.ts"]

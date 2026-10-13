@@ -105,6 +105,7 @@ test("every write tool is T1 and has a schema the model can be given", () => {
       "reject_pending",
       "create_budget",
       "edit_budget",
+      "set_reminder_preferences",
       "undo_action",
     ],
   );

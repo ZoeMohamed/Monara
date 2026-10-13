@@ -4,6 +4,7 @@ import {
   createBudgetInputSchema,
   createTransactionInputSchema,
   rejectTransactionInputSchema,
+  reminderPreferencesMutationResultSchema,
   transactionMutationResultSchema,
   transactionValuesSchema,
   undoActionInputSchema,
@@ -83,6 +84,25 @@ const createBudget: AgentTool<typeof createBudgetToolInputSchema> = {
   },
 };
 
+const setReminderPreferencesToolInputSchema = z.object({ whatsAppEnabled: z.boolean() }).strict();
+
+const setReminderPreferences: AgentTool<typeof setReminderPreferencesToolInputSchema> = {
+  name: "set_reminder_preferences",
+  description:
+    'Turns Reminders on WhatsApp on or off, for example when the User says "stop reminders". Reminders in the app always stay on.',
+  tier: "T1",
+  input: setReminderPreferencesToolInputSchema,
+  async run(input, context) {
+    return reminderPreferencesMutationResultSchema.parse(
+      await context.callOperation("set_reminder_preferences", context, {
+        ...input,
+        // The Agent has not read the current preferences, so it does not claim a version.
+        expectedUpdatedAt: null,
+      }),
+    );
+  },
+};
+
 const undoAction: AgentTool<typeof undoActionInputSchema> = {
   name: "undo_action",
   description:
@@ -123,5 +143,6 @@ export const writeTools = [
     input: updateBudgetInputSchema,
     output: budgetMutationResultSchema,
   }),
+  setReminderPreferences,
   undoAction,
 ] satisfies AgentTool[];

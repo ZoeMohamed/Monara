@@ -17,6 +17,34 @@ export const whatsAppMessageSchema = z
 
 export type WhatsAppMessage = z.infer<typeof whatsAppMessageSchema>;
 
+export const phoneE164Schema = z.string().regex(/^\+[1-9]\d{7,14}$/, "Phone must be E.164.");
+export const whatsAppVerificationCodeSchema = z.string().regex(/^\d{6}$/);
+
+// What the Agent asks the backend about each WhatsApp sender. The number is a
+// claim until the backend finds a verified WhatsApp Link for it. A code is sent
+// only when the whole message is one, so no conversation reaches this call.
+export const resolveWhatsAppSenderInputSchema = z
+  .object({
+    phoneE164: phoneE164Schema,
+    verificationCode: whatsAppVerificationCodeSchema.nullable(),
+  })
+  .strict();
+
+export const whatsAppCodeRejectionSchema = z.enum(["incorrect", "expired", "too_many_attempts"]);
+
+export const resolveWhatsAppSenderResultSchema = z.discriminatedUnion("status", [
+  // A verified link exists: messages from this number belong to this User.
+  z.object({ status: z.literal("linked"), userId: userIdSchema }).strict(),
+  // The code matched a pending link, which is now verified.
+  z.object({ status: z.literal("verified"), userId: userIdSchema }).strict(),
+  z.object({ status: z.literal("code_rejected"), reason: whatsAppCodeRejectionSchema }).strict(),
+  z.object({ status: z.literal("unlinked") }).strict(),
+]);
+
+export type ResolveWhatsAppSenderInput = z.input<typeof resolveWhatsAppSenderInputSchema>;
+export type WhatsAppCodeRejection = z.infer<typeof whatsAppCodeRejectionSchema>;
+export type ResolveWhatsAppSenderResult = z.infer<typeof resolveWhatsAppSenderResultSchema>;
+
 // One earlier message in a chat. An Agent turn carries the receipts of what it
 // changed, so a later "undo" or "no, 38k" can refer to them, and the destructive
 // action it asked the User to confirm, if any.
