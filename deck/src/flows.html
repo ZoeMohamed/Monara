@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:1728px;height:749px;overflow:hidden;background:transparent;font-family:Poppins,sans-serif;color:#1b1b1b}
+.lane{position:absolute;left:0;width:1728px;height:222px;border-radius:28px;background:rgba(238,243,255,.6);border:3px dashed #c9d9ff}
+.ln{position:absolute;left:28px;top:0;height:100%;width:190px;display:flex;flex-direction:column;justify-content:center}
+.ln b{font-size:28px;color:#14307f;line-height:1.15}.ln span{font-size:17px;color:#3171FD;font-weight:600;margin-top:8px;letter-spacing:1px;text-transform:uppercase}
+.st{position:absolute;top:26px;width:264px;height:166px;background:#fff;border:3px solid #dce7ff;border-radius:20px;padding:14px 18px;box-shadow:0 4px 14px rgba(40,50,80,.09)}
+.st.hi{border-color:#3171FD}
+.n{width:34px;height:34px;border-radius:50%;background:#3171FD;color:#fff;font-weight:700;font-size:18px;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.t{font-size:21px;font-weight:700;color:#14307f;line-height:1.2}.s{font-size:15.5px;color:#4b5263;margin-top:6px;line-height:1.35}
+svg{position:absolute;left:0;top:0}
+</style></head><body>
+<div class="lane" style="top:0"><div class="ln"><b>Email to ledger</b><span>Gmail import</span></div></div>
+<div class="lane" style="top:263px"><div class="ln"><b>Chat to action</b><span>In-app or chat channel</span></div></div>
+<div class="lane" style="top:526px"><div class="ln"><b>Reminders</b><span>Scheduled job</span></div></div>
+<script>
+const lanes=[
+ [0,[["Retrieve","Composio fetches payment and income emails"],["Extract","Agent job reads fields with the LLM, never guesses"],["Pending","Backend creates Pending Transactions, with no duplicates"],["Review","You confirm, edit or reject in the Review Queue"],["Count","Only Confirmed Transactions reach any total"]]],
+ [263,[["Message","Arrives in the app or on a chat channel"],["Identity","Web session or verified channel Link"],["Plan","Agent picks Agent Tools. Email text is data only"],["Tier","T0 read, T1 undo, T2 confirm, T3 web only"],["Check","Backend operation re-checks ownership"]]],
+ [526,[["Check","Job scans Budget thresholds and upcoming bills"],["Record","Reminder saved in the app"],["Send","WhatsApp: free-form in 24 hours, else an approved template"]]]
+];
+let h='';
+lanes.forEach(([top,steps],li)=>{steps.forEach((s,i)=>{const x=232+i*(264+36);h+=`<div class="st ${(li==0&&i==2)||(li==1&&i==3)||(li==2&&i==2)?'hi':''}" style="left:${x}px;top:${top+26}px"><div class="n">${i+1}</div><div class="t">${s[0]}</div><div class="s">${s[1]}</div></div>`;
+ if(i<steps.length-1){const ax=x+264+4,ay=top+111;h+=`<svg width="1728" height="749" style="pointer-events:none"><path d="M${ax} ${ay} L${ax+26} ${ay}" stroke="#3171FD" stroke-width="4" stroke-linecap="round" fill="none"/><path d="M${ax+22} ${ay-8} L${ax+32} ${ay} L${ax+22} ${ay+8}Z" fill="#3171FD"/></svg>`}})});
+document.body.insertAdjacentHTML('beforeend',h);
+</script>
+</body></html>
