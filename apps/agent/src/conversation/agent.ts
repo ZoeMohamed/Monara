@@ -1,4 +1,5 @@
 import type { UserId } from "@monara/contracts";
+import type { CallOperation } from "./backend.ts";
 import type { ChatMessage, Complete } from "./llm.ts";
 import { systemPrompt } from "./prompt.ts";
 import { type AgentTool, executeToolCall, toToolDefinitions } from "./tools.ts";
@@ -15,13 +16,15 @@ const STEP_LIMIT_REPLY =
 export async function runAgent(input: {
   complete: Complete;
   tools: AgentTool[];
+  callOperation: CallOperation;
   userId: UserId;
   text: string;
+  now: Date;
 }): Promise<string> {
-  const { complete, tools, userId } = input;
+  const { complete, tools, callOperation, userId } = input;
   const definitions = toToolDefinitions(tools);
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt({ hasTools: tools.length > 0 }) },
+    { role: "system", content: systemPrompt({ hasTools: tools.length > 0, now: input.now }) },
     { role: "user", content: input.text },
   ];
 
@@ -34,7 +37,7 @@ export async function runAgent(input: {
       return reply;
     }
     for (const call of message.tool_calls) {
-      const result = await executeToolCall(tools, call, { userId });
+      const result = await executeToolCall(tools, call, { userId, callOperation });
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
     }
   }

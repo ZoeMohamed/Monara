@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { runAgent } from "../src/conversation/agent.ts";
+import { runAgent as runAgentWith } from "../src/conversation/agent.ts";
 import type {
   AssistantMessage,
   ChatMessage,
@@ -11,6 +11,17 @@ import type {
 import type { AgentTool } from "../src/conversation/tools.ts";
 
 const userId = "7b0c0f0e-4f0f-4a4e-9f43-2f8e6f1c9a11";
+
+// These tests cover the loop itself, so no tool here reaches the backend.
+const runAgent = (input: Pick<Parameters<typeof runAgentWith>[0], "complete" | "tools" | "text">) =>
+  runAgentWith({
+    ...input,
+    userId,
+    now: new Date("2026-10-13T10:00:00Z"),
+    callOperation: async () => {
+      throw new Error("No backend in this test.");
+    },
+  });
 
 const say = (content: string): AssistantMessage => ({ role: "assistant", content });
 const call = (name: string, args: unknown): AssistantMessage => ({
@@ -55,7 +66,7 @@ const lastToolResult = (messages: ChatMessage[]) => {
 
 test("returns the model's reply and tells it when no tools are connected", async () => {
   const model = scripted([say("  Records are not connected yet.  ")]);
-  const reply = await runAgent({ complete: model.complete, tools: [], userId, text: "hi" });
+  const reply = await runAgent({ complete: model.complete, tools: [], text: "hi" });
 
   assert.equal(reply, "Records are not connected yet.");
   assert.deepEqual(model.seen[0]?.tools, []);
@@ -67,7 +78,7 @@ test("returns the model's reply and tells it when no tools are connected", async
 test("runs a tool with validated input and the verified User, then replies", async () => {
   const { tool, runs } = recordingTool("T0");
   const model = scripted([call("lookup", { limit: 5 }), say("Done.")]);
-  const reply = await runAgent({ complete: model.complete, tools: [tool], userId, text: "go" });
+  const reply = await runAgent({ complete: model.complete, tools: [tool], text: "go" });
 
   assert.equal(reply, "Done.");
   assert.deepEqual(runs, [{ input: { limit: 5 }, userId }]);
@@ -78,7 +89,7 @@ test("runs a tool with validated input and the verified User, then replies", asy
 test("does not run a destructive tool without a confirmation", async () => {
   const { tool, runs } = recordingTool("T2");
   const model = scripted([call("lookup", { limit: 5 }), say("I can't do that yet.")]);
-  await runAgent({ complete: model.complete, tools: [tool], userId, text: "delete it" });
+  await runAgent({ complete: model.complete, tools: [tool], text: "delete it" });
 
   assert.deepEqual(runs, []);
   assert.match(lastToolResult(model.seen[1]?.messages ?? []).error, /confirmation/);
@@ -91,7 +102,7 @@ test("rejects invalid arguments and unknown tools without running anything", asy
     call("drop_everything", {}),
     say("Sorry."),
   ]);
-  await runAgent({ complete: model.complete, tools: [tool], userId, text: "go" });
+  await runAgent({ complete: model.complete, tools: [tool], text: "go" });
 
   assert.deepEqual(runs, []);
   assert.match(lastToolResult(model.seen[1]?.messages ?? []).error, /Invalid arguments/);
@@ -109,7 +120,7 @@ test("hides a tool's failure details from the model", async () => {
     },
   };
   const model = scripted([call("lookup", {}), say("Something went wrong.")]);
-  await runAgent({ complete: model.complete, tools: [tool], userId, text: "go" });
+  await runAgent({ complete: model.complete, tools: [tool], text: "go" });
 
   assert.deepEqual(lastToolResult(model.seen[1]?.messages ?? []), {
     error: "lookup failed.",
@@ -119,7 +130,7 @@ test("hides a tool's failure details from the model", async () => {
 test("stops after the step limit instead of looping forever", async () => {
   const { tool, runs } = recordingTool("T0");
   const model = scripted(Array.from({ length: 20 }, () => call("lookup", { limit: 1 })));
-  const reply = await runAgent({ complete: model.complete, tools: [tool], userId, text: "go" });
+  const reply = await runAgent({ complete: model.complete, tools: [tool], text: "go" });
 
   assert.match(reply, /more steps than I could finish/);
   assert.equal(runs.length, 8);

@@ -52,8 +52,9 @@ export function createComplete(config: {
         body: JSON.stringify({
           model: config.model,
           messages,
-          // Some providers reject an empty tools array.
-          ...(tools.length > 0 ? { tools, tool_choice: "auto" } : {}),
+          // Some providers reject an empty tools array. The team's model only accepts
+          // function tools on this endpoint with reasoning turned off.
+          ...(tools.length > 0 ? { tools, tool_choice: "auto", reasoning_effort: "none" } : {}),
         }),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });

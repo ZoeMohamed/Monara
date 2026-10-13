@@ -1,5 +1,6 @@
 import type { UserId } from "@monara/contracts";
 import { z } from "zod";
+import type { CallOperation } from "./backend.ts";
 import type { ToolCall, ToolDefinition } from "./llm.ts";
 
 /**
@@ -11,6 +12,7 @@ type PermissionTier = "T0" | "T1" | "T2";
 export interface ToolContext {
   /** Resolved from the verified Channel, never from message text or tool arguments. */
   userId: UserId;
+  callOperation: CallOperation;
 }
 
 export interface AgentTool<Schema extends z.ZodType = z.ZodType> {
@@ -20,10 +22,6 @@ export interface AgentTool<Schema extends z.ZodType = z.ZodType> {
   input: Schema;
   run(input: z.infer<Schema>, context: ToolContext): Promise<unknown>;
 }
-
-// Read tools (AR3) and write tools (AR4) are registered here once the backend
-// operations they call exist. Until then the Agent has no access to records.
-export const agentTools: AgentTool[] = [];
 
 export function toToolDefinitions(tools: AgentTool[]): ToolDefinition[] {
   return tools.map((tool) => {

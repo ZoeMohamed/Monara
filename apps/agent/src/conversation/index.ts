@@ -1,8 +1,9 @@
 import { type AgentChatResponse, agentChatRequestSchema } from "@monara/contracts";
 import type { Env } from "../env.ts";
 import { runAgent } from "./agent.ts";
+import { createCallOperation } from "./backend.ts";
 import { createComplete } from "./llm.ts";
-import { agentTools } from "./tools.ts";
+import { readTools } from "./read-tools.ts";
 
 const encoder = new TextEncoder();
 
@@ -27,8 +28,15 @@ async function secretsMatch(received: string, expected: string): Promise<boolean
  * request is a single turn; the Agent keeps no conversation history yet.
  */
 export async function handleChatRequest(request: Request, env: Env): Promise<Response> {
-  const { MONARA_AGENT_BACKEND_SECRET, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL } = env;
-  if (!MONARA_AGENT_BACKEND_SECRET || !LLM_BASE_URL || !LLM_API_KEY || !LLM_MODEL) {
+  const { MONARA_BACKEND_URL, MONARA_AGENT_BACKEND_SECRET, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL } =
+    env;
+  if (
+    !MONARA_BACKEND_URL ||
+    !MONARA_AGENT_BACKEND_SECRET ||
+    !LLM_BASE_URL ||
+    !LLM_API_KEY ||
+    !LLM_MODEL
+  ) {
     return Response.json({ error: "The Agent is not configured." }, { status: 503 });
   }
 
@@ -45,9 +53,14 @@ export async function handleChatRequest(request: Request, env: Env): Promise<Res
   try {
     const reply = await runAgent({
       complete: createComplete({ baseUrl: LLM_BASE_URL, apiKey: LLM_API_KEY, model: LLM_MODEL }),
-      tools: agentTools,
+      tools: readTools,
+      callOperation: createCallOperation({
+        baseUrl: MONARA_BACKEND_URL,
+        secret: MONARA_AGENT_BACKEND_SECRET,
+      }),
       userId: body.data.userId,
       text: body.data.text,
+      now: new Date(),
     });
     return Response.json({ reply } satisfies AgentChatResponse);
   } catch {
