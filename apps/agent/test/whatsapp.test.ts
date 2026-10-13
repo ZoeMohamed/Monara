@@ -168,6 +168,14 @@ function harness(reply: (text: string, history: AgentChatTurn[]) => Promise<Agen
     put: async (key, value) => {
       stored.set(key, structuredClone(value));
     },
+    delete: async (key) => stored.delete(key),
+    list: async <T>({ prefix }: { prefix: string }) =>
+      new Map(
+        [...stored]
+          .filter(([key]) => key.startsWith(prefix))
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, value]) => [key, structuredClone(value) as T]),
+      ),
     deleteAll: async () => stored.clear(),
     setAlarm: async (time) => {
       clock.alarm = time;
@@ -300,7 +308,7 @@ test("a conversation is forgotten after half an hour of silence", async () => {
   const { session, stored, asked, clock } = harness(echo);
   await session().receive(message("wamid.1", "lunch 20k"));
   await session().drain();
-  assert.equal(stored.size, 1);
+  assert.ok(stored.size > 0);
 
   clock.now += IDLE_MS;
   await session().drain();
@@ -309,4 +317,28 @@ test("a conversation is forgotten after half an hour of silence", async () => {
   await session().receive(message("wamid.2", "gopay"));
   await session().drain();
   assert.deepEqual(asked[1]?.history, []);
+});
+
+test("a message that arrives while the Agent is replying is not lost", async () => {
+  let release: (response: AgentChatResponse) => void = () => {};
+  const { session, sent, asked } = harness((text) =>
+    text === "lunch 20k"
+      ? new Promise<AgentChatResponse>((resolve) => {
+          release = resolve;
+        })
+      : echo(text),
+  );
+  await session().receive(message("wamid.1", "lunch 20k"));
+  const draining = session().drain();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  // The Agent is still thinking about the first message when the second one lands.
+  await session().receive(message("wamid.2", "gopay"));
+  release({ reply: "Which account?", actions: [], confirmation: null });
+  await draining;
+
+  assert.deepEqual(sent, ["Which account?", "You said gopay"]);
+  assert.deepEqual(asked[1]?.history, [
+    { role: "user", text: "lunch 20k" },
+    { role: "assistant", text: "Which account?" },
+  ]);
 });

@@ -1,5 +1,5 @@
 // Runs every Agent scenario against the real model and an in-memory ledger.
-// Usage: pnpm --filter @monara/agent sandbox [scenario-id ...] [--json]
+// Usage: pnpm --filter @monara/agent sandbox [scenario-id ...] [--json] [--verbose]
 // Reads LLM_BASE_URL, LLM_API_KEY and LLM_MODEL from the environment or apps/agent/.dev.vars.
 import { existsSync, readFileSync } from "node:fs";
 import type { AgentChatResponse, AgentChatTurn } from "@monara/contracts";

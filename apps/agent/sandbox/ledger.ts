@@ -301,6 +301,11 @@ export function createSandboxLedger(now: Date) {
     return row;
   };
   const touch = () => new Date().toISOString();
+  /** Removes a row if it is still there. A row that is already gone must not take another with it. */
+  const remove = <Row>(rows: Row[], row: Row) => {
+    const index = rows.indexOf(row);
+    if (index >= 0) rows.splice(index, 1);
+  };
   const page = <Row>(items: Row[]) => ({ items, nextCursor: null });
   const rupiah = (amountMinor: string) => `Rp ${Number(amountMinor).toLocaleString("id-ID")}`;
 
@@ -373,9 +378,7 @@ export function createSandboxLedger(now: Date) {
         transactions.push(transaction);
         return {
           transaction,
-          action: receipt("transaction", transaction.id, () =>
-            transactions.splice(transactions.indexOf(transaction), 1),
-          ),
+          action: receipt("transaction", transaction.id, () => remove(transactions, transaction)),
         };
       }
       case "edit_transaction": {
@@ -420,7 +423,7 @@ export function createSandboxLedger(now: Date) {
         budgets.push(budget);
         return {
           budget,
-          action: receipt("budget", budget.id, () => budgets.splice(budgets.indexOf(budget), 1)),
+          action: receipt("budget", budget.id, () => remove(budgets, budget)),
         };
       }
       case "edit_budget": {

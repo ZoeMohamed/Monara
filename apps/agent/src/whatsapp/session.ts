@@ -14,13 +14,11 @@ interface Outbound {
   text: string;
 }
 
+/** Everything `drain` owns. `receive` never writes it, so the two cannot overwrite each other. */
 interface SessionState {
-  inbox: QueuedMessage[];
   /** The message the Agent is working on. Still set after a crash, never run twice. */
   inFlight: QueuedMessage | null;
   outbox: Outbound[];
-  /** Recent message ids, so a redelivered webhook is not answered twice. */
-  seen: string[];
   history: AgentChatTurn[];
   lastActiveAt: number;
 }
@@ -29,12 +27,18 @@ interface SessionState {
 export interface SessionStorage {
   get<T>(key: string): Promise<T | undefined>;
   put<T>(key: string, value: T): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  /** Entries whose key starts with `prefix`, in key order. */
+  list<T>(options: { prefix: string }): Promise<Map<string, T>>;
   deleteAll(): Promise<void>;
   setAlarm(scheduledTime: number): Promise<void>;
 }
 
 const STATE_KEY = "state";
-const MAX_SEEN = 100;
+// One key per queued message, so a message arriving mid-reply is added, never merged.
+const INBOX_PREFIX = "inbox:";
+// One key per message id already taken, so a redelivered webhook is not answered twice.
+const SEEN_PREFIX = "seen:";
 // 20 exchanges is plenty for follow-up questions, corrections, and undo.
 const MAX_HISTORY_TURNS = 40;
 /** A conversation is forgotten after this long without a message. */
@@ -44,13 +48,14 @@ export const FAILURE_REPLY =
   "Sorry, something went wrong and I can't confirm what was saved. Please check the app before sending that again.";
 
 const emptyState = (): SessionState => ({
-  inbox: [],
   inFlight: null,
   outbox: [],
-  seen: [],
   history: [],
   lastActiveAt: 0,
 });
+
+// Keeps messages that arrive in the same millisecond in arrival order.
+let sequence = 0;
 
 /**
  * One User's WhatsApp conversation. It answers messages one at a time and in
@@ -60,6 +65,9 @@ const emptyState = (): SessionState => ({
  * The Agent runs at most once per message: a message leaves the inbox before
  * the Agent starts, so a crash or a failed send can never record a
  * transaction twice. Only sending the reply is retried.
+ *
+ * `receive` can run while `drain` is waiting on the model or on Kapso. They
+ * write different keys, so neither can lose the other's work.
  */
 export class ConversationSession {
   private readonly storage: SessionStorage;
@@ -79,23 +87,33 @@ export class ConversationSession {
     this.now = dependencies.now;
   }
 
-  private async load(): Promise<SessionState> {
-    return (await this.storage.get<SessionState>(STATE_KEY)) ?? emptyState();
-  }
-
   /** Queues a message and returns at once, so the webhook can answer Kapso in time. */
   async receive(message: QueuedMessage): Promise<void> {
-    const state = await this.load();
-    if (state.seen.includes(message.messageId)) return;
-    state.seen = [...state.seen, message.messageId].slice(-MAX_SEEN);
-    state.inbox.push(message);
-    await this.storage.put(STATE_KEY, state);
+    const seenKey = `${SEEN_PREFIX}${message.messageId}`;
+    if (await this.storage.get(seenKey)) return;
+    sequence = (sequence + 1) % 1_000_000;
+    const order = `${String(this.now()).padStart(15, "0")}:${String(sequence).padStart(6, "0")}`;
+    await this.storage.put(seenKey, true);
+    await this.storage.put(`${INBOX_PREFIX}${order}`, message);
     await this.storage.setAlarm(this.now());
+  }
+
+  /** Takes the oldest queued message out of the inbox and marks it as being worked on. */
+  private async takeNext(state: SessionState): Promise<QueuedMessage | null> {
+    const inbox = await this.storage.list<QueuedMessage>({ prefix: INBOX_PREFIX });
+    const next = inbox.entries().next().value;
+    if (!next) return null;
+    const [key, message] = next;
+    state.inFlight = message;
+    // Saved before the inbox entry goes, so a crash in between cannot lose the message silently.
+    await this.storage.put(STATE_KEY, state);
+    await this.storage.delete(key);
+    return message;
   }
 
   /** Works through the queue. A throw makes the runtime call this again later. */
   async drain(): Promise<void> {
-    const state = await this.load();
+    const state = (await this.storage.get<SessionState>(STATE_KEY)) ?? emptyState();
 
     if (state.inFlight) {
       // The last run stopped partway, so what it saved is unknown. Say so instead of redoing it.
@@ -111,11 +129,9 @@ export class ConversationSession {
         await this.storage.put(STATE_KEY, state);
       }
 
-      const message = state.inbox.shift();
-      if (!message) break;
       if (this.now() - state.lastActiveAt > IDLE_MS) state.history = [];
-      state.inFlight = message;
-      await this.storage.put(STATE_KEY, state);
+      const message = await this.takeNext(state);
+      if (!message) break;
 
       let text = FAILURE_REPLY;
       try {
@@ -144,6 +160,7 @@ export class ConversationSession {
       await this.storage.put(STATE_KEY, state);
     }
 
+    // The inbox was empty a moment ago. A message arriving from here on sets its own alarm.
     if (this.now() - state.lastActiveAt >= IDLE_MS) {
       await this.storage.deleteAll();
     } else {

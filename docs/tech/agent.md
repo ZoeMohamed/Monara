@@ -94,7 +94,7 @@ Open risks:
 ## How to verify
 
 ```sh
-pnpm --filter @monara/agent test      # 39 tests, no network
+pnpm --filter @monara/agent test      # 40 tests, no network
 pnpm --filter @monara/core test       # 11 tests for WhatsApp Link codes
 pnpm --filter @monara/integrations test
 pnpm --filter @monara/agent sandbox   # needs LLM_* in apps/agent/.dev.vars

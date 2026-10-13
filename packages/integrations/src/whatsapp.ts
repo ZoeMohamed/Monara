@@ -51,6 +51,9 @@ export const KAPSO_MESSAGE_RECEIVED_EVENT = "whatsapp.message.received";
 const KAPSO_API_BASE_URL = "https://api.kapso.ai/meta/whatsapp/v24.0";
 // Media is only ever fetched from Kapso, so the API key cannot be sent anywhere else.
 const KAPSO_MEDIA_ORIGIN = "https://api.kapso.ai";
+// A stalled send would hold up the webhook's answer to Kapso and a User's whole queue.
+const SEND_TIMEOUT_MS = 10_000;
+const MEDIA_TIMEOUT_MS = 30_000;
 // WhatsApp caps images at 5 MB and audio at 16 MB.
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 // WhatsApp rejects text bodies longer than 4096 characters.
@@ -178,6 +181,7 @@ export function createKapsoTransport(config: {
       method: "POST",
       headers: { "X-API-Key": config.apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({ messaging_product: "whatsapp", to, ...message }),
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
     if (!response.ok) {
       // The response body can echo the recipient or the message, so keep it out of the error.
@@ -226,6 +230,7 @@ export function createKapsoTransport(config: {
       const response = await fetch(media.url, {
         headers: { "X-API-Key": config.apiKey },
         redirect: "error",
+        signal: AbortSignal.timeout(MEDIA_TIMEOUT_MS),
       });
       if (!response.ok)
         throw new Error(`Kapso media request failed with status ${response.status}.`);
