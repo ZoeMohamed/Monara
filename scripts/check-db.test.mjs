@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, sep } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { checkDb, validateMigrations } from "./check-db.mjs";
+import { checkDb, validateMigrationHistory, validateMigrations } from "./check-db.mjs";
 import { generateDbTypes } from "./generate-db-types.mjs";
 
 function fixture(t, schema = true) {
@@ -39,6 +39,15 @@ function fixture(t, schema = true) {
 }
 
 describe("migration preflight", () => {
+  it("validates filenames without Docker, RLS tests, or generated types", (t) => {
+    const context = fixture(t, false);
+    context.write("supabase/migrations/20261010064300_initial_schema.sql");
+    checkDb({ ...context, validateOnly: true });
+    assert.equal(context.calls.length, 0);
+    context.write("supabase/migrations/20260230064300_invalid_date.sql");
+    assert.throws(() => checkDb({ ...context, validateOnly: true }), /Invalid UTC/);
+  });
+
   it("accepts a real leap-day UTC timestamp and snake_case name", () => {
     validateMigrations(["20240229000159_initial_schema.sql"]);
   });
@@ -120,6 +129,86 @@ describe("migration preflight", () => {
       if (previous === undefined) delete process.env.CI;
       else process.env.CI = previous;
     }
+  });
+});
+
+describe("migration history", () => {
+  const first = "20261010064300_initial_schema.sql";
+  const second = "20261011064300_add_categories.sql";
+
+  it("accepts the first migration and unordered listings of later additions", () => {
+    validateMigrationHistory([first], [], []);
+    validateMigrationHistory([second, first], [first], []);
+    validateMigrationHistory([first, second], [second, first], []);
+  });
+
+  it("rejects edits, deletes, renames, and insertion before existing history", () => {
+    assert.throws(() => validateMigrationHistory([first], [first], [first]), /changed or removed/);
+    assert.throws(() => validateMigrationHistory([], [first], [first]), /changed or removed/);
+    assert.throws(() => validateMigrationHistory([second], [first], [first]), /changed or removed/);
+    assert.throws(() => validateMigrationHistory([first, second], [second], []), /must be newer/);
+    assert.throws(
+      () => validateMigrationHistory([first, "20261010064300_renamed.sql"], [first], []),
+      /must be newer/,
+    );
+  });
+
+  it("checks real Git history and working-tree changes before any stack command", (t) => {
+    const context = fixture(t, false);
+    // Hooks export GIT_DIR/GIT_INDEX_FILE for the real checkout. Never let fixtures inherit them.
+    const isolatedEnv = (env) =>
+      Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith("GIT_")));
+    const git = (args) => {
+      const result = spawnSync("git", args, {
+        cwd: context.root,
+        encoding: "utf8",
+        env: isolatedEnv(process.env),
+      });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
+    git(["init"]);
+    context.write(`supabase/migrations/${first}`);
+    git(["add", "."]);
+    git([
+      "-c",
+      "user.name=Test",
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "core.hooksPath=/dev/null",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-m",
+      "synthetic baseline",
+    ]);
+    const baseRef = git(["rev-parse", "HEAD"]);
+    const run = (command, args, options) => {
+      assert.equal(command, "git");
+      assert.equal(options.shell, false); // Preserve ^{commit} on Windows without cmd escaping.
+      return spawnSync(command, args, { ...options, env: isolatedEnv(options.env) });
+    };
+    const check = () => checkDb({ ...context, run, baseRef, validateOnly: true });
+    check();
+    context.write(`supabase/migrations/${second}`);
+    check(); // Includes the untracked new migration.
+    context.write("supabase/migrations/20261009000000_out_of_order.sql");
+    assert.throws(check, /must be newer/);
+    rmSync(join(context.root, "supabase/migrations/20261009000000_out_of_order.sql"));
+    context.write(`supabase/migrations/${first}`, "-- changed SQL\n");
+    assert.throws(check, /changed or removed/);
+    rmSync(join(context.root, `supabase/migrations/${first}`));
+    rmSync(join(context.root, `supabase/migrations/${second}`));
+    assert.throws(check, /changed or removed/); // Deleting the last file must not skip.
+    assert.throws(
+      () => checkDb({ ...context, run, baseRef: "missing", validateOnly: true }),
+      /failed/,
+    );
+    assert.throws(
+      () => checkDb({ ...context, run, baseRef: "--help", validateOnly: true }),
+      /Invalid migration base ref/,
+    );
   });
 });
 

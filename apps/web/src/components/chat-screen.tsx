@@ -108,7 +108,7 @@ export function ChatScreen({ onSend }: { onSend: (text: string) => Promise<strin
       </div>
 
       <form
-        className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] mt-3 bg-background pt-2 pb-1 lg:bottom-4"
+        className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] mt-3 bg-background pt-2 pb-1 lg:bottom-4"
         onSubmit={send}
       >
         <div className="flex items-center gap-2">

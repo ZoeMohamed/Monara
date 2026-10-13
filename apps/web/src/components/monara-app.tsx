@@ -78,18 +78,13 @@ function useOnlineStatus() {
 
 function Logo() {
   return (
-    <div className="flex items-center gap-2 sm:gap-3">
-      <Image
-        src="/icons/icon-192.png"
-        alt=""
-        width={40}
-        height={40}
-        className="h-8 w-8 shrink-0 sm:h-10 sm:w-10"
-      />
-      <span className="text-lg font-black tracking-[-0.05em] text-foreground sm:text-xl">
-        Monara
-      </span>
-    </div>
+    <Image
+      src="/logos/monara-lockup-light.svg"
+      alt="Monara"
+      width={704}
+      height={142}
+      className="h-8 w-auto shrink-0 object-contain sm:h-10"
+    />
   );
 }
 
@@ -234,7 +229,7 @@ function HomeView({
           role="progressbar"
         >
           <div
-            className={`h-full rounded-full ${percent >= 100 ? "bg-danger" : "bg-accent"}`}
+            className={`h-full rounded-full ${percent >= 100 ? "bg-danger" : "bg-brand"}`}
             style={{ width: `${Math.min(percent, 100)}%` }}
           />
         </div>
@@ -562,10 +557,10 @@ function BottomNav({
   return (
     <nav
       aria-label="Bottom navigation"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pl-[max(.5rem,env(safe-area-inset-left,0px))] pr-[max(.5rem,env(safe-area-inset-right,0px))] pb-[calc(.5rem+env(safe-area-inset-bottom,0px))] pt-1.5 lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pl-[max(.5rem,env(safe-area-inset-left,0px))] pr-[max(.5rem,env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pt-1.5 lg:hidden"
     >
       <div className="mx-auto grid max-w-lg grid-cols-5 items-end">
-        {tabs.slice(0, 2).map((tab) => (
+        {tabs.slice(0, 4).map((tab) => (
           <MobileTab
             active={activeTab === tab.id}
             key={tab.id}
@@ -573,24 +568,12 @@ function BottomNav({
             tab={tab}
           />
         ))}
-        <Button
-          isIconOnly
-          variant="primary"
-          aria-label="Add transaction"
-          className="mx-auto -mt-6 grid h-13 w-13 place-items-center rounded-2xl bg-accent text-white"
-          onPress={() => onAdd()}
-          type="button"
-        >
-          <Icon className="h-6 w-6" name="plus" strokeWidth={2.2} />
-        </Button>
-        {tabs.slice(2, 4).map((tab) => (
-          <MobileTab
-            active={activeTab === tab.id}
-            key={tab.id}
-            onClick={() => onSelect(tab.id)}
-            tab={tab}
-          />
-        ))}
+        <MobileTab
+          active={false}
+          ariaLabel="Add transaction"
+          onClick={onAdd}
+          tab={{ icon: "plus", label: "Add" }}
+        />
       </div>
     </nav>
   );
@@ -743,7 +726,7 @@ export function MonaraApp() {
             ref={mainRef}
             tabIndex={-1}
             aria-label={tabs.find((tab) => tab.id === activeTab)?.label}
-            className="mx-auto w-full max-w-[920px] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[calc(6rem+env(safe-area-inset-bottom,0px))] pt-3 sm:pl-[max(2rem,env(safe-area-inset-left,0px))] sm:pr-[max(2rem,env(safe-area-inset-right,0px))] sm:pt-6 lg:px-12 lg:pb-16 lg:pt-8"
+            className="mx-auto w-full max-w-[920px] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-3 sm:pl-[max(2rem,env(safe-area-inset-left,0px))] sm:pr-[max(2rem,env(safe-area-inset-right,0px))] sm:pt-6 lg:px-12 lg:pb-16 lg:pt-8"
           >
             {activeTab === "home" ? (
               <HomeView
@@ -831,14 +814,17 @@ function MobileTab({
   tab,
   active,
   onClick,
+  ariaLabel,
 }: {
-  tab: TabItem;
+  tab: Pick<TabItem, "icon" | "label">;
   active: boolean;
   onClick: () => void;
+  ariaLabel?: string;
 }) {
   return (
     <Button
       variant="ghost"
+      aria-label={ariaLabel}
       aria-current={active ? "page" : undefined}
       className={`h-auto min-h-11 w-full flex-col items-center gap-1 px-1 py-1 text-[10px] font-bold ${active ? "text-accent" : "text-muted"}`}
       onPress={onClick}

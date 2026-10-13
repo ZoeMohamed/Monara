@@ -37,13 +37,14 @@ Use compound components such as `Card.Content`, `Modal.Dialog`, and `ProgressBar
 
 ## Color and interaction conventions
 
-Change shared colors in [the theme](../packages/ui/src/theme.css), then use semantic tokens in new UI. Use white surfaces, royal blue actions, and pale cyan highlighted panels throughout the light-only interface. The user-selected [logo-1.png](https://cloud.abhipraya.dev/s/o5rjWg3JsYN4Zdg) supplies the dominant opaque color `#0b33fd`; derived tints keep the palette consistent. The original artwork is preserved; see [asset provenance and icon sizing](../apps/web/public/icons/README.md). Reserve status colors for their meaning, and retain text labels alongside them.
+Change shared colors in [the theme](../packages/ui/src/theme.css), then use semantic tokens in new UI. Use white surfaces, blue actions, and pale cyan highlighted panels throughout the light-only interface. On 12 October the User approved `#3171FD` as the exact brand blue, the supplied SVG lockup for interface branding, and the supplied Apple artwork for installation. Website favicons use the separate blue cat symbol. Use `#2865E5` for small blue text and buttons with white labels: the exact brand blue has only 4.28:1 contrast against white, while the darker action blue reaches 5.14:1. Graphical highlights and focus rings use the exact brand blue. See [asset provenance and icon sizing](../apps/web/public/icons/README.md). Reserve status colors for their meaning, and retain text labels alongside them.
 
 | Purpose | Token | Monara color |
 | --- | --- | --- |
 | Canvas and text | `--background`, `--foreground` | `#f5fbff`, `#192d52` |
 | Cards and fields | `--surface`, `--field-background` | White |
-| Primary action and focus | `--accent`, `--focus` | `#0b33fd` |
+| Brand graphics and focus | `--brand`, `--focus` | `#3171FD` |
+| Primary action and small blue text | `--accent`, `--link` | `#2865E5` |
 | Soft accent and brand panels | `--accent-soft` | `#e2f4ff` |
 | Secondary text and borders | `--muted`, `--border` | `#566b83`, `#dae8f3` |
 | Input boundary and hover | `--field-border`, `--field-border-hover` | `#7b8da3`, `#6e829c` |
@@ -51,6 +52,12 @@ Change shared colors in [the theme](../packages/ui/src/theme.css), then use sema
 Use a visible label for each input; give icon-only actions an accessible name. Associate modal titles with their dialog, place initial focus intentionally, and verify Escape, focus containment, and focus restoration. Label progress bars and communicate pending/confirmed status with text as well as color. Preserve keyboard focus indicators, reduced-motion handling, and usable touch controls. Keep cards, navigation, and actions flat, with no decorative shadow/glow. HeroUI shadow tokens use `0 0 #0000` to preserve composed focus and invalid rings; select popovers use a border for separation.
 
 Keep native document landmarks, headings, and SVG charts where they express the correct semantics. HeroUI primitives provide the component foundation; review the full composed interaction for accessibility.
+
+## Typography and branding
+
+Nunito Sans is the approved typeface for all interface text, headings, controls, and the standalone offline screen. It is distinct from Nunito. Local variable WOFF2 files provide normal and italic styles at weights 200 to 900; Next.js loads them through `next/font/local`, and the offline screen references the same public files directly. Browsers make no Google Fonts requests. The font license and source links live in [the font directory](../apps/web/public/fonts/README.md). Service worker v7 allowlists only those two public font paths and the blue SVG favicon in addition to the existing public assets; application HTML, auth responses, and financial data stay outside its caches.
+
+The header, sidebar, and sign-in use the supplied blue `monara-lockup-light.svg` on the current light surfaces. The white `monara-lockup-dark.svg` is retained for dark surfaces, but no dark theme is introduced. Each lockup includes both the cat symbol and the Monara wordmark, so it replaces the separate symbol and text. Preserve the wordmark paths and proportions; Nunito Sans applies to interface text, while the supplied lockup artwork remains unchanged. Installed PWA icons use the supplied Apple artwork. Website favicons use the blue `logo-light.svg` cat mark, with PNG and ICO fallbacks derived from that same SVG. Browser icon links do not point to the installed-app artwork; Apple touch-icon metadata and manifest icons remain separate.
 
 ## Verification
 
@@ -63,7 +70,7 @@ Run `pnpm check` and `pnpm build` for shared dependency changes. React Doctor mu
 
 `SignInScreen` accepts an explicit action, progress, and error state. `GmailConnectionsScreen` accepts loading, unavailable, sign-in-required, error, or ready presentation data, plus action callbacks. Ready data supports three-mailbox limits, reconnect status, sync progress/results, and disconnect confirmation. These local props are not transport contracts: validate and authorize provider/backend data before adapting it into them. The backend must enforce limits and ownership independently.
 
-The v5 service worker caches only the standalone static offline fallback, manifest, and named icons. Application navigation and Next.js chunks stay on the network; navigation failures show the generic fallback. It never caches app HTML or provides an offline financial ledger. Tests in `scripts/sw.test.mjs` cover the cache boundary and old-cache cleanup.
+The v7 service worker caches only the standalone static offline fallback, manifest, named PWA icons, the blue SVG favicon, and two public font files. Application navigation and Next.js chunks stay on the network; navigation failures show the generic fallback. It never caches app HTML or provides an offline financial ledger. Tests in `scripts/sw.test.mjs` cover the cache boundary and old-cache cleanup.
 
 Verification on 11 October: full checks and builds passed; browser inspection covered the two unavailable routes and actual public cache contents. Synthetic connected, disconnect, mailbox-limit, sync-result and progress/error interactions have now been browser-verified. Live integration remains pending.
 
@@ -74,17 +81,19 @@ Mobile is the primary layout. Use 16px page gutters and card padding, compact se
 
 The Review Queue supports pending-only records, editing without confirmation, validated confirmation, explicit rejection, and incomplete-field flags. Demo summaries use confirmed expense/income records only and omit transfers. These are synthetic session interactions; backend ownership, persistence and rejected-email dedup remain required. See [the UI technical draft](tech/ui.md).
 
-The current review checks rendered DOM and CSS at 390px and 320px for horizontal overflow and clipped text. The native browser resize command timed out, so script-free copies of the rendered screen provide layout evidence only; interactions are checked in the regular browser viewport. Physical device touch, keyboard-over-input, and installation behavior still need verification on a phone.
+The 11 October review used script-free copies of rendered screens after native browser resizing timed out. On 12 October the collaborative browser successfully resized the interactive app to 390px and 320px. Home, Transactions, Budgets, and Chat had no horizontal overflow at either width; controls used the loaded Nunito Sans font, and the Chat composer cleared the taller bottom navigation. Physical device touch, keyboard-over-input, and installation behavior still need verification on a phone.
+
+The 12 October branding pass passed `pnpm check` (72 tests, React Doctor 100 for both UI targets) and `pnpm build`. The existing service-worker registration console warning remains. A local production build registered service worker v6 and cached exactly the fallback, manifest, four public icons, and two public fonts. With that temporary server stopped, an uncached navigation rendered the generic offline fallback with Nunito Sans loaded from cache. Apple touch-icon metadata, favicon links, and manifest icon sizes/purposes were inspected; actual installation and installed-icon refresh remain unverified on physical devices.
 
 ## Mobile platform and motion
 
 The explicitly requested [mobile-native](https://github.com/emilkowalski/skills/blob/main/skills/mobile-native/SKILL.md), [emil-design-eng](https://github.com/emilkowalski/skills/blob/main/skills/emil-design-eng/SKILL.md), and [find-animation-opportunities](https://github.com/emilkowalski/skills/blob/main/skills/find-animation-opportunities/SKILL.md) informed this pass. Frequent tab navigation is immediate, with no page-rise animation. HeroUI press feedback uses a 120ms transform transition; reduced motion removes movement transitions. Financial charts and numbers do not animate for decoration.
 
-Controls use `touch-action: manipulation`; only controls suppress text selection. Coarse-pointer inputs remain at least 16px without disabling zoom. The viewport allows edge-to-edge safe areas and keyboard content resizing. Header, bottom navigation, page clearance, and modal padding account for safe-area insets. Browser chrome uses the light header color, matching the manifest. Device-specific input zoom, keyboard, hover/tap feel, notch, and installed-PWA behavior still require a real phone.
+Controls use `touch-action: manipulation`; only controls suppress text selection. Coarse-pointer inputs remain at least 16px without disabling zoom. The viewport allows edge-to-edge safe areas and keyboard content resizing. Header, bottom navigation, page clearance, and modal padding account for safe-area insets. Bottom navigation reserves 24px plus the bottom safe-area inset, with main content clearance of 112px plus the inset and the Chat composer offset of 92px plus the inset. This adds space above iPhone and Android gesture handles even when the browser reports no inset. Browser chrome uses the light header color, matching the manifest. Device-specific input zoom, keyboard, hover/tap feel, notch, and installed-PWA behavior still require a real phone.
 
 ## Navigation and screen patterns
 
-Mobile navigation follows Oyen and Aiccountant: Home, Transactions, a central Add button, Budgets, and Chat in the bottom bar. Profile and Reminders sit in the header. Desktop uses the sidebar with the same destinations. Keep a single headline number per screen, list rows inside one bordered card with separators, and secondary text in `--muted`.
+Mobile navigation has five equal-size items in this order: Home, Transactions, Budgets, Chat, and Add. Every item uses the same icon size, labelled layout, padding, and button shape. Add is an action that opens the transaction form, not a selected page; it sits at the far right without a raised or oversized treatment. Profile and Reminders sit in the header. Desktop uses the sidebar with the same destinations. Keep a single headline number per screen, list rows inside one bordered card with separators, and secondary text in `--muted`.
 
 Budget states use the semantic tokens with a text label: accent for on track, `warning` with "Near limit" from the Budget's warning percent, and `danger` with "Over budget" at 100%. Long amounts and names wrap rather than truncate unless the full value is one tap away (transaction rows open a detail sheet). Check 320px after layout changes. Unavailable services say what is missing and what still works; they never simulate a reply or a saved change.
 

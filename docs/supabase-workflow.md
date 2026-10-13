@@ -82,6 +82,14 @@ The existing contract schemas cover UUID identifiers, pending/confirmed status, 
 
 ## Database validation command and CI
 
+`pnpm db:validate` checks migration filenames and unique, real UTC timestamps without Docker. It runs as part of `pnpm check`, even before the first schema exists. To also check history and ordering against a locally available base commit or branch, run:
+
+```bash
+pnpm db:validate --base-ref origin/main
+```
+
+The base's SQL migrations must remain unchanged, including their names. Every new timestamp must be later than the latest migration in the base. Multiple new migrations may arrive in any directory-listing order; their timestamps determine replay order. This catches edits, deletions, renames, and backdated additions, including untracked new SQL files. Fetch the base first if needed; an unavailable or invalid base fails validation. Without `--base-ref`, the static command checks filenames and timestamps only.
+
 `pnpm db:check` runs preflight checks and skips without starting services when no SQL migrations exist. Once a schema exists, preflight requires valid UTC filenames in `YYYYMMDDHHMMSS_snake_case.sql` form, unique timestamps, a SQL test filename containing `rls` or `ownership` under `supabase/tests/database/`, and a generated `packages/db/src/types/database.types.ts` file. Migrations must sit directly under `supabase/migrations/`. CI also requires the generated file to be tracked; local validation allows the first untracked baseline. Test naming establishes that a suite exists; reviewers must verify its actual policy coverage.
 
 To replay migrations, explicitly opt into resetting a disposable local database:
@@ -94,7 +102,7 @@ This replaces the current checkout's local records, including saved data from a 
 
 The gate starts the local database explicitly with `pnpm db:start --runtime docker`, preventing the experimental CLI from falling back to native processes. It replays migrations and seeds, lints `public` with warnings treated as failures, runs pgTAP tests, and runs `pnpm db:types --check` to reject type drift while preserving working-tree edits. It stops the database in `finally`, including when replay or checks fail. Stopping preserves the resulting local data; linked-worktree teardown deletes it.
 
-The `Local database migrations` job in [CI](../.github/workflows/ci.yml) runs `pnpm db:check --reset` on its disposable Ubuntu checkout for code changes. It uses the repository's pinned installation and no hosted credentials. `pnpm check` stays independent of Docker. Supabase describes migration and type verification in its [environment workflow](https://supabase.com/docs/guides/deployment/managing-environments).
+The `Local database migrations` job in [CI](../.github/workflows/ci.yml) runs `pnpm db:check --reset --base-ref <base-sha>` on its disposable Ubuntu checkout for code changes. It fetches history and compares against the PR base commit, or the previous commit for a main-branch push. The first push of a new repository has no base, so it checks filenames and replays without comparing history. History is validated before the empty-schema skip, so deleting the last migration fails. The job uses the repository's pinned installation and no hosted credentials. `pnpm check` stays independent of Docker. Supabase describes migration and type verification in its [environment workflow](https://supabase.com/docs/guides/deployment/managing-environments).
 
 ## Hosted database handoff
 

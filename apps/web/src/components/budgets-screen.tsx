@@ -17,7 +17,7 @@ import {
 } from "@/data/demo-ledger";
 
 const fillByState = {
-  "on-track": "bg-accent",
+  "on-track": "bg-brand",
   warning: "bg-warning",
   over: "bg-danger",
 } as const;

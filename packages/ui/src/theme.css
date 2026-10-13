@@ -1,5 +1,9 @@
 @import "@heroui/styles";
 
+@theme inline {
+  --color-brand: var(--brand);
+}
+
 /* Import after Tailwind, and apply class="light" data-theme="light" to the app root. */
 @layer base {
   :root,
@@ -21,11 +25,13 @@
 
     --default: #edf7ff;
     --default-foreground: var(--foreground);
-    --accent: #0b33fd;
+    /* Keep the exact brand blue separate from accessible small text and button fills. */
+    --brand: #3171fd;
+    --accent: #2865e5;
     --accent-foreground: #ffffff;
-    --accent-hover: #0829d6;
+    --accent-hover: #2156c4;
     --accent-soft: #e2f4ff;
-    --accent-soft-foreground: #143db8;
+    --accent-soft-foreground: #2454b4;
     --accent-soft-hover: #d2edff;
     --success: #1b7a50;
     --success-foreground: #ffffff;
@@ -42,15 +48,15 @@
 
     --border: #dae8f3;
     --separator: #dae8f3;
-    --focus: var(--accent);
-    --link: #0829d6;
+    --focus: var(--brand);
+    --link: var(--accent);
     --backdrop: #192d5280;
     --field-background: #ffffff;
     --field-foreground: var(--foreground);
     --field-placeholder: var(--muted);
     --field-border: #7b8da3;
     --field-border-hover: #6e829c;
-    --field-border-focus: var(--accent);
+    --field-border-focus: var(--brand);
     --field-border-width: 1px;
     /* Transparent shadows keep HeroUI's composed focus rings intact. */
     --surface-shadow: 0 0 #0000;
