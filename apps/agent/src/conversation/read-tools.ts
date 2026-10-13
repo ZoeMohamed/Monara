@@ -32,7 +32,7 @@ function readTool<Input extends z.ZodType>(config: {
     tier: "T0",
     input: config.input,
     async run(input, context) {
-      return config.output.parse(await context.callOperation(config.name, context.userId, input));
+      return config.output.parse(await context.callOperation(config.name, context, input));
     },
   };
 }

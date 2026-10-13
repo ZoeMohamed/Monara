@@ -4,6 +4,7 @@ import { runAgent } from "./agent.ts";
 import { createCallOperation } from "./backend.ts";
 import { createComplete } from "./llm.ts";
 import { readTools } from "./read-tools.ts";
+import { writeTools } from "./write-tools.ts";
 
 const encoder = new TextEncoder();
 
@@ -24,8 +25,8 @@ async function secretsMatch(received: string, expected: string): Promise<boolean
 
 /**
  * In-app chat (F11). Only the Monara web backend may call this: it authenticates
- * the User's session and sends their id with the shared backend secret. Each
- * request is a single turn; the Agent keeps no conversation history yet.
+ * the User's session and sends their id with the shared backend secret. The
+ * Agent stores no conversation; the caller sends the earlier turns each time.
  */
 export async function handleChatRequest(request: Request, env: Env): Promise<Response> {
   const { MONARA_BACKEND_URL, MONARA_AGENT_BACKEND_SECRET, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL } =
@@ -51,18 +52,20 @@ export async function handleChatRequest(request: Request, env: Env): Promise<Res
   }
 
   try {
-    const reply = await runAgent({
+    const { reply, actions } = await runAgent({
       complete: createComplete({ baseUrl: LLM_BASE_URL, apiKey: LLM_API_KEY, model: LLM_MODEL }),
-      tools: readTools,
+      tools: [...readTools, ...writeTools],
       callOperation: createCallOperation({
         baseUrl: MONARA_BACKEND_URL,
         secret: MONARA_AGENT_BACKEND_SECRET,
       }),
-      userId: body.data.userId,
+      // Only the web backend holds the secret checked above, so this is in-app chat.
+      caller: { userId: body.data.userId, channel: "web" },
+      history: body.data.history,
       text: body.data.text,
       now: new Date(),
     });
-    return Response.json({ reply } satisfies AgentChatResponse);
+    return Response.json({ reply, actions } satisfies AgentChatResponse);
   } catch {
     return Response.json({ error: "The Agent could not respond." }, { status: 502 });
   }

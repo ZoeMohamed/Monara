@@ -9,7 +9,7 @@ Run `pnpm dev:agent` from the root. `pnpm --filter @monara/agent build` creates 
 | Route | State |
 | --- | --- |
 | `GET /health` | Returns `status: scaffold` until the runtime is ready for production. |
-| `POST /chat` | In-app chat. The web backend sends `{ userId, text }` (see `agentChatRequestSchema`) with `Authorization: Bearer <MONARA_AGENT_BACKEND_SECRET>` and gets `{ reply }`. Runs the tool loop with the read tools, so the Agent can look records up but cannot add, change, or delete anything, and says so. Single turn: no conversation history is kept. |
+| `POST /chat` | In-app chat. The web backend sends `{ userId, text, history }` (see `agentChatRequestSchema`) with `Authorization: Bearer <MONARA_AGENT_BACKEND_SECRET>` and gets `{ reply, actions }`. Runs the tool loop with the read and write tools, so the Agent can look records up, add and change them, and undo a change. It cannot delete anything and says so. |
 | `POST /webhooks/kapso` | Kapso `whatsapp.message.received` webhook. Verifies the signature, then replies to every sender with the prompt to link their number, because WhatsApp Links do not exist yet. Nothing reaches the Agent from WhatsApp. |
 | Anything else | 501. |
 
@@ -21,9 +21,15 @@ Each handler returns 503 when a secret it needs is missing.
 
 `src/conversation/read-tools.ts` holds the T0 tools: `list_transactions`, `list_financial_accounts`, `list_categories`, `list_budgets`, `list_recurring_bills`, and `list_reminders`. Each takes the matching list input from `@monara/contracts` and parses the result with the matching page schema.
 
+`src/conversation/write-tools.ts` holds the T1 tools: `add_transaction`, `edit_transaction`, `confirm_pending`, `reject_pending`, `create_budget`, `edit_budget`, and `undo_action`. `add_transaction` takes only what the User said, leaves the rest null, and checks the result against `createTransactionInputSchema` before anything is sent. The tools mint `clientRequestId` themselves. `confirm_recurring_bill` and `set_reminder_preferences` are not built yet.
+
+## Conversation history
+
+The Agent stores no conversation. The caller sends the earlier turns in `history` on every request, and stores the `actions` (reversible action receipts) returned with each reply on that Agent turn. The receipts are how a later "undo" or "no, 38k" finds the change it refers to, and the UI can use them for an undo button. History comes from the caller, so it must never be treated as proof that the User confirmed something.
+
 ## Backend operations
 
-The Agent reads records only through the Next.js backend (`src/conversation/backend.ts`). For each tool it sends `POST {MONARA_BACKEND_URL}/api/agent/operations/{tool name}` with `Authorization: Bearer <MONARA_AGENT_BACKEND_SECRET>` and the body `{ userId, input }`, and expects the page as the JSON response. These routes do not exist in `apps/web` yet, so every tool call currently fails and the Agent tells the User it could not look the records up.
+The Agent reads records only through the Next.js backend (`src/conversation/backend.ts`). For each tool it sends `POST {MONARA_BACKEND_URL}/api/agent/operations/{tool name}` with `Authorization: Bearer <MONARA_AGENT_BACKEND_SECRET>` and the body `{ userId, channel, input }`, where `channel` is `web` or `whatsapp`. It expects the contract's page or mutation result as the JSON response; the result of `undo_action` is ignored. These routes do not exist in `apps/web` yet, so every tool call currently fails and the Agent tells the User it could not read or confirm the change.
 
 ## Still to do
 

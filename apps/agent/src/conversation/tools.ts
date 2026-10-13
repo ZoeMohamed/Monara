@@ -1,6 +1,5 @@
-import type { UserId } from "@monara/contracts";
 import { z } from "zod";
-import type { CallOperation } from "./backend.ts";
+import type { Caller, CallOperation } from "./backend.ts";
 import type { ToolCall, ToolDefinition } from "./llm.ts";
 
 /**
@@ -9,9 +8,8 @@ import type { ToolCall, ToolDefinition } from "./llm.ts";
  */
 type PermissionTier = "T0" | "T1" | "T2";
 
-export interface ToolContext {
-  /** Resolved from the verified Channel, never from message text or tool arguments. */
-  userId: UserId;
+/** The caller is resolved from the verified Channel, never from message text or tool arguments. */
+export interface ToolContext extends Caller {
   callOperation: CallOperation;
 }
 

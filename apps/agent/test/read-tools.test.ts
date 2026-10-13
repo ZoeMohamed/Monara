@@ -53,11 +53,12 @@ async function runTool(name: string, args: unknown, backendResult: unknown) {
   await runAgent({
     complete,
     tools: readTools,
-    userId,
+    caller: { userId, channel: "web" },
+    history: [],
     text: "go",
     now,
-    callOperation: async (operation, user, input) => {
-      operations.push({ operation, userId: user, input });
+    callOperation: async (operation, caller, input) => {
+      operations.push({ operation, userId: caller.userId, input });
       return backendResult;
     },
   });
@@ -123,14 +124,14 @@ test("a backend result outside the contract is not shown to the model", async ()
   assert.deepEqual(run.result, { error: "list_transactions failed." });
 });
 
-test("the prompt gives the model today's date in Jakarta", async () => {
+test("the prompt gives the model the date and time in Jakarta", async () => {
   const run = await runTool("list_budgets", {}, { items: [], nextCursor: null });
 
   // 18:30 UTC on 13 October is already 14 October in Jakarta.
-  assert.match(run.system, /Today is 2026-10-14\./);
+  assert.match(run.system, /It is now 2026-10-14 01:30 for the User\./);
 });
 
-test("the backend caller authenticates, sends the User, and hides error bodies", async (t) => {
+test("the backend caller authenticates, sends the User and Channel, and hides error bodies", async (t) => {
   const requests: { url: string; init: RequestInit | undefined }[] = [];
   let response = Response.json({ items: [], nextCursor: null });
   t.mock.method(globalThis, "fetch", async (url: string, init?: RequestInit) => {
@@ -139,18 +140,28 @@ test("the backend caller authenticates, sends the User, and hides error bodies",
   });
   const callOperation = createCallOperation({ baseUrl: "https://monara.test/", secret: "s3cret" });
 
-  assert.deepEqual(await callOperation("list_budgets", userId, { limit: 50 }), {
-    items: [],
-    nextCursor: null,
-  });
+  assert.deepEqual(
+    await callOperation("list_budgets", { userId, channel: "whatsapp" }, { limit: 50 }),
+    {
+      items: [],
+      nextCursor: null,
+    },
+  );
   assert.equal(requests[0]?.url, "https://monara.test/api/agent/operations/list_budgets");
   assert.equal(requests[0]?.init?.method, "POST");
   assert.equal(new Headers(requests[0]?.init?.headers).get("Authorization"), "Bearer s3cret");
-  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), { userId, input: { limit: 50 } });
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    userId,
+    channel: "whatsapp",
+    input: { limit: 50 },
+  });
 
   response = Response.json({ message: "salary Rp 9.000.000" }, { status: 500 });
-  await assert.rejects(callOperation("list_budgets", userId, {}), (error: Error) => {
-    assert.equal(error.message, "list_budgets failed with status 500.");
-    return true;
-  });
+  await assert.rejects(
+    callOperation("list_budgets", { userId, channel: "web" }, {}),
+    (error: Error) => {
+      assert.equal(error.message, "list_budgets failed with status 500.");
+      return true;
+    },
+  );
 });

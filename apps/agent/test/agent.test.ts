@@ -13,15 +13,20 @@ import type { AgentTool } from "../src/conversation/tools.ts";
 const userId = "7b0c0f0e-4f0f-4a4e-9f43-2f8e6f1c9a11";
 
 // These tests cover the loop itself, so no tool here reaches the backend.
-const runAgent = (input: Pick<Parameters<typeof runAgentWith>[0], "complete" | "tools" | "text">) =>
-  runAgentWith({
+async function runAgent(
+  input: Pick<Parameters<typeof runAgentWith>[0], "complete" | "tools" | "text">,
+): Promise<string> {
+  const { reply } = await runAgentWith({
     ...input,
-    userId,
+    caller: { userId, channel: "web" },
+    history: [],
     now: new Date("2026-10-13T10:00:00Z"),
     callOperation: async () => {
       throw new Error("No backend in this test.");
     },
   });
+  return reply;
+}
 
 const say = (content: string): AssistantMessage => ({ role: "assistant", content });
 const call = (name: string, args: unknown): AssistantMessage => ({
