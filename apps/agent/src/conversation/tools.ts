@@ -1,0 +1,64 @@
+import type { UserId } from "@monara/contracts";
+import { z } from "zod";
+import type { ToolCall, ToolDefinition } from "./llm.ts";
+
+/**
+ * Permission Tiers from PRD section 6.2. T3 actions (connections, WhatsApp
+ * linking, export, credentials) are never Agent Tools, so the type has no T3.
+ */
+type PermissionTier = "T0" | "T1" | "T2";
+
+export interface ToolContext {
+  /** Resolved from the verified Channel, never from message text or tool arguments. */
+  userId: UserId;
+}
+
+export interface AgentTool<Schema extends z.ZodType = z.ZodType> {
+  name: string;
+  description: string;
+  tier: PermissionTier;
+  input: Schema;
+  run(input: z.infer<Schema>, context: ToolContext): Promise<unknown>;
+}
+
+// Read tools (AR3) and write tools (AR4) are registered here once the backend
+// operations they call exist. Until then the Agent has no access to records.
+export const agentTools: AgentTool[] = [];
+
+export function toToolDefinitions(tools: AgentTool[]): ToolDefinition[] {
+  return tools.map((tool) => {
+    const { $schema: _schema, ...parameters } = z.toJSONSchema(tool.input);
+    return {
+      type: "function",
+      function: { name: tool.name, description: tool.description, parameters },
+    };
+  });
+}
+
+/** Runs one tool call. Problems come back as `{ error }` so the model can recover. */
+export async function executeToolCall(
+  tools: AgentTool[],
+  call: ToolCall,
+  context: ToolContext,
+): Promise<unknown> {
+  const tool = tools.find((candidate) => candidate.name === call.function.name);
+  if (!tool) return { error: `Unknown tool: ${call.function.name}` };
+  if (tool.tier === "T2") {
+    // Confirmations bound to one action arrive with AR5. Until then nothing destructive runs.
+    return { error: "This action needs the User's confirmation, which is not available yet." };
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(call.function.arguments || "{}");
+  } catch {
+    return { error: "Arguments were not valid JSON." };
+  }
+  const parsed = tool.input.safeParse(json);
+  if (!parsed.success) return { error: `Invalid arguments: ${z.prettifyError(parsed.error)}` };
+  try {
+    return await tool.run(parsed.data, context);
+  } catch {
+    // Errors can carry financial records, so the model only learns that the tool failed.
+    return { error: `${tool.name} failed.` };
+  }
+}

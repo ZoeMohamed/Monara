@@ -1,0 +1,9 @@
+{
+  // Tests run on Node, so they are checked against Node's types instead of the Workers runtime's.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["**/*.ts"]
+}

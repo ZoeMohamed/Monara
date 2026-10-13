@@ -1,2 +1,8 @@
 export type { GmailConnector } from "./gmail";
-export type { WhatsAppTransport } from "./whatsapp";
+export type { KapsoInboundMessage, WhatsAppTransport } from "./whatsapp";
+export {
+  createKapsoTransport,
+  KAPSO_MESSAGE_RECEIVED_EVENT,
+  parseKapsoInboundMessages,
+  verifyKapsoSignature,
+} from "./whatsapp";
