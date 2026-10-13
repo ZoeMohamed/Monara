@@ -3,6 +3,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+/** Generates database types atomically, or checks them without changing the working tree. */
 export function generateDbTypes({ root, check = false, run = spawnSync }) {
   const result = run("pnpm", ["exec", "supabase", "gen", "types", "typescript", "--local"], {
     cwd: root,
@@ -15,9 +16,10 @@ export function generateDbTypes({ root, check = false, run = spawnSync }) {
       result.stderr?.trim() || result.error?.message || "Database type generation failed.",
     );
   }
+  const output = `${result.stdout.replace(/[\t ]+$/gm, "").trimEnd()}\n`;
   const target = join(root, "packages/db/src/types/database.types.ts");
   if (check) {
-    if (!existsSync(target) || readFileSync(target, "utf8") !== result.stdout) {
+    if (!existsSync(target) || readFileSync(target, "utf8") !== output) {
       throw new Error(
         "Generated database types differ from packages/db/src/types/database.types.ts. Regenerate with pnpm db:types against the migrated local schema and review the diff.",
       );
@@ -25,7 +27,7 @@ export function generateDbTypes({ root, check = false, run = spawnSync }) {
     return;
   }
   const temporary = `${target}.tmp`;
-  writeFileSync(temporary, result.stdout);
+  writeFileSync(temporary, output);
   renameSync(temporary, target);
 }
 
