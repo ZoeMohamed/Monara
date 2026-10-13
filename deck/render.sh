@@ -20,7 +20,10 @@ conn 322 94 2
 cover-bg 1920 1080 1
 cover-top 1920 160 1
 flows 1728 749 2
-gap 825 507 2
+gap 856 440 2
+strips 856 150 2
+ability 928 228 2
+slide3-preview 1920 1080 1
 hero 940 820 1
 hub 1800 680 2
 icon 512 494 1
@@ -31,7 +34,11 @@ risk 1728 724 2
 team 1696 610 2
 thanks-icons 200 100 2
 tiers 1728 595 2
-waves 768 507 2
+bar 826 52 2
+waves 826 350 2
+segments 826 300 2
+slide15-preview 880 830 1
+warn 48 44 2
 "
 want=" $* "
 while read -r name w h scale; do

@@ -1,0 +1,6 @@
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:transparent;font-family:'Poppins',sans-serif;color:#1b1b1b;overflow:hidden}
+.card{position:absolute;inset:3px;background:#fff;border:2px solid #dce7ff;border-radius:24px;box-shadow:0 3px 14px rgba(40,50,80,.1)}
+.fl{font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;font-size:30px;line-height:1}
+.src{font-size:13px;color:#8a90a2;line-height:1.3}
+.asean{display:inline-block;width:42px;height:28px;vertical-align:middle}
