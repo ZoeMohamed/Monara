@@ -173,15 +173,26 @@ export function createComposioGmailClient(config: ComposioGmailConfig) {
       return email.toLowerCase();
     },
 
-    /** Deletes the connection at Composio, which also discards its Google tokens. */
+    /**
+     * Revokes the tokens at Google, then deletes the connection at Composio.
+     * Deleting alone leaves the Google grant live, so the next consent would be
+     * skipped and the User could not choose permissions again.
+     */
     async deleteConnection(connectedAccountId: string) {
-      const result = await request(
-        "DELETE",
-        `/connected_accounts/${encodeURIComponent(connectedAccountId)}`,
-      );
+      const path = `/connected_accounts/${encodeURIComponent(connectedAccountId)}`;
+      const revoked = await request("POST", `${path}/revoke`);
       // Already gone is the state we want.
-      if (!result.ok && result.status !== 404) {
-        throw new ComposioRequestError("Composio did not delete the connection.", result.status);
+      if (revoked.status === 404) return;
+      // Other 4xx: revoke is unsupported, the connection is not ACTIVE, or the
+      // User already revoked it at Google. Deleting is still correct. Server
+      // errors stop here so the connection stays visible and can be retried.
+      if (!revoked.ok && (revoked.status < 400 || revoked.status >= 500)) {
+        throw new ComposioRequestError("Composio did not revoke the connection.", revoked.status);
+      }
+
+      const deleted = await request("DELETE", path);
+      if (!deleted.ok && deleted.status !== 404) {
+        throw new ComposioRequestError("Composio did not delete the connection.", deleted.status);
       }
     },
   };

@@ -33,6 +33,7 @@ export interface GmailConnectionProvider {
     | { ok: false; reason: "identity_mismatch" | "expired" }
   >;
   getGmailAddress(input: { userId: string; connectedAccountId: string }): Promise<string>;
+  /** Revokes the grant at the provider and deletes the Composio account. */
   deleteConnection(connectedAccountId: string): Promise<void>;
 }
 
@@ -83,8 +84,14 @@ export function createGmailConnectionService(deps: {
   }
 
   return {
+    /**
+     * Disconnected rows stay in the database so their processed emails are
+     * never imported twice, but the User no longer sees them.
+     */
     async list(userId: UserId): Promise<GmailConnection[]> {
-      return (await repository.listForUser(userId)).map(toPublic);
+      return (await repository.listForUser(userId))
+        .filter((connection) => connection.status !== "disconnected")
+        .map(toPublic);
     },
 
     /** Returns Composio's consent URL. The limit is checked again on completion. */

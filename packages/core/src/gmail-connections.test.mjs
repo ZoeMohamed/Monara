@@ -73,6 +73,41 @@ function fakeProvider(overrides = {}) {
 const rejectsWith = (promise, code) =>
   assert.rejects(promise, (error) => error instanceof GmailConnectionError && error.code === code);
 
+describe("listing Gmail connections", () => {
+  it("returns active and error connections but hides disconnected ones", async () => {
+    const repository = fakeRepository([
+      connection(userA, "a@gmail.com"),
+      connection(userA, "b@gmail.com", "error"),
+      connection(userA, "c@gmail.com", "disconnected"),
+      connection(userB, "d@gmail.com"),
+    ]);
+    const service = createGmailConnectionService({ repository, provider: fakeProvider() });
+    const listed = await service.list(userA);
+    assert.deepEqual(
+      listed.map((c) => [c.gmailAddress, c.status]),
+      [
+        ["a@gmail.com", "active"],
+        ["b@gmail.com", "error"],
+      ],
+    );
+    assert.ok(listed.every((c) => !("composioConnectedAccountId" in c)));
+  });
+
+  it("shows a disconnected mailbox again after it is reconnected, reusing its row", async () => {
+    const old = connection(userA, "new@gmail.com", "disconnected");
+    const repository = fakeRepository([old]);
+    const service = createGmailConnectionService({ repository, provider: fakeProvider() });
+    assert.deepEqual(await service.list(userA), []);
+    await service.complete(userA, "session-uri");
+    const listed = await service.list(userA);
+    assert.deepEqual(
+      listed.map((c) => [c.id, c.status]),
+      [[old.id, "active"]],
+    );
+    assert.equal(repository.rows.length, 1);
+  });
+});
+
 describe("starting a Gmail connection", () => {
   it("returns the consent URL while the User has fewer than three active connections", async () => {
     const repository = fakeRepository([

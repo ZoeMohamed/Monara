@@ -97,10 +97,44 @@ describe("Composio Gmail client", () => {
     );
   });
 
-  it("treats deleting a missing connection as done", async () => {
+  it("revokes at Google before deleting the connection", async () => {
+    const { calls, fetcher } = fakeFetch(
+      { body: { revoked_tokens: ["access_token", "refresh_token"] } },
+      { status: 200 },
+    );
+    await client(fetcher).deleteConnection("ca_1");
+    assert.deepEqual(
+      calls.map((call) => [call.method, call.url.replace("https://composio.test/api/v3.1", "")]),
+      [
+        ["POST", "/connected_accounts/ca_1/revoke"],
+        ["DELETE", "/connected_accounts/ca_1"],
+      ],
+    );
+  });
+
+  it("treats a missing connection as done without deleting", async () => {
     const { calls, fetcher } = fakeFetch({ status: 404 });
     await client(fetcher).deleteConnection("ca_1");
-    assert.equal(calls[0].method, "DELETE");
-    assert.equal(calls[0].url.endsWith("/connected_accounts/ca_1"), true);
+    assert.equal(calls.length, 1);
+  });
+
+  it("still deletes when revoke is unsupported or the connection is not active", async () => {
+    for (const status of [400, 409]) {
+      const { calls, fetcher } = fakeFetch({ status }, { status: 404 });
+      await client(fetcher).deleteConnection("ca_1");
+      assert.deepEqual(
+        calls.map((call) => call.method),
+        ["POST", "DELETE"],
+      );
+    }
+  });
+
+  it("keeps the connection when revoke fails on the server", async () => {
+    const { calls, fetcher } = fakeFetch({ status: 500 });
+    await assert.rejects(
+      client(fetcher).deleteConnection("ca_1"),
+      (error) => error instanceof ComposioRequestError && error.status === 500,
+    );
+    assert.equal(calls.length, 1);
   });
 });
