@@ -35,6 +35,10 @@ team 1696 610 2
 thanks-icons 200 100 2
 tiers 1728 595 2
 bar 826 52 2
+som-line 150 16 2
+pill 140 60 2
+share 826 48 2
+slide15-left-preview 960 1080 1
 waves 826 350 2
 segments 826 300 2
 slide15-preview 880 830 1
