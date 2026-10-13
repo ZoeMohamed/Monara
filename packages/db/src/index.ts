@@ -1,5 +1,7 @@
 import type { CookieMethodsServer } from "@supabase/ssr";
 import { createBrowserClient, createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "./types/database.types.ts";
 
 export type { Database } from "./types/database.types.ts";
 
@@ -53,6 +55,22 @@ export function parsePublicSupabaseConfig(values: {
 export function createMonaraBrowserClient(config: PublicSupabaseConfig) {
   return createBrowserClient(config.url, config.publishableKey);
 }
+
+/**
+ * Creates a service-role client that bypasses RLS. Server-only: call it after
+ * the caller is authenticated, and scope every query to the verified User.
+ */
+export function createMonaraServiceRoleClient(
+  config: PublicSupabaseConfig,
+  serviceRoleKey: string | undefined,
+) {
+  const key = requireValue("SUPABASE_SERVICE_ROLE_KEY", serviceRoleKey);
+  return createClient<Database>(config.url, key, {
+    auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+  });
+}
+
+export type MonaraServiceRoleClient = ReturnType<typeof createMonaraServiceRoleClient>;
 
 /** Creates a cookie-aware server Supabase client without reading ambient secrets. */
 export function createMonaraServerClient(
