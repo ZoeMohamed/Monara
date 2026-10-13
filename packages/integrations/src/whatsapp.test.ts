@@ -55,6 +55,7 @@ test("reads a single inbound text message and normalises the sender", () => {
       phoneNumberId: "111",
       type: "text",
       text: "coffee 28k",
+      media: null,
     },
   ]);
 });
@@ -135,4 +136,135 @@ test("fails without leaking the provider response when Kapso rejects a message",
     assert.doesNotMatch(error.message, /6281200000001/);
     return true;
   });
+});
+
+test("reads the stored media of a photo or voice note, and nothing for other types", () => {
+  const media = {
+    url: "https://api.kapso.ai/media/abc",
+    content_type: "image/jpeg",
+    byte_size: 2048,
+  };
+  const photo = inboundEvent({
+    message: {
+      id: "wamid.5",
+      type: "image",
+      from: "6281200000001",
+      image: { caption: " lunch receipt " },
+      kapso: { direction: "inbound", media_data: media },
+    },
+  });
+  const voice = inboundEvent({
+    message: {
+      id: "wamid.6",
+      type: "audio",
+      from: "6281200000001",
+      kapso: { media_data: { url: "https://api.kapso.ai/media/def", content_type: "audio/ogg" } },
+    },
+  });
+  const video = inboundEvent({
+    message: { id: "wamid.7", type: "video", from: "6281200000001", kapso: { media_data: media } },
+  });
+  const [first, second, third] = parseKapsoInboundMessages({
+    batch: true,
+    data: [photo, voice, video],
+  });
+
+  assert.deepEqual(first?.media, {
+    url: "https://api.kapso.ai/media/abc",
+    contentType: "image/jpeg",
+    byteSize: 2048,
+    caption: "lunch receipt",
+  });
+  assert.equal(first?.text, null);
+  assert.deepEqual(second?.media, {
+    url: "https://api.kapso.ai/media/def",
+    contentType: "audio/ogg",
+    byteSize: null,
+    caption: null,
+  });
+  assert.equal(third?.media, null);
+});
+
+test("sends a template with its body parameters in order", async () => {
+  const bodies: unknown[] = [];
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)));
+    return Response.json({ messages: [{ id: "wamid.template" }] });
+  }) as typeof fetch;
+
+  const transport = createKapsoTransport({ apiKey: "key-123", phoneNumberId: "111" });
+  const result = await transport.sendTemplate({
+    to: "6281200000001",
+    name: "bill_due",
+    languageCode: "en",
+    bodyParameters: ["Rp 54.990", "Spotify", "20 Oct"],
+  });
+
+  assert.deepEqual(result, { messageId: "wamid.template" });
+  assert.deepEqual(bodies, [
+    {
+      messaging_product: "whatsapp",
+      to: "6281200000001",
+      type: "template",
+      template: {
+        name: "bill_due",
+        language: { code: "en" },
+        components: [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: "Rp 54.990" },
+              { type: "text", text: "Spotify" },
+              { type: "text", text: "20 Oct" },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
+});
+
+test("downloads media from Kapso with the API key and without following redirects", async () => {
+  const requests: { url: string; init: RequestInit }[] = [];
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    requests.push({ url, init });
+    return new Response(new Uint8Array([1, 2, 3]));
+  }) as typeof fetch;
+
+  const transport = createKapsoTransport({ apiKey: "key-123", phoneNumberId: "111" });
+  const media = await transport.fetchMedia({
+    url: "https://api.kapso.ai/media/abc",
+    contentType: "image/jpeg",
+    byteSize: 3,
+    caption: null,
+  });
+
+  assert.equal(media.contentType, "image/jpeg");
+  assert.deepEqual([...new Uint8Array(media.bytes)], [1, 2, 3]);
+  assert.equal(requests[0]?.url, "https://api.kapso.ai/media/abc");
+  assert.equal(new Headers(requests[0]?.init.headers).get("X-API-Key"), "key-123");
+  assert.equal(requests[0]?.init.redirect, "error");
+});
+
+test("never sends the API key to a host other than Kapso, and refuses oversized media", async () => {
+  let called = false;
+  globalThis.fetch = (async () => {
+    called = true;
+    return new Response("");
+  }) as typeof fetch;
+  const transport = createKapsoTransport({ apiKey: "key-123", phoneNumberId: "111" });
+  const media = { contentType: "image/jpeg", byteSize: 3, caption: null };
+
+  for (const url of [
+    "https://evil.example/media/abc",
+    "https://api.kapso.ai.evil.example/x",
+    "nope",
+  ]) {
+    await assert.rejects(transport.fetchMedia({ ...media, url }), /not hosted by Kapso/);
+  }
+  await assert.rejects(
+    transport.fetchMedia({ ...media, url: "https://api.kapso.ai/media/abc", byteSize: 99_000_000 }),
+    /too large/,
+  );
+  assert.equal(called, false);
 });

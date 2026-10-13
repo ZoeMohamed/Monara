@@ -3,8 +3,34 @@
 import { z } from "zod";
 
 export interface WhatsAppTransport {
-  /** Sends a text message to a WhatsApp number given in international format, digits only. */
+  /**
+   * Sends a text message to a WhatsApp number given in international format, digits only.
+   * WhatsApp only delivers it within 24 hours of the recipient's last message.
+   */
   sendText(input: { to: string; text: string }): Promise<{ messageId: string }>;
+  /**
+   * Sends an approved template, which is the only message WhatsApp delivers
+   * outside the 24-hour window. Parameters fill {{1}}, {{2}}, ... in order.
+   */
+  sendTemplate(input: {
+    to: string;
+    name: string;
+    languageCode: string;
+    bodyParameters: string[];
+  }): Promise<{ messageId: string }>;
+  /**
+   * Downloads a photo or voice note for extraction. The bytes are returned to
+   * the caller and kept nowhere else; do not store them after extraction.
+   */
+  fetchMedia(media: KapsoInboundMedia): Promise<{ bytes: ArrayBuffer; contentType: string }>;
+}
+
+export interface KapsoInboundMedia {
+  url: string;
+  contentType: string;
+  byteSize: number | null;
+  /** Text the sender typed under a photo. Data to read, never instructions. */
+  caption: string | null;
 }
 
 export interface KapsoInboundMessage {
@@ -16,11 +42,17 @@ export interface KapsoInboundMessage {
   type: string;
   /** Null for anything that is not a text message. */
   text: string | null;
+  /** Set for a photo (`image`) or voice note (`audio`) that Kapso has stored. */
+  media: KapsoInboundMedia | null;
 }
 
 export const KAPSO_MESSAGE_RECEIVED_EVENT = "whatsapp.message.received";
 
 const KAPSO_API_BASE_URL = "https://api.kapso.ai/meta/whatsapp/v24.0";
+// Media is only ever fetched from Kapso, so the API key cannot be sent anywhere else.
+const KAPSO_MEDIA_ORIGIN = "https://api.kapso.ai";
+// WhatsApp caps images at 5 MB and audio at 16 MB.
+const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 // WhatsApp rejects text bodies longer than 4096 characters.
 const MAX_TEXT_LENGTH = 4000;
 
@@ -56,7 +88,19 @@ const messageEventSchema = z.object({
     type: z.string().optional(),
     from: z.string().optional(),
     text: z.object({ body: z.string().optional() }).optional(),
-    kapso: z.object({ direction: z.string().optional() }).optional(),
+    image: z.object({ caption: z.string().optional() }).optional(),
+    kapso: z
+      .object({
+        direction: z.string().optional(),
+        media_data: z
+          .object({
+            url: z.string().optional(),
+            content_type: z.string().optional(),
+            byte_size: z.number().optional(),
+          })
+          .optional(),
+      })
+      .optional(),
   }),
   conversation: z
     .object({ phone_number: z.string().optional(), phone_number_id: z.string().optional() })
@@ -84,12 +128,22 @@ export function parseKapsoInboundMessages(payload: unknown): KapsoInboundMessage
     const phoneNumberId = phone_number_id ?? conversation?.phone_number_id;
     if (!from || !phoneNumberId) continue;
     const type = message.type ?? "unknown";
+    const stored = message.kapso?.media_data;
+    const hasMedia = (type === "image" || type === "audio") && stored?.url && stored.content_type;
     messages.push({
       messageId: message.id,
       from,
       phoneNumberId,
       type,
       text: type === "text" ? (message.text?.body ?? null) : null,
+      media: hasMedia
+        ? {
+            url: stored.url ?? "",
+            contentType: stored.content_type ?? "",
+            byteSize: stored.byte_size ?? null,
+            caption: message.image?.caption?.trim() || null,
+          }
+        : null,
     });
   }
   return messages;
@@ -119,11 +173,11 @@ export function createKapsoTransport(config: {
 }): WhatsAppTransport {
   const url = `${config.baseUrl ?? KAPSO_API_BASE_URL}/${config.phoneNumberId}/messages`;
 
-  async function send(to: string, body: string): Promise<string> {
+  async function send(to: string, message: Record<string, unknown>): Promise<string> {
     const response = await fetch(url, {
       method: "POST",
       headers: { "X-API-Key": config.apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body } }),
+      body: JSON.stringify({ messaging_product: "whatsapp", to, ...message }),
     });
     if (!response.ok) {
       // The response body can echo the recipient or the message, so keep it out of the error.
@@ -141,9 +195,43 @@ export function createKapsoTransport(config: {
       if (chunks.length === 0) throw new Error("Cannot send an empty WhatsApp message.");
       let messageId = "";
       for (const chunk of chunks) {
-        messageId = await send(to, chunk);
+        messageId = await send(to, { type: "text", text: { body: chunk } });
       }
       return { messageId };
+    },
+    async sendTemplate({ to, name, languageCode, bodyParameters }) {
+      const parameters = bodyParameters.map((text) => ({ type: "text", text }));
+      const messageId = await send(to, {
+        type: "template",
+        template: {
+          name,
+          language: { code: languageCode },
+          components: parameters.length > 0 ? [{ type: "body", parameters }] : [],
+        },
+      });
+      return { messageId };
+    },
+    async fetchMedia(media) {
+      let origin = "";
+      try {
+        origin = new URL(media.url).origin;
+      } catch {
+        // Falls through to the origin check.
+      }
+      if (origin !== KAPSO_MEDIA_ORIGIN) throw new Error("Media is not hosted by Kapso.");
+      if (media.byteSize !== null && media.byteSize > MAX_MEDIA_BYTES) {
+        throw new Error("Media is too large.");
+      }
+      // A redirect could carry the API key to another host.
+      const response = await fetch(media.url, {
+        headers: { "X-API-Key": config.apiKey },
+        redirect: "error",
+      });
+      if (!response.ok)
+        throw new Error(`Kapso media request failed with status ${response.status}.`);
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength > MAX_MEDIA_BYTES) throw new Error("Media is too large.");
+      return { bytes, contentType: media.contentType };
     },
   };
 }
