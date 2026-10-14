@@ -1,0 +1,4 @@
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:420px;height:417px;overflow:hidden;background:transparent;font-family:'Poppins',sans-serif;color:#1b1b1b}
+.card{position:absolute;left:6px;top:6px;width:408px;height:405px;background:#fff;border-radius:22px;box-shadow:0 4px 18px rgba(40,50,80,.12);overflow:hidden;border:2px solid #eef1f7}
+.hd{height:56px;display:flex;align-items:center;padding:0 22px;font-weight:700;font-size:20px;color:#14307f;background:#eef3ff;border-bottom:2px solid #e1e8fb}
