@@ -125,6 +125,9 @@ importers:
       '@monara/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@monara/db':
+        specifier: workspace:*
+        version: link:../db
     devDependencies:
       typescript:
         specifier: 5.9.3
