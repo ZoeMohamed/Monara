@@ -13,7 +13,7 @@ card1 420 417 2
 card2 420 417 2
 card3 420 417 2
 card4 420 417 2
-competitor 1792 584 2
+competitor 1792 616 2
 conn 322 94 2
 cover-bg 1920 1080 1
 cover-top 1920 160 1
