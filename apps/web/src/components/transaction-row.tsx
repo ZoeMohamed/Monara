@@ -2,7 +2,8 @@
 
 import { Button } from "@monara/ui";
 
-import { categoryColor } from "@/data/category-style";
+import { Icon, type IconName } from "@/components/icon";
+import { categoryColor, categoryIcon } from "@/data/category-style";
 import { formatDay, formatRupiah, type Transaction } from "@/data/demo-ledger";
 
 function transactionRowModel(transaction: Transaction, showDate: boolean) {
@@ -22,6 +23,12 @@ function transactionRowModel(transaction: Transaction, showDate: boolean) {
         ? "Transfer"
         : "Uncategorized");
   const sign = transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : "";
+  const icon: IconName =
+    transaction.kind === "income"
+      ? "income"
+      : transaction.kind === "transfer"
+        ? "transfer"
+        : categoryIcon(category);
 
   return {
     merchant: transaction.merchant ?? "Merchant or source missing",
@@ -36,6 +43,7 @@ function transactionRowModel(transaction: Transaction, showDate: boolean) {
         : transaction.kind === "transfer"
           ? "var(--muted)"
           : categoryColor(category),
+    icon,
     metadata,
   };
 }
@@ -46,23 +54,23 @@ export function TransactionRow({
   showDate = false,
 }: {
   transaction: Transaction;
-  onClick: () => void;
+  onClick?: () => void;
   showDate?: boolean;
 }) {
   const model = transactionRowModel(transaction, showDate);
-  return (
-    <Button
-      variant="ghost"
-      className="group h-auto min-h-11 w-full justify-start gap-3 rounded-xl px-0 py-3 text-left whitespace-normal sm:px-2"
-      onPress={onClick}
-      type="button"
-    >
+  const rowClassName =
+    "group flex h-auto min-h-11 w-full items-center justify-start gap-3 rounded-xl px-0 py-3 text-left whitespace-normal sm:px-2";
+  const content = (
+    <>
       <span
         aria-hidden
         className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-base"
-        style={{ background: `color-mix(in srgb, ${model.tint} 8%, var(--surface))` }}
+        style={{
+          background: `color-mix(in srgb, ${model.tint} 10%, var(--surface))`,
+          color: model.tint,
+        }}
       >
-        {transaction.emoji}
+        <Icon name={model.icon} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-foreground">
@@ -74,7 +82,7 @@ export function TransactionRow({
       </span>
       <span className="min-w-0 max-w-[47%] shrink-0 text-right">
         <span
-          className={`block break-words text-sm font-semibold tabular-nums ${model.amountColor}`}
+          className={`block text-sm font-semibold tabular-nums [overflow-wrap:anywhere] ${model.amountColor}`}
         >
           {model.amount}
         </span>
@@ -82,6 +90,13 @@ export function TransactionRow({
           <span className="mt-0.5 block text-xs font-normal text-muted">{model.metadata}</span>
         ) : null}
       </span>
+    </>
+  );
+  return onClick ? (
+    <Button className={rowClassName} onPress={onClick} type="button" variant="ghost">
+      {content}
     </Button>
+  ) : (
+    <div className={rowClassName}>{content}</div>
   );
 }

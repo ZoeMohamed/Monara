@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Button } from "@monara/ui";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { Icon } from "@/components/icon";
 import styles from "@/components/session-toast.module.css";
@@ -9,6 +10,21 @@ import type { SaveNotice } from "@/components/use-monara-session";
 // An Undo needs time to be noticed and used, so it stays up longer than a plain confirmation.
 const messageMs = 5_000;
 const undoMs = 9_000;
+
+function subscribeToDialogs(callback: () => void) {
+  const observer = new MutationObserver(callback);
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["open"],
+  });
+  return () => observer.disconnect();
+}
+
+function dialogIsOpen() {
+  return document.querySelector('[role="dialog"], dialog[open]') !== null;
+}
 
 function ToastCard({
   notice,
@@ -19,7 +35,8 @@ function ToastCard({
   onUndo: () => void;
   onDismiss: () => void;
 }) {
-  const [paused, setPaused] = useState(false);
+  const [held, setHeld] = useState({ pointer: false, focus: false });
+  const paused = held.pointer || held.focus;
   const cardRef = useRef<HTMLDivElement>(null);
   // Tracking the notice being dismissed lets a newer notice replace it mid-exit.
   const [leavingNotice, setLeavingNotice] = useState<SaveNotice | null>(null);
@@ -38,17 +55,23 @@ function ToastCard({
   useEffect(() => {
     const card = cardRef.current;
     if (!card) return;
-    const hold = () => setPaused(true);
-    const release = () => setPaused(false);
+    const pointerEnter = () => setHeld((current) => ({ ...current, pointer: true }));
+    const pointerLeave = () => setHeld((current) => ({ ...current, pointer: false }));
+    const focusIn = () => setHeld((current) => ({ ...current, focus: true }));
+    const focusOut = (event: FocusEvent) => {
+      if (event.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
+      setHeld((current) => ({ ...current, focus: false }));
+    };
     const events = [
-      ["pointerenter", hold],
-      ["focusin", hold],
-      ["pointerleave", release],
-      ["focusout", release],
+      ["pointerenter", pointerEnter],
+      ["focusin", focusIn],
+      ["pointerleave", pointerLeave],
     ] as const;
     for (const [name, handler] of events) card.addEventListener(name, handler);
+    card.addEventListener("focusout", focusOut);
     return () => {
       for (const [name, handler] of events) card.removeEventListener(name, handler);
+      card.removeEventListener("focusout", focusOut);
     };
   }, []);
 
@@ -56,8 +79,8 @@ function ToastCard({
     <div
       className={styles.toast}
       data-leaving={leaving}
-      onAnimationEnd={() => {
-        if (leaving) onDismiss();
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget && leaving) onDismiss();
       }}
       ref={cardRef}
     >
@@ -66,18 +89,19 @@ function ToastCard({
       </span>
       <p className={styles.message}>{notice.message}</p>
       {notice.undo ? (
-        <button className={styles.undo} onClick={onUndo} type="button">
+        <Button className={styles.undo} onPress={onUndo} type="button" variant="ghost">
           Undo
-        </button>
+        </Button>
       ) : null}
-      <button
+      <Button
         aria-label="Dismiss message"
         className={styles.close}
-        onClick={() => setLeavingNotice(notice)}
+        onPress={() => setLeavingNotice(notice)}
         type="button"
+        variant="ghost"
       >
         <Icon name="close" strokeWidth={2.4} />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -92,9 +116,14 @@ export function SessionToast({
   onUndo: () => void;
   onDismiss: () => void;
 }) {
+  // Modal focus containment makes outside actions unreachable. Start the toast's
+  // display and Undo window when the modal closes, keeping the result available.
+  const deferred = useSyncExternalStore(subscribeToDialogs, dialogIsOpen, () => false);
   return (
     <div aria-live="polite" className={styles.layer} role="status">
-      {notice ? <ToastCard notice={notice} onDismiss={onDismiss} onUndo={onUndo} /> : null}
+      {notice && !deferred ? (
+        <ToastCard notice={notice} onDismiss={onDismiss} onUndo={onUndo} />
+      ) : null}
     </div>
   );
 }

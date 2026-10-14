@@ -8,8 +8,19 @@ import { useAppNavigation } from "@/components/use-app-navigation";
 import { useFinanceSync } from "@/components/use-finance-sync";
 import { replayTour, useTourPending } from "@/components/use-product-tour";
 import type { AppView } from "@/data/app-navigation";
+import type { Budget } from "@/data/demo-ledger";
 import { demoReminders, demoToday, type RecurringBill } from "@/data/demo-ledger";
-import { budgets, initialBills, initialTransactions, type Transaction } from "@/data/sample-data";
+import {
+  duePersonalReminders,
+  type PersonalReminder,
+  personalReminderErrors,
+} from "@/data/personal-reminders";
+import {
+  initialBills,
+  budgets as initialBudgets,
+  initialTransactions,
+  type Transaction,
+} from "@/data/sample-data";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
 import type { FinanceSnapshot } from "@/lib/finance/presentation";
 
@@ -90,6 +101,7 @@ function sessionRecords(
   snapshot: FinanceSnapshot | undefined,
   demoTransactions: Transaction[],
   bills: RecurringBill[],
+  budgets: Budget[],
 ) {
   if (snapshot)
     return {
@@ -131,6 +143,11 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const navigation = useAppNavigation(currentMonth);
   const { view } = navigation;
   const [demoTransactions, setTransactions] = useState(initialTransactions);
+  const [demoBudgets, setBudgets] = useState(initialBudgets);
+  const [personalReminders, setPersonalReminders] = useState<PersonalReminder[]>([]);
+  const [notificationStatuses, setNotificationStatuses] = useState<
+    Record<string, "read" | "dismissed">
+  >({});
   const sync = useFinanceSync(initialFinance, view.month, today);
   const financeSnapshot = sync.snapshot;
   const [removedId, setRemovedId] = useState<string | null>(null);
@@ -144,11 +161,18 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const [chatPrompt, setChatPrompt] = useState<string | null>(null);
   const tourMode: "live" | "demo" = live ? "live" : "demo";
   const tourPending = useTourPending(tourMode, homeIsUncovered(view));
-  const { transactions, selectedBudgets, reminders, resources } = sessionRecords(
-    financeSnapshot,
-    demoTransactions,
-    bills,
-  );
+  const {
+    transactions,
+    selectedBudgets,
+    reminders: activeReminders,
+    resources,
+  } = sessionRecords(financeSnapshot, demoTransactions, bills, demoBudgets);
+  const reminders = live
+    ? activeReminders
+    : activeReminders.map((reminder) => ({
+        ...reminder,
+        status: notificationStatuses[reminder.id] ?? ("unread" as const),
+      }));
   const { mutationPending } = sync;
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -223,6 +247,51 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     runMutation: mutate,
     bills,
     reminders,
+    reminderCount:
+      reminders.filter((reminder) => reminder.status !== "read" && reminder.status !== "dismissed")
+        .length + duePersonalReminders(personalReminders, today),
+    personalReminders,
+    updateDemoBudget: (budgetId, changes) => {
+      if (live) return;
+      setBudgets((items) =>
+        items.map((budget) => (budget.id === budgetId ? { ...budget, ...changes } : budget)),
+      );
+      setNotice({ message: "Budget updated for this demo visit." });
+    },
+    saveDemoReminder: (draft, id) => {
+      if (live || Object.keys(personalReminderErrors(draft)).length > 0) return;
+      const title = draft.title.trim();
+      if (id)
+        setPersonalReminders((items) =>
+          items.map((reminder) =>
+            reminder.id === id ? { ...reminder, ...draft, title } : reminder,
+          ),
+        );
+      else
+        setPersonalReminders((items) => [
+          ...items,
+          { ...draft, title, id: crypto.randomUUID(), completedAt: null },
+        ]);
+      setNotice({
+        message: id
+          ? "Reminder updated for this demo visit."
+          : "Reminder added for this demo visit.",
+      });
+    },
+    setDemoReminderDone: (id, done) => {
+      if (live) return;
+      setPersonalReminders((items) =>
+        items.map((reminder) =>
+          reminder.id === id
+            ? { ...reminder, completedAt: done ? new Date().toISOString() : null }
+            : reminder,
+        ),
+      );
+    },
+    setDemoNotificationStatus: (id, status) => {
+      if (live) return;
+      setNotificationStatuses((previous) => ({ ...previous, [id]: status }));
+    },
     online,
     query,
     setQuery,

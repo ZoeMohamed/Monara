@@ -88,3 +88,18 @@ export function spendingPlaces(transactions: Transaction[], month: string): Merc
   }
   return Array.from(places.values()).sort(compareSpending);
 }
+
+// Ranking a single payment never combines repeated titles or changes canonical records.
+export function biggestExpenses(transactions: Transaction[], month: string): Transaction[] {
+  return demoSummary(transactions, month)
+    .confirmed.filter((transaction) => transaction.kind === "expense")
+    .sort((left, right) => {
+      const leftAmount = BigInt(left.amount ?? 0);
+      const rightAmount = BigInt(right.amount ?? 0);
+      if (leftAmount !== rightAmount) return leftAmount > rightAmount ? -1 : 1;
+      return (
+        `${right.date} ${right.time ?? ""}`.localeCompare(`${left.date} ${left.time ?? ""}`) ||
+        left.id.localeCompare(right.id, "en-US")
+      );
+    });
+}

@@ -1,0 +1,29 @@
+.badge {
+  display: grid;
+  width: var(--badge-size, 40px);
+  height: var(--badge-size, 40px);
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 30%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: calc(var(--badge-size, 40px) * 0.36);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.badge[data-kind="cash"] {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.badge svg {
+  width: 55%;
+  height: 55%;
+}
+
+.badge[data-kind="unknown"] {
+  background: var(--surface);
+  color: var(--muted);
+}

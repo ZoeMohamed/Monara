@@ -680,6 +680,53 @@ export function createSupabaseFinanceRepository(
       return result.data.map(toReminder);
     },
 
+    async listReminders(userId, input) {
+      const offset = offsetFor(input.cursor);
+      const limit = input.limit ?? 50;
+      let query = client
+        .from("reminders")
+        .select(REMINDER_COLUMNS)
+        .eq("user_id", userId)
+        .order("scheduled_for", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + limit);
+      if (input.status) query = query.eq("status", input.status);
+      if (input.kind) query = query.eq("kind", input.kind);
+      const result = await query;
+      if (result.error) fail(result.error);
+      return page(result.data.map(toReminder), offset, limit);
+    },
+
+    async findReminder(userId, reminderId) {
+      const result = await client
+        .from("reminders")
+        .select(REMINDER_COLUMNS)
+        .eq("user_id", userId)
+        .eq("id", reminderId)
+        .maybeSingle();
+      if (result.error) fail(result.error);
+      return result.data ? toReminder(result.data) : null;
+    },
+
+    async updateReminder(input) {
+      const result = await client
+        .from("reminders")
+        .update({ status: input.status, read_at: input.readAt })
+        .eq("user_id", input.userId)
+        .eq("id", input.reminderId)
+        .eq("status", input.expectedStatus)
+        .select(REMINDER_COLUMNS)
+        .maybeSingle();
+      if (result.error) fail(result.error);
+      if (!result.data) {
+        throw new FinanceOperationError(
+          "CONFLICT",
+          "This notification changed. Refresh it and try again.",
+        );
+      }
+      return toReminder(result.data);
+    },
+
     async createBudgetThresholdReminder(input) {
       const result = await client.from("reminders").insert({
         user_id: input.userId,

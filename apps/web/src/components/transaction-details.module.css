@@ -1,0 +1,201 @@
+.top {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hero {
+  margin-top: 4px;
+  text-align: center;
+}
+
+.amount {
+  font-size: clamp(34px, 10vw, 42px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.amount[data-kind="income"] {
+  color: var(--success);
+}
+
+.amount[data-kind="transfer"],
+.amount[data-kind="unknown"] {
+  color: var(--muted);
+}
+
+.merchant {
+  margin-top: 8px;
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.when {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* The flow reads top to bottom, joined by a quiet rail behind the marks. */
+.flow {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 18px;
+  border-radius: 24px;
+  background: var(--surface-secondary);
+}
+
+.flow::before {
+  position: absolute;
+  top: 38px;
+  bottom: 38px;
+  left: 37px;
+  width: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--muted) 24%, transparent);
+  content: "";
+}
+
+.stop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.stopText {
+  display: grid;
+  min-width: 0;
+}
+
+.stopText span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.stopText strong {
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.mark {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--mark-color, var(--accent)) 14%, var(--surface));
+  color: var(--mark-color, var(--accent));
+}
+
+.mark svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mark[data-kind="merchant"] {
+  background: var(--surface);
+  font-size: 20px;
+}
+
+.source {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.source svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.sourceHelp {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.more {
+  margin-top: 12px;
+  border-top: 1px solid var(--separator);
+}
+
+.more summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 650;
+  list-style: none;
+}
+
+.more summary::-webkit-details-marker {
+  display: none;
+}
+
+.more summary::after {
+  margin-left: auto;
+  content: "+";
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.more[open] summary::after {
+  content: "−";
+}
+
+.more summary:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.more dl {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 8px;
+  font-size: 14px;
+}
+
+.more dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.more dt {
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.more dd {
+  max-width: 55%;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-align: right;
+}

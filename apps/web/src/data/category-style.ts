@@ -13,19 +13,38 @@ export function categoryColor(name: string, index = 0): string {
   return categoryStyles[name]?.color ?? extraColors[index % extraColors.length];
 }
 
-const categoryIcons: Record<string, "food" | "transport" | "shopping" | "digital" | "bills"> = {
-  "Food & Drinks": "food",
-  Transport: "transport",
-  Shopping: "shopping",
-  Digital: "digital",
-  Bills: "bills",
-};
+type CategoryGlyph =
+  | "food"
+  | "transport"
+  | "shopping"
+  | "digital"
+  | "bills"
+  | "home"
+  | "heart"
+  | "book"
+  | "film"
+  | "income"
+  | "transfer"
+  | "dot";
 
-/** A drawn glyph per known category; anything else uses a neutral dot. */
-export function categoryIcon(
-  name: string,
-): "food" | "transport" | "shopping" | "digital" | "bills" | "dot" {
-  return categoryIcons[name] ?? "dot";
+// Match whole category words: "Rent" gets a house, while "Current" stays neutral.
+const categoryIcons: [RegExp, CategoryGlyph][] = [
+  [/\b(rent|rental|housing|house|home|kos|mortgage|sewa)\b/i, "home"],
+  [/\b(health|healthcare|medical|medicine|pharmacy|doctor|hospital|clinic)\b/i, "heart"],
+  [/\b(education|school|courses?|tuition|books?)\b/i, "book"],
+  [/\b(entertainment|movies?|cinema|games?|gaming|hobby|hobbies|leisure)\b/i, "film"],
+  [/\b(food|drinks?|coffee|kopi|groceries|grocery|restaurants?|meals?|makan)\b/i, "food"],
+  [/\b(transport|transportation|rides?|fuel|bensin|parking|tolls?|travel|ojek)\b/i, "transport"],
+  [/\b(shopping|shops?|clothes|clothing|fashion|belanja)\b/i, "shopping"],
+  [/\b(digital|subscriptions?|phone|internet|streaming)\b/i, "digital"],
+  [/\b(bills?|utilities|utility|electric|electricity|listrik|water|insurance)\b/i, "bills"],
+  [/\b(income|salary|gaji|wages?|payroll)\b/i, "income"],
+  [/\b(transfers?)\b/i, "transfer"],
+];
+
+/** A drawn glyph per category meaning; anything unrecognised uses a neutral dot. */
+export function categoryIcon(name: string): CategoryGlyph {
+  return categoryIcons.find(([pattern]) => pattern.test(name))?.[1] ?? "dot";
 }
 
 export function categoryEmoji(name: string): string {

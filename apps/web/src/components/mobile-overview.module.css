@@ -1,8 +1,11 @@
 .home button {
+  height: auto;
+  white-space: normal;
   -webkit-tap-highlight-color: transparent;
 }
 
 .home button:focus-visible,
+.home button[data-focus-visible="true"],
 .monthPicker:focus-within {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
@@ -206,15 +209,10 @@
 
 .chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
-  margin: 12px calc(-1 * max(20px, env(safe-area-inset-right, 0px))) 0;
-  padding: 2px max(20px, env(safe-area-inset-right, 0px)) 4px;
-  scrollbar-width: none;
-}
-
-.chips::-webkit-scrollbar {
-  display: none;
+  margin-top: 24px;
+  padding: 2px 0;
 }
 
 .chip {
@@ -224,9 +222,9 @@
   align-items: center;
   gap: 8px;
   padding: 8px 16px 8px 12px;
-  border: 1px solid rgb(255 255 255 / 85%);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgb(255 255 255 / 76%);
+  background: var(--surface-secondary);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   color: var(--foreground);
@@ -237,6 +235,10 @@
 
 .chipIcon {
   display: grid;
+  color: var(--accent);
+}
+
+.chipIcon[data-tone="accent"] {
   color: var(--accent);
 }
 
@@ -549,6 +551,29 @@
   margin-top: 4px;
 }
 
+.activityHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.seeAll {
+  min-height: 44px;
+  margin-right: -8px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* A new record lands with a brief tint so the eye catches what just changed. */
+.activityItem {
+  border-radius: 14px;
+  animation: activity-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .todayAction {
   width: 100%;
   margin-top: 12px;
@@ -641,6 +666,147 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
+}
+
+/* Needs attention / in numbers ------------------------------------- */
+
+.attention {
+  margin-top: 24px;
+  padding: 18px 18px 10px;
+  border-radius: 24px;
+  background: var(--surface-secondary);
+}
+
+.cardLabel {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.alerts {
+  margin-top: 6px;
+}
+
+.alerts li + li {
+  border-top: 1px solid var(--separator);
+}
+
+.alert,
+.fact {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  text-align: left;
+  transition: transform 160ms ease-out;
+}
+
+.alert:active,
+.fact:active {
+  transform: scale(0.985);
+}
+
+.alertIcon,
+.factIcon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.alertIcon svg,
+.factIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.alertIcon[data-tone="danger"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.alertIcon[data-tone="warning"] {
+  background: var(--warning-soft);
+  color: var(--warning-soft-foreground);
+}
+
+.alertIcon[data-tone="success"] {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.factIcon {
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.factIcon[data-tone="up"] {
+  color: var(--danger);
+}
+
+.factIcon[data-tone="down"] {
+  color: var(--success);
+}
+
+.alertBody {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+
+.alertBody strong {
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.alertBody span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.factText {
+  min-width: 0;
+  flex: 1;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.factText strong {
+  color: var(--foreground);
+  font-weight: 750;
+}
+
+.alertArrow {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--muted);
+  transition:
+    color 160ms ease-out,
+    transform 160ms ease-out;
+}
+
+.allClear {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.alertIcon[data-tone="success"] svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Safe to spend --------------------------------------------------- */
@@ -851,19 +1017,22 @@
   .block,
   .todayCard,
   .safe,
+  .attention,
   .features {
     margin-top: 0;
   }
 
   .block,
   .todayCard,
-  .safe {
+  .safe,
+  .attention {
     padding: 28px;
     border: 1px solid var(--border);
     border-radius: 28px;
     background: var(--surface);
   }
 
+  .lead,
   .aside {
     display: grid;
     gap: 24px;
@@ -912,6 +1081,12 @@
 
     .category:hover .categoryIcon {
       transform: scale(1.06);
+    }
+
+    .alert:hover .alertArrow,
+    .fact:hover .alertArrow {
+      color: var(--foreground);
+      transform: translateX(2px);
     }
   }
 }
@@ -974,5 +1149,17 @@
 @keyframes grow-x {
   from {
     transform: scaleX(0);
+  }
+}
+
+@keyframes activity-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+
+  60% {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
   }
 }

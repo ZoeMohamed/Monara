@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { browserOrigin, isSameOriginRequest } from "../http/origin.ts";
+import { browserOrigin, configuredTunnelOrigin, isSameOriginRequest } from "../http/origin.ts";
 import { availablePublicSupabaseConfig } from "../supabase/config.ts";
 import { isGoogleSignInAvailable } from "../supabase/provider.ts";
 import { identityFromVerifiedClaims, profileFromIdentity } from "./identity.ts";
@@ -198,6 +198,56 @@ describe("browser OAuth origin", () => {
     } finally {
       delete process.env.NGROK_DOMAIN;
     }
+  });
+
+  it("preserves the configured public tunnel for a loopback upstream without trusting forwarded hosts", () => {
+    const previous = process.env.NGROK_DOMAIN;
+    try {
+      process.env.NGROK_DOMAIN = "example.ngrok-free.dev";
+      const request = new Request("http://localhost:3005/auth/sign-in", {
+        headers: { host: "example.ngrok-free.dev", "x-forwarded-host": "attacker.example" },
+      });
+      assert.equal(browserOrigin(request), "https://example.ngrok-free.dev");
+      assert.equal(
+        browserOrigin(
+          new Request("http://localhost:3005/auth/sign-in", {
+            headers: { host: "localhost:3005", "x-forwarded-host": "example.ngrok-free.dev" },
+          }),
+        ),
+        "http://localhost:3005",
+      );
+    } finally {
+      if (previous === undefined) delete process.env.NGROK_DOMAIN;
+      else process.env.NGROK_DOMAIN = previous;
+    }
+  });
+
+  it("validates tunnel configuration before using it as an OAuth destination", () => {
+    assert.equal(
+      configuredTunnelOrigin(" https://EXAMPLE.ngrok-free.dev/ "),
+      "https://example.ngrok-free.dev",
+    );
+    assert.equal(
+      configuredTunnelOrigin("example.ngrok-free.dev"),
+      "https://example.ngrok-free.dev",
+    );
+    for (const invalid of [
+      "",
+      "localhost",
+      "http://example.ngrok-free.dev",
+      "127.0.0.1",
+      "[::1]",
+      "https://example.ngrok-free.dev:443",
+      "https://user:secret@example.ngrok-free.dev",
+      "https://example.ngrok-free.dev/path",
+      "https://example.ngrok-free.dev?query",
+      "https://example.ngrok-free.dev#fragment",
+      "https://example.ngrok-free.dev//",
+      "https://example.ngrok-free.dev/.",
+      "internal.local",
+      "finance.test",
+    ])
+      assert.equal(configuredTunnelOrigin(invalid), null, invalid);
   });
 });
 

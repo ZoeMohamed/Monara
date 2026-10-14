@@ -23,14 +23,19 @@ export function useFinanceSync(initial: FinanceSnapshot | undefined, month: stri
   const needsRecovery = recoveryState === "required";
   const latest = useRef({ month, today });
   const generation = useRef(0);
+  const latestRequest = useRef(0);
   const loading = useRef(false);
   const mutating = useRef(false);
   const recovery = useRef(false);
-  const verifiedPeriod = useRef({ month: initial?.month ?? month, today });
+  const verifiedPeriod = useRef<{ month: string; today: string } | null>({
+    month: initial?.month ?? month,
+    today,
+  });
 
   const refresh = useCallback(async () => {
     if (!live) return;
     const request = ++generation.current;
+    latestRequest.current = request;
     const period = latest.current;
     loading.current = true;
     setLoadState("loading");
@@ -43,14 +48,16 @@ export function useFinanceSync(initial: FinanceSnapshot | undefined, month: stri
       setRecoveryState("verified");
       setError(null);
     } catch (failure) {
-      if (generation.current === request) {
-        recovery.current = true;
-        setRecoveryState("required");
-        setError(failure instanceof Error ? failure.message : "Your records could not be loaded.");
-      }
+      if (generation.current !== request) return;
+      recovery.current = true;
+      setRecoveryState("required");
+      setError(failure instanceof Error ? failure.message : "Your records could not be loaded.");
       throw failure;
     } finally {
-      if (generation.current === request) {
+      // A period change may invalidate this result without starting another read
+      // (for example, returning to the already verified month). That read still
+      // owns its loading flag, but must never clear a newer read's flag.
+      if (latestRequest.current === request) {
         loading.current = false;
         setLoadState("idle");
       }
@@ -61,7 +68,7 @@ export function useFinanceSync(initial: FinanceSnapshot | undefined, month: stri
     latest.current = { month, today };
     if (
       live &&
-      (month !== verifiedPeriod.current.month || today !== verifiedPeriod.current.today)
+      (month !== verifiedPeriod.current?.month || today !== verifiedPeriod.current?.today)
     ) {
       void refresh().catch(() => undefined);
     }
@@ -90,6 +97,11 @@ export function useFinanceSync(initial: FinanceSnapshot | undefined, month: stri
       const result = await operation();
       if (options?.shouldRefresh && !options.shouldRefresh(result)) return result;
       saved = true;
+      // The snapshot predates this write. Returning to its month must still
+      // reconcile the saved result, even if an intervening read was invalidated.
+      verifiedPeriod.current = null;
+      recovery.current = true;
+      setRecoveryState("required");
       try {
         await refresh();
       } catch (failure) {
@@ -110,6 +122,10 @@ export function useFinanceSync(initial: FinanceSnapshot | undefined, month: stri
       const uncertain =
         saved || (failure instanceof FinanceClientError && failure.actionMayHaveCompleted);
       if (uncertain) {
+        // Reads begun before an uncertain write cannot establish its outcome.
+        // Invalidate them and require a new read, even in a previously seen month.
+        generation.current += 1;
+        verifiedPeriod.current = null;
         recovery.current = true;
         setRecoveryState("required");
         const message = saved

@@ -29,7 +29,9 @@ The rules require technical documentation covering system architecture, core alg
 
 Status values: Not started, Draft, Reviewed, Final.
 
-The UI section was reconciled with code and the live tracker on 14 October. Its status remains Draft, matching ER12 In progress with a 16 October deadline; normal documentation checks do not constitute owner review or final submission acceptance. Other owners' sections retain their existing status.
+The UI section was reconciled with current code and public PRD/tracker text exports on 14 October. The external tracker snapshot lists ER12 In progress; the repository places ER12 In review in [PR #29](https://github.com/ZoeMohamed/Monara/pull/29), due 16 October. The technical section remains Draft pending owner review. Normal documentation checks do not constitute review or final submission acceptance. External statuses were read without editing them; other owners' sections retain their existing status.
+
+Architecture and Agent drafts were also reconciled against current source without changing their owners or review status. Data/security, extraction, Reminders, evaluation and the security self-assessment remain Not started with owner TODOs. The normal structure check can pass while these submission sections are unfinished; final acceptance requires completed content, measured evidence and owner review.
 
 ## How to write a section
 

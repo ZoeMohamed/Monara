@@ -10,7 +10,9 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const { spendingFlow, spendingPlaces } = await import("../apps/web/src/data/spending-flow.ts");
+const { biggestExpenses, spendingFlow, spendingPlaces } = await import(
+  "../apps/web/src/data/spending-flow.ts"
+);
 hooks.deregister();
 
 function record(overrides = {}) {
@@ -193,5 +195,51 @@ test("ranked places preserve bigint totals beyond safe-number sums and determini
       { name: "A place", amount: 1n },
       { name: "B place", amount: 1n },
     ],
+  );
+});
+
+test("biggest expenses rank individual payments separately from a place's total", () => {
+  const first = Object.freeze(record({ id: "first", merchant: "Frequent place", amount: 12000 }));
+  const second = Object.freeze(record({ id: "second", merchant: "Frequent place", amount: 12000 }));
+  const largest = Object.freeze(record({ id: "largest", merchant: "One payment", amount: 18000 }));
+  const records = Object.freeze([first, second, largest]);
+  assert.equal(spendingPlaces(records, "2026-10")[0].name, "Frequent place");
+  assert.equal(spendingPlaces(records, "2026-10")[0].amount, 24000n);
+  assert.equal(biggestExpenses(records, "2026-10")[0], largest);
+  assert.deepEqual(biggestExpenses(records, "2026-10"), [largest, first, second]);
+  assert.deepEqual(records, [first, second, largest]);
+});
+
+test("single-payment ranking excludes unconfirmed, incomplete, income, transfer and other months", () => {
+  const valid = record({ id: "valid", amount: Number.MAX_SAFE_INTEGER });
+  const records = [
+    record({ status: "pending" }),
+    record({ status: "rejected" }),
+    record({ amount: null }),
+    record({ currency: null }),
+    record({ date: "2026-10-32" }),
+    record({ kind: "income" }),
+    record({ kind: "transfer", method: "BCA → Jago" }),
+    record({ date: "2026-09-30" }),
+    record({ id: "smaller", amount: Number.MAX_SAFE_INTEGER - 1 }),
+    valid,
+  ];
+  assert.deepEqual(
+    biggestExpenses(records, "2026-10").map(({ id }) => id),
+    ["valid", "smaller"],
+  );
+  assert.equal(biggestExpenses(records, "2026-10")[0], valid);
+});
+
+test("same-size payments use latest date and time, then record identity for stable order", () => {
+  const records = [
+    record({ id: "later-id", date: "2026-10-01" }),
+    record({ id: "first-id", date: "2026-10-01" }),
+    record({ id: "latest-day", date: "2026-10-03", time: null }),
+    record({ id: "later-time", date: "2026-10-01", time: "18:15" }),
+  ];
+  assert.deepEqual(
+    biggestExpenses(records, "2026-10").map(({ id }) => id),
+    ["latest-day", "later-time", "first-id", "later-id"],
   );
 });

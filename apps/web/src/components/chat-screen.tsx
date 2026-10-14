@@ -174,19 +174,6 @@ export function ChatScreen({
               Ask how your month is going, or log a payment like “kopi 25rb”. Answers come from your
               confirmed records.
             </p>
-            <ul aria-label="Suggestions" className={styles.suggestions}>
-              {suggestions.map((suggestion) => (
-                <li key={suggestion}>
-                  <button
-                    className={styles.suggestion}
-                    onClick={() => void sendText(suggestion)}
-                    type="button"
-                  >
-                    {suggestion}
-                  </button>
-                </li>
-              ))}
-            </ul>
           </div>
         ) : (
           <ol className="space-y-2">
@@ -232,6 +219,21 @@ export function ChatScreen({
       </div>
 
       <form className={styles.composer} onSubmit={send}>
+        <ul aria-label="Prompt shortcuts" className={styles.suggestions}>
+          {suggestions.map((suggestion) => (
+            <li key={suggestion}>
+              <Button
+                className={styles.suggestion}
+                isDisabled={sending}
+                onPress={() => void sendText(suggestion, draft.trim() !== "")}
+                type="button"
+                variant="ghost"
+              >
+                {suggestion}
+              </Button>
+            </li>
+          ))}
+        </ul>
         <div className={styles.composerControls}>
           <TextField
             className="min-w-0 flex-1"

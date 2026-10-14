@@ -33,7 +33,6 @@ export function OverviewRoute() {
           />
         ) : null
       }
-      demo={session.dataMode === "demo"}
       month={navigation.view.month}
       setMonth={navigation.setMonth}
       transactions={session.transactions}
@@ -43,6 +42,7 @@ export function OverviewRoute() {
       amountsHidden={session.amountsHidden}
       toggleAmounts={session.toggleAmounts}
       openTransaction={(transaction) => navigation.openTransaction(transaction.id)}
+      openTransactions={() => navigation.navigate({ screen: "transactions", reviewOpen: false })}
       openReview={session.openReview}
       openReports={() => navigation.navigate({ screen: "reports" })}
       openBudgets={() => navigation.navigate({ screen: "budgets" })}
@@ -104,6 +104,7 @@ export function BudgetsRoute() {
   return (
     <BudgetsScreen
       demo={session.dataMode === "demo"}
+      onEditBudget={session.dataMode === "demo" ? session.updateDemoBudget : undefined}
       management={
         session.financeSnapshot ? (
           <BudgetManager

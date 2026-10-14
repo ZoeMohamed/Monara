@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
   const finish = (result: string) => {
     const target = new URL(RESULT_PAGE, browserOrigin(request));
     target.searchParams.set("result", result);
-    return Response.redirect(target, 303);
+    return new Response(null, {
+      status: 303,
+      headers: { Location: target.toString(), "Cache-Control": "private, no-store" },
+    });
   };
 
   const identity = await getAuthenticatedIdentity();

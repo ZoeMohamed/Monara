@@ -143,3 +143,40 @@ export type BudgetPage = z.infer<typeof budgetPageSchema>;
 export type BudgetSuggestionInput = z.input<typeof budgetSuggestionInputSchema>;
 export type BudgetSuggestion = z.infer<typeof budgetSuggestionSchema>;
 export type BudgetMutationResult = z.infer<typeof budgetMutationResultSchema>;
+
+/** Calendar interval for the date: monthly resets follow the chosen start day. */
+export function budgetPeriodForDate(
+  budget: Pick<Budget, "cadence" | "startsOn">,
+  date: string,
+): { startsOn: string; endsOn: string } | null {
+  if (date < budget.startsOn) return null;
+  const at = new Date(`${date}T00:00:00Z`);
+  const iso = (value: Date) => {
+    if (value.getUTCFullYear() < 0 || value.getUTCFullYear() > 9999) {
+      throw new RangeError("Budget period extends beyond supported calendar dates.");
+    }
+    return value.toISOString().slice(0, 10);
+  };
+  const shiftDays = (value: Date, days: number) => {
+    const result = new Date(value);
+    result.setUTCDate(result.getUTCDate() + days);
+    return result;
+  };
+  if (budget.cadence === "weekly") {
+    const initial = new Date(`${budget.startsOn}T00:00:00Z`);
+    const elapsed = (at.getTime() - initial.getTime()) / 86400000;
+    const startsOn = shiftDays(initial, Math.floor(elapsed / 7) * 7);
+    return { startsOn: iso(startsOn), endsOn: iso(shiftDays(startsOn, 6)) };
+  }
+  const anchorDay = Number(budget.startsOn.slice(8, 10));
+  const anchor = (offset: number) => {
+    const first = new Date(0);
+    first.setUTCFullYear(at.getUTCFullYear(), at.getUTCMonth() + offset, 1);
+    const last = new Date(first);
+    last.setUTCMonth(last.getUTCMonth() + 1, 0);
+    first.setUTCDate(Math.min(anchorDay, last.getUTCDate()));
+    return first;
+  };
+  const offset = at < anchor(0) ? -1 : 0;
+  return { startsOn: iso(anchor(offset)), endsOn: iso(shiftDays(anchor(offset + 1), -1)) };
+}

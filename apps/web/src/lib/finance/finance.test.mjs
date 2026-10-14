@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { transactionErrors } from "../../data/demo-ledger.ts";
+import { budgetUsage, transactionErrors } from "../../data/demo-ledger.ts";
 import { callFinanceOperation, FinanceClientError } from "./client.ts";
 import {
   FinancePresentationError,
@@ -215,6 +215,38 @@ describe("owned financial presentation", () => {
     assert.deepEqual((await loadFinanceSnapshot(emptyReader(), "2026-10")).transactions, []);
   });
 
+  it("keeps server-computed payday usage and period dates instead of recalculating calendar spending", async () => {
+    const monthly = budget({ cadence: "monthly", startsOn: "2026-09-25" });
+    const usage = {
+      budget: monthly,
+      periodStartsOn: "2026-09-25",
+      periodEndsOn: "2026-10-24",
+      used: { amountMinor: "123456", currency: "IDR" },
+      remaining: { amountMinor: "576544", currency: "IDR" },
+      usagePercent: 17.63657142857143,
+      state: "on_track",
+    };
+    const base = emptyReader(async () => ({
+      items: [record({ reviewStatus: "confirmed" })],
+      nextCursor: null,
+    }));
+    const snapshot = await loadFinanceSnapshot(
+      async (operation, input) =>
+        operation === "get_dashboard"
+          ? { ...emptyDashboard, budgetUsage: [usage] }
+          : operation === "list_budgets"
+            ? { items: [monthly], nextCursor: null }
+            : base(operation, input),
+      "2026-10",
+      "2026-10-14",
+    );
+    const shown = budgetUsage(snapshot.transactions, snapshot.budgets[0], "2026-10", "2026-10-14");
+    assert.equal(shown.used, 123456n);
+    assert.equal(shown.remaining, 576544n);
+    assert.equal(shown.periodStartsOn, "2026-09-25");
+    assert.equal(shown.periodEndsOn, "2026-10-24");
+  });
+
   it("rejects cursor loops, changing pages, and malformed results instead of displaying partial totals", async () => {
     await assert.rejects(
       loadFinanceSnapshot(
@@ -243,6 +275,64 @@ describe("owned financial presentation", () => {
 });
 
 describe("financial HTTP boundary", () => {
+  it("validates owned notification read state and round-trips persisted read receipts", async () => {
+    const reminderId = "00000000-0000-4000-8000-000000000601";
+    const saved = {
+      id: reminderId,
+      kind: "budget_threshold",
+      status: "read",
+      budgetId,
+      thresholdPercent: 80,
+      title: "Synthetic budget",
+      message: "Budget threshold reached.",
+      dedupeKey: "synthetic-owned-notification",
+      scheduledFor: timestamp,
+      readAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    let calls = 0;
+    const read = await callFinanceOperation(
+      "mark_reminder_read",
+      { reminderId, expectedStatus: "unread" },
+      async (path, options) => {
+        calls += 1;
+        assert.equal(path, "/api/finance/operations/mark_reminder_read");
+        assert.equal(options.cache, "no-store");
+        assert.equal(options.credentials, "same-origin");
+        assert.deepEqual(JSON.parse(options.body), { reminderId, expectedStatus: "unread" });
+        return Response.json(saved);
+      },
+    );
+    assert.equal(read.readAt, timestamp);
+    await assert.rejects(
+      callFinanceOperation(
+        "mark_reminder_read",
+        { reminderId, expectedStatus: "unread", userId: accountId },
+        () => {
+          calls += 1;
+          throw new Error("Not called");
+        },
+      ),
+      { code: "VALIDATION_FAILED" },
+    );
+    assert.equal(calls, 1);
+    await assert.rejects(
+      callFinanceOperation(
+        "mark_reminder_read",
+        { reminderId, expectedStatus: "unread" },
+        async () => Response.json({ ...saved, readAt: null }),
+      ),
+      (error) => error instanceof FinanceClientError && error.actionMayHaveCompleted,
+    );
+    const archived = await callFinanceOperation(
+      "dismiss_reminder",
+      { reminderId, expectedStatus: "read" },
+      async () => Response.json({ ...saved, status: "dismissed" }),
+    );
+    assert.equal(archived.status, "dismissed");
+    assert.equal(archived.readAt, timestamp);
+  });
   it("renames an owned category using its canonical id and reviewed version", async () => {
     const input = {
       categoryId,

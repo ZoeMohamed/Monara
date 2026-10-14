@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@monara/ui";
 import Image from "next/image";
 import { type CSSProperties, type ReactNode, useId, useState, useSyncExternalStore } from "react";
 
@@ -8,10 +9,10 @@ import { MonaraMascot } from "@/components/monara-mascot";
 import { TransactionRow } from "@/components/transaction-row";
 import { categoryColor, categoryIcon } from "@/data/category-style";
 import {
-  daysBetween,
+  daysInMonth,
+  formatDay,
   formatMonth,
   formatRupiah,
-  type RecurringBill,
   shiftMonth,
   type Transaction,
 } from "@/data/demo-ledger";
@@ -23,7 +24,12 @@ import {
   compactAmount,
   financialMonth,
 } from "@/data/finance-analytics";
-import { type overviewModel, type SceneTime, sceneTime } from "@/data/overview-model";
+import {
+  type AttentionItem,
+  type overviewModel,
+  type SceneTime,
+  sceneTime,
+} from "@/data/overview-model";
 
 import styles from "./mobile-overview.module.css";
 
@@ -83,12 +89,18 @@ function Chip({
   label?: string;
 }) {
   return (
-    <button aria-label={label} className={styles.chip} onClick={onClick} type="button">
+    <Button
+      variant="ghost"
+      aria-label={label}
+      className={styles.chip}
+      onClick={onClick}
+      type="button"
+    >
       <span aria-hidden className={styles.chipIcon} data-tone={tone}>
         <Icon name={icon} strokeWidth={2.2} />
       </span>
       <span>{children}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -111,9 +123,13 @@ function ComparisonChip({
       onClick={onOpen}
       tone={difference > BigInt(0) ? "up" : "down"}
     >
-      {difference === BigInt(0)
-        ? `Same as ${previous}`
-        : `${compactAmount(size)} ${direction} than ${previous.slice(0, 3)}`}
+      {difference === BigInt(0) ? (
+        `Same as ${previous}`
+      ) : (
+        <span
+          data-amount
+        >{`${compactAmount(size)} ${direction} than ${previous.slice(0, 3)}`}</span>
+      )}
     </Chip>
   );
 }
@@ -125,9 +141,6 @@ function SceneHero({
   amountsHidden,
   toggleAmounts,
   openChat,
-  openReview,
-  openBudgets,
-  openReports,
 }: {
   month: string;
   today: string;
@@ -135,9 +148,6 @@ function SceneHero({
   amountsHidden: boolean;
   toggleAmounts: () => void;
   openChat: (prompt?: string) => void;
-  openReview: () => void;
-  openBudgets: () => void;
-  openReports: () => void;
 }) {
   const time = useSyncExternalStore(
     subscribeToClock,
@@ -184,7 +194,8 @@ function SceneHero({
             </span>
             <span aria-hidden>{amountsHidden ? "••••••" : spendingDigits}</span>
           </p>
-          <button
+          <Button
+            variant="ghost"
             aria-label={amountsHidden ? "Show amounts" : "Hide amounts"}
             aria-pressed={amountsHidden}
             className={styles.eye}
@@ -192,7 +203,7 @@ function SceneHero({
             type="button"
           >
             <Icon name={amountsHidden ? "eye-off" : "eye"} />
-          </button>
+          </Button>
         </div>
         <p className={styles.caption}>
           {monthName(month)} spending
@@ -201,7 +212,8 @@ function SceneHero({
 
         <div className={styles.askWrap} data-tour="ask">
           <MonaraMascot className={styles.mascot} />
-          <button
+          <Button
+            variant="ghost"
             aria-label="Ask Monara anything"
             className={styles.ask}
             onClick={() => openChat()}
@@ -214,15 +226,8 @@ function SceneHero({
             <span aria-hidden className={styles.askArrow}>
               <Icon name="send" strokeWidth={2.4} />
             </span>
-          </button>
+          </Button>
         </div>
-
-        <SceneChips
-          model={model}
-          openReview={openReview}
-          openBudgets={openBudgets}
-          openReports={openReports}
-        />
       </div>
     </section>
   );
@@ -258,7 +263,7 @@ function SceneChips({
       <ComparisonChip comparison={model.comparison} onOpen={openReports} />
       {quiet ? (
         <Chip icon="budgets" onClick={openBudgets}>
-          {compactAmount(budgetLeftOf(model))} budget left
+          <span data-amount>{compactAmount(budgetLeftOf(model))}</span> budget left
         </Chip>
       ) : null}
     </div>
@@ -291,7 +296,8 @@ function CategoryItem({
   const over = budgetLimit !== null && amount > budgetLimit;
   return (
     <li>
-      <button
+      <Button
+        variant="ghost"
         aria-controls={open ? paymentsId : undefined}
         aria-expanded={open}
         aria-label={`${name}, ${formatRupiah(amount)}${budgetLimit !== null ? ` of ${formatRupiah(budgetLimit)} budget${over ? ", over budget" : ""}` : ""}. Show payments.`}
@@ -323,7 +329,7 @@ function CategoryItem({
             </span>
           ) : null}
         </span>
-      </button>
+      </Button>
       {open ? (
         <ul aria-label={`${name} payments`} className={styles.payments} id={paymentsId}>
           {payments.map((item) => (
@@ -394,19 +400,29 @@ function SpendingBlock({
           </p>
           <div>
             {openAdd ? (
-              <button className={styles.primary} onClick={openAdd} type="button">
+              <Button variant="ghost" className={styles.primary} onClick={openAdd} type="button">
                 <Icon name="plus" strokeWidth={2.2} />
                 Add payment
-              </button>
+              </Button>
             ) : null}
             {model.pendingCount > 0 ? (
-              <button className={styles.secondary} onClick={openReview} type="button">
+              <Button
+                variant="ghost"
+                className={styles.secondary}
+                onClick={openReview}
+                type="button"
+              >
                 Review {model.pendingCount}
-              </button>
+              </Button>
             ) : openConnectGmail ? (
-              <button className={styles.secondary} onClick={openConnectGmail} type="button">
+              <Button
+                variant="ghost"
+                className={styles.secondary}
+                onClick={openConnectGmail}
+                type="button"
+              >
                 Connect Gmail
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>
@@ -415,10 +431,17 @@ function SpendingBlock({
           {categories.map((category, index) => {
             const key = categoryKey(category);
             const budget = model.usage.find((item) => categoryMatchesBudget(category, item.budget));
+            // Category spending belongs to the selected calendar month. A payday
+            // limit describes a different range and must not be compared to it.
+            const monthBudget =
+              budget?.periodStartsOn === `${month}-01` &&
+              budget.periodEndsOn === `${month}-${daysInMonth(month)}`
+                ? budget
+                : undefined;
             return (
               <CategoryItem
                 amount={category.amount}
-                budgetLimit={budget?.limit ?? null}
+                budgetLimit={monthBudget?.limit ?? null}
                 index={index}
                 key={key}
                 name={category.name}
@@ -429,7 +452,7 @@ function SpendingBlock({
                   (item) => item.kind === "expense" && categoryContainsTransaction(category, item),
                 )}
                 paymentsId={paymentsId}
-                scale={budget?.limit ?? categories[0].amount}
+                scale={monthBudget?.limit ?? categories[0].amount}
               />
             );
           })}
@@ -439,47 +462,69 @@ function SpendingBlock({
   );
 }
 
-function TodayCard({
-  today,
+function TodayLine({ model }: { model: OverviewModel }) {
+  if (model.todayCount === 0) return <p>Nothing spent yet today.</p>;
+  return (
+    <p>
+      <span data-amount>{compactAmount(model.todaySpending)}</span> spent today ·{" "}
+      {model.todayCount === 1 ? "1 payment" : `${model.todayCount} payments`}
+    </p>
+  );
+}
+
+// The newest confirmed records. Rows are keyed by id, so an added record mounts and
+// animates in while the rest stay put; edits and deletions update in place.
+function ActivityCard({
+  month,
   model,
   openTransaction,
+  openTransactions,
   openAdd,
 }: {
-  today: string;
+  month: string;
   model: OverviewModel;
   openTransaction: (transaction: Transaction) => void;
+  openTransactions?: () => void;
   openAdd?: () => void;
 }) {
-  const records = model.summary.confirmed.filter(
-    (item) => item.date === today && item.kind !== "transfer",
-  );
   return (
-    <section aria-labelledby="today-title" className={styles.todayCard}>
-      <h2 id="today-title">
-        {records.length > 0 ? (
-          <>
-            <span data-amount>{compactAmount(model.todaySpending)}</span> today
-          </>
-        ) : (
-          "No payments yet today"
-        )}
-      </h2>
-      {records.length > 0 ? (
-        <ul>
-          {records.slice(0, 3).map((item) => (
-            <li key={item.id}>
-              <TransactionRow onClick={() => openTransaction(item)} transaction={item} />
+    <section aria-labelledby="activity-title" className={styles.todayCard}>
+      <div className={styles.activityHead}>
+        <h2 id="activity-title">
+          {model.isCurrentMonth ? "Latest activity" : `Latest in ${monthName(month)}`}
+        </h2>
+        {openTransactions && model.recent.length > 0 ? (
+          <Button
+            variant="ghost"
+            className={styles.seeAll}
+            onClick={openTransactions}
+            type="button"
+          >
+            See all
+          </Button>
+        ) : null}
+      </div>
+      {model.isCurrentMonth ? <TodayLine model={model} /> : null}
+      {model.recent.length > 0 ? (
+        <ul aria-label="Latest transactions">
+          {model.recent.map((item, index) => (
+            <li
+              className={styles.activityItem}
+              key={item.id}
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
+              <TransactionRow onClick={() => openTransaction(item)} showDate transaction={item} />
             </li>
           ))}
         </ul>
       ) : (
         <p>Paid in cash? Log it in seconds.</p>
       )}
-      {openAdd ? (
-        <button className={styles.todayAction} onClick={openAdd} type="button">
+      {openAdd && model.isCurrentMonth ? (
+        <Button variant="ghost" className={styles.todayAction} onClick={openAdd} type="button">
           <Icon name="plus" strokeWidth={2.2} />
           Log a payment
-        </button>
+        </Button>
       ) : null}
     </section>
   );
@@ -503,7 +548,7 @@ function Feature({
   amount?: boolean;
 }) {
   return (
-    <button onClick={onOpen} type="button">
+    <Button variant="ghost" onClick={onOpen} type="button">
       <span className={styles.featureName}>
         <span aria-hidden className={styles.featureIcon} data-tone={tone}>
           <Icon name={icon} />
@@ -512,7 +557,7 @@ function Feature({
       </span>
       <strong data-amount={amount || undefined}>{value}</strong>
       <span className={styles.featureHint}>{hint}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -520,9 +565,18 @@ function attentionLine(model: OverviewModel) {
   const attention = model.attentionBudget;
   if (!attention) return "Every category is on track";
   const name = attention.budget.category;
-  if (attention.state === "over") return `${name} is ${compactAmount(-attention.remaining)} over`;
+  if (attention.state === "over")
+    return (
+      <>
+        {name} is <strong data-amount>{compactAmount(-attention.remaining)}</strong> over
+      </>
+    );
   if (attention.state === "at-limit") return `${name} is at its limit`;
-  return `${name} has ${compactAmount(attention.remaining)} left`;
+  return (
+    <>
+      {name} has <strong data-amount>{compactAmount(attention.remaining)}</strong> left
+    </>
+  );
 }
 
 function paceOf(model: OverviewModel) {
@@ -532,7 +586,7 @@ function paceOf(model: OverviewModel) {
 
 function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
   return (
-    <button className={styles.safe} onClick={openBudgets} type="button">
+    <Button variant="ghost" className={styles.safe} onClick={openBudgets} type="button">
       <span className={styles.featureName}>
         <span aria-hidden className={styles.featureIcon} data-tone="green">
           <Icon name="budgets" />
@@ -541,7 +595,7 @@ function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
       </span>
       <strong className={styles.safeEmpty}>Set monthly budgets</strong>
       <span className={styles.safeNote}>Monara will turn them into a daily spending guide.</span>
-    </button>
+    </Button>
   );
 }
 
@@ -551,8 +605,10 @@ function SafeToSpendNote({ month, model }: { month: string; model: OverviewModel
   if (!safe) {
     return (
       <span className={styles.safeNote}>
-        of <strong data-amount>{formatRupiah(model.budgetTotal)}</strong> in {monthName(month)}{" "}
-        budgets
+        of <strong data-amount>{formatRupiah(model.budgetTotal)}</strong>{" "}
+        {model.calendarBudgetPeriods
+          ? `in ${monthName(month)} budgets`
+          : "across your budget periods"}
       </span>
     );
   }
@@ -585,7 +641,7 @@ function SafeToSpendCard({
   if (model.budgetTotal === BigInt(0)) return <SafeToSpendSetup openBudgets={openBudgets} />;
   const safe = model.safeToSpend;
   return (
-    <button className={styles.safe} onClick={openBudgets} type="button">
+    <Button variant="ghost" className={styles.safe} onClick={openBudgets} type="button">
       <span className={styles.featureName}>
         <span aria-hidden className={styles.featureIcon} data-tone="green">
           <Icon name="budgets" />
@@ -597,71 +653,253 @@ function SafeToSpendCard({
         {safe ? <small>/day</small> : null}
       </span>
       <SafeToSpendNote model={model} month={month} />
-      <span aria-hidden className={styles.pace} data-pace={paceOf(model)}>
+      <span
+        aria-hidden
+        className={styles.pace}
+        data-pace={model.calendarBudgetPeriods ? paceOf(model) : undefined}
+      >
         <span className={styles.paceFill} style={{ width: `${Math.min(model.percent, 100)}%` }} />
-        {model.isCurrentMonth ? (
+        {model.isCurrentMonth && model.calendarBudgetPeriods ? (
           <span className={styles.paceMarker} style={{ left: `${model.elapsedPercent}%` }} />
         ) : null}
       </span>
       <span className={styles.paceCaption}>
         <span>
           <strong>{model.percent}%</strong> of budgets used
-          {model.isCurrentMonth ? ` · ${model.elapsedPercent}% of month gone` : ""}
+          {model.isCurrentMonth && model.calendarBudgetPeriods
+            ? ` · ${model.elapsedPercent}% of month gone`
+            : ""}
         </span>
         <span data-state={model.attentionBudget?.state ?? "on-track"}>{attentionLine(model)}</span>
       </span>
-    </button>
+    </Button>
   );
 }
 
-function FeatureGrid({
-  today,
+type Tone = "danger" | "warning" | "accent";
+type AttentionCopy = { tone: Tone; icon: IconName; title: string; detail: string };
+
+function billCopy(
+  item: Extract<AttentionItem, { kind: "bill-due" | "bill-overdue" }>,
+): AttentionCopy {
+  const { bill, days } = item;
+  const amount = formatRupiah(bill.expectedAmount);
+  if (item.kind === "bill-overdue") {
+    return {
+      tone: "danger",
+      icon: "calendar",
+      title: `${bill.merchant} is overdue`,
+      detail: `Was due ${formatDay(bill.nextDue)} · ${amount}`,
+    };
+  }
+  let when = `due in ${days} days`;
+  if (days === 0) when = "due today";
+  else if (days === 1) when = "due tomorrow";
+  return {
+    tone: "accent",
+    icon: "calendar",
+    title: `${bill.merchant} is ${when}`,
+    detail: `${formatDay(bill.nextDue)} · ${amount}`,
+  };
+}
+
+function budgetCopy(item: Extract<AttentionItem, { kind: "budget" }>): AttentionCopy {
+  const { budget, state, used, limit, remaining } = item.usage;
+  if (state === "over") {
+    return {
+      tone: "danger",
+      icon: "budgets",
+      title: `${budget.category} is over budget`,
+      detail: `${compactAmount(-remaining)} over its ${compactAmount(limit)} limit`,
+    };
+  }
+  return {
+    tone: "warning",
+    icon: "budgets",
+    title:
+      state === "at-limit"
+        ? `${budget.category} is at its limit`
+        : `${budget.category} is close to its limit`,
+    detail:
+      state === "at-limit"
+        ? `${compactAmount(used)} of ${compactAmount(limit)} used`
+        : `${compactAmount(remaining)} left of ${compactAmount(limit)}`,
+  };
+}
+
+function attentionCopy(item: AttentionItem): AttentionCopy {
+  if (item.kind === "budget") return budgetCopy(item);
+  if (item.kind === "review") {
+    return {
+      tone: "accent",
+      icon: "inbox",
+      title: `${item.count} ${item.count === 1 ? "import" : "imports"} to review`,
+      detail: "They count once you confirm them",
+    };
+  }
+  return billCopy(item);
+}
+
+function attentionKey(item: AttentionItem) {
+  if (item.kind === "budget") return `budget-${item.usage.budget.id}`;
+  if (item.kind === "review") return "review";
+  return `${item.kind}-${item.bill.id}`;
+}
+
+// Overdue bills, budgets past their limit, bills due this week and imports waiting.
+function AttentionCard({
+  items,
+  openBudgets,
+  openReview,
+}: {
+  items: AttentionItem[];
+  openBudgets: () => void;
+  openReview: () => void;
+}) {
+  return (
+    <section aria-labelledby="attention-title" className={styles.attention}>
+      <h2 className={styles.cardLabel} id="attention-title">
+        Needs attention
+      </h2>
+      {items.length === 0 ? (
+        <p className={styles.allClear}>
+          <span aria-hidden className={styles.alertIcon} data-tone="success">
+            <Icon name="check" strokeWidth={2.4} />
+          </span>
+          Nothing needs attention in the records shown.
+        </p>
+      ) : (
+        <ul className={styles.alerts}>
+          {items.slice(0, 5).map((item) => {
+            const copy = attentionCopy(item);
+            return (
+              <li key={attentionKey(item)}>
+                <Button
+                  variant="ghost"
+                  className={styles.alert}
+                  onClick={item.kind === "review" ? openReview : openBudgets}
+                  type="button"
+                >
+                  <span aria-hidden className={styles.alertIcon} data-tone={copy.tone}>
+                    <Icon name={copy.icon} />
+                  </span>
+                  <span className={styles.alertBody}>
+                    <strong>{copy.title}</strong>
+                    <span data-amount>{copy.detail}</span>
+                  </span>
+                  <Icon aria-hidden className={styles.alertArrow} name="chevron-right" />
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function Fact({
+  icon,
+  tone,
+  children,
+  onOpen,
+}: {
+  icon: IconName;
+  tone?: "up" | "down";
+  children: ReactNode;
+  onOpen: () => void;
+}) {
+  return (
+    <li>
+      <Button variant="ghost" className={styles.fact} onClick={onOpen} type="button">
+        <span aria-hidden className={styles.factIcon} data-tone={tone}>
+          <Icon name={icon} />
+        </span>
+        <span className={styles.factText}>{children}</span>
+        <Icon aria-hidden className={styles.alertArrow} name="chevron-right" />
+      </Button>
+    </li>
+  );
+}
+
+// Plain facts about the month, each one a way into the detail behind it.
+function FactsCard({
+  month,
   model,
-  bills,
+  openReports,
+  openTransaction,
+}: {
+  month: string;
+  model: OverviewModel;
+  openReports: () => void;
+  openTransaction: (transaction: Transaction) => void;
+}) {
+  const { topCategory, dailyAverage, largest } = model.facts;
+  if (!topCategory && !dailyAverage && !largest && model.savingsRate === null) {
+    return null;
+  }
+  return (
+    <section aria-labelledby="facts-title" className={styles.attention}>
+      <h2 className={styles.cardLabel} id="facts-title">
+        {model.isCurrentMonth ? "This month in numbers" : `${monthName(month)} in numbers`}
+      </h2>
+      <ul className={styles.alerts}>
+        {topCategory ? (
+          <Fact icon="pie" onOpen={openReports}>
+            <strong>{topCategory.name}</strong> is {topCategory.share}% of spending
+          </Fact>
+        ) : null}
+        {dailyAverage ? (
+          <Fact icon="pulse" onOpen={openReports}>
+            <strong data-amount>{compactAmount(dailyAverage)}</strong> a day on average
+          </Fact>
+        ) : null}
+        {largest ? (
+          <Fact icon="transactions" onOpen={() => openTransaction(largest)}>
+            Largest payment: <strong>{largest.merchant ?? "Unnamed"}</strong>,{" "}
+            <strong data-amount>{formatRupiah(largest.amount ?? 0)}</strong>
+          </Fact>
+        ) : null}
+        {model.savingsRate !== null ? (
+          <Fact icon="sparkle" onOpen={openReports}>
+            {model.savingsRate < 0 ? (
+              <>
+                Spending is <strong>{-model.savingsRate}%</strong> above income
+              </>
+            ) : (
+              <>
+                You kept <strong>{model.savingsRate}%</strong> of income
+              </>
+            )}
+          </Fact>
+        ) : null}
+      </ul>
+    </section>
+  );
+}
+
+// Shortcuts into the deeper screens; what needs action lives in Needs attention.
+function FeatureGrid({
+  model,
   openBudgets,
   openReports,
-  openReview,
   openConnectGmail,
-  showBills,
 }: {
-  today: string;
   model: OverviewModel;
-  bills: RecurringBill[];
   openBudgets: () => void;
   openReports: () => void;
-  openReview: () => void;
   openConnectGmail?: () => void;
-  showBills: boolean;
 }) {
-  const nextBill = model.nextBill;
-  const nextBillDays = nextBill ? daysBetween(today, nextBill.nextDue) : null;
-  let billValue = `${bills.filter((bill) => bill.status === "active").length} tracked`;
-  if (nextBill && nextBillDays === 0) billValue = `${nextBill.merchant} today`;
-  else if (nextBill) billValue = `${nextBill.merchant} in ${nextBillDays}d`;
-
+  const budgetCount = model.usage.length;
   return (
     <section aria-labelledby="features-title" className={styles.features}>
       <h2 className="sr-only" id="features-title">
-        Your features
+        Shortcuts
       </h2>
       <div className={styles.featureGrid}>
-        {showBills ? (
-          <Feature
-            hint={nextBill ? "Coming up this week" : "Nothing due this week"}
-            icon="calendar"
-            name="Bills"
-            onOpen={openBudgets}
-            tone="violet"
-            value={billValue}
-          />
-        ) : null}
         <Feature
           amount
-          hint={
-            model.savingsRate === null
-              ? "Daily trend and categories"
-              : `${model.savingsRate}% of income kept`
-          }
+          hint="Daily trend, categories and places"
           icon="reports"
           name="Reports"
           onOpen={openReports}
@@ -669,12 +907,16 @@ function FeatureGrid({
           value={`${compactAmount(model.summary.spending)} out`}
         />
         <Feature
-          hint="Imports count once you confirm"
-          icon="inbox"
-          name="Review"
-          onOpen={openReview}
-          tone="amber"
-          value={model.pendingCount > 0 ? `${model.pendingCount} waiting` : "All clear"}
+          hint="Limits and bills"
+          icon="budgets"
+          name="Budgets"
+          onOpen={openBudgets}
+          tone="green"
+          value={
+            budgetCount === 0
+              ? "Set limits"
+              : `${budgetCount} ${budgetCount === 1 ? "budget" : "budgets"}`
+          }
         />
         {openConnectGmail ? (
           <Feature
@@ -698,34 +940,32 @@ export function MobileOverview({
   today,
   model,
   transactions,
-  bills,
   amountsHidden,
   toggleAmounts,
   openTransaction,
+  openTransactions,
   openReports,
   openBudgets,
   openReview,
   openChat,
   openAdd,
   openConnectGmail,
-  showBills = true,
 }: {
   month: string;
   setMonth: (month: string) => void;
   today: string;
   model: OverviewModel;
   transactions: Transaction[];
-  bills: RecurringBill[];
   amountsHidden: boolean;
   toggleAmounts: () => void;
   openTransaction: (transaction: Transaction) => void;
+  openTransactions?: () => void;
   openReports: () => void;
   openBudgets: () => void;
   openReview: () => void;
   openChat: (prompt?: string) => void;
   openAdd?: () => void;
   openConnectGmail?: () => void;
-  showBills?: boolean;
   setup?: ReactNode;
 }) {
   return (
@@ -734,10 +974,7 @@ export function MobileOverview({
         amountsHidden={amountsHidden}
         model={model}
         month={month}
-        openBudgets={openBudgets}
         openChat={openChat}
-        openReports={openReports}
-        openReview={openReview}
         today={today}
         toggleAmounts={toggleAmounts}
       />
@@ -745,44 +982,67 @@ export function MobileOverview({
       <div className={styles.sheet}>
         <nav aria-label="Ask Monara" className={styles.prompts}>
           {prompts.map((item) => (
-            <button key={item.text} onClick={() => openChat(item.prompt)} type="button">
+            <Button
+              variant="ghost"
+              key={item.text}
+              onClick={() => openChat(item.prompt)}
+              type="button"
+            >
               <Icon name={item.icon} />
               {item.text}
-            </button>
+            </Button>
           ))}
         </nav>
         {setup}
         <div className={styles.columns}>
-          <SpendingBlock
-            model={model}
-            month={month}
-            openAdd={openAdd}
-            openConnectGmail={openConnectGmail}
-            openReview={openReview}
-            openTransaction={openTransaction}
-            setMonth={setMonth}
-            today={today}
-            transactions={transactions}
-          />
-          <div className={styles.aside}>
-            <SafeToSpendCard model={model} month={month} openBudgets={openBudgets} />
+          <div className={styles.lead}>
+            <SceneChips
+              model={model}
+              openReview={openReview}
+              openBudgets={openBudgets}
+              openReports={openReports}
+            />
             {model.isCurrentMonth ? (
-              <TodayCard
-                model={model}
-                openAdd={openAdd}
-                openTransaction={openTransaction}
-                today={today}
+              <AttentionCard
+                items={model.attention}
+                openBudgets={openBudgets}
+                openReview={openReview}
               />
             ) : null}
+            {model.isCurrentMonth || model.recent.length > 0 ? (
+              <ActivityCard
+                model={model}
+                month={month}
+                openAdd={openAdd}
+                openTransaction={openTransaction}
+                openTransactions={openTransactions}
+              />
+            ) : null}
+            <SpendingBlock
+              model={model}
+              month={month}
+              openAdd={openAdd}
+              openConnectGmail={openConnectGmail}
+              openReview={openReview}
+              openTransaction={openTransaction}
+              setMonth={setMonth}
+              today={today}
+              transactions={transactions}
+            />
+          </div>
+          <div className={styles.aside}>
+            <SafeToSpendCard model={model} month={month} openBudgets={openBudgets} />
+            <FactsCard
+              model={model}
+              month={month}
+              openReports={openReports}
+              openTransaction={openTransaction}
+            />
             <FeatureGrid
-              showBills={showBills}
-              bills={bills}
               model={model}
               openBudgets={openBudgets}
               openConnectGmail={openConnectGmail}
               openReports={openReports}
-              openReview={openReview}
-              today={today}
             />
           </div>
         </div>

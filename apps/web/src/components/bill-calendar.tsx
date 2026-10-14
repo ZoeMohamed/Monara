@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Icon } from "@/components/icon";
 import { SectionTitle } from "@/components/visual";
+import { categoryIcon } from "@/data/category-style";
 import {
   daysInMonth,
   demoToday,
@@ -159,10 +160,15 @@ export function BillCalendar({
                   className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"
                   key={bill.id}
                 >
-                  <span className="min-w-0 text-sm font-bold [overflow-wrap:anywhere]">
-                    <span aria-hidden className="mr-1.5">
-                      {bill.emoji}
-                    </span>
+                  <span className="flex min-w-0 items-center gap-2 text-sm font-bold [overflow-wrap:anywhere]">
+                    <Icon
+                      className="h-4 w-4 shrink-0 text-accent"
+                      name={
+                        categoryIcon(bill.merchant) === "dot"
+                          ? "bills"
+                          : categoryIcon(bill.merchant)
+                      }
+                    />
                     {bill.merchant}
                   </span>
                   <span className="min-w-0 text-sm font-semibold tabular-nums [overflow-wrap:anywhere]">

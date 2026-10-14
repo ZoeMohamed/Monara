@@ -1,5 +1,6 @@
 import {
   type Budget,
+  type BudgetUsage,
   budgetPageSchema,
   type Category,
   calendarDateSchema,
@@ -114,7 +115,8 @@ export function mapOwnedTransaction(
   };
 }
 
-function mapOwnedBudget(budget: Budget, categories: Category[]): OwnedBudget {
+function mapOwnedBudget(usage: BudgetUsage, categories: Category[], month: string): OwnedBudget {
+  const budget = usage.budget;
   const category = categories.find((item) => item.id === budget.categoryId);
   if (!category) {
     throw new FinancePresentationError(
@@ -132,6 +134,9 @@ function mapOwnedBudget(budget: Budget, categories: Category[]): OwnedBudget {
     limit: safePresentationAmount(budget.limit.amountMinor),
     warningPercent: budget.warningPercent,
     categoryId: budget.categoryId,
+    startsOn: budget.startsOn,
+    usage,
+    usageMonth: month,
     backend: budget,
   };
 }
@@ -212,7 +217,7 @@ export async function loadFinanceSnapshot(
       .map((record) => mapOwnedTransaction(record, financialAccounts, categories)),
     budgets: dashboard.budgetUsage
       .filter((usage) => usage.budget.cadence === "monthly")
-      .map((usage) => mapOwnedBudget(usage.budget, categories)),
+      .map((usage) => mapOwnedBudget(usage, categories, month)),
     financialAccounts,
     categories,
     allBudgets,
@@ -221,6 +226,10 @@ export async function loadFinanceSnapshot(
       id: reminder.id,
       kind: reminder.kind === "budget_threshold" ? "budget" : "bill",
       message: reminder.message,
+      title: reminder.title,
+      status: reminder.status,
+      scheduledFor: reminder.scheduledFor,
+      backend: reminder,
     })),
     month,
     today,

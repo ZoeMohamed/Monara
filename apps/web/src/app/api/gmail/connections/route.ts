@@ -1,14 +1,14 @@
 import { gmailConnectionListSchema, startGmailConnectionResultSchema } from "@monara/contracts";
 import type { NextRequest } from "next/server";
+import { gmailCallbackUrl } from "@/lib/gmail/callback";
 import {
   errorResponse,
-  GMAIL_CALLBACK_PATH,
   gmailConnectionService,
   gmailErrorResponse,
   noStoreHeaders,
   unauthenticated,
 } from "@/lib/gmail/service";
-import { browserOrigin, isSameOriginRequest } from "@/lib/http/origin";
+import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 /** Lists the signed-in User's Gmail Connections. */
@@ -33,7 +33,13 @@ export async function POST(request: NextRequest) {
   const identity = await getAuthenticatedIdentity();
   if (!identity) return unauthenticated();
   try {
-    const callbackUrl = new URL(GMAIL_CALLBACK_PATH, browserOrigin(request)).toString();
+    const callbackUrl = gmailCallbackUrl(request);
+    if (!callbackUrl) {
+      return errorResponse(
+        "VALIDATION_FAILED",
+        "Open Monara through your configured HTTPS tunnel and sign in there before connecting Gmail.",
+      );
+    }
     const result = await gmailConnectionService().start(identity.id, callbackUrl);
     return Response.json(startGmailConnectionResultSchema.parse(result), {
       headers: noStoreHeaders,

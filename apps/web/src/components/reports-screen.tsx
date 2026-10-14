@@ -1,6 +1,6 @@
 "use client";
 
-import { Card } from "@monara/ui";
+import { Button, Card } from "@monara/ui";
 import { useId, useState } from "react";
 
 import { EmptyLedgerState } from "@/components/empty-ledger-state";
@@ -24,7 +24,7 @@ import {
   type Transaction,
 } from "@/data/demo-ledger";
 import { chartRatio, compactAmount, monthComparison } from "@/data/finance-analytics";
-import { spendingPlaces } from "@/data/spending-flow";
+import { biggestExpenses, spendingPlaces } from "@/data/spending-flow";
 
 function TopPlaces({
   transactions,
@@ -51,18 +51,24 @@ function TopPlaces({
   return (
     <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <SectionTitle title="Top places" />
+      <p className="mt-1 text-sm text-muted">Total spent at each place this month.</p>
       <ol className="mt-2 divide-y divide-separator">
         {places.map((place, index) => (
           <li key={place.name}>
-            <button
-              aria-controls={place.transactions.length > 1 ? paymentsId : undefined}
-              aria-expanded={
-                place.transactions.length > 1 ? selectedName === place.name : undefined
+            <Button
+              aria-controls={
+                place.transactions.length > 1 || !openTransaction ? paymentsId : undefined
               }
-              aria-label={`${place.name}, ${formatRupiah(place.amount)}, ${place.transactions.length} ${place.transactions.length === 1 ? "payment" : "payments"}. Show payments.`}
-              className="relative isolate flex min-h-12 w-full cursor-pointer items-center gap-3 overflow-hidden rounded-xl px-2 py-2 text-left text-sm transition-[background-color,transform] duration-150 ease-out hover:bg-surface-secondary active:scale-[0.98] aria-expanded:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus focus-visible:active:scale-100 motion-reduce:transform-none"
-              onClick={() => openPlace(place)}
+              aria-expanded={
+                place.transactions.length > 1 || !openTransaction
+                  ? selectedName === place.name
+                  : undefined
+              }
+              aria-label={`${place.name}, ${formatRupiah(place.amount)}, ${place.transactions.length} ${place.transactions.length === 1 ? "payment" : "payments"}. ${place.transactions.length === 1 && openTransaction ? "Open transaction." : "Show payments."}`}
+              className="relative isolate flex h-auto min-h-12 w-full items-center gap-3 overflow-hidden rounded-xl px-2 py-3 text-left text-sm whitespace-normal aria-expanded:bg-accent-soft"
+              onPress={() => openPlace(place)}
               type="button"
+              variant="ghost"
             >
               <span
                 aria-hidden
@@ -78,15 +84,18 @@ function TopPlaces({
               >
                 {index + 1}
               </span>
-              <span className="min-w-0 flex-1 truncate font-semibold">{place.name}</span>
-              <span className="shrink-0 text-xs text-muted tabular-nums">
-                {place.transactions.length}×
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold">{place.name}</span>
+                <span className="mt-0.5 block text-xs font-normal text-muted">
+                  {place.transactions.length}{" "}
+                  {place.transactions.length === 1 ? "payment" : "payments"}
+                </span>
               </span>
-              <strong className="max-w-[43%] break-words text-right tabular-nums">
+              <strong className="max-w-[43%] text-right tabular-nums [overflow-wrap:anywhere]">
                 {formatRupiah(place.amount)}
               </strong>
               <Icon aria-hidden className="h-3 w-3 shrink-0 text-muted" name="arrow" />
-            </button>
+            </Button>
           </li>
         ))}
       </ol>
@@ -97,28 +106,46 @@ function TopPlaces({
             <ul className="mt-1 divide-y divide-separator">
               {selected.transactions.map((transaction) => (
                 <li key={transaction.id}>
-                  {openTransaction ? (
-                    <TransactionRow
-                      onClick={() => openTransaction(transaction)}
-                      showDate
-                      transaction={transaction}
-                    />
-                  ) : (
-                    <p className="flex flex-wrap justify-between gap-2 py-3 text-sm">
-                      <span>
-                        {transaction.date} · {transaction.category ?? "Uncategorized"}
-                      </span>
-                      <strong className="tabular-nums">
-                        {formatRupiah(transaction.amount ?? 0)}
-                      </strong>
-                    </p>
-                  )}
+                  <TransactionRow
+                    onClick={openTransaction ? () => openTransaction(transaction) : undefined}
+                    showDate
+                    transaction={transaction}
+                  />
                 </li>
               ))}
             </ul>
           </div>
         ) : null}
       </section>
+    </Card>
+  );
+}
+
+function BiggestExpenses({
+  transactions,
+  month,
+  openTransaction,
+}: {
+  transactions: Transaction[];
+  month: string;
+  openTransaction?: (transaction: Transaction) => void;
+}) {
+  const payments = biggestExpenses(transactions, month).slice(0, 5);
+  return (
+    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
+      <SectionTitle title="Biggest expenses" />
+      <p className="mt-1 text-sm text-muted">Largest single payments, highest first.</p>
+      <ol className="mt-2 divide-y divide-separator">
+        {payments.map((transaction) => (
+          <li key={transaction.id}>
+            <TransactionRow
+              onClick={openTransaction ? () => openTransaction(transaction) : undefined}
+              showDate
+              transaction={transaction}
+            />
+          </li>
+        ))}
+      </ol>
     </Card>
   );
 }
@@ -153,15 +180,12 @@ function ReportSummary({
             spent in {formatMonth(month)}
           </p>
           <p className={styles.mobileStats}>
-            of <strong className="text-success">{compactAmount(summary.income)}</strong> income
+            <span>
+              Income <strong className="text-success">{formatRupiah(summary.income)}</strong>
+            </span>
             <span aria-hidden> · </span>
             <span>
-              <strong>
-                {compactAmount(
-                  summary.difference < BigInt(0) ? -summary.difference : summary.difference,
-                )}
-              </strong>{" "}
-              {summary.difference < BigInt(0) ? "over income" : "left"}
+              Net <strong>{formatRupiah(summary.difference)}</strong>
             </span>
           </p>
         </div>
@@ -178,7 +202,7 @@ function ReportSummary({
         <div className="min-w-0">
           <dt className="text-muted">Net income</dt>
           <dd className="mt-1 break-words text-sm font-semibold tabular-nums">
-            {compactAmount(summary.difference)}
+            {formatRupiah(summary.difference)}
           </dd>
         </div>
         {comparison.state === "available" ? (
@@ -196,34 +220,6 @@ function ReportSummary({
         ) : null}
       </dl>
     </Wash>
-  );
-}
-
-function BiggestExpenses({
-  expenses,
-  openTransaction,
-}: {
-  expenses: Transaction[];
-  openTransaction?: (transaction: Transaction) => void;
-}) {
-  return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
-      <SectionTitle title="Biggest expenses" />
-      <ul className="mt-1 divide-y divide-separator">
-        {expenses.map((item) => (
-          <li key={item.id}>
-            {openTransaction ? (
-              <TransactionRow onClick={() => openTransaction(item)} showDate transaction={item} />
-            ) : (
-              <p className="flex justify-between gap-2 py-3 text-sm">
-                {item.merchant ?? "Merchant unassigned"}
-                <strong className="tabular-nums">{formatRupiah(item.amount ?? 0)}</strong>
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
-    </Card>
   );
 }
 
@@ -250,9 +246,6 @@ export function ReportsScreen({
   const pendingCount = transactions.filter((item) => item.status === "pending").length;
   const hasFinancialActivity = summary.confirmed.some((item) => item.kind !== "transfer");
   const expenses = summary.confirmed.filter((item) => item.kind === "expense");
-  const biggest = [...expenses]
-    .sort((left, right) => (right.amount ?? 0) - (left.amount ?? 0))
-    .slice(0, 5);
   return (
     <div>
       <div className={`${styles.header} flex flex-wrap items-center justify-between gap-3`}>
@@ -327,8 +320,8 @@ export function ReportsScreen({
                   transactions={transactions}
                 />
               </div>
-              <div className={`${styles.details} mt-4 grid items-start gap-4 lg:grid-cols-2`}>
-                <div className={`${styles.chart} ${styles.places}`}>
+              <div className={`${styles.places} mt-4 grid items-start gap-4 lg:grid-cols-2`}>
+                <div className={styles.chart}>
                   <TopPlaces
                     key={month}
                     month={month}
@@ -337,7 +330,11 @@ export function ReportsScreen({
                   />
                 </div>
                 <div className={styles.chart}>
-                  <BiggestExpenses expenses={biggest} openTransaction={openTransaction} />
+                  <BiggestExpenses
+                    month={month}
+                    openTransaction={openTransaction}
+                    transactions={transactions}
+                  />
                 </div>
               </div>
             </>

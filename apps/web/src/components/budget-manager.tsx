@@ -8,8 +8,18 @@ import {
   type UpdateBudgetInput,
   updateBudgetInputSchema,
 } from "@monara/contracts";
-import { Button, ProgressBar } from "@monara/ui";
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import {
+  Button,
+  FieldError,
+  Input,
+  Label,
+  ListBox,
+  ProgressBar,
+  Select,
+  Switch,
+  TextField,
+} from "@monara/ui";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import styles from "@/components/budget-manager.module.css";
 import { Icon } from "@/components/icon";
@@ -114,6 +124,7 @@ function BudgetFields({
   errors,
   disabled,
   editing,
+  latestIncomeDate,
   onChange,
 }: {
   draft: Draft;
@@ -121,13 +132,13 @@ function BudgetFields({
   errors: FormErrors;
   disabled: boolean;
   editing: boolean;
+  latestIncomeDate?: string;
   onChange: (patch: Partial<Draft>) => void;
 }) {
-  const prefix = useId();
   const fields = [
     { name: "name", label: "Budget name", type: "text", maxLength: 100 },
     { name: "amount", label: "Limit in rupiah", type: "text", maxLength: 20, inputMode: "numeric" },
-    { name: "startsOn", label: "Starts on", type: "date" },
+    { name: "startsOn", label: "Period starts on", type: "date" },
     {
       name: "warningPercent",
       label: "Warning at (%)",
@@ -138,33 +149,37 @@ function BudgetFields({
   ] as const;
   return (
     <>
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor={`${prefix}-category`}>
-          Category
-        </label>
-        <select
-          aria-describedby={errors.categoryId ? `${prefix}-category-error` : undefined}
-          aria-invalid={Boolean(errors.categoryId)}
-          className={styles.input}
-          disabled={disabled}
-          id={`${prefix}-category`}
-          name="categoryId"
-          onChange={(event) => onChange({ categoryId: event.target.value })}
-          value={draft.categoryId}
-        >
-          <option value="">Choose a category</option>
-          {categories.map((category) => (
-            <option disabled={category.isArchived} key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-        {errors.categoryId && (
-          <p className={styles.error} id={`${prefix}-category-error`}>
-            {errors.categoryId}
-          </p>
-        )}
-      </div>
+      <Select
+        className="w-full"
+        isDisabled={disabled}
+        isInvalid={Boolean(errors.categoryId)}
+        name="categoryId"
+        onChange={(key) => onChange({ categoryId: key === null ? "" : String(key) })}
+        placeholder="Choose a category"
+        value={draft.categoryId || null}
+      >
+        <Label>Category</Label>
+        <Select.Trigger className="min-h-11">
+          <Select.Value />
+          <Select.Indicator />
+        </Select.Trigger>
+        <Select.Popover>
+          <ListBox>
+            {categories.map((category) => (
+              <ListBox.Item
+                id={category.id}
+                isDisabled={category.isArchived}
+                key={category.id}
+                textValue={category.name}
+              >
+                {category.name}
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+            ))}
+          </ListBox>
+        </Select.Popover>
+        <FieldError>{errors.categoryId}</FieldError>
+      </Select>
       <fieldset className={styles.field} disabled={disabled}>
         <legend className={styles.label}>Period</legend>
         <div className="mt-1 flex gap-2">
@@ -183,43 +198,62 @@ function BudgetFields({
         </div>
       </fieldset>
       {fields.map((field) => (
-        <div className={styles.field} key={field.name}>
-          <label className={styles.label} htmlFor={`${prefix}-${field.name}`}>
-            {field.label}
-          </label>
-          <input
-            aria-describedby={errors[field.name] ? `${prefix}-${field.name}-error` : undefined}
-            aria-invalid={Boolean(errors[field.name])}
-            className={styles.input}
-            disabled={disabled}
-            id={`${prefix}-${field.name}`}
+        <TextField
+          className={styles.field}
+          isDisabled={disabled}
+          isInvalid={Boolean(errors[field.name])}
+          key={field.name}
+          name={field.name}
+          onChange={(value) => onChange({ [field.name]: value })}
+          type={field.type}
+          value={draft[field.name]}
+        >
+          <Label>{field.label}</Label>
+          <Input
+            className="min-h-11 text-base"
             inputMode={"inputMode" in field ? field.inputMode : undefined}
             maxLength={"maxLength" in field ? field.maxLength : undefined}
-            name={field.name}
-            onChange={(event) => onChange({ [field.name]: event.target.value })}
-            type={field.type}
-            value={draft[field.name]}
           />
-          {errors[field.name] && (
-            <p className={styles.error} id={`${prefix}-${field.name}-error`}>
-              {errors[field.name]}
-            </p>
+          <FieldError>{errors[field.name]}</FieldError>
+          {field.name === "startsOn" && (
+            <>
+              <p className={styles.meta}>
+                {draft.cadence === "monthly"
+                  ? "Resets on this day each month. Shorter months use their last day. Choose your payday or any date that works for you."
+                  : "Resets every seven days from this date."}
+              </p>
+              {latestIncomeDate && (
+                <Button
+                  className="min-h-11 justify-start rounded-full text-xs"
+                  isDisabled={disabled}
+                  onPress={() => onChange({ startsOn: latestIncomeDate })}
+                  variant="ghost"
+                >
+                  <Icon className="h-4 w-4" name="income" />
+                  Use last income · {formatDay(latestIncomeDate)}
+                </Button>
+              )}
+            </>
           )}
-        </div>
+        </TextField>
       ))}
       {draft.cadence === "weekly" && (
         <p className={styles.meta}>Each week runs for seven days from your start date.</p>
       )}
       {editing && (
-        <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
-          <input
-            checked={draft.isActive}
-            disabled={disabled}
-            onChange={(event) => onChange({ isActive: event.target.checked })}
-            type="checkbox"
-          />
-          Active budget
-        </label>
+        <Switch
+          className="min-h-11"
+          isDisabled={disabled}
+          isSelected={draft.isActive}
+          onChange={(isActive) => onChange({ isActive })}
+        >
+          <Switch.Content>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+          </Switch.Content>
+          <Label>Active budget</Label>
+        </Switch>
       )}
     </>
   );
@@ -382,6 +416,19 @@ function BudgetEditorFields({
         disabled={locked}
         draft={draft}
         editing={editing}
+        latestIncomeDate={
+          props.snapshot.transactions
+            .filter(
+              (transaction) =>
+                transaction.status === "confirmed" &&
+                transaction.kind === "income" &&
+                transaction.date !== null &&
+                transaction.date <= props.snapshot.today,
+            )
+            .map((transaction) => transaction.date)
+            .sort()
+            .at(-1) ?? undefined
+        }
         errors={state.errors}
         onChange={change}
       />
@@ -577,9 +624,7 @@ function BudgetProgress({ usage }: { usage: BudgetUsage }) {
         <span className={styles.meta}>
           {formatRupiah(used)} spent · {percent}%
         </span>
-        <span
-          className={`text-xs font-semibold tabular-nums ${remaining < 0n ? "text-danger" : ""}`}
-        >
+        <span className={`text-sm font-bold tabular-nums ${remaining < 0n ? "text-danger" : ""}`}>
           {formatRupiah(remaining < 0n ? -remaining : remaining)} {remaining < 0n ? "over" : "left"}
         </span>
       </div>

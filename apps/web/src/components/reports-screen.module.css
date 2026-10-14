@@ -1,18 +1,23 @@
-.summaryLabel,
 .mobileStats {
   display: none;
 }
 
-@media (max-width: 767px) {
-  .amount > span {
-    margin-right: 5px;
-    color: var(--muted);
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: normal;
-    vertical-align: 8px;
-  }
+.summaryLabel {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 15px;
+}
 
+.amount > span {
+  margin-right: 5px;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: normal;
+  vertical-align: 8px;
+}
+
+@media (max-width: 767px) {
   .header {
     align-items: flex-start;
     row-gap: 20px;
@@ -41,13 +46,6 @@
     border: 0;
     border-radius: 0;
     background: transparent;
-  }
-
-  .summaryLabel {
-    display: block;
-    margin-bottom: 12px;
-    color: var(--muted);
-    font-size: 15px;
   }
 
   .amount {
@@ -145,18 +143,14 @@
     font-weight: 500;
   }
 
-  /* On a phone the category list and biggest expenses already answer these. */
-  .flow,
-  .places {
+  /* On a phone the category list already answers what the flow diagram shows. */
+  .flow {
     display: none;
   }
 
-  .details {
-    margin-top: 36px;
-  }
-
-  .details {
+  .places {
     gap: 36px;
+    margin-top: 36px;
   }
 }
 

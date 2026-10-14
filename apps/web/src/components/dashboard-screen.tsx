@@ -15,11 +15,11 @@ export function DashboardScreen({
   transactions,
   budgets,
   today = demoToday,
-  demo = true,
   bills = noBills,
   amountsHidden = false,
   toggleAmounts,
   openTransaction,
+  openTransactions,
   openReview,
   openReports,
   openBudgets,
@@ -33,11 +33,11 @@ export function DashboardScreen({
   transactions: Transaction[];
   budgets: Budget[];
   today?: string;
-  demo?: boolean;
   bills?: RecurringBill[];
   amountsHidden?: boolean;
   toggleAmounts: () => void;
   openTransaction: (transaction: Transaction) => void;
+  openTransactions?: () => void;
   openReview: () => void;
   openReports: () => void;
   openBudgets: () => void;
@@ -51,7 +51,6 @@ export function DashboardScreen({
     <MobileOverview
       setup={setup}
       amountsHidden={amountsHidden}
-      bills={bills}
       model={model}
       month={month}
       openAdd={openAdd}
@@ -61,8 +60,8 @@ export function DashboardScreen({
       openReports={openReports}
       openReview={openReview}
       openTransaction={openTransaction}
+      openTransactions={openTransactions}
       setMonth={setMonth}
-      showBills={demo}
       today={today}
       toggleAmounts={toggleAmounts}
       transactions={transactions}

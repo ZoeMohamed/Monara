@@ -11,12 +11,13 @@ import { ModalDialog } from "@/components/modal-dialog";
 import styles from "@/components/monara-app.module.css";
 import { MonaraMascot } from "@/components/monara-mascot";
 import { ProductTour } from "@/components/product-tour";
+import { RemindersCenter } from "@/components/reminders-center";
 import { SessionToast } from "@/components/session-toast";
 import { TransactionDetails } from "@/components/transaction-details";
 import { type TransactionDraft, TransactionEditor } from "@/components/transaction-editor";
 import { useMonaraSession } from "@/components/use-monara-session";
 import type { AppScreen } from "@/data/app-navigation";
-import { demoToday, type Reminder, type Transaction } from "@/data/demo-ledger";
+import { demoToday, type Transaction } from "@/data/demo-ledger";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
 import type { FinanceSnapshot } from "@/lib/finance/presentation";
 
@@ -38,47 +39,6 @@ const mobileTabs: TabItem[] = [
   { id: "reports", label: "Reports", icon: "reports" },
   { id: "budgets", label: "Budgets", icon: "budgets" },
 ];
-
-function RemindersSheet({ reminders, onClose }: { reminders: Reminder[]; onClose: () => void }) {
-  return (
-    <ModalDialog labelledBy="reminders-title" onClose={onClose}>
-      <div className="p-4 sm:p-5">
-        <div className="flex items-center justify-between gap-3">
-          <h2 id="reminders-title" className="text-lg font-black tracking-[-0.03em]">
-            Reminders
-          </h2>
-          <Button
-            aria-label="Close reminders"
-            className="rounded-full"
-            isIconOnly
-            onPress={onClose}
-            variant="ghost"
-          >
-            <Icon name="close" />
-          </Button>
-        </div>
-        {reminders.length > 0 ? (
-          <ul className="mt-2 divide-y divide-separator">
-            {reminders.map((reminder) => (
-              <li className="flex gap-2.5 py-3 text-sm" key={reminder.id}>
-                <Icon
-                  className="mt-0.5 h-4 w-4 shrink-0 text-accent"
-                  name={reminder.kind === "budget" ? "budgets" : "bell"}
-                />
-                {reminder.message}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="py-6 text-center text-sm text-muted">You’re all caught up.</p>
-        )}
-        <p className="mt-2 text-xs text-muted">
-          Budgets alert at 80% and 100%. Bills remind 3 days before and on the due date.
-        </p>
-      </div>
-    </ModalDialog>
-  );
-}
 
 function DesktopSidebar({
   activeTab,
@@ -111,7 +71,7 @@ function DesktopSidebar({
         ))}
       </nav>
       <button className={`${styles.sideLink} mt-3`} onClick={onOpenReminders} type="button">
-        <Icon name="bell" /> Reminders
+        <Icon name="bell" /> Reminders & updates
         {reminderCount > 0 ? <span className={styles.sideBadge}>{reminderCount}</span> : null}
       </button>
       <div className={styles.sideStatus}>
@@ -331,7 +291,8 @@ export function MonaraApp({
 
 function AppChrome({ workspace, children }: { workspace: Workspace; children: ReactNode }) {
   const { session, live, view, mainRef, notice, setNotice, undo, sync } = workspace;
-  const { profile, navigation, today, currentMonth, reminders, online, amountsHidden } = session;
+  const { profile, navigation, today, currentMonth, reminderCount, online, amountsHidden } =
+    session;
   return (
     <div
       className={`${styles.shell} min-h-dvh bg-background text-foreground`}
@@ -350,7 +311,7 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
           hrefFor={navigation.hrefFor}
           onAdd={navigation.openAdd}
           onOpenReminders={navigation.openReminders}
-          reminderCount={reminders.length}
+          reminderCount={reminderCount}
           live={live}
         />
         <div className="min-w-0">
@@ -358,7 +319,7 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
             demo={!live}
             profile={profile}
             today={today}
-            reminderCount={reminders.length}
+            reminderCount={reminderCount}
             onOpenCalendar={() => navigation.navigate({ screen: "reports", month: currentMonth })}
             onOpenProfile={() => navigation.navigate({ screen: "account" })}
             onOpenReminders={navigation.openReminders}
@@ -435,13 +396,14 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
     resources,
     sync,
   } = workspace;
-  const { navigation, today, reminders, confirm } = session;
+  const { navigation, today, confirm } = session;
   return (
     <>
       {selected ? (
         <TransactionDetails
           key={selected.id}
           transaction={selected}
+          financialAccounts={session.financeSnapshot?.financialAccounts}
           onClose={navigation.closePopup}
           onEdit={() => navigation.openEdit(selected.id)}
           onConfirm={() => confirm(selected.id)}
@@ -491,9 +453,7 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
         />
       ) : null}
       {tourPending ? <ProductTour mode={tourMode} /> : null}
-      {view.remindersOpen ? (
-        <RemindersSheet onClose={navigation.closePopup} reminders={reminders} />
-      ) : null}
+      {view.remindersOpen ? <RemindersCenter onClose={navigation.closePopup} /> : null}
     </>
   );
 }

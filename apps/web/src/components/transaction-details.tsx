@@ -1,10 +1,14 @@
 "use client";
 
+import type { FinancialAccount, TransactionSource } from "@monara/contracts";
 import { Button, Chip } from "@monara/ui";
-import { type RefObject, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, type RefObject, useRef, useState } from "react";
+import { AccountBadge } from "@/components/account-badge";
 import { FinanceRecovery } from "@/components/budget-manager";
-import { Icon } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
+import styles from "@/components/transaction-details.module.css";
+import { categoryColor, categoryIcon } from "@/data/category-style";
 import {
   formatRupiah,
   isCalendarDate,
@@ -16,15 +20,16 @@ import { FinanceClientError } from "@/lib/finance/client";
 const typeLabels = { expense: "Expense", income: "Income", transfer: "Transfer" } as const;
 const statusLabels = { pending: "Needs review", confirmed: "Confirmed", rejected: "Rejected" };
 const statusColors = { pending: "warning", confirmed: "success", rejected: "default" } as const;
-const sourceLabels = {
-  manual_form: "Manual entry",
-  gmail_email: "Gmail import",
-  in_app_chat: "In-app Agent",
-  whatsapp_text: "WhatsApp message",
-  whatsapp_receipt: "WhatsApp receipt",
-  whatsapp_voice: "WhatsApp voice",
-} as const;
+const sources: Record<TransactionSource, { icon: IconName; label: string }> = {
+  manual_form: { icon: "compose", label: "Added by you" },
+  gmail_email: { icon: "mail", label: "Imported from Gmail" },
+  in_app_chat: { icon: "chat", label: "Added through Monara chat" },
+  whatsapp_text: { icon: "whatsapp", label: "From a WhatsApp message" },
+  whatsapp_receipt: { icon: "whatsapp", label: "From a WhatsApp receipt" },
+  whatsapp_voice: { icon: "whatsapp", label: "From a WhatsApp voice note" },
+};
 const dateFormatter = new Intl.DateTimeFormat("en-GB", {
+  weekday: "long",
   day: "numeric",
   month: "long",
   year: "numeric",
@@ -32,40 +37,49 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
 });
 const confidenceFormatter = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 });
 
+function validConfidence(confidence: number | null) {
+  return confidence !== null && Number.isFinite(confidence) && confidence >= 0 && confidence <= 100;
+}
+
+// Live records state their source; demo imports are the ones carrying extraction confidence.
+function sourceOf(transaction: Transaction) {
+  const kind =
+    transaction.backend?.source ??
+    (transaction.confidence === null ? "manual_form" : "gmail_email");
+  return { ...sources[kind], kind };
+}
+
 function detailsOf(transaction: Transaction) {
   const pending = transaction.status === "pending";
   const editable = pending || transaction.status === "confirmed";
   const valid = Object.keys(transactionErrors(transaction)).length === 0;
-  const confidence = transaction.confidence;
-  const rows = [
-    ["Type", transaction.kind ? typeLabels[transaction.kind] : "Not selected"],
-    [
-      "Date",
-      isCalendarDate(transaction.date)
-        ? dateFormatter.format(new Date(`${transaction.date}T00:00:00Z`))
-        : "Not provided",
-    ],
-    ["Time", transaction.time || "Not provided"],
-    [transaction.kind === "transfer" ? "From → To" : "Account", transaction.method || "Unassigned"],
-    ["Category", transaction.category || "Unassigned"],
-    ["Currency", transaction.currency || "Not provided"],
-  ];
-  if (transaction.backend) rows.push(["Source", sourceLabels[transaction.backend.source]]);
-  if (confidence !== null && Number.isFinite(confidence) && confidence >= 0 && confidence <= 100) {
-    rows.push(["Import confidence", `${confidenceFormatter.format(confidence)}%`]);
-  }
+  const date = isCalendarDate(transaction.date)
+    ? dateFormatter.format(new Date(`${transaction.date}T00:00:00Z`))
+    : "Date not provided";
+  const sign = transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : "";
   return {
     pending,
     editable,
     valid,
-    rows,
+    // Secondary facts stay one tap away under “More details”.
+    rows: [
+      ["Type", transaction.kind ? typeLabels[transaction.kind] : "Not selected"],
+      ["Currency", transaction.currency || "Not provided"],
+      ["Status", statusLabels[transaction.status]],
+      ...(validConfidence(transaction.confidence) && sourceOf(transaction).kind !== "manual_form"
+        ? [["Extraction confidence", `${confidenceFormatter.format(transaction.confidence ?? 0)}%`]]
+        : []),
+    ],
     merchant: transaction.merchant || "Transaction",
+    when: transaction.time ? `${date} · ${transaction.time}` : date,
     amount:
       transaction.amount === null
         ? "Amount missing"
-        : transaction.currency === "IDR"
-          ? formatRupiah(transaction.amount)
-          : "Currency missing",
+        : !Number.isSafeInteger(transaction.amount) || transaction.amount <= 0
+          ? "Amount invalid"
+          : transaction.currency === "IDR"
+            ? `${sign}${formatRupiah(transaction.amount)}`
+            : "Currency missing",
     help: valid
       ? "Not included in totals until confirmed."
       : "Complete the missing fields to confirm.",
@@ -154,6 +168,7 @@ type TransactionDetailsProps = {
   confirmationError?: string | null;
   refreshRequired?: boolean;
   onRefreshRecords?: () => Promise<void>;
+  financialAccounts?: FinancialAccount[];
 };
 
 function useTransactionDeletion({
@@ -208,52 +223,217 @@ function useTransactionDeletion({
   };
 }
 
+function Stop({
+  label,
+  visual,
+  detail,
+  children,
+}: {
+  label: string;
+  visual: ReactNode;
+  detail?: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <li className={styles.stop}>
+      {visual}
+      <span className={styles.stopText}>
+        <span>{label}</span>
+        <strong>{children}</strong>
+        {detail && detail !== children ? <span>{detail}</span> : null}
+      </span>
+    </li>
+  );
+}
+
+function CategoryMark({ name }: { name: string }) {
+  return (
+    <span
+      aria-hidden
+      className={styles.mark}
+      style={{ "--mark-color": categoryColor(name) } as CSSProperties}
+    >
+      <Icon name={categoryIcon(name)} />
+    </span>
+  );
+}
+
+function MerchantMark({ income }: { income: boolean }) {
+  return (
+    <span aria-hidden className={styles.mark} data-kind="merchant">
+      <Icon name={income ? "income" : "store"} />
+    </span>
+  );
+}
+
+type MoneyFlowProps = {
+  transaction: Transaction;
+  financialAccounts?: FinancialAccount[];
+};
+
+function AccountStop({
+  label,
+  name,
+  account,
+  fallback = "Account not set",
+}: {
+  label: string;
+  name: string | null | undefined;
+  account?: FinancialAccount;
+  fallback?: string;
+}) {
+  return (
+    <Stop
+      detail={account?.institution}
+      label={label}
+      visual={<AccountBadge account={account} name={name || null} />}
+    >
+      {name || fallback}
+    </Stop>
+  );
+}
+
+function transferAccounts({ transaction, financialAccounts }: MoneyFlowProps) {
+  if (transaction.backend) {
+    // Owned transfers resolve UUIDs; display names may themselves contain arrows.
+    const from = financialAccounts?.find(
+      (account) => account.id === transaction.backend?.fromFinancialAccountId,
+    );
+    const to = financialAccounts?.find(
+      (account) => account.id === transaction.backend?.toFinancialAccountId,
+    );
+    return { from, to, fromName: from?.name, toName: to?.name };
+  }
+  const names = (transaction.method ?? "").split("→").map((part) => part.trim());
+  const [fromName, toName] = names.length === 2 ? names : [];
+  return { from: undefined, to: undefined, fromName, toName };
+}
+
+function TransferMoneyFlow(props: MoneyFlowProps) {
+  const accounts = transferAccounts(props);
+  return (
+    <ol aria-label="Money flow" className={styles.flow}>
+      <AccountStop
+        account={accounts.from}
+        fallback="Not set"
+        label="From"
+        name={accounts.fromName}
+      />
+      <AccountStop account={accounts.to} fallback="Not set" label="To" name={accounts.toName} />
+    </ol>
+  );
+}
+
+const paymentFlowLabels = {
+  income: { account: "Into", place: "From" },
+  expense: { account: "From", place: "Where it went" },
+  transfer: { account: "Account", place: "Merchant or source" },
+  unknown: { account: "Account", place: "Merchant or source" },
+} as const;
+
+function PaymentMoneyFlow({ transaction, financialAccounts }: MoneyFlowProps) {
+  const income = transaction.kind === "income";
+  const labels = paymentFlowLabels[transaction.kind ?? "unknown"];
+  const merchant = transaction.merchant || "Not provided";
+  const category = transaction.category || "Not assigned";
+  const savedAccount = financialAccounts?.find(
+    (item) => item.id === transaction.backend?.financialAccountId,
+  );
+  const accountName = transaction.backend ? savedAccount?.name : transaction.method;
+  const account = <AccountStop account={savedAccount} label={labels.account} name={accountName} />;
+  const place = (
+    <Stop label={labels.place} visual={<MerchantMark income={income} />}>
+      {merchant}
+    </Stop>
+  );
+  return (
+    <ol aria-label="Money flow" className={styles.flow}>
+      {income ? place : account}
+      <Stop label="Category" visual={<CategoryMark name={category} />}>
+        {category}
+      </Stop>
+      {income ? account : place}
+    </ol>
+  );
+}
+
+// Money moves from an account, through a category, to a place; income runs the other way.
+function MoneyFlow(props: MoneyFlowProps) {
+  return props.transaction.kind === "transfer" ? (
+    <TransferMoneyFlow {...props} />
+  ) : (
+    <PaymentMoneyFlow {...props} />
+  );
+}
+
 function TransactionInformation({
   transaction,
   details,
   pending,
   onClose,
+  financialAccounts,
 }: {
   transaction: Transaction;
   details: ReturnType<typeof detailsOf>;
   pending: boolean;
   onClose: () => void;
+  financialAccounts?: FinancialAccount[];
 }) {
+  const source = sourceOf(transaction);
   return (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 id="transaction-details-title" className="break-words text-xl font-bold">
-            {details.merchant}
-          </h2>
-          {transaction.backend ? (
-            <p className="mt-1 text-sm text-muted">Your private ledger</p>
-          ) : null}
-        </div>
+      <div className={styles.top}>
+        {transaction.status === "confirmed" ? (
+          <span />
+        ) : (
+          <Chip color={statusColors[transaction.status]} variant="soft">
+            {statusLabels[transaction.status]}
+          </Chip>
+        )}
         <Button
-          isIconOnly
-          variant="ghost"
           aria-label="Close transaction details"
+          className="rounded-full"
           isDisabled={pending}
+          isIconOnly
           onPress={onClose}
+          variant="ghost"
         >
           <Icon name="close" />
         </Button>
       </div>
-      <p className="mt-6 break-words text-3xl font-bold tabular-nums">{details.amount}</p>
-      <Chip className="mt-3" color={statusColors[transaction.status]} variant="soft">
-        {statusLabels[transaction.status]}
-      </Chip>
-      <dl className="mt-6 divide-y divide-border border-y border-border">
-        {details.rows.map(([label, value]) => (
-          <div key={label} className="flex justify-between gap-5 py-3 text-sm">
-            <dt className="shrink-0 text-muted">{label}</dt>
-            <dd className="min-w-0 break-words text-right font-medium">{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <div className={styles.hero}>
+        <p className={styles.amount} data-amount data-kind={transaction.kind ?? "unknown"}>
+          {details.amount}
+        </p>
+        <h2 className={styles.merchant} id="transaction-details-title">
+          {details.merchant}
+        </h2>
+        <p className={styles.when}>{details.when}</p>
+      </div>
+      <MoneyFlow financialAccounts={financialAccounts} transaction={transaction} />
+      <p className={styles.source}>
+        <Icon name={source.icon} />
+        {source.label}
+        {transaction.backend ? " · your private ledger" : ""}
+      </p>
+      {source.kind === "gmail_email" && details.editable ? (
+        <p className={styles.sourceHelp}>
+          You can edit this record. Its Gmail source stays unchanged.
+        </p>
+      ) : null}
+      <details className={styles.more}>
+        <summary>More details</summary>
+        <dl>
+          {details.rows.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
       {details.pending && (
-        <p id="transaction-review-help" className="mt-4 text-sm text-muted">
+        <p className="mt-4 text-sm text-muted" id="transaction-review-help">
           {details.help}
         </p>
       )}
@@ -352,6 +532,7 @@ export function TransactionDetails(props: TransactionDetailsProps) {
             onClose={deletion.close}
             pending={Boolean(props.pending)}
             transaction={props.transaction}
+            financialAccounts={props.financialAccounts}
           />
           <TransactionActions
             deletion={{ openDelete: deletion.openDelete }}

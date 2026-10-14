@@ -180,6 +180,50 @@ const glyphs = {
       <path d="M9 8h6M9 12h3" />
     </>
   ),
+  heart: <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />,
+  book: (
+    <>
+      <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3Z" />
+      <path d="M5 17a3 3 0 0 1 3-3h11" />
+    </>
+  ),
+  film: (
+    <>
+      <rect height="13" rx="2" width="18" x="3" y="6" />
+      <path d="m8 3 4 3 4-3" />
+    </>
+  ),
+  cash: (
+    <>
+      <rect height="12" rx="2" width="18" x="3" y="6" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6.5 9.5h.01M17.5 14.5h.01" />
+    </>
+  ),
+  bank: (
+    <>
+      <path d="m3 9 9-6 9 6H3ZM3 21h18M5 9v9M10 9v9M14 9v9M19 9v9" />
+    </>
+  ),
+  wallet: (
+    <>
+      <rect height="14" rx="2" width="18" x="3" y="6" />
+      <path d="M3 7V5a2 2 0 0 1 2-2h13v3M16 11h5v5h-5a2.5 2.5 0 0 1 0-5Z" />
+    </>
+  ),
+  store: (
+    <>
+      <path d="M4 10v10h16V10M3 10l2-6h14l2 6M8 20v-6h5v6" />
+      <path d="M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0" />
+    </>
+  ),
+  income: (
+    <>
+      <path d="M12 4v10m0 0 4-4m-4 4-4-4" />
+      <path d="M4 15v4h16v-4" />
+    </>
+  ),
+  transfer: <path d="M4 8h15l-3-3M20 16H5l3 3" />,
   dot: <circle cx="12" cy="12" r="3" />,
   whatsapp: (
     <>

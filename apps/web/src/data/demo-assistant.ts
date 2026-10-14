@@ -189,7 +189,7 @@ export function demoReply(text: string, context: DemoContext): DemoReply {
   if (/budget/.test(lower)) {
     const usage = context.budgets.map((budget) => ({
       budget,
-      ...budgetUsage(context.transactions, budget, month),
+      ...budgetUsage(context.transactions, budget, month, context.today),
     }));
     if (usage.length === 0) return { reply: "No budgets are set for this month." };
     const tight = usage.filter((item) => item.state !== "on-track");

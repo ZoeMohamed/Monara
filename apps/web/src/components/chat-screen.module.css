@@ -94,12 +94,19 @@
 
 .suggestions {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 24px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+  padding: 4px;
+  scrollbar-width: thin;
+}
+
+.suggestions > li {
+  flex-shrink: 0;
 }
 
 .suggestion {
+  height: auto;
   min-height: 44px;
   padding: 10px 16px;
   border-radius: 999px;
@@ -221,6 +228,11 @@
 
   .suggestion {
     font-size: 14px;
+  }
+
+  .suggestions {
+    flex-wrap: wrap;
+    overflow: visible;
   }
 
   .message[data-role="agent"] {
