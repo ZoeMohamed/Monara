@@ -108,7 +108,7 @@ function ConnectionIntro({
   const count = state.status === "ready" ? state.mailboxes.length : 0;
   const canConnect = state.status === "ready" && count < 3 && !!actions && !pendingAction;
   return (
-    <Card className="block gap-0 mt-4 rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <Card className="block gap-0 mt-4 rounded-2xl border border-border bg-surface p-5 sm:p-6">
       <h2 className="text-lg font-bold">Connect Gmail separately</h2>
       <p className="mt-2 text-sm leading-6 text-muted">
         Google sign-in opens your Monara account. Connecting Gmail gives permission to import
@@ -180,7 +180,7 @@ function MailboxActions({ mailbox, actions, pendingAction, onDisconnect }: Mailb
 
 function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxCardProps) {
   return (
-    <Card className="block gap-0 rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <Card className="block gap-0 rounded-2xl border border-border bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="min-w-0 break-all font-bold">{mailbox.email}</h2>
         <Chip variant="soft" color={mailbox.status === "active" ? "success" : "warning"}>
@@ -232,7 +232,7 @@ export function GmailConnectionsScreen({
       <div className="mt-5 flex flex-wrap items-start justify-between gap-5">
         <div>
           <p className="text-sm font-semibold text-accent">Connections</p>
-          <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
+          <h1 className="mt-2 text-[32px] font-extrabold tracking-[-0.04em]">
             Your Gmail mailboxes
           </h1>
         </div>

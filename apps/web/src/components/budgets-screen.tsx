@@ -282,13 +282,13 @@ function BudgetSummaryCard({
   const currentMonth = month === today.slice(0, 7);
   const safe = safeToSpendToday(transactions, budgets, today);
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border p-4 sm:p-6">
+    <Card className="block min-w-0 gap-0 rounded-2xl border border-border p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-4">
         <div className="min-w-0 flex-1 basis-[13rem]">
           <h2 className="text-sm font-medium text-muted">
             {monthlyOnly ? "Monthly category budgets remaining" : "Remaining in category budgets"}
           </h2>
-          <p className="mt-2 text-3xl font-semibold leading-tight tracking-tight tabular-nums [overflow-wrap:anywhere] sm:text-4xl">
+          <p className="mt-2 text-3xl font-extrabold leading-tight tracking-[-0.03em] tabular-nums [overflow-wrap:anywhere] sm:text-4xl">
             {formatRupiah(summary.remaining)}
           </p>
         </div>
@@ -374,7 +374,7 @@ function CategoryBudgets({
   return (
     <section aria-labelledby="category-budgets" className="mt-5">
       <SectionTitle id="category-budgets" meta="Monthly" title="By category" />
-      <Card className="mt-2 block min-w-0 gap-0 rounded-2xl border border-border px-4 py-1">
+      <Card className="mt-2 block min-w-0 gap-0 rounded-2xl border border-border px-5 py-1">
         {budgets.length > 0 ? (
           <ul className="divide-y divide-separator">
             {budgets.map((budget, index) => (
@@ -408,7 +408,7 @@ function SuggestedBill({
   onDismissBill: (id: string) => void;
 }) {
   return (
-    <Card className="mt-3 block min-w-0 gap-0 rounded-2xl border border-border p-4">
+    <Card className="mt-3 block min-w-0 gap-0 rounded-2xl border border-border p-5">
       <div className="min-w-0">
         <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
           {bill.merchant} looks like a monthly bill
@@ -456,7 +456,7 @@ function RecurringBills({
         meta={`${active.length} tracked`}
         title="Recurring bills"
       />
-      <Card className="mt-2 block min-w-0 gap-0 rounded-2xl border border-border px-4 py-1">
+      <Card className="mt-2 block min-w-0 gap-0 rounded-2xl border border-border px-5 py-1">
         {active.length > 0 ? (
           <ul className="divide-y divide-separator">
             {active.map((bill) => (
@@ -513,9 +513,7 @@ export function BudgetsScreen({
     <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-[32px] font-extrabold tracking-[-0.04em] lg:text-3xl lg:font-semibold">
-            Budgets
-          </h1>
+          <h1 className="text-[32px] font-extrabold tracking-[-0.04em]">Budgets</h1>
         </div>
         {setMonth ? (
           <MonthSelector currentMonth={today.slice(0, 7)} month={month} onChange={setMonth} />

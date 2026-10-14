@@ -49,7 +49,7 @@ function TopPlaces({
   }
 
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
+    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <SectionTitle title="Top places" />
       <ol className="mt-2 divide-y divide-separator">
         {places.map((place, index) => (
@@ -207,7 +207,7 @@ function BiggestExpenses({
   openTransaction?: (transaction: Transaction) => void;
 }) {
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
+    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <SectionTitle title="Biggest expenses" />
       <ul className="mt-1 divide-y divide-separator">
         {expenses.map((item) => (
@@ -256,7 +256,7 @@ export function ReportsScreen({
   return (
     <div>
       <div className={`${styles.header} flex flex-wrap items-center justify-between gap-3`}>
-        <h1 className="text-2xl font-bold tracking-[-0.035em] sm:text-3xl">Reports</h1>
+        <h1 className="text-[32px] font-extrabold tracking-[-0.04em]">Reports</h1>
         <MonthSelector currentMonth={today.slice(0, 7)} month={month} onChange={setMonth} />
       </div>
       {!hasFinancialActivity ? (

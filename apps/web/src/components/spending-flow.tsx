@@ -213,7 +213,7 @@ export function SpendingFlow({
   return (
     <Card
       aria-labelledby={headingId}
-      className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4 sm:p-6"
+      className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5 sm:p-6"
     >
       <SectionTitle id={headingId} title="Follow the money" />
       {!selected ? (

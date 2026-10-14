@@ -130,7 +130,7 @@ export function ChatScreen({
     >
       <div aria-hidden className={styles.handle} />
       <div className={`${styles.header} flex flex-wrap items-center justify-between gap-3`}>
-        <h1 className="text-2xl font-bold tracking-[-0.035em] sm:text-3xl">
+        <h1 className="text-[32px] font-extrabold tracking-[-0.04em]">
           <span className={styles.desktopTitle}>Chat</span>
           <span className={styles.mobileTitle}>Ask Monara</span>
         </h1>

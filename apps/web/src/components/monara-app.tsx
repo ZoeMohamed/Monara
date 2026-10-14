@@ -11,9 +11,10 @@ import { ModalDialog } from "@/components/modal-dialog";
 import styles from "@/components/monara-app.module.css";
 import { MonaraMascot } from "@/components/monara-mascot";
 import { ProductTour } from "@/components/product-tour";
+import { SessionToast } from "@/components/session-toast";
 import { TransactionDetails } from "@/components/transaction-details";
 import { type TransactionDraft, TransactionEditor } from "@/components/transaction-editor";
-import { type SaveNotice, useMonaraSession } from "@/components/use-monara-session";
+import { useMonaraSession } from "@/components/use-monara-session";
 import type { AppScreen } from "@/data/app-navigation";
 import { demoToday, type Reminder, type Transaction } from "@/data/demo-ledger";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
@@ -95,52 +96,38 @@ function DesktopSidebar({
   live: boolean;
 }) {
   return (
-    <aside className="sticky top-0 hidden h-dvh border-r border-border bg-surface p-5 lg:flex lg:flex-col">
+    <aside className={styles.sidebar}>
       <Logo />
-      <nav aria-label="Main navigation" className="mt-8 space-y-1">
+      <nav aria-label="Main navigation" className={styles.sideNav}>
         {tabs.map((tab) => (
           <Link
-            href={hrefFor(tab.id)}
             aria-current={activeTab === tab.id ? "page" : undefined}
-            className={`flex min-h-11 w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
-              activeTab === tab.id
-                ? "bg-accent-soft text-accent"
-                : "text-muted hover:bg-surface hover:text-foreground"
-            }`}
+            className={styles.sideLink}
+            href={hrefFor(tab.id)}
             key={tab.id}
           >
-            <Icon name={tab.icon} /> {tab.label}
+            <Icon name={tab.icon} strokeWidth={activeTab === tab.id ? 2.3 : 1.8} /> {tab.label}
           </Link>
         ))}
       </nav>
-      <Button
-        variant="ghost"
-        className="mt-4 h-auto w-full justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-bold text-muted hover:bg-surface hover:text-foreground"
-        onPress={() => onOpenReminders()}
-      >
+      <button className={`${styles.sideLink} mt-3`} onClick={onOpenReminders} type="button">
         <Icon name="bell" /> Reminders
-        {reminderCount > 0 ? (
-          <span className="ml-auto rounded-full bg-warning-soft px-2 text-xs text-warning-soft-foreground tabular-nums">
-            {reminderCount}
-          </span>
-        ) : null}
-      </Button>
-      <div className="mt-auto flex items-center gap-3 rounded-2xl border border-warning/40 bg-warning-soft p-3">
-        <span className="min-w-0 text-xs text-warning-soft-foreground">
-          {live ? (
-            <>
-              <strong className="block text-sm">Private ledger</strong>
-              Saved to your account
-            </>
-          ) : (
-            <DemoIndicator className="block text-sm font-bold" />
-          )}
-        </span>
+        {reminderCount > 0 ? <span className={styles.sideBadge}>{reminderCount}</span> : null}
+      </button>
+      <div className={styles.sideStatus}>
+        {live ? (
+          <>
+            <strong>Private ledger</strong>
+            Saved to your account
+          </>
+        ) : (
+          <DemoIndicator className="block text-sm font-bold" />
+        )}
       </div>
-      <Button className="mt-3 min-h-12 w-full gap-2 rounded-full" onPress={onAdd}>
-        <Icon name="plus" />
+      <button className={styles.sideAdd} onClick={onAdd} type="button">
+        <Icon name="plus" strokeWidth={2.4} />
         Add transaction
-      </Button>
+      </button>
     </aside>
   );
 }
@@ -293,39 +280,6 @@ function RejectDialog({
   );
 }
 
-function SessionNotice({
-  notice,
-  onUndo,
-  onDismiss,
-}: {
-  notice: SaveNotice | null;
-  onUndo: () => void;
-  onDismiss: () => void;
-}) {
-  if (!notice) return null;
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface px-3 py-2">
-      <p className="min-w-0 flex-1 text-sm font-semibold" role="status">
-        {notice.message}
-      </p>
-      {notice.undo ? (
-        <Button className="rounded-full text-accent" onPress={onUndo} size="sm" variant="ghost">
-          Undo
-        </Button>
-      ) : null}
-      <Button
-        aria-label="Dismiss message"
-        className="rounded-full"
-        isIconOnly
-        onPress={onDismiss}
-        variant="ghost"
-      >
-        <Icon name="close" />
-      </Button>
-    </div>
-  );
-}
-
 function MissingTransaction({ onClose }: { onClose: () => void }) {
   return (
     <ModalDialog labelledBy="missing-transaction" onClose={onClose}>
@@ -390,7 +344,7 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
       >
         Skip to content
       </a>
-      <div className="mx-auto min-h-dvh max-w-[1760px] bg-background lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
+      <div className="mx-auto min-h-dvh max-w-[1760px] bg-background lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
         <DesktopSidebar
           activeTab={view.screen}
           hrefFor={navigation.hrefFor}
@@ -445,12 +399,12 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
                 ) : null}
               </div>
             ) : null}
-            <SessionNotice notice={notice} onUndo={undo} onDismiss={() => setNotice(null)} />
-            <div className={notice ? "mt-4" : ""}>{children}</div>
+            {children}
           </main>
         </div>
       </div>
       <BottomNav activeTab={view.screen} onAdd={navigation.openAdd} hrefFor={navigation.hrefFor} />
+      <SessionToast notice={notice} onUndo={undo} onDismiss={() => setNotice(null)} />
       <AppSheets workspace={workspace} />
     </div>
   );

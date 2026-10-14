@@ -481,7 +481,7 @@ export function SpendingTrend({ transactions, month, today = demoToday }: Financ
   const selectedDay = selection?.month === month ? selection.day : defaultTrendDay(current, today);
   const model = spendingChartModel(current, previous, mode, selectedDay);
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
+    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <ChartHeading
         action={<TrendModeControls mode={mode} onChange={setMode} />}
         title="Spending trend"
@@ -543,7 +543,7 @@ export function CashFlowChart({ transactions, month, today = demoToday }: Financ
   );
 
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
+    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <ChartHeading meta="6 months" title="Cash flow" />
       <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
         <span className="flex items-center gap-1.5">
@@ -859,7 +859,7 @@ export function CategoryBreakdown({
 
   return (
     <Card
-      className={`${donutStyles.breakdown} block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4`}
+      className={`${donutStyles.breakdown} block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5`}
       data-keyboard={keyboardSelection}
     >
       <ChartHeading title="Where the money went" />
@@ -952,7 +952,7 @@ export function SpendingCalendar({
   const countedDays = month === today.slice(0, 7) ? Number(today.slice(8)) : summary.days.length;
 
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
+    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <ChartHeading
         meta={`avg ${compactAmount(summary.spending / BigInt(Math.max(countedDays, 1)))}/day`}
         title="Daily spending"

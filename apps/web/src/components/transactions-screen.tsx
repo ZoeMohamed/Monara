@@ -240,7 +240,7 @@ function GroupedLedger({
     <div className="mt-3 space-y-4">
       {groupByDate(transactions).map(([date, group]) => (
         <section aria-labelledby={`ledger-day-${date}`} key={date}>
-          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-2 lg:px-5">
             <h2 className="min-w-0 text-sm font-semibold" id={`ledger-day-${date}`}>
               <time dateTime={date}>
                 {ledgerDayFormatter.format(new Date(`${date}T00:00:00Z`))}
@@ -252,7 +252,7 @@ function GroupedLedger({
               </p>
             ) : null}
           </div>
-          <div className="divide-y divide-separator rounded-3xl border border-border bg-surface px-3 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent max-lg:px-0">
+          <div className="divide-y divide-separator rounded-3xl border border-border bg-surface px-5 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent max-lg:px-0">
             {group.transactions.map((transaction) => (
               <TransactionRow
                 key={transaction.id}
@@ -451,7 +451,7 @@ export function TransactionsScreen({
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[32px] font-extrabold tracking-[-0.04em] lg:text-3xl lg:font-bold">
+        <h1 className="text-[32px] font-extrabold tracking-[-0.04em]">
           <span className="lg:hidden">History</span>
           <span className="max-lg:hidden">Transactions</span>
         </h1>

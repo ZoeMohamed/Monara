@@ -159,7 +159,7 @@ function SceneHero({
           fill
           fetchPriority="high"
           loading="eager"
-          sizes="(max-width: 1023px) 100vw, 1px"
+          sizes="(max-width: 1023px) 100vw, 1280px"
           src="/scenes/overview-landscape.webp"
         />
       </div>
@@ -707,36 +707,40 @@ export function MobileOverview({
           ))}
         </nav>
         {setup}
-        <SpendingBlock
-          model={model}
-          month={month}
-          openAdd={openAdd}
-          openBudgets={openBudgets}
-          openConnectGmail={openConnectGmail}
-          openReview={openReview}
-          openTransaction={openTransaction}
-          setMonth={setMonth}
-          today={today}
-          transactions={transactions}
-        />
-        {model.isCurrentMonth ? (
-          <TodayCard
+        <div className={styles.columns}>
+          <SpendingBlock
             model={model}
+            month={month}
             openAdd={openAdd}
+            openBudgets={openBudgets}
+            openConnectGmail={openConnectGmail}
+            openReview={openReview}
             openTransaction={openTransaction}
+            setMonth={setMonth}
             today={today}
+            transactions={transactions}
           />
-        ) : null}
-        <FeatureGrid
-          showBills={showBills}
-          bills={bills}
-          model={model}
-          openBudgets={openBudgets}
-          openConnectGmail={openConnectGmail}
-          openReports={openReports}
-          openReview={openReview}
-          today={today}
-        />
+          <div className={styles.aside}>
+            {model.isCurrentMonth ? (
+              <TodayCard
+                model={model}
+                openAdd={openAdd}
+                openTransaction={openTransaction}
+                today={today}
+              />
+            ) : null}
+            <FeatureGrid
+              showBills={showBills}
+              bills={bills}
+              model={model}
+              openBudgets={openBudgets}
+              openConnectGmail={openConnectGmail}
+              openReports={openReports}
+              openReview={openReview}
+              today={today}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ function Row({ title, detail, end }: { title: string; detail?: string; end?: Rea
 function LinkRow({ href, title, detail }: { href: string; title: string; detail: string }) {
   return (
     <Link
-      className="-mx-4 flex min-h-16 items-center gap-3 px-4 py-2.5 transition-colors duration-100 hover:bg-surface-secondary focus-visible:bg-surface-secondary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus active:bg-surface-secondary"
+      className="-mx-5 flex min-h-16 items-center gap-3 px-5 py-2.5 transition-colors duration-100 hover:bg-surface-secondary focus-visible:bg-surface-secondary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus active:bg-surface-secondary"
       href={href}
     >
       <div className="min-w-0 flex-1">
@@ -41,7 +41,7 @@ function Group({ id, title, children }: { id: string; title: string; children: R
   return (
     <section aria-labelledby={id} className="mt-5">
       <SectionTitle id={id} title={title} />
-      <Card className="mt-2 block gap-0 overflow-hidden rounded-2xl border border-border px-4 py-0.5">
+      <Card className="mt-2 block gap-0 overflow-hidden rounded-2xl border border-border px-5 py-0.5">
         <div className="divide-y divide-separator">{children}</div>
       </Card>
     </section>
@@ -50,7 +50,7 @@ function Group({ id, title, children }: { id: string; title: string; children: R
 
 function ProfileIdentity({ profile, demo }: { profile: AuthenticatedProfile; demo: boolean }) {
   return (
-    <Card className="mt-4 block gap-0 rounded-2xl border border-border p-4 sm:p-5">
+    <Card className="mt-4 block gap-0 rounded-2xl border border-border p-5 sm:p-6">
       <div className="flex items-start gap-3">
         <MonaraMascot className="h-16 w-16 shrink-0" />
         <div className="min-w-0 flex-1">
@@ -208,9 +208,7 @@ export function ProfileScreen({
 }) {
   return (
     <div>
-      <h1 className="text-[32px] font-extrabold tracking-[-0.04em] lg:text-3xl lg:font-bold">
-        Profile
-      </h1>
+      <h1 className="text-[32px] font-extrabold tracking-[-0.04em]">Profile</h1>
       <ProfileIdentity demo={demo} profile={profile} />
       {demo ? <DemoSignup /> : null}
       {financialAccounts}

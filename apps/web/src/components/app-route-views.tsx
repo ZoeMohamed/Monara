@@ -40,14 +40,11 @@ export function OverviewRoute() {
       budgets={session.budgets}
       today={session.today}
       bills={session.bills}
-      reminders={session.reminders}
       amountsHidden={session.amountsHidden}
       toggleAmounts={session.toggleAmounts}
       openTransaction={(transaction) => navigation.openTransaction(transaction.id)}
       openReview={session.openReview}
-      openReminders={session.openReminders}
       openReports={() => navigation.navigate({ screen: "reports" })}
-      openTransactions={() => navigation.navigate({ screen: "transactions", reviewOpen: false })}
       openBudgets={() => navigation.navigate({ screen: "budgets" })}
       openChat={session.openChat}
       openAdd={navigation.openAdd}

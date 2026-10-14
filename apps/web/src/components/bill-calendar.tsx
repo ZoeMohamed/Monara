@@ -50,7 +50,7 @@ export function BillCalendar({
   return (
     <section aria-labelledby="bill-calendar-heading" className="min-w-0">
       <SectionTitle id="bill-calendar-heading" title="Bill calendar" />
-      <Card className="mt-2 block min-w-0 gap-0 rounded-2xl border border-border p-3 min-[400px]:p-4">
+      <Card className="mt-2 block min-w-0 gap-0 rounded-2xl border border-border p-4 min-[400px]:p-5">
         <div className="flex items-center justify-between gap-1">
           <Button
             aria-label={`Previous bill month, ${formatMonth(shiftMonth(calendar.month, -1))}`}
