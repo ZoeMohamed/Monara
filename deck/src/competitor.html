@@ -1,14 +1,14 @@
 <!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="base.css">
 <!-- Competitor table, transposed: metrics down the left, products across. 1792x604, render at 2x. Product badges are initials, not brand logos. -->
 <style>
-html,body{width:1792px;height:616px}
-.t{position:absolute;left:0;top:0;width:1792px;height:514px;display:grid;grid-template-columns:250px repeat(6,257px);grid-template-rows:80px 64px 96px 64px 84px 126px;filter:drop-shadow(0 2px 7px rgba(40,50,80,.12))}
-.c{background:#fff;display:flex;align-items:center;padding:0 18px;font-size:19px;line-height:1.3;border-bottom:2px solid #eceae2;border-right:2px solid #eceae2;font-weight:500;color:var(--muted);gap:10px}
+html,body{width:1792px;height:638px}
+.t{position:absolute;left:0;top:0;width:1792px;height:550px;display:grid;grid-template-columns:212px repeat(5,222px) 470px;grid-template-rows:72px 52px 76px 52px 130px 96px 72px;filter:drop-shadow(0 2px 7px rgba(40,50,80,.12))}
+.c{background:#fff;display:flex;align-items:center;padding:0 14px;font-size:18px;line-height:1.3;border-bottom:2px solid #eceae2;border-right:2px solid #eceae2;font-weight:500;color:var(--muted);gap:10px}
 .c:nth-child(7n){border-right:none}
 .gone{visibility:hidden;background:none;border:none}
-.h{background:var(--paler);color:var(--navy);font-weight:700;font-size:22px;border-bottom:2px solid #eceae2}
-.bd{flex:none;width:38px;height:38px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800}
-.m .bd{background:#fff;color:var(--brand-dark)}
+.h{background:var(--paler);color:var(--navy);font-weight:700;font-size:21px;border-bottom:2px solid #eceae2}
+.fv{flex:none;width:38px;height:38px;border-radius:9px;object-fit:contain;background:#fff}
+.m .fv{padding:3px}
 .tl{border-top-left-radius:18px}.tr{border-top-right-radius:18px}.bl{border-bottom-left-radius:18px}.br{border-bottom-right-radius:18px}
 .l{font-weight:700;color:var(--navy);background:var(--paler);font-size:19px;gap:12px}
 .l svg{flex:none;width:28px;height:28px}
@@ -21,7 +21,7 @@ html,body{width:1792px;height:616px}
 .p{font-weight:800;color:var(--navy);font-size:21px;line-height:1.2}.p small{display:block;font-weight:600;color:var(--muted);font-size:15px}
 .m .p{color:var(--brand-dark)}
 .ch{display:flex;flex-direction:column;gap:3px}.ch div{display:flex;align-items:center;gap:8px}
-.strip{position:absolute;left:0;top:532px;width:1792px;height:84px;background:var(--pale);border-radius:18px;display:flex;align-items:center;padding:0 34px;gap:26px}
+.strip{position:absolute;left:0;top:562px;width:1792px;height:76px;background:var(--pale);border-radius:18px;display:flex;align-items:center;padding:0 34px;gap:26px}
 .strip .lb{font-size:22px;font-weight:700;color:var(--navy);line-height:1.25;width:500px}
 .chip{background:#fff;border:2px solid #a9c3ff;border-radius:999px;padding:9px 26px;font-size:22px;font-weight:700;color:var(--navy)}
 .note{font-size:16px;font-weight:500;color:var(--muted);margin-left:auto;text-align:right;line-height:1.25;width:330px}
@@ -32,22 +32,25 @@ html,body{width:1792px;height:616px}
 </defs></svg>
 <div class="t">
 <div class="c gone"></div>
-<div class="c h tl"><span class="bd">R</span>Rekafin</div><div class="c h"><span class="bd">O</span>Oyenza</div><div class="c h"><span class="bd">M</span>Money Lover</div><div class="c h"><span class="bd">S</span>Spendee</div><div class="c h"><span class="bd">M</span>Moneko</div><div class="c h m tr"><span class="bd"><img src="../brand/logo-light.svg" style="width:24px;height:24px"></span>Monara</div>
+<div class="c h tl"><img class="fv" src="../brand/favicon-rekafin.png">Rekafin</div><div class="c h"><img class="fv" src="../brand/favicon-oyenza.png">Oyenza</div><div class="c h"><img class="fv" src="../brand/favicon-moneylover.png">Money Lover</div><div class="c h"><img class="fv" src="../brand/favicon-spendee.png">Spendee</div><div class="c h"><img class="fv" src="../brand/favicon-moneko.png">Moneko</div><div class="c h m tr"><img class="fv" src="../brand/logo-light.svg">Monara</div>
 
 <div class="c l tl"><svg viewBox="0 0 24 24" fill="none" stroke="#1f4fc4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg>Market</div>
-<div class="c"><span class="fl">🇮🇩</span>Indonesia</div><div class="c"><span class="fl">🇮🇩</span>Indonesia</div><div class="c"><span class="fl">🇻🇳</span>Vietnam, used in SEA</div><div class="c"><span class="fl">🌐</span>Global</div><div class="c"><span class="fl">🌐</span>Global</div><div class="c m"><span class="fl">🇮🇩</span>Indonesia, then SEA</div>
+<div class="c"><span class="fl">🇮🇩</span>Indonesia</div><div class="c"><span class="fl">🇮🇩</span>Indonesia</div><div class="c"><span class="fl">🇻🇳</span>Vietnam</div><div class="c"><span class="fl">🌐</span>Global</div><div class="c"><span class="fl">🌐</span>Global</div><div class="c m"><span class="fl">🇮🇩</span>Indonesia, then Southeast Asia</div>
 
 <div class="c l"><svg viewBox="0 0 24 24" fill="none" stroke="#1f4fc4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-11.6 7.1L4 20.5l1.4-4.6A8 8 0 1121 12z"/></svg>Chat channel</div>
 <div class="c"><img class="logo" src="../brand/whatsapp.svg">WhatsApp</div><div class="c">Voice, receipts, web app</div><div class="c">Not verified</div><div class="c">Not verified</div><div class="c"><div class="ch"><div><img class="logo" src="../brand/whatsapp.svg">WhatsApp</div><div><img class="logo" src="../brand/telegram.svg">Telegram</div></div></div><div class="c m"><div class="ch"><div><img class="logo" src="../brand/whatsapp.svg">WhatsApp first</div><div>then LINE, Messenger, Zalo</div></div></div>
 
-<div class="c l"><svg viewBox="0 0 24 24" fill="none" stroke="#1f4fc4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6.5L21 7"/></svg>Gmail import</div>
-<div class="c"><svg class="ck"><use href="#no"/></svg>Not verified</div><div class="c"><svg class="ck"><use href="#yes"/></svg>Yes</div><div class="c"><svg class="ck"><use href="#no"/></svg>Not verified</div><div class="c"><svg class="ck"><use href="#no"/></svg>Not verified</div><div class="c"><svg class="ck"><use href="#yes"/></svg>Yes</div><div class="c m"><svg class="ck"><use href="#yes"/></svg>Yes, as Pending</div>
+<div class="c l"><svg viewBox="0 0 24 24" fill="none" stroke="#1f4fc4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6.5L21 7"/></svg>Gmail tracking</div>
+<div class="c"><svg class="ck"><use href="#no"/></svg>Not verified</div><div class="c"><svg class="ck"><use href="#yes"/></svg>Yes</div><div class="c"><svg class="ck"><use href="#no"/></svg>Not verified</div><div class="c"><svg class="ck"><use href="#no"/></svg>Not verified</div><div class="c"><svg class="ck"><use href="#yes"/></svg>Yes</div><div class="c m"><svg class="ck"><use href="#yes"/></svg>Yes, you confirm every item</div>
 
-<div class="c l"><svg viewBox="0 0 24 24" fill="none" stroke="#1f4fc4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg>Price per month</div>
-<div class="c"><div class="p">US$1.62<small>≈ RMB 10.91</small></div></div><div class="c"><div class="p">US$5.53<small>≈ RMB 37.23</small></div></div><div class="c"><div class="p">US$2.49<small>≈ RMB 16.76</small></div></div><div class="c"><div class="p">US$5.99<small>≈ RMB 40.32</small></div></div><div class="c"><div class="p">US$6.67<small>≈ RMB 44.90</small></div></div><div class="c m"><div class="p">US$1.50<small>≈ RMB 10.10</small></div></div>
+<div class="c l"><svg viewBox="0 0 24 24" fill="none" stroke="#1f4fc4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V5a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2v-2"/><path d="M21 12h-6a2 2 0 000 4h6z"/></svg>Smart budgeting</div>
+<div class="c">Budgeting feature; alerts not verified</div><div class="c">Category budgets set in chat</div><div class="c">Category budgets, alert at 75%</div><div class="c">Category budgets, alerts at 75% and 90%</div><div class="c">Category pockets, budget check on request</div><div class="c m">Suggested budgets per category from your history, or set your own. Reminders on WhatsApp and in the app. Alerts at your threshold (say 80%) and a pace warning (say 60% spent by day 3).</div>
 
-<div class="c l last bl"><svg viewBox="0 0 24 24" fill="none" stroke="#1f4fc4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.2 5.3L20 9l-4.4 3.8L17 18.5 12 15.6 7 18.5l1.4-5.7L4 9l5.8-.7L12 3z"/></svg>Where Monara differs</div>
-<div class="c last">Gmail receipts become Pending items, so typing is optional</div><div class="c last">Permission tiers: deletes always ask first</div><div class="c last">Chat and Gmail capture, not manual logging</div><div class="c last">Chat plus Gmail evidence, no receipt photos needed</div><div class="c last">Built for SEA channels, at under a quarter of the price</div><div class="c m last br">A trusted Agent: source on every item, no invented amounts</div>
+<div class="c l"><svg viewBox="0 0 24 24" fill="none" stroke="#1f4fc4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>Expense forecasting</div>
+<div class="c">Not verified</div><div class="c">Not verified</div><div class="c">Projected spend per budget</div><div class="c">Not verified</div><div class="c">Balance and goal scenarios, not spend</div><div class="c m">Forecasts repeat spending per merchant from your history, plus what you will spend this week and this month.</div>
+
+<div class="c l last bl"><svg viewBox="0 0 24 24" fill="none" stroke="#1f4fc4" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg>Price per month</div>
+<div class="c last"><div class="p">US$1.62<small>≈ RMB 10.91</small></div></div><div class="c last"><div class="p">US$5.53<small>≈ RMB 37.23</small></div></div><div class="c last"><div class="p">US$2.49<small>≈ RMB 16.76</small></div></div><div class="c last"><div class="p">US$5.99<small>≈ RMB 40.32</small></div></div><div class="c last"><div class="p">US$6.67<small>≈ RMB 44.90</small></div></div><div class="c m last br"><div class="p">US$1.50<small>≈ RMB 10.10</small></div></div>
 </div>
 <div class="strip"><div class="lb">Payment networks move money.<br>Monara helps you understand it.</div><div class="chip">Alipay+</div><div class="chip">WeChat Pay</div><div class="chip">GCash</div><div class="chip">DANA</div><div class="note">Ecosystems Monara sits on top of, not competitors</div></div>
 </body></html>
