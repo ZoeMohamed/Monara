@@ -17,6 +17,7 @@ describe("safe auth redirects", () => {
   it("rejects absolute, protocol-relative, and missing destinations", () => {
     assert.equal(safeNextPath("https://attacker.example/path"), "/");
     assert.equal(safeNextPath("//attacker.example/path"), "/");
+    assert.equal(safeNextPath("/.//attacker.example"), "/");
     assert.equal(safeNextPath("connections/gmail"), "/");
     assert.equal(safeNextPath(null), "/");
   });

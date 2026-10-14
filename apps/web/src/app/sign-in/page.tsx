@@ -8,14 +8,18 @@ import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 export const metadata: Metadata = { title: "Sign in" };
 
 export default async function SignInPage({ searchParams }: PageProps<"/sign-in">) {
-  const identity = await getAuthenticatedIdentity();
-  if (identity) redirect("/");
-
   const params = await searchParams;
+  const next = safeNextPath(typeof params.next === "string" ? params.next : null);
+  const identity = await getAuthenticatedIdentity();
+  if (identity) {
+    if (next === "/connections/gmail") redirect("/connections/gmail");
+    redirect("/");
+  }
+
   return (
     <SignInScreen
       error={signInErrorMessage(typeof params.error === "string" ? params.error : null)}
-      next={safeNextPath(typeof params.next === "string" ? params.next : null)}
+      next={next}
     />
   );
 }

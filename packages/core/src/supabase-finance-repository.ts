@@ -432,7 +432,7 @@ export function createSupabaseFinanceRepository(
     },
 
     async createFinancialAccount(userId, input) {
-      const result = await client
+      const inserted = await client
         .from("financial_accounts")
         .insert({
           user_id: userId,
@@ -445,8 +445,28 @@ export function createSupabaseFinanceRepository(
         })
         .select(ACCOUNT_COLUMNS)
         .single();
-      if (result.error) fail(result.error);
-      return toAccount(result.data);
+      if (!inserted.error) return toAccount(inserted.data);
+      if (inserted.error.code !== "23505") fail(inserted.error);
+
+      const existing = await client
+        .from("financial_accounts")
+        .select(ACCOUNT_COLUMNS)
+        .eq("user_id", userId)
+        .eq("client_request_id", input.clientRequestId)
+        .maybeSingle();
+      if (existing.error) fail(existing.error);
+      if (!existing.data) fail(inserted.error);
+      const financialAccount = toAccount(existing.data);
+      if (
+        financialAccount.name !== input.name ||
+        financialAccount.institution !== input.institution ||
+        financialAccount.accountType !== input.accountType ||
+        financialAccount.currency !== input.currency ||
+        financialAccount.lastFour !== input.lastFour
+      ) {
+        throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
+      }
+      return financialAccount;
     },
 
     async updateFinancialAccount(userId, input) {
@@ -560,7 +580,7 @@ export function createSupabaseFinanceRepository(
     },
 
     async createBudget(userId, input) {
-      const result = await client
+      const inserted = await client
         .from("budgets")
         .insert({
           user_id: userId,
@@ -575,8 +595,30 @@ export function createSupabaseFinanceRepository(
         })
         .select(BUDGET_COLUMNS)
         .single();
-      if (result.error) fail(result.error);
-      return toBudget(result.data as unknown as ExactBudgetRow);
+      if (!inserted.error) return toBudget(inserted.data as unknown as ExactBudgetRow);
+      if (inserted.error.code !== "23505") fail(inserted.error);
+
+      const existing = await client
+        .from("budgets")
+        .select(BUDGET_COLUMNS)
+        .eq("user_id", userId)
+        .eq("client_request_id", input.clientRequestId)
+        .maybeSingle();
+      if (existing.error) fail(existing.error);
+      if (!existing.data) fail(inserted.error);
+      const budget = toBudget(existing.data as unknown as ExactBudgetRow);
+      if (
+        budget.categoryId !== input.categoryId ||
+        budget.name !== input.name ||
+        budget.cadence !== input.cadence ||
+        budget.limit.amountMinor !== input.limit.amountMinor ||
+        budget.limit.currency !== input.limit.currency ||
+        budget.warningPercent !== input.warningPercent ||
+        budget.startsOn !== input.startsOn
+      ) {
+        throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
+      }
+      return budget;
     },
 
     async updateBudget(userId, input) {

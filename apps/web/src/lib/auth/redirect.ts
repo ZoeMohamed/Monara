@@ -7,6 +7,7 @@ export function safeNextPath(value: string | null | undefined): string {
   try {
     const parsed = new URL(value, "https://monara.invalid");
     if (parsed.origin !== "https://monara.invalid") return DEFAULT_PATH;
+    if (!parsed.pathname.startsWith("/") || parsed.pathname.startsWith("//")) return DEFAULT_PATH;
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return DEFAULT_PATH;
