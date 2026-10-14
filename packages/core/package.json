@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@monara/contracts": "workspace:*",
-    "@monara/db": "workspace:*"
+    "@monara/db": "workspace:*",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "typescript": "5.9.3"
