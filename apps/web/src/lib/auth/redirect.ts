@@ -14,6 +14,13 @@ export function safeNextPath(value: string | null | undefined): string {
   }
 }
 
+/** Resolves a safe post-auth destination without looping back to the sign-in page. */
+export function safeAuthenticatedNextPath(value: string | null | undefined): string {
+  const next = safeNextPath(value);
+  const parsed = new URL(next, "https://monara.invalid");
+  return parsed.pathname === "/sign-in" ? DEFAULT_PATH : next;
+}
+
 export function signInErrorMessage(code: string | null | undefined): string | undefined {
   switch (code) {
     case "oauth_callback_failed":

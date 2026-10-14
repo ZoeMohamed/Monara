@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { browserOrigin } from "../http/origin.ts";
 import { isGoogleSignInAvailable } from "../supabase/provider.ts";
 import { identityFromVerifiedClaims, profileFromIdentity } from "./identity.ts";
-import { safeNextPath, signInErrorMessage } from "./redirect.ts";
+import { safeAuthenticatedNextPath, safeNextPath, signInErrorMessage } from "./redirect.ts";
 
 describe("safe auth redirects", () => {
   it("keeps valid same-origin paths", () => {
@@ -12,6 +12,15 @@ describe("safe auth redirects", () => {
       safeNextPath("/connections/gmail?from=profile"),
       "/connections/gmail?from=profile",
     );
+  });
+
+  it("preserves safe post-auth destinations without sign-in loops", () => {
+    assert.equal(
+      safeAuthenticatedNextPath("/connections/gmail?from=profile#mailboxes"),
+      "/connections/gmail?from=profile#mailboxes",
+    );
+    assert.equal(safeAuthenticatedNextPath("/sign-in?next=/"), "/");
+    assert.equal(safeAuthenticatedNextPath("//attacker.example/path"), "/");
   });
 
   it("rejects absolute, protocol-relative, and missing destinations", () => {
