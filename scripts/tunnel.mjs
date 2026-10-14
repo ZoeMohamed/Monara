@@ -27,8 +27,12 @@ console.log("If ngrok reports the endpoint is already online, someone else is us
 // An empty NGROK_AUTHTOKEN falls back to the token in ngrok's own config file.
 const env = authtoken ? { ...process.env, NGROK_AUTHTOKEN: authtoken } : process.env;
 const child = spawn("ngrok", ["http", port, "--url", `https://${host}`], { env, stdio: "inherit" });
-child.on("error", () => {
-  console.error("ngrok is not installed. See https://ngrok.com/download.");
+child.on("error", (error) => {
+  console.error(
+    error.code === "ENOENT"
+      ? "ngrok is not installed. See https://ngrok.com/download."
+      : `ngrok could not start: ${error.message}`,
+  );
   process.exit(1);
 });
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal));
