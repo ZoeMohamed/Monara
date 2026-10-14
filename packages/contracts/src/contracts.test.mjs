@@ -12,9 +12,13 @@ import {
   createFinancialAccountInputSchema,
   createTransactionInputSchema,
   destructiveActionConfirmationSchema,
+  extractedTransactionSchema,
+  gmailJobSchema,
   listTransactionsInputSchema,
   positiveMoneySchema,
+  recordGmailExtractionInputSchema,
   reminderPreferencesSchema,
+  reportGmailConnectionErrorInputSchema,
   setReminderPreferencesInputSchema,
   transactionSchema,
   updateBudgetInputSchema,
@@ -441,5 +445,66 @@ describe("reminder contracts", () => {
       }).success,
       true,
     );
+  });
+});
+
+describe("Gmail extraction contracts", () => {
+  const connectionId = "00000000-0000-4000-8000-000000000010";
+  const processedMessageId = "00000000-0000-4000-8000-000000000020";
+  const extracted = {
+    kind: "expense",
+    merchantName: "Kopi Contoh",
+    money,
+    occurredOn: "2026-10-12",
+    occurredTime: null,
+    description: null,
+    location: null,
+    accountHint: null,
+    categoryName: "Food",
+    confidence: 0.8,
+  };
+
+  it("rejects fractional or zero Rupiah and category or account ids", () => {
+    assert.equal(extractedTransactionSchema.safeParse(extracted).success, true);
+    for (const amountMinor of ["0", "25000.5"]) {
+      assert.equal(
+        extractedTransactionSchema.safeParse({ ...extracted, money: { ...money, amountMinor } })
+          .success,
+        false,
+      );
+    }
+    assert.equal(
+      extractedTransactionSchema.safeParse({ ...extracted, categoryId: ids.category }).success,
+      false,
+    );
+  });
+
+  it("keeps items only on a transactions outcome", () => {
+    const record = (outcome, items) =>
+      recordGmailExtractionInputSchema.safeParse({ processedMessageId, outcome, items }).success;
+    assert.equal(record("transactions", [extracted]), true);
+    assert.equal(record("transactions", []), false);
+    assert.equal(record("skipped", []), true);
+    assert.equal(record("failed", [extracted]), false);
+  });
+
+  it("reports a connection error only with a known reason", () => {
+    assert.equal(
+      reportGmailConnectionErrorInputSchema.safeParse({
+        connectionId,
+        reason: "authorization_lost",
+      }).success,
+      true,
+    );
+    assert.equal(
+      reportGmailConnectionErrorInputSchema.safeParse({ connectionId, reason: "anything" }).success,
+      false,
+    );
+  });
+
+  it("never accepts a User id on a queued job", () => {
+    const job = { kind: "gmail.extract", connectionId, gmailMessageId: "m1", receivedAt: null };
+    assert.equal(gmailJobSchema.safeParse(job).success, true);
+    assert.equal(gmailJobSchema.safeParse({ ...job, userId: ids.accountA }).success, false);
   });
 });

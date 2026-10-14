@@ -1,3 +1,4 @@
+import type { GmailJob } from "@monara/contracts";
 import type { WhatsAppConversation } from "./whatsapp/conversation.ts";
 
 // Every value is optional at the type level so each handler has to check what it
@@ -5,8 +6,11 @@ import type { WhatsAppConversation } from "./whatsapp/conversation.ts";
 export interface Env {
   /** One Durable Object per User for their WhatsApp conversation. */
   CONVERSATIONS?: DurableObjectNamespace<WhatsAppConversation>;
+  /** Gmail sync and extraction jobs. See src/gmail/pipeline.ts. */
+  GMAIL_JOBS?: Queue<GmailJob>;
   MONARA_BACKEND_URL?: string;
   MONARA_AGENT_BACKEND_SECRET?: string;
+  COMPOSIO_API_URL?: string;
   COMPOSIO_API_KEY?: string;
   KAPSO_API_KEY?: string;
   KAPSO_WEBHOOK_SECRET?: string;

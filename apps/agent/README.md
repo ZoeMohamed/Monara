@@ -2,7 +2,7 @@
 
 One TypeScript worker hosts the shared agent runtime. Feature folders hold Adlyn's Gmail extraction (`src/gmail`), the Agent core and budgeting logic (`src/conversation`, `src/budgeting`), and Kapso message handling (`src/whatsapp`).
 
-Run `pnpm dev:agent` from the root. `pnpm --filter @monara/agent build` creates a local dry-run bundle without deployment, and `pnpm --filter @monara/agent test` runs the Agent tests.
+Run `pnpm dev:agent` from the root. `pnpm --filter @monara/agent build` creates a local dry-run bundle without deployment, and `pnpm --filter @monara/agent test` runs the Agent and Gmail tests with synthetic data.
 
 ## Endpoints
 
@@ -11,6 +11,7 @@ Run `pnpm dev:agent` from the root. `pnpm --filter @monara/agent build` creates 
 | `GET /health` | Returns `status: scaffold` until the runtime is ready for production. |
 | `POST /chat` | In-app chat. The web backend sends `{ userId, text, history }` (see `agentChatRequestSchema`) with `Authorization: Bearer <MONARA_AGENT_BACKEND_SECRET>` and gets `{ reply, actions, confirmation }`. |
 | `POST /webhooks/kapso` | Kapso `whatsapp.message.received` webhook. Verifies the signature, asks the backend who each sender is, and queues a linked User's text for the Agent. Everyone else gets a fixed reply and no data. |
+| `POST /gmail/sync` | Manual Gmail sync. The web backend sends `{ connectionId }` with the same Bearer secret, only after checking that the signed-in User owns the connection. Queues a sync job and returns 202. |
 | Anything else | 501. |
 
 Each handler returns 503 when a secret or binding it needs is missing.
@@ -58,9 +59,40 @@ The Agent reads and changes records only through the Next.js backend (`src/conve
 
 None of these routes exist in `apps/web` yet, so against the real backend every tool call fails and the Agent tells the User it could not read or confirm the change.
 
+## Gmail ingestion
+
+A cron trigger runs every 15 minutes and queues a sync job for each active Gmail Connection on the `monara-gmail-jobs` queue. A sync job lists one page of mail and queues one extraction job per message. If there are more pages, it queues a follow-up sync job. The first sync covers the last 30 days; later syncs start from the previous sync time.
+
+An extraction job (`src/gmail/pipeline.ts`):
+
+1. Resolves the connection through the backend.
+2. Claims the message so it is processed only once.
+3. Reads the message through Composio.
+4. Extracts transactions with one LLM call (`src/gmail/extract.ts`).
+5. Records Pending Transactions through the backend.
+
+The extractor treats email content as untrusted. Amounts must appear in the email exactly as written, non-Rupiah amounts are never converted, and anything the email does not state stays empty.
+
+The worker never writes to Supabase. It calls `POST {MONARA_BACKEND_URL}/api/agent/gmail/{name}` with the Bearer secret, kept apart from the per-User `/api/agent/operations/` above because these run with no User or Channel:
+
+| Operation | Input | Result |
+| --- | --- | --- |
+| `list-active-connections` | `{}` | `{ connections: [{ connectionId, lastSyncedAt }] }` |
+| `resolve-connection` | `{ connectionId }` | `{ connectionId, userId, composioConnectedAccountId, categoryNames }` |
+| `claim-message` | `{ connectionId, gmailMessageId, receivedAt }` | `{ processedMessageId, alreadyFinished }` |
+| `record-extraction` | `{ processedMessageId, outcome, items }` | `{ transactionIds, alreadyFinished }` |
+| `mark-synced` | `{ connectionId, syncedAt }` | `{}` |
+| `report-connection-error` | `{ connectionId, reason: "authorization_lost" }` | `{}` |
+
+The extractor offers the model the User's own Category names and keeps a `categoryName` only when it matches one of them; the backend maps it to that User's Category. Locations, like amounts, must appear in the email.
+
+When a Composio read fails with a client error other than 429, the worker asks Composio for the connected account's status. Only when Composio says the account is expired, failed, inactive, or gone does it call `report-connection-error`, which sets the connection to `error`. A bad Composio API key fails that check too, so it never marks Users' connections.
+
+The schemas are in `packages/contracts/src/gmail-extraction.ts`. A 404 with the JSON `NOT_FOUND` error means the connection is no longer active and ends the job without a retry. Any other failure, including a route that does not exist yet, retries up to three times, and the last attempt records the message as failed. None of these routes exist in `apps/web` yet, so ingestion fails clearly until they do.
+
 ## Still to do
 
-Implement automatic Gmail processing with durable background jobs and manual sync. Provision queues or other durable resources only with deployment authorization. Do not substitute fire-and-forget promises for durable processing. No queue bindings, schedules, or Gmail webhooks are configured yet.
+The Gmail queue and cron are declared in `wrangler.jsonc` and simulated by `wrangler dev`. Creating the queue in Cloudflare requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
 
 The `CONVERSATIONS` Durable Object binding in `wrangler.jsonc` is created on the first deployment. It has only run locally.
 

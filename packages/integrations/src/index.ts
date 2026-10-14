@@ -5,6 +5,14 @@ export type {
   GmailConnector,
 } from "./gmail.ts";
 export { ComposioRequestError, createComposioGmailClient } from "./gmail.ts";
+export type {
+  ComposioGmailReader,
+  GmailMailbox,
+  GmailMessageContent,
+  GmailMessagePage,
+  GmailMessageSummary,
+} from "./gmail-read.ts";
+export { createComposioGmailReader, decodeBase64Url, GmailReadError } from "./gmail-read.ts";
 export type { KapsoInboundMedia, KapsoInboundMessage, WhatsAppTransport } from "./whatsapp.ts";
 export {
   createKapsoTransport,

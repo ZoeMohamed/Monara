@@ -1,2 +1,1 @@
-// Adlyn: connect Gmail extraction to Composio and durable ingestion jobs.
-export type { GmailExtractionJob } from "@monara/contracts";
+export { consumeGmailJobs, handleGmailSyncRequest, scheduleGmailSyncs } from "./worker.ts";
