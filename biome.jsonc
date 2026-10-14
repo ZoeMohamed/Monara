@@ -17,6 +17,7 @@
       "!**/database.types.ts",
       "!**/public",
       "!**/*.svg",
+      "!deck/src",
       "!pnpm-lock.yaml"
     ]
   },

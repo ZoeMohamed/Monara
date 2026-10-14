@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:1728px;height:724px;overflow:hidden;background:transparent;font-family:Poppins,sans-serif;color:#1b1b1b}
+h1{font-size:54px;font-weight:700;color:#191919;letter-spacing:-1px;height:80px}
+h1 span{color:#3171FD}
+.panel{position:absolute;left:0;top:96px;width:560px;height:724px;background:#fff;border:3px solid #dce7ff;border-radius:22px;box-shadow:0 4px 14px rgba(40,50,80,.08)}
+.ph{position:absolute;left:0;top:0;width:100%;height:60px;background:#3171FD;border-radius:19px 19px 0 0;color:#fff;font-weight:700;font-size:20px;letter-spacing:3px;display:flex;align-items:center;padding-left:30px}
+.cell{position:absolute;width:132px;height:132px;border:3px solid #fff}
+.mk{position:absolute;width:52px;height:52px;border-radius:50%;background:#1f4fc4;color:#fff;font-weight:700;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(20,48,127,.35);border:3px solid #fff}
+.ax{position:absolute;font-size:15px;font-weight:700;color:#4d5160;letter-spacing:1px}
+.row{position:absolute;left:592px;width:1136px;height:118px;background:#fff;border:3px solid #dce7ff;border-radius:22px;box-shadow:0 4px 14px rgba(40,50,80,.08);display:flex;align-items:center}
+.hd{background:#3171FD;border-color:#3171FD;height:60px;color:#fff;font-weight:700;font-size:20px;letter-spacing:3px}
+.n{width:56px;height:56px;border-radius:50%;background:#1f4fc4;color:#fff;font-weight:700;font-size:27px;display:flex;align-items:center;justify-content:center;margin:0 20px 0 22px;flex:none}
+.c1{width:318px;font-size:25px;font-weight:700;color:#14307f;line-height:1.2}
+.c1 small{display:block;font-size:16px;font-weight:500;color:#5a6075;margin-top:4px;line-height:1.25}
+.c2{flex:1;padding:0 26px 0 20px;font-size:21px;color:#3b4254;line-height:1.32;border-left:3px solid #e6ecfa;height:78px;display:flex;align-items:center}
+.hd .c1{margin-left:30px;color:#fff;font-size:20px;font-weight:700;width:370px}.hd .c2{color:#fff;font-size:20px;font-weight:700;border:none;padding-left:0}
+.cap{position:absolute;left:30px;top:658px;width:500px;font-size:16px;color:#5a6075;line-height:1.35}
+</style></head><body><div style="position:absolute;left:0;top:-96px;width:1728px;height:820px">
+<div class="panel"><div class="ph">RISK HEAT MAP</div></div>
+<div id="g"></div>
+<div class="row hd" style="top:96px"><div class="c1">ATTACK THE JUDGES TEST</div><div class="c2">HOW THE DESIGN ANSWERS IT</div></div>
+<script>
+const shade={2:'#f1f5ff',3:'#dce7ff',4:'#bcd0ff',5:'#8fb0ff',6:'#5b8fff'};
+let h='';const X0=124,Y0=186;
+for(let r=0;r<3;r++)for(let c=0;c<3;c++){const L=3-r,I=c+1;h+=`<div class="cell" style="left:${X0+c*138}px;top:${Y0+r*138}px;background:${shade[L+I]}"></div>`}
+const mk={1:[2,0],5:[1,0],2:[2,1],3:[1,1],4:[2,2]};
+for(const k in mk){const [c,r]=mk[k];h+=`<div class="mk" style="left:${X0+c*138+40}px;top:${Y0+r*138+40}px">${k}</div>`}
+['HIGH','MEDIUM','LOW'].forEach((t,i)=>h+=`<div class="ax" style="left:40px;top:${Y0+i*138+56}px;width:76px;text-align:right">${t}</div>`);
+['LOW','MEDIUM','HIGH'].forEach((t,i)=>h+=`<div class="ax" style="left:${X0+i*138}px;top:${Y0+420}px;width:132px;text-align:center">${t}</div>`);
+h+=`<div class="ax" style="left:${X0}px;top:${Y0+452}px;width:408px;text-align:center;font-size:17px;color:#14307f">IMPACT</div>`;
+h+=`<div class="ax" style="left:-26px;top:${Y0+195}px;width:110px;text-align:center;font-size:17px;color:#14307f;transform:rotate(-90deg)">LIKELIHOOD</div>`;
+h+=`<div class="cap" style="left:30px;top:${Y0+510}px">Team assessment of the design, before the build is tested.</div>`;
+const rows=[
+["Prompt injection","Hidden instructions in an email or receipt","Content is treated as data, never as instructions. Every Agent Tool sits in a permission tier."],
+["Privilege escalation","Reaching another user's data or actions","The server verifies identity and ownership on every request. A WhatsApp number must be linked and verified first, and row-level security is the last line."],
+["Data extraction","Coaxing the Agent into revealing data","The Agent reads only the signed-in user's own data, through backend operations. Raw emails and conversations are never logged, and keys stay server-side."],
+["Induced transfers","Tricking the Agent into moving money","Monara has no payment tool, so it cannot move money. Deletes and other destructive actions always ask first."],
+["Invented amounts","Made-up or wrong figures in the ledger","Fields are never guessed. Every extracted item stays Pending until you confirm it."]
+];
+rows.forEach((r,i)=>{h+=`<div class="row" style="top:${176+i*128}px"><div class="n">${i+1}</div><div class="c1">${r[0]}<small>${r[1]}</small></div><div class="c2">${r[2]}</div></div>`});
+document.getElementById('g').innerHTML=h;
+</script></div></body></html>
