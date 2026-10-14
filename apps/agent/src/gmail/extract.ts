@@ -81,23 +81,22 @@ const RESPONSE_SCHEMA = {
 
 const modelOutputSchema = z.object({
   isTransactionEmail: z.boolean(),
-  items: z
-    .array(
-      z.object({
-        kind: z.enum(["expense", "income", "transfer"]).nullable(),
-        amountText: z.string().nullable(),
-        currency: z.string().nullable(),
-        occurredOn: z.string().nullable(),
-        occurredTime: z.string().nullable(),
-        merchantName: z.string().nullable(),
-        description: z.string().nullable(),
-        location: z.string().nullable(),
-        accountHint: z.string().nullable(),
-        categoryName: z.string().nullable(),
-        confidence: z.number().nullable(),
-      }),
-    )
-    .max(MAX_ITEMS),
+  // No length limit here: a long receipt would fail every retry. Extra items are dropped below.
+  items: z.array(
+    z.object({
+      kind: z.enum(["expense", "income", "transfer"]).nullable(),
+      amountText: z.string().nullable(),
+      currency: z.string().nullable(),
+      occurredOn: z.string().nullable(),
+      occurredTime: z.string().nullable(),
+      merchantName: z.string().nullable(),
+      description: z.string().nullable(),
+      location: z.string().nullable(),
+      accountHint: z.string().nullable(),
+      categoryName: z.string().nullable(),
+      confidence: z.number().nullable(),
+    }),
+  ),
 });
 
 type ModelItem = z.infer<typeof modelOutputSchema>["items"][number];
@@ -250,6 +249,8 @@ export async function extractTransactions(
   if (!parsed.data.isTransactionEmail) return { isTransactionEmail: false, items: [] };
   return {
     isTransactionEmail: true,
-    items: parsed.data.items.map((item) => toExtractedTransaction(item, email, categoryNames)),
+    items: parsed.data.items
+      .slice(0, MAX_ITEMS)
+      .map((item) => toExtractedTransaction(item, email, categoryNames)),
   };
 }

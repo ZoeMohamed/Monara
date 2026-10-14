@@ -202,6 +202,13 @@ describe("extractTransactions", () => {
     assert.equal(result.money, null);
   });
 
+  it("keeps the first 20 items of a very long receipt instead of failing it", async () => {
+    const items = Array.from({ length: 25 }, () => item());
+    const llm = fakeLlm({ isTransactionEmail: true, items });
+    const result = await extractTransactions(llm, email("Total Rp 25.000"));
+    assert.equal(result.items.length, 20);
+  });
+
   it("throws on output that does not match the schema", async () => {
     const llm = fakeLlm({ items: "nope" });
     await assert.rejects(extractTransactions(llm, email("Total Rp 25.000")), ExtractionOutputError);
