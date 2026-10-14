@@ -653,6 +653,93 @@ export function createSupabaseFinanceRepository(
       if (result.error) fail(result.error);
     },
 
+    async createDestructiveConfirmation(input) {
+      const log = await client
+        .from("agent_action_logs")
+        .insert({
+          user_id: input.userId,
+          channel: input.channel,
+          event_type: "tool_call",
+          tool_name: input.action,
+          permission_tier: "T2",
+          result_status: "awaiting_confirmation",
+          resource_type: input.resourceType,
+          resource_id: input.resourceId,
+          request_fingerprint: input.requestFingerprint,
+          confirmation_expires_at: input.expiresAt,
+          created_at: input.createdAt,
+        })
+        .select("id")
+        .single();
+      if (log.error) fail(log.error);
+      const confirmationId = log.data.id;
+      const state = await client.from("agent_action_states").insert({
+        action_id: confirmationId,
+        user_id: input.userId,
+        purpose: "confirmation",
+        operation_state:
+          input.state as unknown as Database["public"]["Tables"]["agent_action_states"]["Insert"]["operation_state"],
+        expires_at: input.expiresAt,
+        created_at: input.createdAt,
+      });
+      if (state.error) {
+        await client
+          .from("agent_action_logs")
+          .update({ result_status: "failed" })
+          .eq("id", confirmationId)
+          .eq("user_id", input.userId);
+        fail(state.error);
+      }
+      return confirmationId;
+    },
+
+    async findDestructiveConfirmation(userId, confirmationId) {
+      const result = await client
+        .from("agent_action_states")
+        .select("operation_state, expires_at, consumed_at")
+        .eq("action_id", confirmationId)
+        .eq("user_id", userId)
+        .eq("purpose", "confirmation")
+        .maybeSingle();
+      if (result.error) fail(result.error);
+      return result.data
+        ? {
+            state: result.data.operation_state,
+            expiresAt: result.data.expires_at,
+            consumedAt: result.data.consumed_at,
+          }
+        : null;
+    },
+
+    async consumeDestructiveConfirmation(input) {
+      const state = await client
+        .from("agent_action_states")
+        .update({ consumed_at: input.consumedAt })
+        .eq("action_id", input.confirmationId)
+        .eq("user_id", input.userId)
+        .eq("purpose", "confirmation")
+        .is("consumed_at", null)
+        .gt("expires_at", input.consumedAt)
+        .select("action_id")
+        .maybeSingle();
+      if (state.error) fail(state.error);
+      if (!state.data) return false;
+
+      const log = await client
+        .from("agent_action_logs")
+        .update({ result_status: "succeeded" })
+        .eq("id", input.confirmationId)
+        .eq("user_id", input.userId)
+        .eq("result_status", "awaiting_confirmation")
+        .select("id")
+        .maybeSingle();
+      if (log.error) fail(log.error);
+      if (!log.data) {
+        throw new FinanceOperationError("INTERNAL", "The confirmation audit could not be updated.");
+      }
+      return true;
+    },
+
     async recordUndoAction(input) {
       const log = await client
         .from("agent_action_logs")

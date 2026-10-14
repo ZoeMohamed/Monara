@@ -30,10 +30,13 @@ const FINANCE_OPERATIONS = [
 ] as const;
 
 export type FinanceOperation = (typeof FINANCE_OPERATIONS)[number];
-export type AgentFinanceOperation = Exclude<
-  FinanceOperation,
-  "delete_transaction" | "delete_budget"
->;
+type AgentFinanceOperation = Exclude<FinanceOperation, "delete_transaction" | "delete_budget">;
+const AGENT_CONFIRMATION_OPERATIONS = [
+  "request_destructive_action",
+  "confirm_destructive_action",
+] as const;
+type AgentConfirmationOperation = (typeof AGENT_CONFIRMATION_OPERATIONS)[number];
+export type AgentOperation = AgentFinanceOperation | AgentConfirmationOperation;
 
 function financeService(): FinanceService {
   const client = createMonaraServiceRoleClient(
@@ -47,8 +50,15 @@ export function isFinanceOperation(value: string): value is FinanceOperation {
   return (FINANCE_OPERATIONS as readonly string[]).includes(value);
 }
 
-export function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinanceOperation {
+function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinanceOperation {
   return value !== "delete_transaction" && value !== "delete_budget";
+}
+
+export function isAgentOperation(value: string): value is AgentOperation {
+  return (
+    (isFinanceOperation(value) && isAgentFinanceOperation(value)) ||
+    (AGENT_CONFIRMATION_OPERATIONS as readonly string[]).includes(value)
+  );
 }
 
 export async function runFinanceOperation(
@@ -95,6 +105,20 @@ export async function runFinanceOperation(
     case "get_dashboard":
       return service.getDashboard(caller, input);
   }
+}
+
+export async function runAgentOperation(
+  operation: AgentOperation,
+  caller: FinanceCaller,
+  input: unknown,
+): Promise<unknown> {
+  if (operation === "request_destructive_action") {
+    return financeService().requestDestructiveAction(caller, input);
+  }
+  if (operation === "confirm_destructive_action") {
+    return financeService().confirmDestructiveAction(caller, input);
+  }
+  return runFinanceOperation(operation, caller, input);
 }
 
 const STATUS = {

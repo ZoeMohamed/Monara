@@ -241,6 +241,7 @@ function createMemoryFinanceRepository() {
   const reminders = [];
   const reminderKeys = new Set();
   const actions = [];
+  const confirmations = [];
   const categoryNames = [
     "Food & Drinks",
     "Transport",
@@ -491,6 +492,41 @@ function createMemoryFinanceRepository() {
         },
       });
     },
+    async createDestructiveConfirmation(input) {
+      const confirmationId = nextId();
+      confirmations.push({
+        ownerId: input.userId,
+        confirmationId,
+        state: input.state,
+        expiresAt: input.expiresAt,
+        consumedAt: null,
+      });
+      return confirmationId;
+    },
+    async findDestructiveConfirmation(ownerId, confirmationId) {
+      const confirmation = confirmations.find(
+        (entry) => entry.ownerId === ownerId && entry.confirmationId === confirmationId,
+      );
+      return confirmation
+        ? {
+            state: confirmation.state,
+            expiresAt: confirmation.expiresAt,
+            consumedAt: confirmation.consumedAt,
+          }
+        : null;
+    },
+    async consumeDestructiveConfirmation(input) {
+      const confirmation = confirmations.find(
+        (entry) =>
+          entry.ownerId === input.userId &&
+          entry.confirmationId === input.confirmationId &&
+          entry.consumedAt === null &&
+          entry.expiresAt > input.consumedAt,
+      );
+      if (!confirmation) return false;
+      confirmation.consumedAt = input.consumedAt;
+      return true;
+    },
     async recordUndoAction(input) {
       const receipt = {
         actionId: nextId(),
@@ -506,7 +542,7 @@ function createMemoryFinanceRepository() {
 
   return {
     repository,
-    state: { actions, budgets, reminderKeys, reminders, transactions },
+    state: { actions, budgets, confirmations, reminderKeys, reminders, transactions },
     seedPending(ownerId, overrides = {}) {
       const createdAt = stamp();
       const row = transaction({
@@ -612,6 +648,96 @@ describe("ZO6 Review Queue service simulation", () => {
     assert.equal(rejected.transaction.reviewStatus, "rejected");
     const queue = await service.listTransactions(callerA, { reviewStatus: "pending" });
     assert.equal(queue.items.length, 0);
+  });
+});
+
+describe("Agent T2 confirmation simulation", () => {
+  it("binds a transaction delete to its User and allows it exactly once", async () => {
+    const memory = createMemoryFinanceRepository();
+    let currentTime = new Date("2026-10-15T05:00:00.000Z");
+    const service = createFinanceService(memory.repository, { now: () => currentTime });
+    const caller = { ...callerA, channel: "whatsapp", directSource: "whatsapp_text" };
+    const created = await service.addTransaction(caller, {
+      clientRequestId: "confirmation-transaction",
+      kind: "expense",
+      merchantName: "Synthetic Coffee",
+      money: { amountMinor: "28000", currency: "IDR" },
+      occurredOn: "2026-10-15",
+      occurredTime: null,
+      description: null,
+      location: null,
+      accountHint: null,
+      categoryId: category.id,
+      financialAccountId: "40000000-0000-4000-8000-000000000004",
+      fromFinancialAccountId: null,
+      toFinancialAccountId: null,
+    });
+    const confirmation = await service.requestDestructiveAction(caller, {
+      action: "delete_transaction",
+      input: {
+        transactionId: created.transaction.id,
+        expectedUpdatedAt: created.transaction.updatedAt,
+      },
+    });
+    assert.equal(confirmation.action, "delete_transaction");
+    assert.deepEqual(confirmation.resourceIds, [created.transaction.id]);
+    assert.match(confirmation.summary, /Synthetic Coffee/);
+
+    await assert.rejects(
+      service.confirmDestructiveAction(
+        { ...caller, userId: ownerB },
+        { confirmationId: confirmation.confirmationId, answer: "yes" },
+      ),
+      (error) => error instanceof FinanceOperationError && error.code === "NOT_FOUND",
+    );
+
+    assert.deepEqual(
+      await service.confirmDestructiveAction(caller, {
+        confirmationId: confirmation.confirmationId,
+        answer: "yes",
+      }),
+      { ok: true },
+    );
+    assert.equal((await service.listTransactions(caller, {})).items.length, 0);
+    await assert.rejects(
+      service.confirmDestructiveAction(caller, {
+        confirmationId: confirmation.confirmationId,
+        answer: "yes",
+      }),
+      (error) => error instanceof FinanceOperationError && error.code === "CONFLICT",
+    );
+
+    const expiring = await service.addTransaction(caller, {
+      clientRequestId: "expired-confirmation-transaction",
+      kind: "expense",
+      merchantName: "Synthetic Tea",
+      money: { amountMinor: "18000", currency: "IDR" },
+      occurredOn: "2026-10-15",
+      occurredTime: null,
+      description: null,
+      location: null,
+      accountHint: null,
+      categoryId: category.id,
+      financialAccountId: "40000000-0000-4000-8000-000000000004",
+      fromFinancialAccountId: null,
+      toFinancialAccountId: null,
+    });
+    const expiredConfirmation = await service.requestDestructiveAction(caller, {
+      action: "delete_transaction",
+      input: {
+        transactionId: expiring.transaction.id,
+        expectedUpdatedAt: expiring.transaction.updatedAt,
+      },
+    });
+    currentTime = new Date("2026-10-15T05:05:00.000Z");
+    await assert.rejects(
+      service.confirmDestructiveAction(caller, {
+        confirmationId: expiredConfirmation.confirmationId,
+        answer: "yes",
+      }),
+      (error) => error instanceof FinanceOperationError && error.code === "CONFLICT",
+    );
+    assert.equal((await service.listTransactions(caller, {})).items.length, 1);
   });
 });
 
@@ -734,9 +860,16 @@ describe("ZO6-ZO8 backend journey simulation", () => {
     dashboard = await service.getDashboard(callerA, { month: "2026-10" });
     assert.equal(dashboard.spending.amountMinor, "900");
 
-    await service.deleteBudget(callerA, {
-      budgetId: raisedBudget.budget.id,
-      expectedUpdatedAt: raisedBudget.budget.updatedAt,
+    const budgetConfirmation = await service.requestDestructiveAction(callerA, {
+      action: "delete_budget",
+      input: {
+        budgetId: raisedBudget.budget.id,
+        expectedUpdatedAt: raisedBudget.budget.updatedAt,
+      },
+    });
+    await service.confirmDestructiveAction(callerA, {
+      confirmationId: budgetConfirmation.confirmationId,
+      answer: "yes",
     });
     assert.equal((await service.listBudgets(callerA, {})).items.length, 0);
     assert.ok(editedExpense.action.actionId);

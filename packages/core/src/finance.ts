@@ -10,15 +10,20 @@ import {
   type CreateFinancialAccountInput,
   type CreateTransactionInput,
   categoryMutationResultSchema,
+  confirmDestructiveActionInputSchema,
   confirmedTransactionValuesSchema,
   confirmTransactionInputSchema,
   createBudgetInputSchema,
   createFinancialAccountInputSchema,
   createTransactionInputSchema,
   type DashboardSummary,
+  type DeleteBudgetInput,
+  type DeleteTransactionInput,
+  type DestructiveActionConfirmation,
   dashboardSummarySchema,
   deleteBudgetInputSchema,
   deleteTransactionInputSchema,
+  destructiveActionConfirmationSchema,
   type FinancialAccount,
   type FinancialAccountPage,
   financialAccountMutationResultSchema,
@@ -36,6 +41,7 @@ import {
   type OperationErrorCode,
   type ReversibleActionReceipt,
   rejectTransactionInputSchema,
+  requestDestructiveActionInputSchema,
   type SignedMoney,
   type Transaction,
   type TransactionMutationResult,
@@ -77,6 +83,16 @@ export interface FinanceCaller {
 export interface ActionState {
   operation: string;
   [key: string]: boolean | null | number | string | TransactionValues | ActionState;
+}
+
+export type DestructiveConfirmationState =
+  | { operation: "delete_transaction"; input: DeleteTransactionInput }
+  | { operation: "delete_budget"; input: DeleteBudgetInput };
+
+export interface StoredDestructiveConfirmation {
+  state: unknown;
+  expiresAt: string;
+  consumedAt: string | null;
 }
 
 export interface FinanceRepository {
@@ -157,6 +173,26 @@ export interface FinanceRepository {
     undoExpiresAt: string;
     state: ActionState;
   }): Promise<ReversibleActionReceipt>;
+  createDestructiveConfirmation(input: {
+    userId: string;
+    channel: FinanceChannel;
+    action: DestructiveConfirmationState["operation"];
+    resourceType: "transaction" | "budget";
+    resourceId: string;
+    requestFingerprint: string;
+    createdAt: string;
+    expiresAt: string;
+    state: DestructiveConfirmationState;
+  }): Promise<string>;
+  findDestructiveConfirmation(
+    userId: string,
+    confirmationId: string,
+  ): Promise<StoredDestructiveConfirmation | null>;
+  consumeDestructiveConfirmation(input: {
+    userId: string;
+    confirmationId: string;
+    consumedAt: string;
+  }): Promise<boolean>;
 }
 
 const idr = (amount: bigint): Money => ({ amountMinor: amount.toString(), currency: "IDR" });
@@ -354,6 +390,30 @@ const transactionValues = (transaction: Transaction): TransactionValues => ({
 
 const plusMinutes = (iso: string, minutes: number) =>
   new Date(Date.parse(iso) + minutes * 60_000).toISOString();
+
+async function fingerprint(value: unknown): Promise<string> {
+  const encoded = new TextEncoder().encode(JSON.stringify(value));
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function parseConfirmationState(value: unknown): DestructiveConfirmationState {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("operation" in value) ||
+    !("input" in value)
+  ) {
+    throw new FinanceOperationError("INTERNAL", "The confirmation state is invalid.");
+  }
+  if (value.operation === "delete_transaction") {
+    return { operation: value.operation, input: deleteTransactionInputSchema.parse(value.input) };
+  }
+  if (value.operation === "delete_budget") {
+    return { operation: value.operation, input: deleteBudgetInputSchema.parse(value.input) };
+  }
+  throw new FinanceOperationError("INTERNAL", "The confirmation state is invalid.");
+}
 
 export function createFinanceService(
   repository: FinanceRepository,
@@ -591,6 +651,128 @@ export function createFinanceService(
         expectedUpdatedAt: values.expectedUpdatedAt,
         deletedAt: now(),
       });
+    },
+
+    async requestDestructiveAction(
+      operationCaller: FinanceCaller,
+      input: unknown,
+    ): Promise<DestructiveActionConfirmation> {
+      const verified = caller(operationCaller);
+      const request = requestDestructiveActionInputSchema.parse(input);
+      const createdAt = now();
+      const expiresAt = plusMinutes(createdAt, 5);
+
+      let state: DestructiveConfirmationState;
+      let resourceType: "transaction" | "budget";
+      let resourceId: string;
+      let summary: string;
+
+      if (request.action === "delete_transaction") {
+        const values = deleteTransactionInputSchema.parse(request.input);
+        const transaction = await repository.findTransaction(verified.userId, values.transactionId);
+        if (!transaction || transaction.deletedAt) {
+          throw new FinanceOperationError("NOT_FOUND", "That transaction was not found.");
+        }
+        if (transaction.updatedAt !== values.expectedUpdatedAt) {
+          throw new FinanceOperationError(
+            "CONFLICT",
+            "This transaction changed. Reload it and try again.",
+          );
+        }
+        state = { operation: request.action, input: values };
+        resourceType = "transaction";
+        resourceId = transaction.id;
+        const merchant = transaction.merchantName ?? "unknown merchant";
+        const amount = transaction.money ? ` for IDR ${transaction.money.amountMinor}` : "";
+        const date = transaction.occurredOn ? ` on ${transaction.occurredOn}` : "";
+        summary = `Delete the ${transaction.kind} at ${merchant}${amount}${date}.`;
+      } else if (request.action === "delete_budget") {
+        const values = deleteBudgetInputSchema.parse(request.input);
+        const budget = await repository.findBudget(verified.userId, values.budgetId);
+        if (!budget || budget.deletedAt) {
+          throw new FinanceOperationError("NOT_FOUND", "That Budget was not found.");
+        }
+        if (budget.updatedAt !== values.expectedUpdatedAt) {
+          throw new FinanceOperationError(
+            "CONFLICT",
+            "This Budget changed. Reload it and try again.",
+          );
+        }
+        state = { operation: request.action, input: values };
+        resourceType = "budget";
+        resourceId = budget.id;
+        summary = `Delete the ${budget.name} Budget of IDR ${budget.limit.amountMinor}.`;
+      } else {
+        throw new FinanceOperationError(
+          "NOT_FOUND",
+          "That destructive action is not available yet.",
+        );
+      }
+
+      const confirmationId = await repository.createDestructiveConfirmation({
+        userId: verified.userId,
+        channel: verified.channel,
+        action: state.operation,
+        resourceType,
+        resourceId,
+        requestFingerprint: await fingerprint(state),
+        createdAt,
+        expiresAt,
+        state,
+      });
+      return destructiveActionConfirmationSchema.parse({
+        confirmationId,
+        action: state.operation,
+        resourceIds: [resourceId],
+        summary,
+        expiresAt,
+      });
+    },
+
+    async confirmDestructiveAction(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const values = confirmDestructiveActionInputSchema.parse(input);
+      const confirmation = await repository.findDestructiveConfirmation(
+        verified.userId,
+        values.confirmationId,
+      );
+      if (!confirmation) {
+        throw new FinanceOperationError("NOT_FOUND", "That confirmation was not found.");
+      }
+      if (confirmation.consumedAt) {
+        throw new FinanceOperationError("CONFLICT", "That confirmation was already used.");
+      }
+      const consumedAt = now();
+      if (Date.parse(confirmation.expiresAt) <= Date.parse(consumedAt)) {
+        throw new FinanceOperationError("CONFLICT", "That confirmation has expired.");
+      }
+
+      const state = parseConfirmationState(confirmation.state);
+      if (state.operation === "delete_transaction") {
+        await repository.softDeleteTransaction({
+          userId: verified.userId,
+          transactionId: state.input.transactionId,
+          expectedUpdatedAt: state.input.expectedUpdatedAt,
+          deletedAt: consumedAt,
+        });
+      } else {
+        await repository.softDeleteBudget({
+          userId: verified.userId,
+          budgetId: state.input.budgetId,
+          expectedUpdatedAt: state.input.expectedUpdatedAt,
+          deletedAt: consumedAt,
+        });
+      }
+
+      const consumed = await repository.consumeDestructiveConfirmation({
+        userId: verified.userId,
+        confirmationId: values.confirmationId,
+        consumedAt,
+      });
+      if (!consumed) {
+        throw new FinanceOperationError("CONFLICT", "That confirmation is no longer available.");
+      }
+      return { ok: true as const };
     },
 
     async listFinancialAccounts(operationCaller: FinanceCaller, input: unknown) {

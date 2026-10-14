@@ -5,9 +5,8 @@ import { FinanceOperationError } from "@monara/core";
 import {
   financeErrorResponse,
   financeSuccessResponse,
-  isAgentFinanceOperation,
-  isFinanceOperation,
-  runFinanceOperation,
+  isAgentOperation,
+  runAgentOperation,
 } from "@/lib/finance/service";
 
 export const runtime = "nodejs";
@@ -36,17 +35,17 @@ export async function POST(
     return financeErrorResponse(new FinanceOperationError("UNAUTHENTICATED", "Not authorized."));
   }
   const { operation } = await params;
-  if (!isFinanceOperation(operation)) {
-    return financeErrorResponse(
-      new FinanceOperationError("NOT_FOUND", "That operation does not exist."),
-    );
-  }
-  if (!isAgentFinanceOperation(operation)) {
+  if (operation === "delete_transaction" || operation === "delete_budget") {
     return financeErrorResponse(
       new FinanceOperationError(
         "FORBIDDEN",
         "Destructive actions require a bound confirmation flow.",
       ),
+    );
+  }
+  if (!isAgentOperation(operation)) {
+    return financeErrorResponse(
+      new FinanceOperationError("NOT_FOUND", "That operation does not exist."),
     );
   }
   try {
@@ -60,7 +59,7 @@ export async function POST(
       throw new FinanceOperationError("VALIDATION_FAILED", "The request is not valid.");
     }
     return financeSuccessResponse(
-      await runFinanceOperation(
+      await runAgentOperation(
         operation,
         {
           userId: body.userId,
