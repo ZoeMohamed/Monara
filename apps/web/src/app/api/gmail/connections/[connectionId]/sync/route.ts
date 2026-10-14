@@ -53,8 +53,9 @@ export async function POST(_request: NextRequest, context: Context) {
       return errorResponse("CONFLICT", "Reconnect this Gmail account before syncing.");
     }
 
-    await requestAgentSync(connectionId);
+    // Read counts first: once the sync is queued, nothing after it may fail and invite a retry.
     const counts = await gmailIngestionRepository().syncCounts(identity.id, connectionId);
+    await requestAgentSync(connectionId);
     return Response.json(gmailSyncResultSchema.parse({ status: "queued", counts }), {
       headers: noStoreHeaders,
       status: 202,

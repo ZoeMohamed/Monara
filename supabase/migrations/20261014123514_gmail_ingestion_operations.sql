@@ -65,7 +65,9 @@ begin
     raise exception using errcode = '22023', message = 'Items do not match the outcome.';
   end if;
 
-  -- The row lock serializes concurrent attempts for the same message.
+  -- The message lock serializes concurrent attempts for the same message. The share
+  -- lock on the connection makes a concurrent disconnect wait until this record ends,
+  -- so transactions are never added after the connection stopped being active.
   select message.*
     into v_message
     from public.processed_gmail_messages as message
@@ -74,7 +76,8 @@ begin
       and connection.user_id = message.user_id
     where message.id = p_processed_message_id
       and connection.status = 'active'
-    for update of message;
+    for update of message
+    for share of connection;
   if v_message.id is null then
     raise exception using errcode = 'P0002', message = 'Gmail connection is not active.';
   end if;
