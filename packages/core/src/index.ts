@@ -10,3 +10,4 @@ export {
   type GmailConnectionService,
   type StoredGmailConnection,
 } from "./gmail-connections.ts";
+export * from "./whatsapp-link.ts";

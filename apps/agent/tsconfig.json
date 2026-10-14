@@ -1,7 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types"],
+    // Tests run on Node's type stripping, which needs explicit .ts import paths.
+    "allowImportingTsExtensions": true
   },
   "include": ["src/**/*.ts"]
 }

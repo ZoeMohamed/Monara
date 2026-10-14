@@ -3,6 +3,12 @@ export type {
   ComposioGmailClient,
   ComposioGmailConfig,
   GmailConnector,
-} from "./gmail";
-export { ComposioRequestError, createComposioGmailClient } from "./gmail";
-export type { WhatsAppTransport } from "./whatsapp";
+} from "./gmail.ts";
+export { ComposioRequestError, createComposioGmailClient } from "./gmail.ts";
+export type { KapsoInboundMedia, KapsoInboundMessage, WhatsAppTransport } from "./whatsapp.ts";
+export {
+  createKapsoTransport,
+  KAPSO_MESSAGE_RECEIVED_EVENT,
+  parseKapsoInboundMessages,
+  verifyKapsoSignature,
+} from "./whatsapp.ts";

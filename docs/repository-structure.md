@@ -60,7 +60,7 @@ pnpm build
 
 Use Node 24 (`.nvmrc`). `pnpm install` also installs the Husky git hooks. macOS and Windows are both supported: `.gitattributes` keeps LF line endings, the repository scripts are Node, and the git hooks run in Git Bash (included with Git for Windows). CI runs lint, typecheck, tests, a worktree smoke test, and a git hook smoke test on Windows. Local Supabase needs a Docker-compatible runtime (OrbStack on macOS, Docker Desktop on Windows).
 
-Run web and agent dev commands in separate terminals. The main checkout listens on web port 3000 and agent port 8787; linked worktrees use their own ports (see Worktrees below). `GET /health` on the agent reports `status: scaffold`; other routes return 501. `pnpm build` builds Next.js and performs a Wrangler dry-run bundle without cloud deployment.
+Run web and agent dev commands in separate terminals. The main checkout listens on web port 3000 and agent port 8787; linked worktrees use their own ports (see Worktrees below). `GET /health` on the agent reports `status: scaffold`; `POST /chat` and `POST /webhooks/kapso` are described in `apps/agent/README.md`, and other routes return 501. `pnpm build` builds Next.js and performs a Wrangler dry-run bundle without cloud deployment.
 
 Supabase local development is optional until database implementation begins. It requires OrbStack running on this Mac:
 

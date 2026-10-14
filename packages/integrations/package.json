@@ -7,13 +7,15 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "node --test src/*.test.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/*.test.mjs\" \"src/**/*.test.ts\""
   },
   "dependencies": {
-    "@monara/contracts": "workspace:*"
+    "@monara/contracts": "workspace:*",
+    "zod": "4.6.5"
   },
   "devDependencies": {
+    "@types/node": "20.19.43",
     "typescript": "5.9.3"
   }
 }
