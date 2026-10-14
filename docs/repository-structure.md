@@ -38,7 +38,7 @@ The UI package exports HeroUI primitives and the shared light theme; HeroUI v3 u
 ## Agreed flows
 
 - Google sign-in uses Supabase Auth. A Gmail Connection through Composio is separate from login.
-- Gmail imports run automatically through durable background jobs in the Cloudflare runtime. Provide manual sync for testing and recovery. The worker includes Agent/chat and WhatsApp handlers; automatic Gmail ingestion jobs remain a separate incomplete integration.
+- Gmail imports must run automatically through durable background jobs in the Cloudflare runtime. Provide manual sync for testing and recovery. The worker includes Agent/chat and WhatsApp handlers; automatic Gmail ingestion jobs remain a separate incomplete integration.
 - Deduplicate email imports using the User, Gmail Connection, and source message identity. Enforce uniqueness durably when implementing persistence.
 - Extracted transactions remain pending review until confirmed. Pending transactions do not contribute to confirmed totals.
 - The signed-in User explicitly links and verifies their WhatsApp number. Kapso provides transport into the shared agent runtime.
@@ -62,7 +62,7 @@ Use Node 24 (`.nvmrc`). `pnpm install` also installs the Husky git hooks. macOS 
 
 Run web and agent dev commands in separate terminals. The main checkout listens on web port 3000 and agent port 8787; linked worktrees use their own ports (see Worktrees below). `GET /health` on the agent reports `status: scaffold`; `POST /chat` and `POST /webhooks/kapso` are described in `apps/agent/README.md`, and other routes return 501. `pnpm build` builds Next.js and performs a Wrangler dry-run bundle without cloud deployment.
 
-Local migration/RLS replay requires a disposable Supabase stack; normal source checks remain independent of Docker. It requires OrbStack running on this Mac:
+Local migration/RLS replay requires a disposable Supabase stack and a running Docker-compatible runtime: OrbStack on macOS or Docker Desktop on Windows. Normal source checks remain independent of Docker. For local database work, run:
 
 ```bash
 pnpm db:start

@@ -23,6 +23,7 @@ function getStandaloneMode() {
 
 export function InstallAppButton() {
   const installEvent = useRef<BeforeInstallPromptEvent | null>(null);
+  const installInProgress = useRef(false);
   const [showHelp, setShowHelp] = useState(false);
   const [wasInstalled, setWasInstalled] = useState(false);
   const isStandalone = useSyncExternalStore(subscribeToDisplayMode, getStandaloneMode, () => false);
@@ -56,14 +57,21 @@ export function InstallAppButton() {
   }
 
   const install = async () => {
+    if (installInProgress.current) return;
     const promptEvent = installEvent.current;
     if (!promptEvent) {
       setShowHelp(true);
       return;
     }
-    await promptEvent.prompt();
-    const choice = await promptEvent.userChoice;
-    if (choice.outcome === "accepted") installEvent.current = null;
+    installInProgress.current = true;
+    installEvent.current = null;
+    try {
+      await Promise.all([promptEvent.prompt(), promptEvent.userChoice]);
+    } catch {
+      setShowHelp(true);
+    } finally {
+      installInProgress.current = false;
+    }
   };
 
   return (

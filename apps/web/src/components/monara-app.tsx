@@ -365,6 +365,7 @@ export function MonaraApp({
   const navigation = useAppNavigation();
   const { view } = navigation;
   const [transactions, setTransactions] = useState(initialTransactions);
+  const [removedId, setRemovedId] = useState<string | null>(null);
   const [bills, setBills] = useState(initialBills);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<SaveNotice | null>(null);
@@ -480,6 +481,7 @@ export function MonaraApp({
     const next = deleteConfirmedTransaction(transactions, transaction);
     if (next === transactions)
       throw new Error("This transaction changed. Reopen it and try again.");
+    setRemovedId(transaction.id);
     setTransactions(next);
     setNotice({
       message: "Transaction deleted.",
@@ -511,11 +513,17 @@ export function MonaraApp({
     });
     navigation.closePopup();
   };
+  // Native history updates can settle after the ledger mutation. Suppress only the
+  // current removal, then let later stale links show the normal unavailable state.
+  if (removedId && ![view.editId, view.transactionId, view.rejectId].includes(removedId)) {
+    setRemovedId(null);
+  }
+
   const missing = [
     { id: view.editId, transaction: editing },
     { id: view.transactionId, transaction: selected },
     { id: view.rejectId, transaction: rejecting },
-  ].some(({ id, transaction }) => id !== null && !transaction);
+  ].some(({ id, transaction }) => id !== null && id !== removedId && !transaction);
 
   return (
     <AppSessionContext
@@ -623,6 +631,7 @@ export function MonaraApp({
             transaction={rejecting}
             onCancel={navigation.closePopup}
             onReject={() => {
+              setRemovedId(rejecting.id);
               setTransactions((items) => rejectPendingTransaction(items, rejecting.id));
               navigation.closePopup();
               setNotice({ message: "Transaction rejected." });
