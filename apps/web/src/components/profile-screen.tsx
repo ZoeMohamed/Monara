@@ -1,11 +1,12 @@
 "use client";
 
-import { Avatar, Card, Label, Switch } from "@monara/ui";
+import { Avatar, Button, Card, Label, Switch } from "@monara/ui";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Icon } from "@/components/icon";
 import { InstallAppButton } from "@/components/install-app-button";
+import type { AuthenticatedProfile } from "@/lib/auth/identity";
 
 function Row({ title, detail, end }: { title: string; detail?: string; end?: ReactNode }) {
   return (
@@ -47,27 +48,36 @@ function Group({ id, title, children }: { id: string; title: string; children: R
   );
 }
 
-export function ProfileScreen({ online }: { online: boolean }) {
+export function ProfileScreen({
+  online,
+  profile,
+}: {
+  online: boolean;
+  profile: AuthenticatedProfile;
+}) {
   return (
     <div>
       <h1 className="text-2xl font-black tracking-[-0.05em] sm:text-4xl">Profile</h1>
 
       <Card className="mt-3 block gap-0 rounded-2xl bg-accent-soft p-4">
         <div className="flex items-center gap-3">
-          <Avatar aria-label="Demo profile" className="h-11 w-11 rounded-xl bg-surface text-accent">
-            <Avatar.Fallback>M</Avatar.Fallback>
+          <Avatar
+            aria-label={`${profile.displayName} profile`}
+            className="h-11 w-11 rounded-xl bg-surface text-accent"
+          >
+            <Avatar.Fallback>{profile.initials}</Avatar.Fallback>
           </Avatar>
           <div className="min-w-0">
-            <p className="font-bold">Demo profile</p>
-            <p className="mt-0.5 text-xs text-accent-soft-foreground">
-              Sample data · not signed in · IDR · Asia/Jakarta
+            <p className="truncate font-bold">{profile.displayName}</p>
+            <p className="mt-0.5 break-all text-xs text-accent-soft-foreground">
+              {profile.email ?? "Google account"} · IDR · Asia/Jakarta
             </p>
           </div>
         </div>
       </Card>
 
       <Group id="connections" title="Connections">
-        <LinkRow detail="Separate from Gmail access" href="/sign-in" title="Sign in with Google" />
+        <Row detail="Separate from Gmail access" end="Connected" title="Google sign-in" />
         <LinkRow
           detail="Up to 3 mailboxes · not connected"
           href="/connections/gmail"
@@ -78,6 +88,20 @@ export function ProfileScreen({ online }: { online: boolean }) {
           end="Not linked"
           title="WhatsApp"
         />
+      </Group>
+
+      <Group id="account" title="Account">
+        <div className="flex min-h-14 items-center justify-between gap-3 py-2.5">
+          <div>
+            <p className="text-sm font-semibold">Current session</p>
+            <p className="mt-0.5 text-xs text-muted">Sign out on this device.</p>
+          </div>
+          <form action="/auth/sign-out" method="post">
+            <Button className="min-h-11" type="submit" variant="secondary">
+              Sign out
+            </Button>
+          </form>
+        </div>
       </Group>
 
       <Group id="reminders" title="Reminders">

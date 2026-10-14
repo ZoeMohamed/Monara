@@ -1,5 +1,8 @@
 import type { CookieMethodsServer } from "@supabase/ssr";
 import { createBrowserClient, createServerClient } from "@supabase/ssr";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "./types/database.types.ts";
 
 export type { Database } from "./types/database.types.ts";
 
@@ -11,6 +14,8 @@ export interface PublicSupabaseConfig {
 export interface SupabaseConnectivity {
   connected: true;
 }
+
+export type MonaraServiceRoleClient = SupabaseClient<Database>;
 
 type ConnectivityFetch = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -51,7 +56,7 @@ export function parsePublicSupabaseConfig(values: {
 
 /** Creates a browser Supabase client from already validated public configuration. */
 export function createMonaraBrowserClient(config: PublicSupabaseConfig) {
-  return createBrowserClient(config.url, config.publishableKey);
+  return createBrowserClient<Database>(config.url, config.publishableKey);
 }
 
 /** Creates a cookie-aware server Supabase client without reading ambient secrets. */
@@ -59,7 +64,21 @@ export function createMonaraServerClient(
   config: PublicSupabaseConfig,
   cookies: CookieMethodsServer,
 ) {
-  return createServerClient(config.url, config.publishableKey, { cookies });
+  return createServerClient<Database>(config.url, config.publishableKey, { cookies });
+}
+
+/**
+ * Creates a server-only client for trusted backend operations. Callers must
+ * still resolve a verified User and scope every product query by that User.
+ */
+export function createMonaraServiceRoleClient(
+  config: PublicSupabaseConfig,
+  serviceRoleKey: string | undefined,
+): MonaraServiceRoleClient {
+  const key = requireValue("SUPABASE_SERVICE_ROLE_KEY", serviceRoleKey);
+  return createClient<Database>(config.url, key, {
+    auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+  });
 }
 
 /** Verifies that the configured endpoint returns the public Supabase Auth settings shape. */
