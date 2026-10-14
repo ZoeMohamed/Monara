@@ -8,18 +8,19 @@ Earlier source reviews covered the main-document tabs, registration workbook, an
 
 ## Current implementation checkpoint — 14 October 2026
 
-The live tracker was refreshed again on 14 October; its header remains dated 12 October. ER1–ER3 and ER11 are Done. ZO1–ZO8 are now Done, and ZO9 is Not started. The following UI rows remain In progress; their deadlines and external statuses were not changed.
+The live tracker was refreshed again on 14 October; its header remains dated 12 October. In the external tracker ER1–ER3 and ER11 are Done, ZO1–ZO8 are Done and ZO9 is Not started; ER4–ER10 and ER12 are still listed In progress. The pull request for `feat/unified-finance-experience` puts the UI rows below **In review** in the repository. ER9 stays In progress because verified WhatsApp linking, saved preferences and Reminder delivery are not built. The external tracker was not edited; its owners update it after review, and no deadline changed.
 
-| Tracker row | Implemented presentation | Remaining acceptance / deadline |
-| --- | --- | --- |
-| ER4 | Google sign-in, public demo, profile/sign-out, authenticated Gmail lifecycle adapter | Live OAuth/reconnect evidence and ingestion/Sync Now results. 14 Oct. |
-| ER5 | Owned ledger loading, transaction operations, Financial Account setup and category renaming; demo review/Undo remains isolated | Live-session ownership/concurrency acceptance and durable ingestion/deduplication evidence. 15 Oct. |
-| ER6 | Complete owned ledger feeds confirmed-only summaries, Reports and UUID-based category drilldowns/current names; dashboard contract is validated | Live aggregate comparison and User-timezone acceptance. 15 Oct. |
-| ER7 | Authenticated `/api/chat` bridge, shared mutation/recovery gate, structured receipts/confirmation, demo assistant and failed-draft retention | Agent/backend operation compatibility, durable turn idempotency/status and live scenario acceptance. 15 Oct. |
-| ER8 | Live budget create/edit/pause/delete, explicit weekly/monthly usage periods, budget bars/gauge and demo bill-confirmation/calendar | Persistent budget/ownership acceptance and live bill/detection integration. 16 Oct. |
-| ER9 | Backend dashboard reminders and explicit unavailable WhatsApp/preference controls | Verified link UI, saved settings and actual Reminder delivery. 16 Oct. |
-| ER10 | Public-only PWA caching, OYenza-inspired mobile layout, glass navigation, demo and guided tour | Real-phone installation, touch/keyboard and service recovery evidence. 18 Oct. |
-| ER12 | Updated UI technical draft and backend handoff | Owner review/final documentation acceptance. 16 Oct. |
+| Tracker row | Repository status | Implemented presentation | Remaining acceptance / deadline |
+| --- | --- | --- | --- |
+| ER1–ER3, ER11 | Done | HeroUI 3.2.6 setup and light theme, English product copy, migrated controls, user-selected cat logo | Submission packaging for the logo. |
+| ER4 | In review | Google sign-in, public demo, profile/sign-out, authenticated Gmail lifecycle adapter | Live OAuth/reconnect evidence and ingestion/Sync Now results. 14 Oct. |
+| ER5 | In review | Owned ledger loading, transaction operations, Financial Account setup and category renaming; demo review/Undo remains isolated | Live-session ownership/concurrency acceptance and durable ingestion/deduplication evidence. 15 Oct. |
+| ER6 | In review | Complete owned ledger feeds confirmed-only summaries, Reports and UUID-based category drilldowns/current names; dashboard contract is validated | Live aggregate comparison and User-timezone acceptance. 15 Oct. |
+| ER7 | In review | Authenticated `/api/chat` bridge, shared mutation/recovery gate, structured receipts/confirmation, demo assistant and failed-draft retention | Agent/backend operation compatibility, durable turn idempotency/status and live scenario acceptance. 15 Oct. |
+| ER8 | In review | Live budget create/edit/pause/delete, explicit weekly/monthly usage periods, budget bars/gauge and demo bill-confirmation/calendar | Persistent budget/ownership acceptance; live bill management and detection are not built. 16 Oct. |
+| ER9 | In progress | Backend dashboard reminders and explicit unavailable WhatsApp/preference controls | Verified link UI, saved settings and actual Reminder delivery. 16 Oct. |
+| ER10 | In review | Public-only PWA caching, OYenza-inspired mobile layout, glass navigation and toast, the same Home composition on desktop, demo and guided tour | Real-phone installation, touch/keyboard and service recovery evidence. 18 Oct. |
+| ER12 | In review | Updated UI technical draft and backend handoff | Owner review/final documentation acceptance; the technical section stays Draft until then. 16 Oct. |
 
 ## Shared setup
 
@@ -102,7 +103,7 @@ The upstream 12 October branding pass passed `pnpm check` (72 tests, React Docto
 
 ## Mobile platform and motion
 
-Earlier passes used the explicitly requested mobile-native, emil-design-eng, and find-animation-opportunities references. The latest User direction keeps the landscape, mascot, and financial visualizations while reducing decorative detail. Overview retains income/expense bars, the two-ring budget pace view, and category budget rings. Budgets retains its smaller semicircle gauge and progress bars; Reports keeps every financial chart visible. Use plain section headings, quiet summary labels, and flat surfaces. Keep exact amounts immediate and explain chart marks in visible text or accessible labels.
+Earlier passes used the explicitly requested mobile-native, emil-design-eng, and find-animation-opportunities references. The latest User direction keeps the landscape, mascot, and financial visualizations while reducing decorative detail. Overview is one composition at every width: the landscape hero with greeting, exact spending and Ask Monara, a quiet-chip row, prompts, “Where it went” category rows with budget bars, a Today card and feature cards. Income/expense bars, the two-ring pace view and category rings live in Reports and Budgets. Budgets retains its smaller semicircle gauge and progress bars; Reports keeps every financial chart visible. Use plain section headings, quiet summary labels, and flat surfaces. Keep exact amounts immediate and explain chart marks in visible text or accessible labels.
 
 The [Overview landscape](../apps/web/public/scenes/overview-landscape.webp) is an existing static asset with progressive scroll parallax in the mobile presentation. The device clock changes the greeting only; the demo financial date remains fixed. The shared [Monara mascot](../apps/web/src/components/monara-mascot.tsx) preserves its simple white/cyan head, notched left ear and two blue arch eyes, with no paws or legs and a finite entrance on the mobile composer. Reduced motion removes parallax and transitions. Chart selection keeps visible keyboard focus, and exact amounts do not count through temporary values. HeroUI press feedback remains short. Section titles from [visual.tsx](../apps/web/src/components/visual.tsx) have no decorative emoji or icon badges. Colour identifies categories, budget states and chart marks.
 
@@ -111,6 +112,10 @@ Controls use `touch-action: manipulation`; only controls suppress text selection
 ## Navigation and screen patterns
 
 Mobile navigation has five equal-size items: Home, History, Reports, Budgets and Add. The glass capsule uses a moving selected background; Add opens the transaction form and never becomes the selected page. Home's Ask Monara control and prompts open Chat, which has its own close/new-conversation actions. Home's space control opens Profile, and the bell opens Reminders. Reports remains in the desktop sidebar and is reachable from financial summary links. Destinations use real route links, browser history and direct URLs. Shared layout state retains demo changes during navigation. Keep one headline amount per screen, quiet summary labels and secondary text in `--muted`.
+
+Desktop (1024px and wider) reuses the mobile Home components rather than a second design. The hero becomes a rounded landscape card with its content held to the left; prompts and chips wrap instead of scrolling; “Where it went” and the Today and feature cards sit in two columns on the page canvas. The sidebar is a floating panel using the same glass recipe as the mobile navigation, with the soft selected background, an ink Add button and the Demo or Private ledger status above it. The month is chosen from the category block, as on mobile. Page titles share one size and weight (32px extra bold) at every width. Cards and lists keep at least 20px of inner padding so text never crowds a rounded corner, and headline remainders such as “Remaining in category budgets” are extra bold.
+
+Transient confirmations use one toast. It is a dark glass capsule with a green check, the message, Undo when the action can be reversed, and Dismiss. On desktop it rises from the bottom-right corner; on mobile it floats centered just above the glass navigation, within thumb reach and clear of the Home header. It leaves after 5 seconds, or 9 when it offers Undo, and holds while hovered or focused. The live region stays mounted so each message is announced, and reduced motion removes the entrance and exit. Persistent problems such as offline or a failed refresh stay as inline alerts, not toasts.
 
 Budget states use semantic tokens with text labels: accent for on track, `warning` with “Near limit” from the Budget's warning percent and “At limit” at 100%, and `danger` with “Over budget” above the limit. Long amounts and names wrap rather than truncate unless the full value is one tap away (transaction rows open a detail sheet). Check 320px after layout changes. Unavailable services say what is missing and what still works; they never simulate a reply or a saved change.
 
