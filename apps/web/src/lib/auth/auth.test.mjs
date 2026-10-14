@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { browserOrigin } from "../http/origin.ts";
+import { browserOrigin, isSameOriginRequest } from "../http/origin.ts";
+import { availablePublicSupabaseConfig } from "../supabase/config.ts";
 import { isGoogleSignInAvailable } from "../supabase/provider.ts";
 import { identityFromVerifiedClaims, profileFromIdentity } from "./identity.ts";
 import { safeAuthenticatedNextPath, safeNextPath, signInErrorMessage } from "./redirect.ts";
@@ -129,6 +130,36 @@ describe("Google provider availability", () => {
   });
 });
 
+describe("public Supabase configuration availability", () => {
+  it("fails closed for missing or invalid public configuration", () => {
+    for (const values of [
+      { url: undefined, publishableKey: undefined },
+      { url: "https://example.supabase.co", publishableKey: "  " },
+      { url: "not-a-url", publishableKey: "public-key" },
+      { url: "http://remote.example", publishableKey: "public-key" },
+    ]) {
+      assert.equal(availablePublicSupabaseConfig(values), null);
+    }
+  });
+
+  it("retains validated public configuration for real session verification", () => {
+    assert.deepEqual(
+      availablePublicSupabaseConfig({
+        url: " https://example.supabase.co/ ",
+        publishableKey: " public-key ",
+      }),
+      { url: "https://example.supabase.co", publishableKey: "public-key" },
+    );
+    assert.deepEqual(
+      availablePublicSupabaseConfig({
+        url: "http://127.0.0.1:54321",
+        publishableKey: "public-key",
+      }),
+      { url: "http://127.0.0.1:54321", publishableKey: "public-key" },
+    );
+  });
+});
+
 describe("browser OAuth origin", () => {
   it("uses the browser-facing Host instead of the development bind address", () => {
     const request = new Request("http://0.0.0.0:3005/auth/sign-in", {
@@ -153,5 +184,47 @@ describe("browser OAuth origin", () => {
       headers: { host: "attacker.example" },
     });
     assert.equal(browserOrigin(request), "http://0.0.0.0:3005");
+  });
+});
+
+describe("same-origin mutation guard", () => {
+  const url = "https://monara-finance.vercel.app/api/finance/operations/add_transaction";
+
+  it("accepts requests the browser marks as same-origin", () => {
+    assert.equal(
+      isSameOriginRequest(new Request(url, { headers: { "sec-fetch-site": "same-origin" } })),
+      true,
+    );
+  });
+
+  it("refuses cross-site and same-site fetch metadata even with a matching Origin", () => {
+    for (const site of ["cross-site", "same-site", "none"]) {
+      const request = new Request(url, {
+        headers: { "sec-fetch-site": site, origin: "https://monara-finance.vercel.app" },
+      });
+      assert.equal(isSameOriginRequest(request), false, site);
+    }
+  });
+
+  it("falls back to an exact Origin match and refuses missing or opaque origins", () => {
+    assert.equal(
+      isSameOriginRequest(
+        new Request(url, { headers: { origin: "https://monara-finance.vercel.app" } }),
+      ),
+      true,
+    );
+    assert.equal(
+      isSameOriginRequest(new Request(url, { headers: { origin: "https://attacker.example" } })),
+      false,
+    );
+    assert.equal(isSameOriginRequest(new Request(url, { headers: { origin: "null" } })), false);
+    assert.equal(isSameOriginRequest(new Request(url)), false);
+  });
+
+  it("matches the browser origin in local development on 0.0.0.0", () => {
+    const request = new Request("http://0.0.0.0:3005/api/chat", {
+      headers: { host: "localhost:3005", origin: "http://localhost:3005" },
+    });
+    assert.equal(isSameOriginRequest(request), true);
   });
 });

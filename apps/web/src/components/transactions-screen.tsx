@@ -10,7 +10,13 @@ import { TransactionRow } from "@/components/transaction-row";
 import { Wash } from "@/components/visual";
 import type { LedgerKind } from "@/data/app-navigation";
 import { categoryColor } from "@/data/category-style";
-import { demoSummary, formatMonth, formatRupiah, type Transaction } from "@/data/demo-ledger";
+import {
+  demoSummary,
+  demoToday,
+  formatMonth,
+  formatRupiah,
+  type Transaction,
+} from "@/data/demo-ledger";
 import { chartRatio, financialMonth } from "@/data/finance-analytics";
 
 type KindFilter = LedgerKind;
@@ -98,7 +104,7 @@ function LedgerSummary({
   categories: ReturnType<typeof financialMonth>["categories"];
 }) {
   return (
-    <Wash className="mt-4 p-4 sm:p-5" tone="blue">
+    <Wash className="mt-4 p-4 max-lg:hidden sm:p-5" tone="blue">
       <p className="text-sm font-medium text-muted">Confirmed spending</p>
       <p className="mt-2 text-3xl font-bold tracking-[-0.04em] tabular-nums [overflow-wrap:anywhere] sm:text-4xl">
         {formatRupiah(summary.spending)}
@@ -116,7 +122,7 @@ function LedgerSummary({
             {categories.map((category, index) => (
               <span
                 className="h-full"
-                key={category.name}
+                key={category.categoryId ?? category.name}
                 style={{
                   flexGrow: chartRatio(category.amount, summary.spending) * 1000,
                   background: categoryColor(category.name, index),
@@ -126,7 +132,7 @@ function LedgerSummary({
           </div>
           <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
             {categories.map((category, index) => (
-              <li className="flex items-center gap-1.5" key={category.name}>
+              <li className="flex items-center gap-1.5" key={category.categoryId ?? category.name}>
                 <span
                   aria-hidden
                   className="h-1.5 w-1.5 rounded-full"
@@ -172,11 +178,14 @@ function LedgerFilters({
           />
         </InputGroup>
       </TextField>
-      <fieldset aria-label="Filter by transaction type" className="mt-3 flex flex-wrap gap-2">
+      <fieldset
+        aria-label="Filter by transaction type"
+        className="mt-3 flex gap-2 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
+      >
         {kindFilters.map((filter) => (
           <Button
             aria-pressed={kindFilter === filter.id}
-            className={`min-h-11 min-w-0 rounded-full px-4 text-xs font-bold ${kindFilter === filter.id ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`}
+            className={`min-h-11 min-w-0 shrink-0 rounded-full px-4 text-xs font-bold ${kindFilter === filter.id ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`}
             key={filter.id}
             onPress={() => onKindChange(filter.id)}
             variant="ghost"
@@ -243,7 +252,7 @@ function GroupedLedger({
               </p>
             ) : null}
           </div>
-          <div className="divide-y divide-separator rounded-3xl border border-border bg-surface px-3">
+          <div className="divide-y divide-separator rounded-3xl border border-border bg-surface px-3 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent max-lg:px-0">
             {group.transactions.map((transaction) => (
               <TransactionRow
                 key={transaction.id}
@@ -384,6 +393,7 @@ export function TransactionsScreen({
   onConfirm,
   onReject,
   month,
+  today = demoToday,
   setMonth,
   query: controlledQuery,
   kindFilter: controlledKindFilter,
@@ -401,6 +411,7 @@ export function TransactionsScreen({
   onConfirm: (id: string) => void;
   onReject: (id: string) => void;
   month: string;
+  today?: string;
   setMonth: (month: string) => void;
   query?: string;
   kindFilter?: KindFilter;
@@ -440,8 +451,13 @@ export function TransactionsScreen({
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-[-0.035em] sm:text-3xl">Transactions</h1>
-        {!reviewOpen ? <MonthSelector month={month} onChange={setMonth} /> : null}
+        <h1 className="text-[32px] font-extrabold tracking-[-0.04em] lg:text-3xl lg:font-bold">
+          <span className="lg:hidden">History</span>
+          <span className="max-lg:hidden">Transactions</span>
+        </h1>
+        {!reviewOpen ? (
+          <MonthSelector month={month} currentMonth={today.slice(0, 7)} onChange={setMonth} />
+        ) : null}
       </div>
       <TransactionViewSelector
         reviewOpen={reviewOpen}

@@ -5,15 +5,16 @@ import { Button } from "@monara/ui";
 import { Icon } from "@/components/icon";
 import { demoMonth, formatMonth, shiftMonth } from "@/data/demo-ledger";
 
-const oldestMonth = shiftMonth(demoMonth, -12);
-
 export function MonthSelector({
   month,
   onChange,
+  currentMonth = demoMonth,
 }: {
   month: string;
   onChange: (month: string) => void;
+  currentMonth?: string;
 }) {
+  const oldestMonth = shiftMonth(currentMonth, -12);
   return (
     <fieldset
       aria-label="Selected month"
@@ -38,7 +39,7 @@ export function MonthSelector({
       <Button
         aria-label="Next month"
         className="shrink-0 rounded-full"
-        isDisabled={month >= demoMonth}
+        isDisabled={month >= currentMonth}
         isIconOnly
         onPress={() => onChange(shiftMonth(month, 1))}
         variant="ghost"

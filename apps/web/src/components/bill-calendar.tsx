@@ -7,7 +7,6 @@ import { Icon } from "@/components/icon";
 import { SectionTitle } from "@/components/visual";
 import {
   daysInMonth,
-  demoMonth,
   demoToday,
   formatMonth,
   formatRupiah,
@@ -28,7 +27,15 @@ function initialDate(month: string, bills: RecurringBill[]): string {
   return bills.find((bill) => bill.nextDue.startsWith(`${month}-`))?.nextDue ?? `${month}-01`;
 }
 
-export function BillCalendar({ bills, month }: { bills: RecurringBill[]; month: string }) {
+export function BillCalendar({
+  bills,
+  month,
+  today = demoToday,
+}: {
+  bills: RecurringBill[];
+  month: string;
+  today?: string;
+}) {
   const [calendar, setCalendar] = useState(() => ({ month, date: initialDate(month, bills) }));
   const monthBills = bills.filter((bill) => bill.nextDue.startsWith(`${calendar.month}-`));
   const selectedBills = monthBills.filter((bill) => bill.nextDue === calendar.date);
@@ -74,7 +81,7 @@ export function BillCalendar({ bills, month }: { bills: RecurringBill[]; month: 
           </p>
           <Button
             className="min-h-11 px-2 text-xs"
-            onPress={() => setCalendar({ month: demoMonth, date: demoToday })}
+            onPress={() => setCalendar({ month: today.slice(0, 7), date: today })}
             size="sm"
             variant="tertiary"
           >
@@ -100,19 +107,19 @@ export function BillCalendar({ bills, month }: { bills: RecurringBill[]; month: 
             const date = `${calendar.month}-${String(day).padStart(2, "0")}`;
             const dayBills = monthBills.filter((bill) => bill.nextDue === date);
             const selected = calendar.date === date;
-            const today = date === demoToday;
+            const isToday = date === today;
             const label = dateFormatter.format(new Date(`${date}T00:00:00Z`));
             return (
               <Button
-                aria-current={today ? "date" : undefined}
-                aria-label={`${label}${today ? ", today" : ""}, ${dayBills.length} ${dayBills.length === 1 ? "bill" : "bills"}`}
+                aria-current={isToday ? "date" : undefined}
+                aria-label={`${label}${isToday ? ", today" : ""}, ${dayBills.length} ${dayBills.length === 1 ? "bill" : "bills"}`}
                 aria-pressed={selected}
                 className={`relative h-11 min-h-11 w-full min-w-0 rounded-lg border p-0 text-xs tabular-nums ${
                   selected
                     ? "border-accent bg-accent text-accent-foreground"
                     : dayBills.length > 0
                       ? "border-accent/20 bg-accent-soft text-accent-soft-foreground"
-                      : today
+                      : isToday
                         ? "border-accent bg-surface text-foreground"
                         : "border-transparent bg-surface-secondary/60 text-muted"
                 }`}

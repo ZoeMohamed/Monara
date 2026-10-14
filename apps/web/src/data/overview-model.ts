@@ -3,7 +3,6 @@ import {
   budgetUsage,
   daysBetween,
   daysInMonth,
-  demoMonth,
   demoSummary,
   demoToday,
   type RecurringBill,
@@ -29,7 +28,9 @@ export function overviewModel(
   budgets: Budget[],
   bills: RecurringBill[],
   month: string,
+  today = demoToday,
 ) {
+  const currentMonth = today.slice(0, 7);
   const summary = demoSummary(transactions, month);
   const expenses = summary.confirmed.filter((item) => item.kind === "expense");
   const usage = budgets.map((budget) => ({ ...budgetUsage(transactions, budget, month), budget }));
@@ -44,20 +45,20 @@ export function overviewModel(
     .filter((item) => item.state !== "on-track")
     .sort((a, b) => severity[b.state] - severity[a.state] || b.percent - a.percent)[0];
   const upcomingBills =
-    month === demoMonth
+    month === currentMonth
       ? bills
           .filter((bill) => {
-            const days = daysBetween(demoToday, bill.nextDue);
+            const days = daysBetween(today, bill.nextDue);
             return bill.status === "active" && days >= 0 && days <= 6;
           })
           .sort((a, b) => a.nextDue.localeCompare(b.nextDue))
       : [];
 
-  const currentDay = Number(demoToday.slice(8, 10));
+  const currentDay = Number(today.slice(8, 10));
   const elapsedPercent =
-    month < demoMonth
+    month < currentMonth
       ? 100
-      : month === demoMonth
+      : month === currentMonth
         ? Math.round((currentDay / daysInMonth(month)) * 100)
         : 0;
 
@@ -66,21 +67,24 @@ export function overviewModel(
     usage,
     elapsedPercent,
     // Safe-to-spend only applies to the month that is still running.
-    safeToSpend: month === demoMonth ? safeToSpendToday(transactions, budgets) : null,
+    safeToSpend: month === currentMonth ? safeToSpendToday(transactions, budgets, today) : null,
     savingsRate:
       summary.income > BigInt(0)
         ? Number((summary.difference * BigInt(100)) / summary.income)
         : null,
-    comparison: monthComparison(transactions, month),
+    comparison: monthComparison(transactions, month, today),
     pendingCount: transactions.filter((item) => item.status === "pending").length,
     recent: [...summary.confirmed]
       .sort((a, b) => `${b.date} ${b.time ?? ""}`.localeCompare(`${a.date} ${a.time ?? ""}`))
       .slice(0, 5),
     expenseCount: expenses.length,
     todaySpending: expenses
-      .filter((item) => item.date === demoToday)
+      .filter((item) => item.date === today)
       .reduce((total, item) => total + BigInt(item.amount ?? 0), BigInt(0)),
-    todayCount: expenses.filter((item) => item.date === demoToday).length,
+    todayCount: expenses.filter((item) => item.date === today).length,
+    isCurrentMonth: month === currentMonth,
+    currentDay,
+    daysLeft: month === currentMonth ? daysInMonth(month) - currentDay + 1 : 0,
     hasFinancialActivity: summary.confirmed.some((item) => item.kind !== "transfer"),
     budgetTotal,
     budgetUsed,

@@ -6,7 +6,7 @@ import { useSyncExternalStore } from "react";
 
 import { Icon } from "@/components/icon";
 import { MonaraMascot } from "@/components/monara-mascot";
-import { demoMonth, demoToday, formatMonth, formatRupiah } from "@/data/demo-ledger";
+import { demoToday, formatMonth, formatRupiah } from "@/data/demo-ledger";
 import { compactAmount } from "@/data/finance-analytics";
 import { type overviewModel, type SceneTime, sceneTime } from "@/data/overview-model";
 
@@ -56,12 +56,14 @@ function ComparisonAction({
 export function OverviewHero({
   month,
   model,
+  today = demoToday,
   openReports,
   openReview,
   openChat,
 }: {
   month: string;
   model: OverviewModel;
+  today?: string;
   openReports: () => void;
   openReview: () => void;
   openChat: () => void;
@@ -71,8 +73,8 @@ export function OverviewHero({
     () => sceneTime(new Date().getHours()),
     () => "morning" as SceneTime,
   );
-  const isCurrentMonth = month === demoMonth;
-  const sampleDate = new Date(`${demoToday}T00:00:00Z`).toLocaleDateString("en-US", {
+  const isCurrentMonth = model.isCurrentMonth;
+  const date = new Date(`${today}T00:00:00Z`).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -95,9 +97,7 @@ export function OverviewHero({
           <h2 className={styles.label} id="overview-spending">
             Confirmed spending
           </h2>
-          <p className={styles.date}>
-            {isCurrentMonth ? `Sample · as of ${sampleDate}` : `Sample · ${formatMonth(month)}`}
-          </p>
+          <p className={styles.date}>{isCurrentMonth ? `As of ${date}` : formatMonth(month)}</p>
         </div>
         <p className={styles.greeting}>{greetings[time]}</p>
         <p className={styles.amount}>{formatRupiah(model.summary.spending)}</p>
@@ -108,15 +108,16 @@ export function OverviewHero({
         <div className={styles.askRow}>
           <MonaraMascot className={styles.mascot} />
           <button
-            aria-label="Open Monara chat. The Agent is not connected yet."
+            aria-label="Open Monara chat"
             className={styles.ask}
             onClick={openChat}
             type="button"
           >
             <Icon aria-hidden className="h-4 w-4 shrink-0 text-accent" name="chat" />
             <span className={styles.askLabel}>Ask Monara</span>
-            <span className={styles.askStatus}>Not connected</span>
-            <Icon aria-hidden className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+            <span className={styles.askArrow}>
+              <Icon aria-hidden className="h-4 w-4 shrink-0" name="send" />
+            </span>
           </button>
         </div>
         <div className={styles.actions}>

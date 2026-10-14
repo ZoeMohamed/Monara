@@ -114,6 +114,31 @@ test("place groups stay within their category and rows retain canonical transact
   assert.equal(shopping.merchants[0].transactions[1], third);
 });
 
+test("owned flow categories retain UUID identity through duplicate names and renames", () => {
+  const firstId = "00000000-0000-4000-8000-000000000201";
+  const secondId = "00000000-0000-4000-8000-000000000202";
+  const first = record({ id: "first", categoryId: firstId, category: "Dining", amount: 100 });
+  const renamed = record({ id: "renamed", categoryId: firstId, category: "Food", amount: 200 });
+  const second = record({ id: "second", categoryId: secondId, category: "Dining", amount: 400 });
+  const result = spendingFlow([first, renamed, second], "2026-10");
+  assert.equal(result.spending, 700n);
+  assert.equal(result.categories.length, 2);
+  const firstGroup = result.categories.find(({ categoryId }) => categoryId === firstId);
+  const secondGroup = result.categories.find(({ categoryId }) => categoryId === secondId);
+  assert.equal(firstGroup.name, "Dining");
+  assert.equal(firstGroup.amount, 300n);
+  assert.equal(firstGroup.count, 2);
+  assert.deepEqual(firstGroup.merchants[0].transactions, [first, renamed]);
+  assert.equal(secondGroup.name, "Dining");
+  assert.equal(secondGroup.amount, 400n);
+  assert.equal(secondGroup.count, 1);
+  assert.deepEqual(secondGroup.merchants[0].transactions, [second]);
+  // Top places deliberately combine the same merchant across category identities.
+  const places = spendingPlaces([first, renamed, second], "2026-10");
+  assert.equal(places.length, 1);
+  assert.equal(places[0].amount, 700n);
+});
+
 test("empty and income-only months contain no invented flows", () => {
   assert.deepEqual(spendingFlow([], "2026-10"), { spending: 0n, categories: [] });
   assert.deepEqual(spendingFlow([record({ kind: "income" })], "2026-10"), {

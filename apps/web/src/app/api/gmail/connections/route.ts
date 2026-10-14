@@ -1,13 +1,14 @@
 import { gmailConnectionListSchema, startGmailConnectionResultSchema } from "@monara/contracts";
 import type { NextRequest } from "next/server";
 import {
+  errorResponse,
   GMAIL_CALLBACK_PATH,
   gmailConnectionService,
   gmailErrorResponse,
   noStoreHeaders,
   unauthenticated,
 } from "@/lib/gmail/service";
-import { browserOrigin } from "@/lib/http/origin";
+import { browserOrigin, isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 /** Lists the signed-in User's Gmail Connections. */
@@ -26,6 +27,9 @@ export async function GET() {
 
 /** Starts a Gmail Connection and returns Composio's consent URL. */
 export async function POST(request: NextRequest) {
+  if (!isSameOriginRequest(request)) {
+    return errorResponse("FORBIDDEN", "This request must come from Monara.");
+  }
   const identity = await getAuthenticatedIdentity();
   if (!identity) return unauthenticated();
   try {

@@ -6,6 +6,7 @@ import {
   isFinanceOperation,
   runFinanceOperation,
 } from "@/lib/finance/service";
+import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -14,6 +15,11 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ operation: string }> },
 ) {
+  if (!isSameOriginRequest(request)) {
+    return financeErrorResponse(
+      new FinanceOperationError("FORBIDDEN", "This request must come from Monara."),
+    );
+  }
   const identity = await getAuthenticatedIdentity();
   if (!identity) {
     return financeErrorResponse(

@@ -1,0 +1,336 @@
+@media (width < 1024px) {
+  .mobileHeader {
+    position: fixed;
+    z-index: 30;
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    right: max(16px, env(safe-area-inset-right, 0px));
+    left: max(16px, env(safe-area-inset-left, 0px));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    pointer-events: none;
+  }
+
+  /* One glass recipe for every floating control, so they read as one layer. */
+  .spaceButton,
+  .dateBadge,
+  .reminderButton,
+  .bottomNav {
+    border: 1px solid rgb(255 255 255 / 72%);
+    background: rgb(255 255 255 / 58%);
+    box-shadow:
+      0 6px 24px rgb(23 37 84 / 8%),
+      inset 0 1px 0 rgb(255 255 255 / 90%);
+    backdrop-filter: blur(20px) saturate(1.6);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+    color: var(--foreground);
+    pointer-events: auto;
+  }
+
+  .spaceButton {
+    display: inline-flex;
+    min-width: 0;
+    height: 48px;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 14px 4px 4px;
+    border-radius: 999px;
+  }
+
+  .avatar {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 800;
+  }
+
+  .avatarMascot {
+    width: 30px;
+    height: 30px;
+    margin-top: 6px;
+  }
+
+  .spaceName {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 16px;
+    font-weight: 750;
+    letter-spacing: -0.02em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .spaceChevron {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--muted);
+  }
+
+  .headerActions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .dateBadge {
+    display: flex;
+    width: 44px;
+    height: 48px;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 12px;
+    background: rgb(255 255 255 / 86%);
+    line-height: 1;
+    text-align: center;
+  }
+
+  .dateBadge span {
+    padding: 4px 0 3px;
+    background: var(--accent);
+    color: var(--accent-foreground);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .dateBadge strong {
+    display: grid;
+    flex: 1;
+    place-items: center;
+    font-size: 19px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+  }
+
+  .reminderButton {
+    position: relative;
+    display: grid;
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 50%;
+  }
+
+  .reminderDot {
+    position: absolute;
+    top: 12px;
+    right: 13px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--warning);
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+
+  .main {
+    padding-top: calc(20px + env(safe-area-inset-top, 0px));
+    padding-right: max(20px, env(safe-area-inset-right, 0px));
+    padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(20px, env(safe-area-inset-left, 0px));
+  }
+
+  .shell[data-screen="home"] .main {
+    padding-top: 0;
+    padding-inline: 0;
+  }
+
+  /* Only Home carries the floating header; other screens lead with their own title. */
+  .shell:not([data-screen="home"]) .mobileHeader {
+    display: none;
+  }
+
+  .shell[data-screen="chat"] {
+    background: var(--canvas);
+  }
+
+  .shell[data-screen="chat"] .main {
+    display: flex;
+    height: var(--chat-viewport-height, 100dvh);
+    flex-direction: column;
+    padding: 0;
+  }
+
+  .bottomNav {
+    position: fixed;
+    z-index: 40;
+    right: max(16px, env(safe-area-inset-right, 0px));
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    left: max(16px, env(safe-area-inset-left, 0px));
+    max-width: 480px;
+    margin-inline: auto;
+    padding: 5px;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 64%);
+    box-shadow:
+      0 12px 32px rgb(23 37 84 / 12%),
+      0 2px 6px rgb(23 37 84 / 6%),
+      inset 0 1px 0 rgb(255 255 255 / 90%);
+  }
+
+  .navItems {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: center;
+  }
+
+  .navIndicator {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 20%;
+    border-radius: 999px;
+    background: rgb(15 23 42 / 8%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 60%);
+    opacity: 0;
+    transition:
+      transform 420ms cubic-bezier(0.32, 0.72, 0, 1),
+      opacity 200ms ease-out;
+  }
+
+  .navIndicator[data-visible="true"] {
+    opacity: 1;
+  }
+
+  .mobileTab,
+  .navAdd {
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 56px;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 2px;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 14px;
+    text-decoration: none;
+  }
+
+  .mobileTab > svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .mobileTab[aria-current="page"] {
+    color: var(--foreground);
+  }
+
+  .navAdd {
+    color: var(--foreground);
+  }
+
+  .addIcon {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--surface);
+  }
+
+  .addIcon > svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .mobileTab,
+  .navAdd,
+  .spaceButton,
+  .dateBadge,
+  .reminderButton {
+    transition:
+      color 180ms ease-out,
+      transform 160ms ease-out;
+  }
+
+  .mobileTab:active,
+  .navAdd:active,
+  .spaceButton:active,
+  .dateBadge:active,
+  .reminderButton:active {
+    transform: scale(0.94);
+  }
+
+  .mobileTab:focus-visible,
+  .navAdd:focus-visible,
+  .spaceButton:focus-visible,
+  .dateBadge:focus-visible,
+  .reminderButton:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+
+  .shell[data-screen="chat"] .mobileHeader,
+  .shell[data-screen="chat"] .bottomNav {
+    display: none;
+  }
+}
+
+/* The glass bar settles as the page moves beneath it: denser and a touch smaller. */
+@supports (animation-timeline: scroll()) {
+  @media (width < 1024px) and (prefers-reduced-motion: no-preference) {
+    .bottomNav {
+      animation: nav-settle linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 240px;
+    }
+
+    .mobileHeader {
+      animation: header-lift linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 160px;
+    }
+  }
+}
+
+@keyframes nav-settle {
+  to {
+    background: rgb(255 255 255 / 80%);
+    transform: scale(0.97);
+  }
+}
+
+@keyframes header-lift {
+  to {
+    transform: translateY(-4px);
+  }
+}
+
+@media (width < 1024px) and (prefers-reduced-motion: reduce) {
+  .navIndicator,
+  .mobileTab,
+  .navAdd,
+  .spaceButton,
+  .dateBadge,
+  .reminderButton {
+    transition: none;
+  }
+
+  .mobileTab:active,
+  .navAdd:active,
+  .spaceButton:active,
+  .dateBadge:active,
+  .reminderButton:active {
+    transform: none;
+  }
+}

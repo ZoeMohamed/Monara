@@ -7,7 +7,7 @@ import { TransactionRow } from "@/components/transaction-row";
 import { SectionTitle } from "@/components/visual";
 import { categoryColor } from "@/data/category-style";
 import { formatRupiah, type Transaction } from "@/data/demo-ledger";
-import { chartRatio } from "@/data/finance-analytics";
+import { categoryKey, chartRatio } from "@/data/finance-analytics";
 import { spendingFlow } from "@/data/spending-flow";
 
 import styles from "./spending-flow.module.css";
@@ -134,7 +134,7 @@ function FlowRibbons({
           )}
           data-selected={category === selected}
           fill={categoryColor(category.name, index)}
-          key={category.name}
+          key={categoryKey(category)}
         />
       ))}
       {selected.merchants.map((merchant, index) => (
@@ -149,7 +149,7 @@ function FlowRibbons({
           )}
           data-selected="true"
           fill={selectedColor}
-          key={`${selected.name}-${merchant.name}`}
+          key={`${categoryKey(selected)}-${merchant.name}`}
         />
       ))}
     </svg>
@@ -179,7 +179,7 @@ export function SpendingFlow({
   month: string;
   onOpenTransaction?: (transaction: Transaction) => void;
 }) {
-  const [categoryName, setCategoryName] = useState<string | null>(null);
+  const [categorySelection, setCategorySelection] = useState<string | null>(null);
   const [merchantName, setMerchantName] = useState<string | null>(null);
   const [layout, setLayout] = useState<FlowLayout | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
@@ -187,10 +187,11 @@ export function SpendingFlow({
   const placesId = useId();
   const flow = spendingFlow(transactions, month);
   const selected =
-    flow.categories.find((category) => category.name === categoryName) ?? flow.categories[0];
+    flow.categories.find((category) => categoryKey(category) === categorySelection) ??
+    flow.categories[0];
   const merchant = selected?.merchants.find((item) => item.name === merchantName);
   const nodeKey = JSON.stringify([
-    flow.categories.map((category) => category.name),
+    flow.categories.map((category) => [categoryKey(category), category.name]),
     selected?.merchants.map((item) => item.name),
   ]);
   useEffect(() => {
@@ -253,14 +254,14 @@ export function SpendingFlow({
                     aria-controls={placesId}
                     aria-pressed={category === selected}
                     className={styles.node}
-                    key={category.name}
+                    key={categoryKey(category)}
                     style={
                       {
                         "--flow-color": categoryColor(category.name, index),
                       } as NodeStyle
                     }
                     onClick={() => {
-                      setCategoryName(category.name);
+                      setCategorySelection(categoryKey(category));
                       setMerchantName(null);
                     }}
                     type="button"

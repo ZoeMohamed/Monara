@@ -12,10 +12,17 @@ import {
 } from "@/components/financial-visuals";
 import { Icon } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
+import styles from "@/components/reports-screen.module.css";
 import { SpendingFlow } from "@/components/spending-flow";
 import { TransactionRow } from "@/components/transaction-row";
 import { SectionTitle, Wash } from "@/components/visual";
-import { demoSummary, formatMonth, formatRupiah, type Transaction } from "@/data/demo-ledger";
+import {
+  demoSummary,
+  demoToday,
+  formatMonth,
+  formatRupiah,
+  type Transaction,
+} from "@/data/demo-ledger";
 import { chartRatio, compactAmount, monthComparison } from "@/data/finance-analytics";
 import { spendingPlaces } from "@/data/spending-flow";
 
@@ -120,25 +127,48 @@ function ReportSummary({
   summary,
   transactions,
   month,
+  today,
 }: {
   summary: ReturnType<typeof demoSummary>;
   transactions: Transaction[];
   month: string;
+  today: string;
 }) {
-  const comparison = monthComparison(transactions, month);
+  const comparison = monthComparison(transactions, month, today);
   const change = comparison.current - comparison.previous;
   const previousName = formatMonth(comparison.previousMonth).split(" ")[0];
+  const spendingAmount = formatRupiah(summary.spending).replace(/^Rp\s*/, "");
   return (
-    <Wash className="mt-4 p-5 sm:p-7" tone="blue">
+    <Wash className={`${styles.summary} mt-4 p-5 sm:p-7`} tone="blue">
       <div className="flex flex-wrap items-center gap-4">
         <div className="min-w-0 flex-1">
-          <p className="break-words text-[clamp(2.25rem,6vw,3.75rem)] font-black leading-none tracking-[-0.06em] tabular-nums">
-            {formatRupiah(summary.spending)}
+          <p className={styles.summaryLabel}>Money out</p>
+          <p
+            className={`${styles.amount} break-words text-[clamp(2.25rem,6vw,3.75rem)] font-black leading-none tracking-[-0.06em] tabular-nums`}
+          >
+            <span>Rp</span>
+            {spendingAmount}
           </p>
-          <p className="mt-1 text-sm font-semibold text-muted">spent in {formatMonth(month)}</p>
+          <p className={`${styles.summaryMonth} mt-1 text-sm font-semibold text-muted`}>
+            spent in {formatMonth(month)}
+          </p>
+          <p className={styles.mobileStats}>
+            of <strong className="text-success">{compactAmount(summary.income)}</strong> income
+            <span aria-hidden> · </span>
+            <span>
+              <strong>
+                {compactAmount(
+                  summary.difference < BigInt(0) ? -summary.difference : summary.difference,
+                )}
+              </strong>{" "}
+              {summary.difference < BigInt(0) ? "over income" : "left"}
+            </span>
+          </p>
         </div>
       </div>
-      <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-4 text-xs sm:grid-cols-3">
+      <dl
+        className={`${styles.desktopStats} mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-4 text-xs sm:grid-cols-3`}
+      >
         <div className="min-w-0">
           <dt className="text-muted">Income</dt>
           <dd className="mt-1 break-words text-sm font-semibold tabular-nums">
@@ -200,6 +230,7 @@ function BiggestExpenses({
 export function ReportsScreen({
   transactions,
   month,
+  today = demoToday,
   setMonth,
   openTransaction,
   openAdd,
@@ -208,6 +239,7 @@ export function ReportsScreen({
 }: {
   transactions: Transaction[];
   month: string;
+  today?: string;
   setMonth: (month: string) => void;
   openTransaction?: (transaction: Transaction) => void;
   openAdd?: () => void;
@@ -223,9 +255,9 @@ export function ReportsScreen({
     .slice(0, 5);
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className={`${styles.header} flex flex-wrap items-center justify-between gap-3`}>
         <h1 className="text-2xl font-bold tracking-[-0.035em] sm:text-3xl">Reports</h1>
-        <MonthSelector month={month} onChange={setMonth} />
+        <MonthSelector currentMonth={today.slice(0, 7)} month={month} onChange={setMonth} />
       </div>
       {!hasFinancialActivity ? (
         <EmptyLedgerState
@@ -246,37 +278,48 @@ export function ReportsScreen({
           <ReportSummary
             key={`summary-${month}`}
             month={month}
+            today={today}
             summary={summary}
             transactions={transactions}
           />
           <div
-            className="mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]"
+            className={`${styles.charts} mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]`}
             key={month}
           >
-            <div className="min-w-0 space-y-4">
+            <div className={`${styles.primaryColumn} min-w-0 space-y-4`}>
               {expenses.length > 0 ? (
-                <SpendingTrend month={month} transactions={transactions} />
+                <div className={styles.chart}>
+                  <SpendingTrend month={month} today={today} transactions={transactions} />
+                </div>
               ) : null}
-              <SpendingCalendar
-                month={month}
-                onOpenTransaction={openTransaction}
-                transactions={transactions}
-              />
-            </div>
-            <div className="min-w-0 space-y-4">
-              {expenses.length > 0 ? (
-                <CategoryBreakdown
+              <div className={`${styles.chart} ${styles.calendar}`}>
+                <SpendingCalendar
                   month={month}
+                  today={today}
                   onOpenTransaction={openTransaction}
                   transactions={transactions}
                 />
+              </div>
+            </div>
+            <div className={`${styles.secondaryColumn} min-w-0 space-y-4`}>
+              {expenses.length > 0 ? (
+                <div className={styles.chart}>
+                  <CategoryBreakdown
+                    month={month}
+                    today={today}
+                    onOpenTransaction={openTransaction}
+                    transactions={transactions}
+                  />
+                </div>
               ) : null}
-              <CashFlowChart month={month} transactions={transactions} />
+              <div className={styles.chart}>
+                <CashFlowChart month={month} today={today} transactions={transactions} />
+              </div>
             </div>
           </div>
           {expenses.length > 0 ? (
             <>
-              <div className="mt-4">
+              <div className={`${styles.chart} ${styles.flow} mt-4`}>
                 <SpendingFlow
                   key={month}
                   month={month}
@@ -284,14 +327,18 @@ export function ReportsScreen({
                   transactions={transactions}
                 />
               </div>
-              <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
-                <TopPlaces
-                  key={month}
-                  month={month}
-                  openTransaction={openTransaction}
-                  transactions={transactions}
-                />
-                <BiggestExpenses expenses={biggest} openTransaction={openTransaction} />
+              <div className={`${styles.details} mt-4 grid items-start gap-4 lg:grid-cols-2`}>
+                <div className={`${styles.chart} ${styles.places}`}>
+                  <TopPlaces
+                    key={month}
+                    month={month}
+                    openTransaction={openTransaction}
+                    transactions={transactions}
+                  />
+                </div>
+                <div className={styles.chart}>
+                  <BiggestExpenses expenses={biggest} openTransaction={openTransaction} />
+                </div>
               </div>
             </>
           ) : null}

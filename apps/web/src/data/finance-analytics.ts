@@ -1,4 +1,5 @@
 import {
+  type Budget,
   daysInMonth,
   demoSummary,
   demoToday,
@@ -20,9 +21,31 @@ type DailyFinance = {
 
 type CategoryFinance = {
   name: string;
+  categoryId?: string;
   amount: bigint;
   count: number;
 };
+
+type CategoryIdentity = Pick<CategoryFinance, "name" | "categoryId">;
+
+// Owned categories use their UUID. Demo categories retain their existing name identity.
+export function categoryKey(category: CategoryIdentity): string {
+  return category.categoryId ?? category.name;
+}
+
+export function categoryContainsTransaction(category: CategoryIdentity, transaction: Transaction) {
+  if (category.categoryId || transaction.categoryId) {
+    return category.categoryId === transaction.categoryId;
+  }
+  return category.name === (transaction.category || "Uncategorized");
+}
+
+export function categoryMatchesBudget(category: CategoryIdentity, budget: Budget) {
+  if (category.categoryId || budget.categoryId) {
+    return category.categoryId === budget.categoryId;
+  }
+  return category.name === budget.category;
+}
 
 // Convert only a bounded, display-only proportion. Monetary totals remain exact bigint values.
 export function chartRatio(value: bigint, maximum: bigint): number {
@@ -49,10 +72,16 @@ export function financialMonth(transactions: Transaction[], month: string, today
     groupedDays.set(date, dateRecords);
     if (transaction.kind === "expense") {
       const name = transaction.category || "Uncategorized";
-      const category = groupedCategories.get(name) ?? { name, amount: BigInt(0), count: 0 };
+      const key = transaction.categoryId ? `id:${transaction.categoryId}` : `name:${name}`;
+      const category = groupedCategories.get(key) ?? {
+        name,
+        ...(transaction.categoryId ? { categoryId: transaction.categoryId } : {}),
+        amount: BigInt(0),
+        count: 0,
+      };
       category.amount += BigInt(transaction.amount ?? 0);
       category.count += 1;
-      groupedCategories.set(name, category);
+      groupedCategories.set(key, category);
     }
   }
 

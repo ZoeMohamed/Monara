@@ -28,6 +28,7 @@ const secondId = "00000000-0000-4000-8000-000000000002";
 
 function view(overrides = {}) {
   return {
+    basePath: "",
     screen: "home",
     month: demoMonth,
     reviewOpen: false,
@@ -300,4 +301,28 @@ test("URLs only contain approved navigation fields and cannot redirect or disclo
       `/?month=${demoMonth}`,
     );
   }
+});
+
+test("the public demo keeps every screen and popup under /demo", () => {
+  for (const [screen, pathname] of Object.entries(screenPaths)) {
+    const demoPath = screen === "home" ? "/demo" : `/demo${pathname}`;
+    const state = view({ basePath: "/demo", screen });
+    assert.equal(buildAppHref(state), `${demoPath}?month=${demoMonth}`);
+    assert.deepEqual(parse(demoPath), state);
+    assert.deepEqual(clearedView(state, "reports").basePath, "/demo");
+  }
+  const popup = view({ basePath: "/demo", screen: "transactions", transactionId: firstId });
+  assert.equal(buildAppHref(popup), `/demo/transactions?month=${demoMonth}&transaction=${firstId}`);
+  assert.equal(parse("/demonstration").basePath, "");
+  assert.equal(parse("/demonstration").screen, "home");
+  assert.equal(buildAppHref(view({ basePath: "//elsewhere.example" })), `/?month=${demoMonth}`);
+});
+
+test("a missing or invalid month falls back to the supplied current month", () => {
+  assert.equal(parseAppView("/", new URLSearchParams(), "2026-11").month, "2026-11");
+  assert.equal(
+    parseAppView("/", new URLSearchParams({ month: "2026-13" }), "2026-11").month,
+    "2026-11",
+  );
+  assert.equal(parseAppView("/", new URLSearchParams(), "not-a-month").month, demoMonth);
 });

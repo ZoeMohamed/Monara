@@ -1,34 +1,23 @@
 "use client";
 
 import { Alert, Button } from "@monara/ui";
-
 import Link from "next/link";
-
-import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
 import { AppSessionContext } from "@/components/app-session-context";
+import { DemoIndicator } from "@/components/demo-indicator";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
 import { ModalDialog } from "@/components/modal-dialog";
+import styles from "@/components/monara-app.module.css";
+import { MonaraMascot } from "@/components/monara-mascot";
+import { ProductTour } from "@/components/product-tour";
 import { TransactionDetails } from "@/components/transaction-details";
 import { type TransactionDraft, TransactionEditor } from "@/components/transaction-editor";
-import { useAppNavigation } from "@/components/use-app-navigation";
+import { type SaveNotice, useMonaraSession } from "@/components/use-monara-session";
 import type { AppScreen } from "@/data/app-navigation";
-import {
-  deleteConfirmedTransaction,
-  demoMonth,
-  demoReminders,
-  demoToday,
-  type Reminder,
-  rejectPendingTransaction,
-  type TransactionValues,
-  transactionErrors,
-  undoTransactionDeletion,
-  undoTransactionUpdate,
-  updateConfirmedTransaction,
-  updatePendingTransaction,
-} from "@/data/demo-ledger";
-import { budgets, initialBills, initialTransactions, type Transaction } from "@/data/sample-data";
+import { demoToday, type Reminder, type Transaction } from "@/data/demo-ledger";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
+import type { FinanceSnapshot } from "@/lib/finance/presentation";
 
 type Tab = AppScreen;
 type TabItem = { id: Tab; label: string; icon: IconName };
@@ -44,27 +33,10 @@ const tabs: TabItem[] = [
 
 const mobileTabs: TabItem[] = [
   { id: "home", label: "Home", icon: "home" },
-  { id: "transactions", label: "Transactions", icon: "transactions" },
+  { id: "transactions", label: "History", icon: "transactions" },
+  { id: "reports", label: "Reports", icon: "reports" },
   { id: "budgets", label: "Budgets", icon: "budgets" },
-  { id: "chat", label: "Chat", icon: "chat" },
 ];
-
-function subscribeToConnection(callback: () => void) {
-  window.addEventListener("online", callback);
-  window.addEventListener("offline", callback);
-  return () => {
-    window.removeEventListener("online", callback);
-    window.removeEventListener("offline", callback);
-  };
-}
-
-function useOnlineStatus() {
-  return useSyncExternalStore(
-    subscribeToConnection,
-    () => navigator.onLine,
-    () => true,
-  );
-}
 
 function RemindersSheet({ reminders, onClose }: { reminders: Reminder[]; onClose: () => void }) {
   return (
@@ -113,12 +85,14 @@ function DesktopSidebar({
   reminderCount,
   onOpenReminders,
   onAdd,
+  live,
 }: {
   activeTab: Tab;
   hrefFor: (tab: Tab) => string;
   reminderCount: number;
   onOpenReminders: () => void;
   onAdd: () => void;
+  live: boolean;
 }) {
   return (
     <aside className="sticky top-0 hidden h-dvh border-r border-border bg-surface p-5 lg:flex lg:flex-col">
@@ -153,8 +127,14 @@ function DesktopSidebar({
       </Button>
       <div className="mt-auto flex items-center gap-3 rounded-2xl border border-warning/40 bg-warning-soft p-3">
         <span className="min-w-0 text-xs text-warning-soft-foreground">
-          <strong className="block text-sm">Sample data</strong>
-          Resets when you reload
+          {live ? (
+            <>
+              <strong className="block text-sm">Private ledger</strong>
+              Saved to your account
+            </>
+          ) : (
+            <DemoIndicator className="block text-sm font-bold" />
+          )}
         </span>
       </div>
       <Button className="mt-3 min-h-12 w-full gap-2 rounded-full" onPress={onAdd}>
@@ -166,56 +146,63 @@ function DesktopSidebar({
 }
 
 function MobileHeader({
-  activeTab,
+  profile,
+  demo,
+  today,
   reminderCount,
   onOpenReminders,
   onOpenProfile,
-  onOpenReports,
+  onOpenCalendar,
 }: {
-  activeTab: Tab;
+  profile: AuthenticatedProfile;
+  demo: boolean;
+  today: string;
   reminderCount: number;
   onOpenReminders: () => void;
   onOpenProfile: () => void;
-  onOpenReports: () => void;
+  onOpenCalendar: () => void;
 }) {
+  const date = new Date(`${today}T00:00:00Z`);
+  const monthLabel = date.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  const firstName = profile.displayName.split(/\s+/)[0] ?? profile.displayName;
   return (
-    <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top,0px))] items-center justify-between border-b border-border bg-background pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(.5rem,env(safe-area-inset-right,0px))] pt-[env(safe-area-inset-top,0px)] sm:pl-[max(2rem,env(safe-area-inset-left,0px))] sm:pr-[max(2rem,env(safe-area-inset-right,0px))] lg:hidden">
-      <Logo />
-      <div className="flex items-center">
-        <Button
-          aria-label="Open Reports"
-          aria-current={activeTab === "reports" ? "page" : undefined}
-          className="rounded-full text-foreground"
-          isIconOnly
-          onPress={onOpenReports}
-          variant="ghost"
+    <header className={`${styles.mobileHeader} lg:hidden`}>
+      <button
+        aria-label={demo ? "Demo space. Open profile" : `${profile.displayName}. Open profile`}
+        className={styles.spaceButton}
+        data-tour="space"
+        onClick={onOpenProfile}
+        type="button"
+      >
+        <span aria-hidden className={styles.avatar}>
+          {demo ? <MonaraMascot className={styles.avatarMascot} /> : profile.initials}
+        </span>
+        {demo ? (
+          <DemoIndicator className={styles.spaceName} />
+        ) : (
+          <span className={styles.spaceName}>{firstName}</span>
+        )}
+        <Icon className={styles.spaceChevron} name="chevron-down" strokeWidth={2.2} />
+      </button>
+      <div className={styles.headerActions}>
+        <button
+          aria-label={`Today, ${date.toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}. Open reports`}
+          className={styles.dateBadge}
+          onClick={onOpenCalendar}
+          type="button"
         >
-          <Icon name="reports" />
-        </Button>
-        <Button
-          isIconOnly
-          variant="ghost"
+          <span aria-hidden>{monthLabel}</span>
+          <strong aria-hidden>{Number(today.slice(8, 10))}</strong>
+        </button>
+        <button
           aria-label={reminderCount > 0 ? `Reminders, ${reminderCount} active` : "Reminders"}
-          className="relative rounded-full text-foreground"
-          onPress={() => onOpenReminders()}
+          className={styles.reminderButton}
+          onClick={onOpenReminders}
           type="button"
         >
-          <Icon name="bell" />
-          {reminderCount > 0 ? (
-            <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-warning ring-2 ring-background" />
-          ) : null}
-        </Button>
-        <Button
-          isIconOnly
-          variant="ghost"
-          aria-current={activeTab === "account" ? "page" : undefined}
-          aria-label="Profile and settings"
-          className={`rounded-full ${activeTab === "account" ? "text-accent" : "text-foreground"}`}
-          onPress={() => onOpenProfile()}
-          type="button"
-        >
-          <Icon name="account" />
-        </Button>
+          <Icon className="h-5 w-5" name="bell" />
+          {reminderCount > 0 ? <span aria-hidden className={styles.reminderDot} /> : null}
+        </button>
       </div>
     </header>
   );
@@ -230,25 +217,31 @@ function BottomNav({
   hrefFor: (tab: Tab) => string;
   onAdd: () => void;
 }) {
+  const activeIndex = mobileTabs.findIndex((tab) => tab.id === activeTab);
   return (
-    <nav
-      aria-label="Bottom navigation"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pl-[max(.5rem,env(safe-area-inset-left,0px))] pr-[max(.5rem,env(safe-area-inset-right,0px))] pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pt-1.5 lg:hidden"
-    >
-      <div className="mx-auto grid max-w-lg grid-cols-5 items-end">
+    <nav aria-label="Bottom navigation" className={`${styles.bottomNav} lg:hidden`}>
+      <div className={styles.navItems}>
+        <span
+          aria-hidden
+          className={styles.navIndicator}
+          data-visible={activeIndex >= 0}
+          style={{ transform: `translateX(${Math.max(activeIndex, 0) * 100}%)` }}
+        />
         {mobileTabs.map((tab) => (
           <MobileTab active={activeTab === tab.id} key={tab.id} href={hrefFor(tab.id)} tab={tab} />
         ))}
-        <Button
+        <button
           aria-label="Add transaction"
-          className="h-12 min-h-12 w-full flex-col items-center justify-center gap-1 rounded-lg px-1 py-1 text-[10px] leading-[15px] font-bold text-muted"
-          onPress={onAdd}
+          className={styles.navAdd}
+          data-tour="add"
+          onClick={onAdd}
           type="button"
-          variant="ghost"
         >
-          <Icon className="h-5 w-5" name="plus" strokeWidth={1.8} />
+          <span aria-hidden className={styles.addIcon}>
+            <Icon name="plus" strokeWidth={2.4} />
+          </span>
           Add
-        </Button>
+        </button>
       </div>
     </nav>
   );
@@ -258,40 +251,47 @@ function RejectDialog({
   transaction,
   onCancel,
   onReject,
+  pending,
+  error,
 }: {
   transaction: Transaction;
   onCancel: () => void;
   onReject: () => void;
+  pending: boolean;
+  error: string | null;
 }) {
   return (
-    <ModalDialog labelledBy="reject-title" onClose={onCancel}>
+    <ModalDialog
+      labelledBy="reject-title"
+      onClose={() => {
+        if (!pending) onCancel();
+      }}
+    >
       <div className="p-4 sm:p-5">
         <h2 id="reject-title" className="text-xl font-bold">
           Reject this transaction?
         </h2>
         <p className="mt-3 break-words text-sm leading-6 text-muted">
           {transaction.merchant ?? "This transaction"} will leave the Review Queue and stay out of
-          totals. Rejection is retained for this demo session.
+          totals. {transaction.backend ? "This imported record will stay rejected." : ""}
         </p>
         <div className="mt-4 flex flex-wrap justify-end gap-2 sm:mt-6 sm:gap-3">
-          <Button variant="secondary" className="min-h-11" onPress={onCancel}>
+          <Button variant="secondary" className="min-h-11" onPress={onCancel} isDisabled={pending}>
             Keep pending
           </Button>
-          <Button variant="danger" className="min-h-11" onPress={onReject}>
-            Reject transaction
+          <Button variant="danger" className="min-h-11" onPress={onReject} isDisabled={pending}>
+            {pending ? "Rejecting…" : "Reject transaction"}
           </Button>
         </div>
+        {error ? (
+          <p className="mt-4 text-sm text-danger" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
     </ModalDialog>
   );
 }
-
-type SaveNotice = {
-  message: string;
-  undo?:
-    | { kind: "update"; before: Transaction; expected: Transaction }
-    | { kind: "delete"; transaction: Transaction; index: number };
-};
 
 function SessionNotice({
   notice,
@@ -333,7 +333,7 @@ function MissingTransaction({ onClose }: { onClose: () => void }) {
         <h2 id="missing-transaction" className="text-xl font-bold">
           Transaction unavailable
         </h2>
-        <p className="mt-2 text-sm text-muted">Sample changes reset on reload.</p>
+        <p className="mt-2 text-sm text-muted">This record may have changed or been removed.</p>
         <Button className="mt-4 w-full" onPress={onClose}>
           Close
         </Button>
@@ -342,318 +342,212 @@ function MissingTransaction({ onClose }: { onClose: () => void }) {
   );
 }
 
-function draftForMonth(month: string): TransactionDraft {
+function draftForMonth(month: string, today = demoToday, live = false): TransactionDraft {
   return {
     merchant: "",
     amount: "",
-    date: month === demoMonth ? demoToday : `${month}-01`,
+    date: month === today.slice(0, 7) ? today : `${month}-01`,
     time: "",
     kind: "expense",
     currency: "IDR",
     category: null,
     method: null,
+    ...(live ? { fromAccount: null, toAccount: null } : {}),
   };
 }
+
+type Workspace = ReturnType<typeof useMonaraSession>;
 
 export function MonaraApp({
   children,
   profile,
+  initialFinance,
 }: {
   children: ReactNode;
   profile: AuthenticatedProfile;
+  initialFinance?: FinanceSnapshot;
 }) {
-  const navigation = useAppNavigation();
-  const { view } = navigation;
-  const [transactions, setTransactions] = useState(initialTransactions);
-  const [removedId, setRemovedId] = useState<string | null>(null);
-  const [bills, setBills] = useState(initialBills);
-  const [query, setQuery] = useState("");
-  const [notice, setNotice] = useState<SaveNotice | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, TransactionDraft>>({});
-  const mainRef = useRef<HTMLElement>(null);
-  const online = useOnlineStatus();
-  const reminders = demoReminders(transactions, budgets, bills);
-  const selected = transactions.find(
-    (item) => item.id === view.transactionId && item.status !== "rejected",
-  );
-  const editing = transactions.find(
-    (item) => item.id === view.editId && item.status !== "rejected",
-  );
-  const rejecting = transactions.find(
-    (item) => item.id === view.rejectId && item.status === "pending",
-  );
-  const editorKey = view.editId ?? `new:${view.month}`;
-
-  useEffect(() => {
-    const title = tabs.find((tab) => tab.id === view.screen)?.label ?? "Monara";
-    mainRef.current?.setAttribute("aria-label", title);
-    mainRef.current?.focus({ preventScroll: true });
-  }, [view.screen]);
-
-  const openReview = () =>
-    navigation.navigate({
-      screen: "transactions",
-      reviewOpen: true,
-      kindFilter: "all",
-      transactionId: null,
-      editId: null,
-      adding: false,
-    });
-  const confirm = (id: string) => {
-    const item = transactions.find(
-      (transaction) => transaction.id === id && transaction.status === "pending",
-    );
-    if (!item) return;
-    if (Object.keys(transactionErrors(item)).length > 0) {
-      navigation.openEdit(id);
-      return;
-    }
-    setTransactions((items) => updatePendingTransaction(items, id, item, "confirm"));
-    setNotice({ message: "Transaction confirmed." });
-    if (view.transactionId) navigation.closePopup();
-  };
-
-  const save = async (values: TransactionValues, action: "edit" | "confirm" | "correct") => {
-    if (!editing) throw new Error("This transaction is unavailable.");
-    if (action !== "edit" && Object.keys(transactionErrors(values)).length > 0)
-      throw new Error("Check the transaction details.");
-    const next =
-      action === "correct"
-        ? updateConfirmedTransaction(transactions, editing.id, values)
-        : updatePendingTransaction(transactions, editing.id, values, action);
-    if (next === transactions)
-      throw new Error("This transaction changed. Reopen it and try again.");
-    const expected = next.find((item) => item.id === editing.id);
-    setTransactions(next);
-    setDrafts((items) => {
-      const next = { ...items };
-      delete next[editorKey];
-      return next;
-    });
-    if (action === "correct" && expected)
-      setNotice({
-        message: "Transaction updated.",
-        undo: { kind: "update", before: editing, expected },
-      });
-    else
-      setNotice({
-        message:
-          action === "confirm" ? "Transaction confirmed." : "Changes saved. Still pending review.",
-      });
-    navigation.navigate({ editId: null, transactionId: editing.id, adding: false }, "replace");
-  };
-
-  const add = async (values: TransactionValues) => {
-    if (Object.keys(transactionErrors(values)).length > 0 || !values.merchant || !values.method)
-      throw new Error("Check the transaction details.");
-    const record: Transaction = {
-      ...values,
-      id: crypto.randomUUID(),
-      emoji: "✦",
-      confidence: null,
-      status: "confirmed",
-    };
-    setTransactions((items) => [record, ...items]);
-    setDrafts((items) => {
-      const next = { ...items };
-      delete next[editorKey];
-      return next;
-    });
-    setNotice({ message: "Transaction added." });
-    navigation.navigate({ adding: false, transactionId: record.id }, "replace");
-  };
-
-  const undo = () => {
-    if (!notice?.undo) return;
-    const restored =
-      notice.undo.kind === "delete"
-        ? undoTransactionDeletion(transactions, notice.undo.transaction, notice.undo.index)
-        : undoTransactionUpdate(transactions, notice.undo.before, notice.undo.expected);
-    if (restored === transactions) {
-      setNotice({ message: "This transaction changed. Undo is unavailable." });
-      return;
-    }
-    setTransactions(restored);
-    setNotice({ message: "Change undone." });
-  };
-
-  const deleteTransaction = async (transaction: Transaction) => {
-    const next = deleteConfirmedTransaction(transactions, transaction);
-    if (next === transactions)
-      throw new Error("This transaction changed. Reopen it and try again.");
-    setRemovedId(transaction.id);
-    setTransactions(next);
-    setNotice({
-      message: "Transaction deleted.",
-      undo: { kind: "delete", transaction, index: transactions.indexOf(transaction) },
-    });
-    setDrafts((items) => {
-      const next = { ...items };
-      delete next[transaction.id];
-      return next;
-    });
-    navigation.navigate({ transactionId: null }, "replace");
-  };
-
-  const confirmBill = (id: string) => {
-    setBills((items) =>
-      items.map((bill) => (bill.id === id ? { ...bill, status: "active" } : bill)),
-    );
-    setNotice({ message: "Bill tracked." });
-  };
-  const dismissBill = (id: string) => {
-    setBills((items) => items.filter((bill) => bill.id !== id));
-    setNotice({ message: "Suggestion dismissed." });
-  };
-  const closeEditor = () => {
-    setDrafts((items) => {
-      const next = { ...items };
-      delete next[editorKey];
-      return next;
-    });
-    navigation.closePopup();
-  };
-  // Native history updates can settle after the ledger mutation. Suppress only the
-  // current removal, then let later stale links show the normal unavailable state.
-  if (removedId && ![view.editId, view.transactionId, view.rejectId].includes(removedId)) {
-    setRemovedId(null);
-  }
-
-  const missing = [
-    { id: view.editId, transaction: editing },
-    { id: view.transactionId, transaction: selected },
-    { id: view.rejectId, transaction: rejecting },
-  ].some(({ id, transaction }) => id !== null && id !== removedId && !transaction);
-
+  const workspace = useMonaraSession(profile, initialFinance);
   return (
-    <AppSessionContext
-      value={{
-        profile,
-        navigation,
-        transactions,
-        bills,
-        reminders,
-        online,
-        query,
-        setQuery,
-        confirm,
-        reject: navigation.openReject,
-        confirmBill,
-        dismissBill,
-        openReview,
-        openReminders: navigation.openReminders,
-      }}
-    >
-      <div className="min-h-dvh bg-background text-foreground">
-        <a
-          className="fixed top-2 left-2 z-50 -translate-y-24 rounded-xl bg-accent px-4 py-3 font-semibold text-white focus:translate-y-0"
-          href="#main-content"
-        >
-          Skip to content
-        </a>
-        <div className="mx-auto min-h-dvh max-w-[1760px] bg-background lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
-          <DesktopSidebar
-            activeTab={view.screen}
-            hrefFor={navigation.hrefFor}
-            onAdd={navigation.openAdd}
-            onOpenReminders={navigation.openReminders}
-            reminderCount={reminders.length}
-          />
-          <div className="min-w-0">
-            <MobileHeader
-              activeTab={view.screen}
-              reminderCount={reminders.length}
-              onOpenProfile={() => navigation.navigate({ screen: "account" })}
-              onOpenReports={() => navigation.navigate({ screen: "reports" })}
-              onOpenReminders={navigation.openReminders}
-            />
-            {!online ? (
-              <Alert className="rounded-none px-4 py-2" role="status" status="warning">
-                <Alert.Content>
-                  <Alert.Title className="text-center text-xs">
-                    Offline. Reconnect for sign-in and sync.
-                  </Alert.Title>
-                </Alert.Content>
-              </Alert>
-            ) : null}
-            <main
-              ref={mainRef}
-              id="main-content"
-              tabIndex={-1}
-              className="mx-auto w-full max-w-[1280px] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-3 outline-none sm:pl-[max(2rem,env(safe-area-inset-left,0px))] sm:pr-[max(2rem,env(safe-area-inset-right,0px))] lg:px-8 lg:pb-16 xl:px-10"
-            >
-              <p className="mb-2 text-[11px] text-muted lg:hidden">
-                Sample data · resets when you reload
-              </p>
-              <SessionNotice notice={notice} onUndo={undo} onDismiss={() => setNotice(null)} />
-              <div className={notice ? "mt-4" : ""}>{children}</div>
-            </main>
-          </div>
-        </div>
-        <BottomNav
-          activeTab={view.screen}
-          onAdd={navigation.openAdd}
-          hrefFor={navigation.hrefFor}
-        />
-        {selected ? (
-          <TransactionDetails
-            key={selected.id}
-            transaction={selected}
-            onClose={navigation.closePopup}
-            onEdit={() => navigation.openEdit(selected.id)}
-            onConfirm={() => confirm(selected.id)}
-            onDelete={() => deleteTransaction(selected)}
-          />
-        ) : null}
-        {editing ? (
-          <TransactionEditor
-            key={editing.id}
-            transaction={editing}
-            initialDraft={drafts[editorKey]}
-            onDraftChange={(draft) => setDrafts((items) => ({ ...items, [editorKey]: draft }))}
-            onClose={closeEditor}
-            onSave={save}
-          />
-        ) : null}
-        {view.adding ? (
-          <TransactionEditor
-            key={editorKey}
-            initialDraft={drafts[editorKey] ?? draftForMonth(view.month)}
-            pristineDraft={draftForMonth(view.month)}
-            onDraftChange={(draft) => setDrafts((items) => ({ ...items, [editorKey]: draft }))}
-            onClose={closeEditor}
-            onSave={add}
-          />
-        ) : null}
-        {missing ? <MissingTransaction onClose={navigation.closePopup} /> : null}
-        {rejecting ? (
-          <RejectDialog
-            transaction={rejecting}
-            onCancel={navigation.closePopup}
-            onReject={() => {
-              setRemovedId(rejecting.id);
-              setTransactions((items) => rejectPendingTransaction(items, rejecting.id));
-              navigation.closePopup();
-              setNotice({ message: "Transaction rejected." });
-            }}
-          />
-        ) : null}
-        {view.remindersOpen ? (
-          <RemindersSheet onClose={navigation.closePopup} reminders={reminders} />
-        ) : null}
-      </div>
+    <AppSessionContext value={workspace.session}>
+      <AppChrome workspace={workspace}>{children}</AppChrome>
     </AppSessionContext>
+  );
+}
+
+function AppChrome({ workspace, children }: { workspace: Workspace; children: ReactNode }) {
+  const { session, live, view, mainRef, notice, setNotice, undo, sync } = workspace;
+  const { profile, navigation, today, currentMonth, reminders, online, amountsHidden } = session;
+  return (
+    <div
+      className={`${styles.shell} min-h-dvh bg-background text-foreground`}
+      data-amounts-hidden={amountsHidden}
+      data-screen={view.screen}
+    >
+      <a
+        className="fixed top-2 left-2 z-50 -translate-y-24 rounded-xl bg-accent px-4 py-3 font-semibold text-white focus:translate-y-0"
+        href="#main-content"
+      >
+        Skip to content
+      </a>
+      <div className="mx-auto min-h-dvh max-w-[1760px] bg-background lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
+        <DesktopSidebar
+          activeTab={view.screen}
+          hrefFor={navigation.hrefFor}
+          onAdd={navigation.openAdd}
+          onOpenReminders={navigation.openReminders}
+          reminderCount={reminders.length}
+          live={live}
+        />
+        <div className="min-w-0">
+          <MobileHeader
+            demo={!live}
+            profile={profile}
+            today={today}
+            reminderCount={reminders.length}
+            onOpenCalendar={() => navigation.navigate({ screen: "reports", month: currentMonth })}
+            onOpenProfile={() => navigation.navigate({ screen: "account" })}
+            onOpenReminders={navigation.openReminders}
+          />
+          {!online ? (
+            <Alert className="rounded-none px-4 py-2" role="status" status="warning">
+              <Alert.Content>
+                <Alert.Title className="text-center text-xs">
+                  Offline. Reconnect for sign-in and sync.
+                </Alert.Title>
+              </Alert.Content>
+            </Alert>
+          ) : null}
+          <main
+            ref={mainRef}
+            id="main-content"
+            tabIndex={-1}
+            className={`${styles.main} mx-auto w-full max-w-[1280px] pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-3 outline-none sm:pl-[max(2rem,env(safe-area-inset-left,0px))] sm:pr-[max(2rem,env(safe-area-inset-right,0px))] lg:px-8 lg:pb-16 xl:px-10`}
+          >
+            {live && (sync.pending || sync.needsRecovery) ? (
+              <div
+                className="mb-4 flex flex-wrap items-center gap-3 rounded-2xl bg-surface-secondary px-4 py-3"
+                role="status"
+              >
+                <p className="min-w-0 flex-1 text-sm">
+                  {sync.pending ? "Updating your records…" : sync.error}
+                </p>
+                {sync.needsRecovery ? (
+                  <Button
+                    isDisabled={sync.pending}
+                    onPress={() => {
+                      void sync.refresh().catch(() => undefined);
+                    }}
+                    variant="secondary"
+                  >
+                    Refresh records
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            <SessionNotice notice={notice} onUndo={undo} onDismiss={() => setNotice(null)} />
+            <div className={notice ? "mt-4" : ""}>{children}</div>
+          </main>
+        </div>
+      </div>
+      <BottomNav activeTab={view.screen} onAdd={navigation.openAdd} hrefFor={navigation.hrefFor} />
+      <AppSheets workspace={workspace} />
+    </div>
+  );
+}
+
+function AppSheets({ workspace }: { workspace: Workspace }) {
+  const {
+    session,
+    live,
+    view,
+    selected,
+    editing,
+    rejecting,
+    drafts,
+    setDrafts,
+    editorKey,
+    closeEditor,
+    save,
+    add,
+    deleteTransaction,
+    mutationPending,
+    confirmError,
+    rejectError,
+    missing,
+    tourPending,
+    tourMode,
+    rejectSelected,
+    resources,
+    sync,
+  } = workspace;
+  const { navigation, today, reminders, confirm } = session;
+  return (
+    <>
+      {selected ? (
+        <TransactionDetails
+          key={selected.id}
+          transaction={selected}
+          onClose={navigation.closePopup}
+          onEdit={() => navigation.openEdit(selected.id)}
+          onConfirm={() => confirm(selected.id)}
+          onDelete={() => deleteTransaction(selected)}
+          pending={mutationPending}
+          confirmationError={confirmError}
+          refreshRequired={sync.needsRecovery}
+          onRefreshRecords={sync.refresh}
+        />
+      ) : null}
+      {editing ? (
+        <TransactionEditor
+          key={editing.id}
+          transaction={editing}
+          initialDraft={drafts[editorKey]}
+          onDraftChange={(draft) => setDrafts((items) => ({ ...items, [editorKey]: draft }))}
+          onClose={closeEditor}
+          onSave={save}
+          resources={resources}
+          today={today}
+          refreshRequired={sync.needsRecovery}
+          onRefreshRecords={sync.refresh}
+        />
+      ) : null}
+      {view.adding ? (
+        <TransactionEditor
+          key={editorKey}
+          initialDraft={drafts[editorKey] ?? draftForMonth(view.month, today, live)}
+          pristineDraft={draftForMonth(view.month, today, live)}
+          onDraftChange={(draft) => setDrafts((items) => ({ ...items, [editorKey]: draft }))}
+          onClose={closeEditor}
+          onSave={add}
+          resources={resources}
+          today={today}
+          refreshRequired={sync.needsRecovery}
+          onRefreshRecords={sync.refresh}
+        />
+      ) : null}
+      {missing ? <MissingTransaction onClose={navigation.closePopup} /> : null}
+      {rejecting ? (
+        <RejectDialog
+          transaction={rejecting}
+          onCancel={navigation.closePopup}
+          pending={mutationPending}
+          error={rejectError}
+          onReject={rejectSelected}
+        />
+      ) : null}
+      {tourPending ? <ProductTour mode={tourMode} /> : null}
+      {view.remindersOpen ? (
+        <RemindersSheet onClose={navigation.closePopup} reminders={reminders} />
+      ) : null}
+    </>
   );
 }
 
 function MobileTab({ tab, active, href }: { tab: TabItem; active: boolean; href: string }) {
   return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={`flex h-12 w-full flex-col items-center justify-center gap-1 rounded-lg px-1 py-1 text-[10px] leading-[15px] font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${active ? "text-accent" : "text-muted"}`}
-    >
-      <Icon className="h-5 w-5" name={tab.icon} strokeWidth={active ? 2.3 : 1.8} />
+    <Link href={href} aria-current={active ? "page" : undefined} className={styles.mobileTab}>
+      <Icon name={tab.icon} strokeWidth={active ? 2.3 : 1.8} />
       {tab.label}
     </Link>
   );

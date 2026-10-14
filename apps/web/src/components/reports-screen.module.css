@@ -1,0 +1,168 @@
+.summaryLabel,
+.mobileStats {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .amount > span {
+    margin-right: 5px;
+    color: var(--muted);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: normal;
+    vertical-align: 8px;
+  }
+
+  .header {
+    align-items: flex-start;
+    row-gap: 20px;
+  }
+
+  .header h1 {
+    flex-basis: 100%;
+    font-size: 32px;
+    line-height: 1.15;
+  }
+
+  .header > fieldset {
+    margin-left: auto;
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .header > fieldset > span {
+    padding-inline: 12px;
+    font-size: 15px;
+  }
+
+  .summary {
+    margin-top: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .summaryLabel {
+    display: block;
+    margin-bottom: 12px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .amount {
+    font-size: clamp(32px, 10vw, 52px);
+    font-weight: 750;
+    line-height: 1.1;
+    letter-spacing: -0.055em;
+  }
+
+  .summaryMonth,
+  .desktopStats {
+    display: none;
+  }
+
+  .mobileStats {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 4px;
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .mobileStats > span > strong {
+    color: var(--foreground);
+  }
+
+  .charts {
+    margin-top: 36px;
+    gap: 36px;
+  }
+
+  .primaryColumn,
+  .secondaryColumn {
+    display: flex;
+    flex-direction: column;
+    gap: 36px;
+  }
+
+  .primaryColumn > *,
+  .secondaryColumn > * {
+    margin-block: 0;
+  }
+
+  .calendar {
+    order: -1;
+  }
+
+  .chart > :first-child {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .chart h2 {
+    font-size: 20px;
+    line-height: 1.35;
+    font-weight: 650;
+    letter-spacing: -0.025em;
+  }
+
+  .calendar :has(> h2) {
+    display: block;
+  }
+
+  .calendar h2 + span {
+    display: block;
+    margin-top: 3px;
+    font-size: 14px;
+    font-weight: 400;
+  }
+
+  .calendar fieldset {
+    column-gap: 5px;
+    row-gap: 8px;
+  }
+
+  .calendar fieldset > span {
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  .calendar fieldset > button {
+    min-height: 44px;
+    aspect-ratio: 1;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 7px;
+    border-radius: 11px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  /* On a phone the category list and biggest expenses already answer these. */
+  .flow,
+  .places {
+    display: none;
+  }
+
+  .details {
+    margin-top: 36px;
+  }
+
+  .details {
+    gap: 36px;
+  }
+}
+
+@media (width < 360px) {
+  .calendar fieldset {
+    margin-inline: -20px;
+    column-gap: 2px;
+  }
+}

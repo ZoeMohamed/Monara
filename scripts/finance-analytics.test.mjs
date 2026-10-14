@@ -14,9 +14,16 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const { cashFlowMonths, chartRatio, compactAmount, financialMonth, monthComparison } = await import(
-  "../apps/web/src/data/finance-analytics.ts"
-);
+const {
+  cashFlowMonths,
+  categoryContainsTransaction,
+  categoryKey,
+  categoryMatchesBudget,
+  chartRatio,
+  compactAmount,
+  financialMonth,
+  monthComparison,
+} = await import("../apps/web/src/data/finance-analytics.ts");
 hooks.deregister();
 
 function record(overrides = {}) {
@@ -137,6 +144,71 @@ test("unassigned categories stay explicit and categories sort by exact amount th
   assert.equal(
     result.categories.reduce((total, category) => total + category.amount, 0n),
     result.spending,
+  );
+});
+
+test("same-name owned categories keep separate totals, budgets, and transaction drilldowns", () => {
+  const firstId = "00000000-0000-4000-8000-000000000201";
+  const secondId = "00000000-0000-4000-8000-000000000202";
+  const records = [
+    record({ id: "first", categoryId: firstId, amount: 100 }),
+    record({ id: "second", categoryId: secondId, amount: 300 }),
+    record({ id: "first-again", categoryId: firstId, amount: 200 }),
+    record({ id: "demo", amount: 50 }),
+    record({ id: "pending", categoryId: firstId, amount: 999, status: "pending" }),
+  ];
+  const result = financialMonth(records, "2026-10");
+  assert.equal(result.spending, 650n);
+  assert.equal(result.categories.length, 3);
+  const first = result.categories.find(({ categoryId }) => categoryId === firstId);
+  const second = result.categories.find(({ categoryId }) => categoryId === secondId);
+  const demo = result.categories.find(({ categoryId }) => categoryId === undefined);
+  assert.deepEqual(first, { categoryId: firstId, name: "Food & Drinks", amount: 300n, count: 2 });
+  assert.deepEqual(second, { categoryId: secondId, name: "Food & Drinks", amount: 300n, count: 1 });
+  assert.deepEqual(demo, { name: "Food & Drinks", amount: 50n, count: 1 });
+  assert.equal(categoryKey(first), firstId);
+  assert.equal(categoryKey(demo), "Food & Drinks");
+  const confirmed = result.days.flatMap(({ transactions }) => transactions);
+  assert.deepEqual(
+    confirmed.filter((item) => categoryContainsTransaction(first, item)).map(({ id }) => id),
+    ["first", "first-again"],
+  );
+  assert.deepEqual(
+    confirmed.filter((item) => categoryContainsTransaction(second, item)).map(({ id }) => id),
+    ["second"],
+  );
+  assert.deepEqual(
+    confirmed.filter((item) => categoryContainsTransaction(demo, item)).map(({ id }) => id),
+    ["demo"],
+  );
+  assert.equal(
+    categoryMatchesBudget(first, { categoryId: firstId, category: "Food & Drinks" }),
+    true,
+  );
+  assert.equal(
+    categoryMatchesBudget(first, { categoryId: secondId, category: "Food & Drinks" }),
+    false,
+  );
+  assert.equal(categoryMatchesBudget(first, { category: "Food & Drinks" }), false);
+  assert.equal(categoryMatchesBudget(demo, { category: "Food & Drinks" }), true);
+});
+
+test("renaming an owned category preserves its grouping, budget, and payments identity", () => {
+  const categoryId = "00000000-0000-4000-8000-000000000201";
+  const records = [
+    record({ id: "renamed", categoryId, category: "Dining", amount: 120 }),
+    record({ id: "old-label", categoryId, category: "Food & Drinks", amount: 80 }),
+    record({ id: "different-category", category: "Dining", amount: 40 }),
+  ];
+  const result = financialMonth(records, "2026-10");
+  const renamed = result.categories.find((category) => category.categoryId === categoryId);
+  assert.deepEqual(renamed, { categoryId, name: "Dining", amount: 200n, count: 2 });
+  assert.equal(categoryKey(renamed), categoryId);
+  assert.equal(categoryMatchesBudget(renamed, { categoryId, category: "Food & Drinks" }), true);
+  assert.equal(categoryMatchesBudget(renamed, { category: "Dining" }), false);
+  assert.deepEqual(
+    records.filter((item) => categoryContainsTransaction(renamed, item)).map(({ id }) => id),
+    ["renamed", "old-label"],
   );
 });
 

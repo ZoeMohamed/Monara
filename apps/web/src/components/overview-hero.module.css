@@ -9,6 +9,11 @@
   background: var(--accent-soft);
 }
 
+.askArrow {
+  display: flex;
+  color: var(--muted);
+}
+
 .landscape {
   z-index: 0;
   object-fit: cover;
@@ -75,11 +80,6 @@
   flex: 1;
   font-size: 14px;
   font-weight: 600;
-}
-
-.askStatus {
-  color: var(--muted);
-  font-size: 11px;
 }
 
 .ask:focus-visible {

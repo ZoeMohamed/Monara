@@ -1,4 +1,6 @@
-// Presentation-only, synthetic session data. Backend contracts and writes belong to Zoe.
+import type { Budget as BackendBudget, Transaction as BackendTransaction } from "@monara/contracts";
+
+// Presentation models support both explicit demo data and validated owned backend records.
 type TransactionKind = "expense" | "income" | "transfer";
 type ReviewStatus = "pending" | "confirmed" | "rejected";
 export type Transaction = {
@@ -14,11 +16,27 @@ export type Transaction = {
   emoji: string;
   confidence: number | null;
   status: ReviewStatus;
+  backend?: BackendTransaction;
+  categoryId?: string | null;
+  financialAccountId?: string | null;
+  fromFinancialAccountId?: string | null;
+  toFinancialAccountId?: string | null;
 };
 
 export type TransactionValues = Pick<
   Transaction,
-  "merchant" | "category" | "amount" | "currency" | "date" | "time" | "method" | "kind"
+  | "merchant"
+  | "category"
+  | "amount"
+  | "currency"
+  | "date"
+  | "time"
+  | "method"
+  | "kind"
+  | "categoryId"
+  | "financialAccountId"
+  | "fromFinancialAccountId"
+  | "toFinancialAccountId"
 >;
 export type TransactionErrors = Partial<Record<keyof TransactionValues, string>>;
 
@@ -43,7 +61,16 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
   }
   if (values.currency !== "IDR") errors.currency = "Choose IDR. Monara supports rupiah only.";
   if (!isCalendarDate(values.date)) errors.date = "Enter a valid transaction date.";
-  if (values.kind === "transfer" && !demoTransferMethods.includes(values.method ?? "")) {
+  const owned =
+    values.financialAccountId !== undefined || values.fromFinancialAccountId !== undefined;
+  if (
+    values.kind === "transfer" &&
+    (owned
+      ? !values.fromFinancialAccountId ||
+        !values.toFinancialAccountId ||
+        values.fromFinancialAccountId === values.toFinancialAccountId
+      : !demoTransferMethods.includes(values.method ?? ""))
+  ) {
     errors.method = "Choose the source and destination Financial Accounts.";
   }
   return errors;
@@ -241,12 +268,18 @@ export type Budget = {
   cadence: "monthly";
   limit: number;
   warningPercent: number;
+  categoryId?: string;
+  backend?: BackendBudget;
 };
 
 export function budgetUsage(transactions: Transaction[], budget: Budget, month = demoMonth) {
   const used = sumAmounts(
     demoSummary(transactions, month).confirmed.filter(
-      (transaction) => transaction.kind === "expense" && transaction.category === budget.category,
+      (transaction) =>
+        transaction.kind === "expense" &&
+        (budget.categoryId
+          ? transaction.categoryId === budget.categoryId
+          : transaction.category === budget.category),
     ),
   );
   const limit = BigInt(budget.limit);

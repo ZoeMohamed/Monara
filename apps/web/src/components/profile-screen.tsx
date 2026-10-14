@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Label, Switch } from "@monara/ui";
+import { Button, Card } from "@monara/ui";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -48,111 +48,177 @@ function Group({ id, title, children }: { id: string; title: string; children: R
   );
 }
 
+function ProfileIdentity({ profile, demo }: { profile: AuthenticatedProfile; demo: boolean }) {
+  return (
+    <Card className="mt-4 block gap-0 rounded-2xl border border-border p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <MonaraMascot className="h-16 w-16 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-semibold tracking-[-0.025em] [overflow-wrap:anywhere]">
+            {demo ? "Your space" : profile.displayName}
+          </h2>
+          {demo ? null : (
+            <p className="mt-1 break-all text-sm text-muted">{profile.email ?? "Google account"}</p>
+          )}
+        </div>
+      </div>
+      <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-separator pt-4 text-xs">
+        <div>
+          <dt className="text-muted">Currency</dt>
+          <dd className="mt-1 font-medium">IDR</dd>
+        </div>
+        <div>
+          <dt className="text-muted">Ledger dates</dt>
+          <dd className="mt-1 font-medium">UTC</dd>
+        </div>
+      </dl>
+    </Card>
+  );
+}
+
+function DemoSignup() {
+  return (
+    <section
+      aria-labelledby="make-it-yours"
+      className="mt-5 rounded-3xl bg-foreground p-5 text-white"
+    >
+      <h2 className="text-xl font-extrabold tracking-[-0.03em]" id="make-it-yours">
+        Make it yours
+      </h2>
+      <p className="mt-1 text-sm leading-6 opacity-80">
+        Sign in with Google to keep a private ledger. Your records stay yours.
+      </p>
+      <Link
+        className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-surface px-5 text-[15px] font-bold text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        href="/sign-in"
+      >
+        Continue with Google
+      </Link>
+    </section>
+  );
+}
+
+function ProfileConnections({ demo }: { demo: boolean }) {
+  return (
+    <Group id="connections" title="Connections">
+      <Row
+        detail="Separate from Gmail access"
+        end={demo ? "Not signed in" : "Connected"}
+        title="Google sign-in"
+      />
+      <LinkRow
+        detail={
+          demo ? "Sign in first · up to 3 mailboxes" : "Manage connections · up to 3 mailboxes"
+        }
+        href={demo ? "/sign-in?next=/connections/gmail" : "/connections/gmail"}
+        title="Gmail"
+      />
+      <Row
+        detail="Number verification is not available in the app yet."
+        end="Unavailable"
+        title="WhatsApp"
+      />
+    </Group>
+  );
+}
+
+function ProfileAccount() {
+  return (
+    <Group id="account" title="Account">
+      <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2.5">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Current session</p>
+          <p className="mt-0.5 text-xs text-muted">Sign out on this device.</p>
+        </div>
+        <form action="/auth/sign-out" method="post">
+          <Button className="min-h-11" type="submit" variant="secondary">
+            Sign out
+          </Button>
+        </form>
+      </div>
+    </Group>
+  );
+}
+
+function ProfileReminderSettings() {
+  return (
+    <Group id="reminders" title="Reminder settings">
+      <Row detail="Reminder preferences are not available yet." end="Unavailable" title="In-app" />
+      <Row
+        detail="Requires a verified WhatsApp link."
+        end="Unavailable"
+        title="WhatsApp reminders"
+      />
+    </Group>
+  );
+}
+
+function ProfileAppSettings({
+  online,
+  onReplayTour,
+}: {
+  online: boolean;
+  onReplayTour?: () => void;
+}) {
+  return (
+    <Group id="app" title="App">
+      <Row
+        end={
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden
+              className={`h-2 w-2 rounded-full ${online ? "bg-success" : "bg-warning"}`}
+            />
+            {online ? "Online" : "Offline"}
+          </span>
+        }
+        detail={online ? "Live operations need a connection." : "Reconnect for live operations."}
+        title="Connection"
+      />
+      <Row detail="Add it to your home screen." end={<InstallAppButton />} title="Install Monara" />
+      {onReplayTour ? (
+        <Row
+          detail="A one-minute look at the essentials."
+          end={
+            <Button className="min-h-11" onPress={onReplayTour} variant="secondary">
+              Replay
+            </Button>
+          }
+          title="Quick tour"
+        />
+      ) : null}
+    </Group>
+  );
+}
+
 export function ProfileScreen({
   online,
   profile,
+  demo = false,
+  financialAccounts,
+  financialCategories,
+  onReplayTour,
 }: {
   online: boolean;
   profile: AuthenticatedProfile;
+  demo?: boolean;
+  financialAccounts?: ReactNode;
+  financialCategories?: ReactNode;
+  onReplayTour?: () => void;
 }) {
   return (
     <div>
-      <h1 className="text-2xl font-bold tracking-[-0.035em] sm:text-3xl">Profile</h1>
-
-      <Card className="mt-4 block gap-0 rounded-2xl border border-border p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          <MonaraMascot className="h-16 w-16 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-semibold tracking-[-0.025em] [overflow-wrap:anywhere]">
-              {profile.displayName}
-            </h2>
-            <p className="mt-1 break-all text-sm text-muted">{profile.email ?? "Google account"}</p>
-          </div>
-        </div>
-        <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-separator pt-4 text-xs">
-          <div>
-            <dt className="text-muted">Currency</dt>
-            <dd className="mt-1 font-medium">IDR</dd>
-          </div>
-          <div>
-            <dt className="text-muted">Time zone</dt>
-            <dd className="mt-1 font-medium">Asia/Jakarta</dd>
-          </div>
-        </dl>
-      </Card>
-
-      <Group id="connections" title="Connections">
-        <Row detail="Separate from Gmail access" end="Connected" title="Google sign-in" />
-        <LinkRow
-          detail="Manage connections · up to 3 mailboxes"
-          href="/connections/gmail"
-          title="Gmail"
-        />
-        <Row
-          detail="Linking opens once number verification is ready."
-          end="Not linked"
-          title="WhatsApp"
-        />
-      </Group>
-
-      <Group id="account" title="Account">
-        <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2.5">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold">Current session</p>
-            <p className="mt-0.5 text-xs text-muted">Sign out on this device.</p>
-          </div>
-          <form action="/auth/sign-out" method="post">
-            <Button className="min-h-11" type="submit" variant="secondary">
-              Sign out
-            </Button>
-          </form>
-        </div>
-      </Group>
-
-      <Group id="reminders" title="Reminders">
-        <Row
-          detail="Budget and bill reminders in the app."
-          end={<span className="text-success">Always on</span>}
-          title="In-app"
-        />
-        <div className="flex items-start gap-3 py-2.5">
-          <div className="min-w-0 flex-1">
-            <Switch isDisabled isSelected={false}>
-              <Switch.Content className="flex w-full items-center justify-between gap-3">
-                <Label className="text-sm font-medium">WhatsApp reminders</Label>
-                <Switch.Control>
-                  <Switch.Thumb />
-                </Switch.Control>
-              </Switch.Content>
-            </Switch>
-            <p className="mt-1 text-xs leading-5 text-muted">Link and verify WhatsApp first.</p>
-          </div>
-        </div>
-        <Row detail="WhatsApp reminders wait until 07:00." end="22:00–07:00" title="Quiet hours" />
-        <Row detail="Extra reminders are combined." end="3 a day" title="WhatsApp limit" />
-      </Group>
-
-      <Group id="app" title="App">
-        <Row
-          end={
-            <span className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className={`h-2 w-2 rounded-full ${online ? "bg-success" : "bg-warning"}`}
-              />
-              {online ? "Online" : "Offline"}
-            </span>
-          }
-          detail={online ? "Live operations need a connection." : "Reconnect for live operations."}
-          title="Connection"
-        />
-        <Row
-          detail="Add it to your home screen."
-          end={<InstallAppButton />}
-          title="Install Monara"
-        />
-      </Group>
-
+      <h1 className="text-[32px] font-extrabold tracking-[-0.04em] lg:text-3xl lg:font-bold">
+        Profile
+      </h1>
+      <ProfileIdentity demo={demo} profile={profile} />
+      {demo ? <DemoSignup /> : null}
+      {financialAccounts}
+      {financialCategories}
+      <ProfileConnections demo={demo} />
+      {demo ? null : <ProfileAccount />}
+      <ProfileReminderSettings />
+      <ProfileAppSettings online={online} onReplayTour={onReplayTour} />
       <p className="mt-4 px-1 text-xs leading-5 text-muted">
         Your records are private to you. Monara never stores Gmail passwords or OAuth tokens, and
         nothing financial is saved for offline use.

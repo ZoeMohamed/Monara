@@ -1,0 +1,296 @@
+"use client";
+
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { AppSession } from "@/components/app-session-context";
+import { useTransactionActions } from "@/components/transaction-actions";
+import type { TransactionDraft } from "@/components/transaction-editor";
+import { useAppNavigation } from "@/components/use-app-navigation";
+import { useFinanceSync } from "@/components/use-finance-sync";
+import { replayTour, useTourPending } from "@/components/use-product-tour";
+import type { AppView } from "@/data/app-navigation";
+import { demoReminders, demoToday, type RecurringBill } from "@/data/demo-ledger";
+import { budgets, initialBills, initialTransactions, type Transaction } from "@/data/sample-data";
+import type { AuthenticatedProfile } from "@/lib/auth/identity";
+import type { FinanceSnapshot } from "@/lib/finance/presentation";
+
+export type SaveNotice = {
+  message: string;
+  undo?:
+    | { kind: "update"; before: Transaction; expected: Transaction }
+    | { kind: "delete"; transaction: Transaction; index: number };
+};
+
+function subscribeToConnection(callback: () => void) {
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+const amountsKey = "monara.hide-amounts";
+const preferenceEvent = "monara-preferences";
+let memoryAmountsHidden = false;
+
+function subscribeToPreferences(callback: () => void) {
+  window.addEventListener("storage", callback);
+  window.addEventListener(preferenceEvent, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(preferenceEvent, callback);
+  };
+}
+
+// A display preference only; no financial value is stored on the device.
+function useAmountsHidden(): [boolean, () => void] {
+  const hidden = useSyncExternalStore(
+    subscribeToPreferences,
+    () => {
+      try {
+        return window.localStorage.getItem(amountsKey) === "1";
+      } catch {
+        return memoryAmountsHidden;
+      }
+    },
+    () => false,
+  );
+  const toggle = () => {
+    memoryAmountsHidden = !hidden;
+    try {
+      window.localStorage.setItem(amountsKey, hidden ? "0" : "1");
+    } catch {
+      // Storage can be unavailable in private modes; the toggle then lasts until reload.
+    }
+    window.dispatchEvent(new Event(preferenceEvent));
+  };
+  return [hidden, toggle];
+}
+
+function useOnlineStatus() {
+  return useSyncExternalStore(
+    subscribeToConnection,
+    () => navigator.onLine,
+    () => true,
+  );
+}
+
+function homeIsUncovered(view: AppView) {
+  return (
+    view.screen === "home" &&
+    !view.adding &&
+    !view.editId &&
+    !view.transactionId &&
+    !view.rejectId &&
+    !view.remindersOpen
+  );
+}
+
+function sessionRecords(
+  snapshot: FinanceSnapshot | undefined,
+  demoTransactions: Transaction[],
+  bills: RecurringBill[],
+) {
+  if (snapshot)
+    return {
+      transactions: snapshot.transactions,
+      selectedBudgets: snapshot.budgets,
+      reminders: snapshot.reminders,
+      resources: { financialAccounts: snapshot.financialAccounts, categories: snapshot.categories },
+    };
+  return {
+    transactions: demoTransactions,
+    selectedBudgets: budgets,
+    reminders: demoReminders(demoTransactions, budgets, bills),
+    resources: undefined,
+  };
+}
+
+function selectionFor(transactions: Transaction[], view: AppView, removedId: string | null) {
+  const selected = transactions.find(
+    (item) => item.id === view.transactionId && item.status !== "rejected",
+  );
+  const editing = transactions.find(
+    (item) => item.id === view.editId && item.status !== "rejected",
+  );
+  const rejecting = transactions.find(
+    (item) => item.id === view.rejectId && item.status === "pending",
+  );
+  const missing = [
+    { id: view.editId, transaction: editing },
+    { id: view.transactionId, transaction: selected },
+    { id: view.rejectId, transaction: rejecting },
+  ].some(({ id, transaction }) => id !== null && id !== removedId && !transaction);
+  return { selected, editing, rejecting, missing };
+}
+
+export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?: FinanceSnapshot) {
+  const today = initialFinance?.today ?? demoToday;
+  const currentMonth = today.slice(0, 7);
+  const live = initialFinance !== undefined;
+  const navigation = useAppNavigation(currentMonth);
+  const { view } = navigation;
+  const [demoTransactions, setTransactions] = useState(initialTransactions);
+  const sync = useFinanceSync(initialFinance, view.month, today);
+  const financeSnapshot = sync.snapshot;
+  const [removedId, setRemovedId] = useState<string | null>(null);
+  const [bills, setBills] = useState(live ? [] : initialBills);
+  const [query, setQuery] = useState("");
+  const [notice, setNotice] = useState<SaveNotice | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, TransactionDraft>>({});
+  const mainRef = useRef<HTMLElement>(null);
+  const online = useOnlineStatus();
+  const [amountsHidden, toggleAmounts] = useAmountsHidden();
+  const [chatPrompt, setChatPrompt] = useState<string | null>(null);
+  const tourMode: "live" | "demo" = live ? "live" : "demo";
+  const tourPending = useTourPending(tourMode, homeIsUncovered(view));
+  const { transactions, selectedBudgets, reminders, resources } = sessionRecords(
+    financeSnapshot,
+    demoTransactions,
+    bills,
+  );
+  const { mutationPending } = sync;
+  const [rejectError, setRejectError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const { selected, editing, rejecting, missing } = selectionFor(transactions, view, removedId);
+  const editorKey = view.editId ?? `new:${view.month}`;
+
+  const refreshFinance = sync.refresh;
+  const mutate = sync.runMutation;
+
+  useEffect(() => {
+    const title = view.screen === "home" ? "Home" : view.screen;
+    mainRef.current?.setAttribute("aria-label", title);
+    mainRef.current?.focus({ preventScroll: true });
+  }, [view.screen]);
+
+  const openReview = () =>
+    navigation.navigate({
+      screen: "transactions",
+      reviewOpen: true,
+      kindFilter: "all",
+      transactionId: null,
+      editId: null,
+      adding: false,
+    });
+  const {
+    confirm,
+    save,
+    add,
+    undo,
+    deleteTransaction,
+    confirmBill,
+    dismissBill,
+    closeEditor,
+    rejectSelected,
+  } = useTransactionActions({
+    live,
+    resources,
+    transactions,
+    editing,
+    rejecting,
+    editorKey,
+    mutate,
+    navigation,
+    notice,
+    setNotice,
+    setDrafts,
+    setTransactions,
+    setRemovedId,
+    setBills,
+    setConfirmError,
+    setRejectError,
+  });
+
+  // Native history updates can settle after the ledger mutation. Suppress only the
+  // current removal, then let later stale links show the normal unavailable state.
+  if (removedId && ![view.editId, view.transactionId, view.rejectId].includes(removedId)) {
+    setRemovedId(null);
+  }
+
+  const session: AppSession = {
+    profile,
+    navigation,
+    transactions,
+    budgets: selectedBudgets,
+    today,
+    currentMonth,
+    dataMode: tourMode,
+    financeSnapshot,
+    refreshFinance,
+    mutationPending,
+    refreshRequired: sync.needsRecovery,
+    runMutation: mutate,
+    bills,
+    reminders,
+    online,
+    query,
+    setQuery,
+    confirm,
+    reject: navigation.openReject,
+    confirmBill,
+    dismissBill,
+    openReview,
+    openReminders: navigation.openReminders,
+    openChat: (prompt) => {
+      setChatPrompt(prompt ?? null);
+      navigation.navigate({ screen: "chat" });
+    },
+    chatPrompt,
+    clearChatPrompt: () => setChatPrompt(null),
+    amountsHidden,
+    toggleAmounts,
+    logDemoPayment: (merchant, amount) => {
+      if (live) return;
+      setTransactions((items) => [
+        {
+          id: crypto.randomUUID(),
+          merchant,
+          category: null,
+          amount,
+          currency: "IDR",
+          date: today,
+          time: null,
+          method: "Cash",
+          kind: "expense",
+          emoji: "✦",
+          confidence: null,
+          status: "confirmed",
+        },
+        ...items,
+      ]);
+    },
+    replayTour: () => {
+      replayTour(tourMode);
+      navigation.navigate({ screen: "home" });
+    },
+  };
+  return {
+    session,
+    live,
+    view,
+    mainRef,
+    notice,
+    setNotice,
+    undo,
+    selected,
+    editing,
+    rejecting,
+    drafts,
+    setDrafts,
+    editorKey,
+    closeEditor,
+    save,
+    add,
+    deleteTransaction,
+    mutationPending,
+    confirmError,
+    rejectError,
+    missing,
+    tourPending,
+    tourMode,
+    rejectSelected,
+    resources,
+    sync,
+  };
+}

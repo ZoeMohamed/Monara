@@ -13,6 +13,21 @@ export function categoryColor(name: string, index = 0): string {
   return categoryStyles[name]?.color ?? extraColors[index % extraColors.length];
 }
 
+const categoryIcons: Record<string, "food" | "transport" | "shopping" | "digital" | "bills"> = {
+  "Food & Drinks": "food",
+  Transport: "transport",
+  Shopping: "shopping",
+  Digital: "digital",
+  Bills: "bills",
+};
+
+/** A drawn glyph per known category; anything else uses a neutral dot. */
+export function categoryIcon(
+  name: string,
+): "food" | "transport" | "shopping" | "digital" | "bills" | "dot" {
+  return categoryIcons[name] ?? "dot";
+}
+
 export function categoryEmoji(name: string): string {
   return categoryStyles[name]?.emoji ?? "✦";
 }

@@ -8,6 +8,7 @@ type MerchantSpending = {
 
 type CategorySpending = {
   name: string;
+  categoryId?: string;
   amount: bigint;
   count: number;
   merchants: MerchantSpending[];
@@ -32,13 +33,16 @@ export function spendingFlow(transactions: Transaction[], month: string) {
   const summary = demoSummary(transactions, month);
   const categories = new Map<
     string,
-    { amount: bigint; merchants: Map<string, MerchantSpending> }
+    { name: string; categoryId?: string; amount: bigint; merchants: Map<string, MerchantSpending> }
   >();
   for (const transaction of summary.confirmed) {
     if (transaction.kind !== "expense") continue;
     const categoryName = transaction.category || "Uncategorized";
+    const key = transaction.categoryId ? `id:${transaction.categoryId}` : `name:${categoryName}`;
     const merchantName = transaction.merchant || "Unassigned merchant";
-    const category = categories.get(categoryName) ?? {
+    const category = categories.get(key) ?? {
+      name: categoryName,
+      ...(transaction.categoryId ? { categoryId: transaction.categoryId } : {}),
       amount: BigInt(0),
       merchants: new Map<string, MerchantSpending>(),
     };
@@ -52,10 +56,11 @@ export function spendingFlow(transactions: Transaction[], month: string) {
     merchant.amount += amount;
     merchant.transactions.push(transaction);
     category.merchants.set(merchantName, merchant);
-    categories.set(categoryName, category);
+    categories.set(key, category);
   }
-  const grouped: CategorySpending[] = Array.from(categories, ([name, category]) => ({
-    name,
+  const grouped: CategorySpending[] = Array.from(categories.values(), (category) => ({
+    name: category.name,
+    ...(category.categoryId ? { categoryId: category.categoryId } : {}),
     amount: category.amount,
     count: Array.from(category.merchants.values()).reduce(
       (count, merchant) => count + merchant.transactions.length,

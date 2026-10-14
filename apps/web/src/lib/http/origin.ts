@@ -20,3 +20,16 @@ export function browserOrigin(request: Request): string {
     return url.origin;
   }
 }
+
+/**
+ * Cookie-authenticated mutations accept only requests the browser itself marks
+ * as same-origin. Fetch metadata is preferred; older browsers fall back to an
+ * exact Origin match. A missing or opaque origin is refused.
+ */
+export function isSameOriginRequest(request: Request): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null) return site === "same-origin";
+  const origin = request.headers.get("origin");
+  if (!origin || origin === "null") return false;
+  return origin === browserOrigin(request);
+}

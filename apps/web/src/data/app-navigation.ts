@@ -3,7 +3,11 @@ import { demoMonth, earliestReportMonth, isCalendarDate } from "./demo-ledger";
 export type AppScreen = "home" | "transactions" | "reports" | "budgets" | "chat" | "account";
 export type LedgerKind = "all" | "expense" | "income" | "transfer";
 
+// The public demo mounts the same screens below /demo with sample data only.
+type AppBasePath = "" | "/demo";
+
 export type AppView = {
+  basePath: AppBasePath;
   screen: AppScreen;
   month: string;
   reviewOpen: boolean;
@@ -24,13 +28,13 @@ export const screenPaths = {
   account: "/profile",
 } as const satisfies Record<AppScreen, string>;
 
-function validMonth(value: string | null): string {
+function validMonth(value: string | null, fallback = demoMonth): string {
   return value &&
     /^\d{4}-\d{2}$/.test(value) &&
     isCalendarDate(`${value}-01`) &&
     value >= earliestReportMonth
     ? value
-    : demoMonth;
+    : fallback;
 }
 
 function validKind(value: string | null): LedgerKind {
@@ -44,9 +48,15 @@ function validId(value: string | null): string | null {
     : null;
 }
 
+function basePathFor(pathname: string): AppBasePath {
+  return pathname === "/demo" || pathname.startsWith("/demo/") ? "/demo" : "";
+}
+
 function screenForPath(pathname: string): AppScreen {
+  const basePath = basePathFor(pathname);
+  const local = pathname.slice(basePath.length) || "/";
   for (const screen of Object.keys(screenPaths) as AppScreen[]) {
-    if (screenPaths[screen] === pathname) return screen;
+    if (screenPaths[screen] === local) return screen;
   }
   return "home";
 }
@@ -54,6 +64,7 @@ function screenForPath(pathname: string): AppScreen {
 export function parseAppView(
   pathname: string,
   params: { get(name: string): string | null },
+  defaultMonth = demoMonth,
 ): AppView {
   const screen = screenForPath(pathname);
   const remindersOpen = params.get("reminders") === "1";
@@ -61,8 +72,9 @@ export function parseAppView(
   const adding = !remindersOpen && !rejectId && params.get("add") === "1";
   const editId = remindersOpen || rejectId || adding ? null : validId(params.get("edit"));
   return {
+    basePath: basePathFor(pathname),
     screen,
-    month: validMonth(params.get("month")),
+    month: validMonth(params.get("month"), validMonth(defaultMonth)),
     reviewOpen: screen === "transactions" && params.get("view") === "review",
     kindFilter: screen === "transactions" ? validKind(params.get("type")) : "all",
     transactionId:
@@ -91,12 +103,15 @@ export function buildAppHref(view: AppView): string {
   else if (view.adding === true) params.set("add", "1");
   else if (editId) params.set("edit", editId);
   else if (transactionId) params.set("transaction", transactionId);
-  return `${screenPaths[screen]}?${params.toString()}`;
+  const basePath = view.basePath === "/demo" ? "/demo" : "";
+  const path = basePath && screen === "home" ? basePath : `${basePath}${screenPaths[screen]}`;
+  return `${path}?${params.toString()}`;
 }
 
 export function clearedView(view: AppView, screen: AppScreen = view.screen): AppView {
   const changingScreen = screen !== view.screen;
   return {
+    basePath: view.basePath,
     screen,
     month: view.month,
     reviewOpen: changingScreen ? false : view.reviewOpen,

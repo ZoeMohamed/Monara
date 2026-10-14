@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Card, Chip, ProgressBar } from "@monara/ui";
+import type { ReactNode } from "react";
 
 import { BillCalendar } from "@/components/bill-calendar";
 import { Icon } from "@/components/icon";
@@ -131,8 +132,8 @@ function BudgetRow({
   );
 }
 
-function BillRow({ bill }: { bill: RecurringBill }) {
-  const daysUntil = daysBetween(demoToday, bill.nextDue);
+function BillRow({ bill, today }: { bill: RecurringBill; today: string }) {
+  const daysUntil = daysBetween(today, bill.nextDue);
   return (
     <li className="py-4">
       <div className="min-w-0">
@@ -171,7 +172,12 @@ function BillRow({ bill }: { bill: RecurringBill }) {
   );
 }
 
-function summarizeBudgets(transactions: Transaction[], budgets: Budget[], month: string) {
+function summarizeBudgets(
+  transactions: Transaction[],
+  budgets: Budget[],
+  month: string,
+  today: string,
+) {
   let totalLimit = BigInt(0);
   let totalUsed = BigInt(0);
   let remaining = BigInt(0);
@@ -184,9 +190,9 @@ function summarizeBudgets(transactions: Transaction[], budgets: Budget[], month:
     if (usage.remaining < BigInt(0)) overBudget -= usage.remaining;
   }
   const usedPercent = totalLimit > BigInt(0) ? Number((totalUsed * BigInt(100)) / totalLimit) : 0;
-  let elapsedPercent = month < demoMonth ? 100 : 0;
-  if (month === demoMonth) {
-    elapsedPercent = Math.round((Number(demoToday.slice(8, 10)) / daysInMonth(month)) * 100);
+  let elapsedPercent = month < today.slice(0, 7) ? 100 : 0;
+  if (month === today.slice(0, 7)) {
+    elapsedPercent = Math.round((Number(today.slice(8, 10)) / daysInMonth(month)) * 100);
   }
   return { totalLimit, totalUsed, remaining, overBudget, usedPercent, elapsedPercent };
 }
@@ -263,19 +269,25 @@ function BudgetSummaryCard({
   budgets,
   month,
   summary,
+  today,
+  monthlyOnly,
 }: {
   transactions: Transaction[];
   budgets: Budget[];
   month: string;
   summary: BudgetSummary;
+  today: string;
+  monthlyOnly: boolean;
 }) {
-  const currentMonth = month === demoMonth;
-  const safe = safeToSpendToday(transactions, budgets);
+  const currentMonth = month === today.slice(0, 7);
+  const safe = safeToSpendToday(transactions, budgets, today);
   return (
     <Card className="block min-w-0 gap-0 rounded-2xl border border-border p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-4">
         <div className="min-w-0 flex-1 basis-[13rem]">
-          <h2 className="text-sm font-medium text-muted">Remaining in category budgets</h2>
+          <h2 className="text-sm font-medium text-muted">
+            {monthlyOnly ? "Monthly category budgets remaining" : "Remaining in category budgets"}
+          </h2>
           <p className="mt-2 text-3xl font-semibold leading-tight tracking-tight tabular-nums [overflow-wrap:anywhere] sm:text-4xl">
             {formatRupiah(summary.remaining)}
           </p>
@@ -427,11 +439,13 @@ function SuggestedBill({
 function RecurringBills({
   active,
   suggested,
+  today,
   onConfirmBill,
   onDismissBill,
 }: {
   active: RecurringBill[];
   suggested: RecurringBill[];
+  today: string;
   onConfirmBill: (id: string) => void;
   onDismissBill: (id: string) => void;
 }) {
@@ -446,7 +460,7 @@ function RecurringBills({
         {active.length > 0 ? (
           <ul className="divide-y divide-separator">
             {active.map((bill) => (
-              <BillRow bill={bill} key={bill.id} />
+              <BillRow bill={bill} key={bill.id} today={today} />
             ))}
           </ul>
         ) : (
@@ -461,7 +475,6 @@ function RecurringBills({
           onDismissBill={onDismissBill}
         />
       ))}
-      <p className="mt-2 text-xs text-muted">Sample bills · changes reset on reload.</p>
     </section>
   );
 }
@@ -471,6 +484,9 @@ export function BudgetsScreen({
   budgets,
   bills,
   month = demoMonth,
+  today = demoToday,
+  management,
+  demo = true,
   setMonth,
   onConfirmBill,
   onDismissBill,
@@ -479,48 +495,63 @@ export function BudgetsScreen({
   budgets: Budget[];
   bills: RecurringBill[];
   month?: string;
+  today?: string;
+  management?: ReactNode;
+  demo?: boolean;
   setMonth?: (month: string) => void;
   onConfirmBill: (id: string) => void;
   onDismissBill: (id: string) => void;
 }) {
-  const summary = summarizeBudgets(transactions, budgets, month);
+  const summary = summarizeBudgets(transactions, budgets, month, today);
   const suggested = bills.filter((bill) => bill.status === "suggested");
   const active = bills
     .filter((bill) => bill.status === "active")
     .sort((a, b) => a.nextDue.localeCompare(b.nextDue));
+  const showBills = demo || bills.length > 0;
 
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Budgets</h1>
+          <h1 className="text-[32px] font-extrabold tracking-[-0.04em] lg:text-3xl lg:font-semibold">
+            Budgets
+          </h1>
         </div>
         {setMonth ? (
-          <MonthSelector month={month} onChange={setMonth} />
+          <MonthSelector currentMonth={today.slice(0, 7)} month={month} onChange={setMonth} />
         ) : (
           <p className="text-xs font-semibold text-muted sm:text-sm">{formatMonth(month)}</p>
         )}
       </div>
 
-      <div className="mt-4 grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-6">
+      <div
+        className={`mt-4 grid min-w-0 gap-5 ${showBills ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" : ""} lg:gap-6`}
+      >
         <div className="min-w-0">
           <BudgetSummaryCard
             budgets={budgets}
             month={month}
             summary={summary}
+            today={today}
+            monthlyOnly={Boolean(management)}
             transactions={transactions}
           />
-          <CategoryBudgets budgets={budgets} month={month} transactions={transactions} />
+          {management ?? (
+            <CategoryBudgets budgets={budgets} month={month} transactions={transactions} />
+          )}
         </div>
-        <div className="min-w-0">
-          <BillCalendar bills={active} key={month} month={month} />
-          <RecurringBills
-            active={active}
-            onConfirmBill={onConfirmBill}
-            onDismissBill={onDismissBill}
-            suggested={suggested}
-          />
-        </div>
+        {showBills && (
+          <div className="min-w-0">
+            <BillCalendar bills={active} key={month} month={month} today={today} />
+            <RecurringBills
+              active={active}
+              onConfirmBill={onConfirmBill}
+              onDismissBill={onDismissBill}
+              suggested={suggested}
+              today={today}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
