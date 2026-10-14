@@ -26,6 +26,8 @@ const config: KnipConfig = {
   },
   // Scaffold packages declare workspace dependencies that no code imports yet.
   ignoreDependencies: [/^@monara\//],
+  // `pnpm dev:tunnel` uses a locally installed ngrok agent, not a package.
+  ignoreBinaries: ["ngrok"],
 };
 
 export default config;
