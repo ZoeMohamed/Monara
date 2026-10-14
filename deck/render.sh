@@ -45,6 +45,12 @@ waves 826 350 2
 segments 826 300 2
 warn 48 44 2
 "
+for requested in "$@"; do
+  if ! awk -v name="$requested" 'NF && $1 == name { found = 1 } END { exit(found ? 0 : 1) }' <<< "$SPECS"; then
+    echo "unknown render name: $requested" >&2
+    exit 1
+  fi
+done
 want=" $* "
 while read -r name w h scale; do
   [ -z "${name:-}" ] && continue
