@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 const typesPath = "packages/db/src/types/database.types.ts";
 
@@ -40,8 +41,53 @@ export function validateMigrations(names) {
   }
 }
 
-export function checkDb({ root, reset = false, run = spawnSync, log = console.log }) {
+export function validateMigrationHistory(names, baseNames, changedNames) {
+  validateMigrations(baseNames);
+  const current = new Set(names);
+  const base = new Set(baseNames);
+  for (const name of baseNames) {
+    if (!current.has(name) || changedNames.includes(name)) {
+      throw new Error(
+        `Existing migration changed or removed: ${name}. Add a new migration instead.`,
+      );
+    }
+  }
+  const latest = baseNames
+    .map((name) => name.slice(0, 14))
+    .sort()
+    .at(-1);
+  for (const name of names) {
+    if (!base.has(name) && latest && name.slice(0, 14) <= latest) {
+      throw new Error(
+        `Migration ${name} must be newer than the base's latest timestamp ${latest}.`,
+      );
+    }
+  }
+}
+
+export function checkDb({
+  root,
+  reset = false,
+  validateOnly = false,
+  baseRef,
+  run = spawnSync,
+  log = console.log,
+}) {
   root = realpathSync(root);
+  const invoke = (command, args, capture = false) => {
+    const result = run(command, args, {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 10 * 1024 * 1024,
+      shell: process.platform === "win32" && command === "pnpm",
+      stdio: capture ? "pipe" : "inherit",
+      env: { ...process.env, SUPABASE_WORKDIR: root, SUPABASE_EXPERIMENTAL_STACK: "1" },
+    });
+    if (result.error || result.status !== 0) {
+      throw new Error(`${command} ${args.join(" ")} failed.`);
+    }
+    return result;
+  };
   const directory = join(root, "supabase/migrations");
   if (existsSync(directory) && realpathSync(directory) !== directory) {
     throw new Error(
@@ -55,14 +101,51 @@ export function checkDb({ root, reset = false, run = spawnSync, log = console.lo
     throw new Error("SQL migrations must be regular files directly under supabase/migrations.");
   }
   const migrations = entries.filter((entry) => /\.sql$/i.test(entry.name));
-  if (migrations.length === 0) {
-    log("Database check skipped: no SQL migrations exist yet; no local stack was started.");
-    return;
-  }
   if (migrations.some((entry) => !entry.isFile())) {
     throw new Error("SQL migrations must be regular files directly under supabase/migrations.");
   }
   validateMigrations(migrations.map((entry) => entry.name));
+  if (baseRef !== undefined) {
+    // Resolve first so user-supplied refs cannot become options or pathspecs.
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_./-]*$/.test(baseRef)) {
+      throw new Error("Invalid migration base ref. Use a commit SHA or branch name.");
+    }
+    const sha = invoke(
+      "git",
+      ["rev-parse", "--verify", "--end-of-options", `${baseRef}^{commit}`],
+      true,
+    ).stdout.trim();
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(sha)) {
+      throw new Error("Could not resolve the migration base commit.");
+    }
+    const prefix = "supabase/migrations/";
+    const basePaths = invoke("git", ["ls-tree", "-r", "--name-only", "-z", sha, "--", prefix], true)
+      .stdout.split("\0")
+      .filter((path) => /\.sql$/i.test(path));
+    const baseNames = basePaths.map((path) => path.slice(prefix.length));
+    validateMigrations(baseNames);
+    const changedNames = basePaths.length
+      ? invoke("git", ["diff", "--name-only", "-z", sha, "--", ...basePaths], true)
+          .stdout.split("\0")
+          .filter(Boolean)
+          .map((path) => path.slice(prefix.length))
+      : [];
+    validateMigrationHistory(
+      migrations.map((entry) => entry.name),
+      baseNames,
+      changedNames,
+    );
+  }
+  if (validateOnly) {
+    log(
+      `Migration validation passed: ${migrations.length} SQL files${baseRef ? ", append-only history and order checked against base" : "; use --base-ref to check history and order"}. No local stack was started.`,
+    );
+    return;
+  }
+  if (migrations.length === 0) {
+    log("Database check skipped: no SQL migrations exist yet; no local stack was started.");
+    return;
+  }
   const testsDirectory = join(root, "supabase/tests/database");
   if (existsSync(testsDirectory) && realpathSync(testsDirectory) !== testsDirectory) {
     throw new Error(
@@ -79,20 +162,6 @@ export function checkDb({ root, reset = false, run = spawnSync, log = console.lo
     throw new Error(`Migrations require generated ${typesPath}. Run pnpm db:types locally.`);
   }
 
-  const invoke = (command, args, capture = false) => {
-    const result = run(command, args, {
-      cwd: root,
-      encoding: "utf8",
-      maxBuffer: 10 * 1024 * 1024,
-      shell: process.platform === "win32",
-      stdio: capture ? "pipe" : "inherit",
-      env: { ...process.env, SUPABASE_WORKDIR: root, SUPABASE_EXPERIMENTAL_STACK: "1" },
-    });
-    if (result.error || result.status !== 0) {
-      throw new Error(`${command} ${args.join(" ")} failed.`);
-    }
-    return result;
-  };
   if (process.env.CI === "true") {
     try {
       invoke("git", ["ls-files", "--error-unmatch", "--", typesPath], true);
@@ -190,13 +259,21 @@ export function checkDb({ root, reset = false, run = spawnSync, log = console.lo
 
 if (import.meta.main) {
   try {
-    const args = process.argv.slice(2);
-    if (args.some((arg) => arg !== "--reset") || args.length > 1) {
-      throw new Error("Usage: pnpm db:check [--reset]");
+    const { values } = parseArgs({
+      options: {
+        reset: { type: "boolean" },
+        "validate-only": { type: "boolean" },
+        "base-ref": { type: "string" },
+      },
+    });
+    if (values.reset && values["validate-only"]) {
+      throw new Error("Use either --reset or --validate-only.");
     }
     checkDb({
       root: fileURLToPath(new URL("../", import.meta.url)),
-      reset: args.includes("--reset"),
+      reset: values.reset,
+      validateOnly: values["validate-only"],
+      baseRef: values["base-ref"],
     });
   } catch (error) {
     console.error(error.message);

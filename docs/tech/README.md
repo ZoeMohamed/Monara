@@ -21,13 +21,15 @@ The rules require technical documentation covering system architecture, core alg
 | [architecture.md](architecture.md) | Abhip | 16 Oct | Draft |
 | [data-and-security.md](data-and-security.md) | Zoe | 16 Oct | Not started |
 | [extraction.md](extraction.md) | Adlyn | 16 Oct | Not started |
-| [agent.md](agent.md) | Argya | 16 Oct | Not started |
+| [agent.md](agent.md) | Argya | 16 Oct | Draft |
 | [ui.md](ui.md) | Erdafa | 16 Oct | Draft |
 | [reminders.md](reminders.md) | Abhip | 16 Oct | Not started |
 | [evaluation.md](evaluation.md) | Abhip | 18 Oct | Not started |
 | [security-self-assessment.md](security-self-assessment.md) | Abhip | 17 Oct | Not started |
 
 Status values: Not started, Draft, Reviewed, Final.
+
+The UI section was reconciled with code and the live tracker on 14 October. Its status remains Draft, matching ER12 In progress with a 16 October deadline; normal documentation checks do not constitute owner review or final submission acceptance. Other owners' sections retain their existing status.
 
 ## How to write a section
 

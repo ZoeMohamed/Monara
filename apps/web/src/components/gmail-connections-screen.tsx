@@ -69,7 +69,7 @@ function SyncStatus({ sync }: { sync: SyncState }) {
 }
 
 function ConnectionNotice({ state }: Pick<GmailConnectionsProps, "state">) {
-  const showSignIn = state.status === "unavailable" || state.status === "requires-sign-in";
+  const showSignIn = state.status === "requires-sign-in";
   return (
     <>
       {state.status === "unavailable" && (
@@ -161,7 +161,7 @@ function MailboxCard({
         {mailbox.status === "active" ? (
           <Button
             className="min-h-11"
-            aria-label={`Sync now for ${mailbox.email}`}
+            aria-label={`Sync ${mailbox.email} now`}
             isDisabled={!actions || busy || syncing}
             onPress={() => actions?.sync(mailbox.id)}
           >

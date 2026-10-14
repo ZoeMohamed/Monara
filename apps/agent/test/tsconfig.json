@@ -1,0 +1,9 @@
+{
+  // Tests run on Node. The Workers types are included because the source under test names them.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "@cloudflare/workers-types"],
+    "allowImportingTsExtensions": true
+  },
+  "include": ["**/*.ts", "../sandbox/**/*.ts"]
+}
