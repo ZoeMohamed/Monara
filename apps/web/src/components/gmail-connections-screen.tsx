@@ -69,7 +69,7 @@ function SyncStatus({ sync }: { sync: SyncState }) {
 }
 
 function ConnectionNotice({ state }: Pick<GmailConnectionsProps, "state">) {
-  const showSignIn = state.status === "unavailable" || state.status === "requires-sign-in";
+  const showSignIn = state.status === "requires-sign-in";
   return (
     <>
       {state.status === "unavailable" && (

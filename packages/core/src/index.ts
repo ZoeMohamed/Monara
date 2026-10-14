@@ -1,6 +1,7 @@
 // Backend services and repositories belong here. Feature owners define financial
 // models and operations alongside database migrations, not in the UI or worker.
 export type { FinancialAccountId, TransactionReviewStatus, UserId } from "@monara/contracts";
+export * from "./finance.ts";
 export { createSupabaseGmailConnectionRepository } from "./gmail-connection-repository.ts";
 export {
   createGmailConnectionService,
@@ -10,4 +11,5 @@ export {
   type GmailConnectionService,
   type StoredGmailConnection,
 } from "./gmail-connections.ts";
+export { createSupabaseFinanceRepository } from "./supabase-finance-repository.ts";
 export * from "./whatsapp-link.ts";

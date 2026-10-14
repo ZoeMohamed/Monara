@@ -6,22 +6,9 @@ import {
 } from "@monara/core";
 import { createMonaraServiceRoleClient } from "@monara/db";
 import { createComposioGmailClient } from "@monara/integrations";
-import type { NextRequest } from "next/server";
 import { publicSupabaseConfig } from "@/lib/supabase/config";
 
 export const GMAIL_CALLBACK_PATH = "/api/gmail/connections/callback";
-
-/**
- * The origin the browser used. `next dev --hostname 0.0.0.0` reports the bind
- * address in nextUrl, which browsers block and which never carries the session
- * cookie, so prefer the forwarded or Host header.
- */
-export function browserOrigin(request: NextRequest): string {
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  if (!host) return request.nextUrl.origin;
-  const protocol = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol;
-  return `${protocol.replace(/:$/, "")}://${host}`;
-}
 
 /** Builds the service from server-only configuration; missing values fail closed. */
 export function gmailConnectionService() {

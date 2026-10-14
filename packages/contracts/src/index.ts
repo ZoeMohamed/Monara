@@ -1,6 +1,7 @@
 export * from "./budgets.ts";
 export * from "./channels.ts";
 export * from "./common.ts";
+export * from "./dashboard.ts";
 export * from "./gmail.ts";
 export * from "./ledger.ts";
 export * from "./recurring-bills.ts";

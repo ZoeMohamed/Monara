@@ -36,6 +36,7 @@ import {
   initialTransactions,
   type Transaction,
 } from "@/data/sample-data";
+import type { AuthenticatedProfile } from "@/lib/auth/identity";
 
 type Tab = "home" | "transactions" | "budgets" | "chat" | "account";
 type TabItem = { id: Tab; label: string; icon: IconName };
@@ -611,7 +612,7 @@ function RejectDialog({
   );
 }
 
-export function MonaraApp() {
+export function MonaraApp({ profile }: { profile: AuthenticatedProfile }) {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const mainRef = useRef<HTMLElement>(null);
   const previousTab = useRef<Tab>("home");
@@ -760,7 +761,7 @@ export function MonaraApp() {
               />
             ) : null}
             {activeTab === "chat" ? <ChatScreen onSend={sendToAgent} /> : null}
-            {activeTab === "account" ? <ProfileScreen online={online} /> : null}
+            {activeTab === "account" ? <ProfileScreen online={online} profile={profile} /> : null}
           </main>
         </div>
       </div>

@@ -1,8 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    // DOM supplies the Web Crypto and TextEncoder types that Node and the edge runtimes share.
-    "lib": ["ES2022", "DOM"]
+    // Shared backend code uses Web APIs available in Node and edge runtimes.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*.ts"]
 }

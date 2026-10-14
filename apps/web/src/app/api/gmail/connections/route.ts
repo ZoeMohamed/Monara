@@ -1,21 +1,21 @@
 import { gmailConnectionListSchema, startGmailConnectionResultSchema } from "@monara/contracts";
 import type { NextRequest } from "next/server";
 import {
-  browserOrigin,
   GMAIL_CALLBACK_PATH,
   gmailConnectionService,
   gmailErrorResponse,
   noStoreHeaders,
   unauthenticated,
 } from "@/lib/gmail/service";
-import { getSignedInUserId } from "@/lib/supabase/session";
+import { browserOrigin } from "@/lib/http/origin";
+import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 /** Lists the signed-in User's Gmail Connections. */
 export async function GET() {
-  const userId = await getSignedInUserId();
-  if (!userId) return unauthenticated();
+  const identity = await getAuthenticatedIdentity();
+  if (!identity) return unauthenticated();
   try {
-    const connections = await gmailConnectionService().list(userId);
+    const connections = await gmailConnectionService().list(identity.id);
     return Response.json(gmailConnectionListSchema.parse({ connections }), {
       headers: noStoreHeaders,
     });
@@ -26,11 +26,11 @@ export async function GET() {
 
 /** Starts a Gmail Connection and returns Composio's consent URL. */
 export async function POST(request: NextRequest) {
-  const userId = await getSignedInUserId();
-  if (!userId) return unauthenticated();
+  const identity = await getAuthenticatedIdentity();
+  if (!identity) return unauthenticated();
   try {
     const callbackUrl = new URL(GMAIL_CALLBACK_PATH, browserOrigin(request)).toString();
-    const result = await gmailConnectionService().start(userId, callbackUrl);
+    const result = await gmailConnectionService().start(identity.id, callbackUrl);
     return Response.json(startGmailConnectionResultSchema.parse(result), {
       headers: noStoreHeaders,
     });

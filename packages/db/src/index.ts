@@ -53,7 +53,7 @@ export function parsePublicSupabaseConfig(values: {
 
 /** Creates a browser Supabase client from already validated public configuration. */
 export function createMonaraBrowserClient(config: PublicSupabaseConfig) {
-  return createBrowserClient(config.url, config.publishableKey);
+  return createBrowserClient<Database>(config.url, config.publishableKey);
 }
 
 /**
@@ -77,7 +77,7 @@ export function createMonaraServerClient(
   config: PublicSupabaseConfig,
   cookies: CookieMethodsServer,
 ) {
-  return createServerClient(config.url, config.publishableKey, { cookies });
+  return createServerClient<Database>(config.url, config.publishableKey, { cookies });
 }
 
 /** Verifies that the configured endpoint returns the public Supabase Auth settings shape. */
