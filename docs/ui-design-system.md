@@ -8,7 +8,7 @@ Earlier source reviews covered the main-document tabs, registration workbook, an
 
 ## Current implementation checkpoint — 14 October 2026
 
-The live tracker was retrieved on 14 October; its header remains dated 12 October. ER1–ER3 and ER11 are Done. ZO1–ZO5 are Done; ZO6–ZO8 remain In progress despite merged backend implementations, and ZO9 is Not started. The following UI rows remain In progress; their deadlines and external statuses were not changed.
+The live tracker was refreshed again on 14 October; its header remains dated 12 October. ER1–ER3 and ER11 are Done. ZO1–ZO8 are now Done, and ZO9 is Not started. The following UI rows remain In progress; their deadlines and external statuses were not changed.
 
 | Tracker row | Implemented presentation | Remaining acceptance / deadline |
 | --- | --- | --- |
