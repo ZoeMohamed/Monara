@@ -1,6 +1,6 @@
 # Repository structure
 
-This is the agreed workspace scaffold. The existing web UI remains a sample-data prototype. No live auth, database schema, financial backend, provider connection, durable job, or LLM workflow is implemented by the scaffold.
+The workspace now contains shared financial contracts, the accepted schema/migrations and RLS tests, generated database types, Supabase Google Auth, financial and Gmail connection APIs, and Agent/WhatsApp runtime code. The rich financial web screens still use labelled sample data while their service adapters are integrated. Implemented source does not establish deployed configuration, live-provider acceptance, or completion of the remaining tracker tasks.
 
 ## Layout and ownership
 
@@ -33,12 +33,12 @@ playground/llm -> contracts, integrations
 
 Apps never import another app. Backend services own financial writes; the agent requests those operations through an authenticated backend API. Contracts must remain browser/worker safe. UI must remain presentation-only. Production code never imports the playground.
 
-The UI package exports HeroUI primitives and the shared light theme used by the web prototype. HeroUI v3 uses CSS themes without a provider; see the [UI design system](ui-design-system.md). Supabase helpers re-export explicit-config SDK constructors without automatically creating a client. Generated database types will be added after migrations exist. Starter contracts cover identifiers, review state, Gmail jobs, and verified WhatsApp message input; they do not finalize the financial schema.
+The UI package exports HeroUI primitives and the shared light theme; HeroUI v3 uses CSS themes without a provider. See the [UI design system](ui-design-system.md). Supabase helpers take explicit configuration, and request-scoped web clients handle server sessions. Generated database types live in `packages/db/src/types/database.types.ts` alongside the implemented migrations. `packages/contracts` defines validated ledger, review, budget, dashboard, Gmail and channel shapes; the [ERD](erd.md) documents owned UUID relationships. The [backend handoff](ui-backend-handoff.md) maps these contracts to the remaining sample-screen adapters.
 
 ## Agreed flows
 
 - Google sign-in uses Supabase Auth. A Gmail Connection through Composio is separate from login.
-- Gmail imports run automatically through durable background jobs in the Cloudflare runtime. Provide manual sync for testing and recovery. The worker scaffold does not yet provision queues or implement jobs.
+- Gmail imports must run automatically through durable background jobs in the Cloudflare runtime. Provide manual sync for testing and recovery. The worker includes Agent/chat and WhatsApp handlers; automatic Gmail ingestion jobs remain a separate incomplete integration.
 - Deduplicate email imports using the User, Gmail Connection, and source message identity. Enforce uniqueness durably when implementing persistence.
 - Extracted transactions remain pending review until confirmed. Pending transactions do not contribute to confirmed totals.
 - The signed-in User explicitly links and verifies their WhatsApp number. Kapso provides transport into the shared agent runtime.
@@ -62,7 +62,7 @@ Use Node 24 (`.nvmrc`). `pnpm install` also installs the Husky git hooks. macOS 
 
 Run web and agent dev commands in separate terminals. The main checkout listens on web port 3000 and agent port 8787; linked worktrees use their own ports (see Worktrees below). `GET /health` on the agent reports `status: scaffold`; `POST /chat` and `POST /webhooks/kapso` are described in `apps/agent/README.md`, and other routes return 501. `pnpm build` builds Next.js and performs a Wrangler dry-run bundle without cloud deployment.
 
-Supabase local development is optional until database implementation begins. It requires OrbStack running on this Mac:
+Local migration/RLS replay requires a disposable Supabase stack and a running Docker-compatible runtime: OrbStack on macOS or Docker Desktop on Windows. Normal source checks remain independent of Docker. For local database work, run:
 
 ```bash
 pnpm db:start

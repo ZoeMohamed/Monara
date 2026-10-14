@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 
 const glyphs = {
+  pause: <path d="M9 5v14M15 5v14" />,
+  play: <path d="m8 4 12 8-12 8Z" />,
+  reports: (
+    <>
+      <path d="M4 20h17M7 16v-5M12 16V4M17 16V8" />
+    </>
+  ),
   home: (
     <>
       <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" />

@@ -28,3 +28,6 @@ supabase/.branches/
 # Per-worktree local environment
 .worktree.env
 .worktrees/
+
+# Local browser review artifacts
+.playwright-mcp/

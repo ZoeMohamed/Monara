@@ -1,0 +1,185 @@
+.hero {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  overflow: hidden;
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--accent-soft);
+}
+
+.landscape {
+  z-index: 0;
+  object-fit: cover;
+  object-position: 65% center;
+}
+
+.shade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    90deg,
+    rgb(245 251 255 / 96%),
+    rgb(245 251 255 / 78%) 40%,
+    rgb(245 251 255 / 12%) 100%
+  );
+}
+
+.content {
+  position: relative;
+  z-index: 2;
+  padding: 20px;
+}
+
+.greeting {
+  margin-top: 16px;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.askRow {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  margin-top: 64px;
+}
+
+.mascot {
+  position: absolute;
+  right: 16px;
+  bottom: calc(100% - 4px);
+  width: 64px;
+  height: 64px;
+  pointer-events: none;
+}
+
+.ask {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 94%);
+  color: var(--foreground);
+  text-align: left;
+}
+
+.askLabel {
+  min-width: 0;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.askStatus {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ask:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.heading {
+  display: flex;
+  max-width: 440px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.date {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.amount {
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+  font-size: clamp(2.125rem, 5vw, 3.25rem);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+  line-height: 1.15;
+}
+
+.caption {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 12px;
+}
+
+.comparison {
+  min-width: 0;
+  height: auto;
+  min-height: 44px;
+  gap: 6px;
+  padding: 8px 0;
+  border-radius: 8px;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  white-space: normal;
+}
+
+.review {
+  min-height: 44px;
+  gap: 6px;
+  padding-inline: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (min-width: 640px) {
+  .content {
+    padding: 24px;
+  }
+
+  .askRow {
+    margin-top: 80px;
+  }
+
+  .mascot {
+    width: 80px;
+    height: 80px;
+  }
+}
+
+@media (max-width: 639px) {
+  .shade {
+    background: linear-gradient(
+      90deg,
+      rgb(245 251 255 / 94%),
+      rgb(245 251 255 / 58%) 68%,
+      rgb(245 251 255 / 18%)
+    );
+  }
+}
