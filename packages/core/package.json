@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@monara/contracts": "workspace:*"
+    "@monara/contracts": "workspace:*",
+    "@monara/db": "workspace:*"
   },
   "devDependencies": {
     "typescript": "5.9.3"
