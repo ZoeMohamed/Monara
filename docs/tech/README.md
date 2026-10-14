@@ -29,6 +29,8 @@ The rules require technical documentation covering system architecture, core alg
 
 Status values: Not started, Draft, Reviewed, Final.
 
+The UI section was reconciled with code and the live tracker on 14 October. Its status remains Draft, matching ER12 In progress with a 16 October deadline; normal documentation checks do not constitute owner review or final submission acceptance. Other owners' sections retain their existing status.
+
 ## How to write a section
 
 1. Copy [_template.md](_template.md) or open your stub, and keep its five headings.

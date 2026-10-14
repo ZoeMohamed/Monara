@@ -1,27 +1,33 @@
 # UI backend handoff
 
-Erdafa owns the UI. Zoe owns financial services/schema; Argya owns conversational tools; Abhip coordinates contracts and Reminders. This note accompanies the mobile-screen PR. It describes presentation needs, not an accepted database or transport contract.
+Erdafa owns the UI. Zoe owns financial services/schema; Argya owns conversational tools; Abhip coordinates contracts and Reminders. Reconciled on 14 October 2026 against the [Action Tracker](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.5tiin0qzk1mg) and merged contracts/backend. This note maps the sample presentation to accepted interfaces; it does not replace those interfaces or establish live-provider acceptance.
 
 ## Current boundaries
 
-The types in [demo-ledger.ts](../apps/web/src/data/demo-ledger.ts) are synthetic, browser-only models. Shared, validated request/response schemas belong in `packages/contracts`; business writes and verified ownership belong in the Next.js backend. The Agent calls those backend operations. No UI component writes directly to Supabase or holds provider credentials.
+[Shared schemas](../packages/contracts/src/index.ts), the [ERD](erd.md), migrations/RLS tests and generated database types are implemented. Google sign-in and server sessions are implemented; Gmail connection APIs, financial services and Agent code also exist. The rich ledger/budget/report screens still mutate synthetic [browser models](../apps/web/src/data/demo-ledger.ts). Gmail presentation is not connected to its lifecycle APIs, and the Chat callback rejects locally instead of calling the merged Agent endpoint.
 
-| UI model | Integration requirement |
+Business writes and verified ownership belong to the Next.js backend. UI components do not write financial rows directly to Supabase or hold provider credentials. Signing in must not imply that sample transactions are the signed-in User's persisted records.
+
+| Presentation boundary | Accepted contract / integration work |
 | --- | --- |
-| Transaction | UUID, expense/income/transfer, review status, nullable uncertain fields, source identity and confidence. Financial Accounts must be owned resource IDs, including transfer source/destination, rather than sample labels. |
-| Money and dates | Demo uses positive safe whole IDR integers and exact `bigint` aggregates. Agree on a lossless JSON money representation before adapting SQL values; `bigint` is not JSON. Dates are canonical calendar values; the server must apply the User's timezone. |
-| Review operations | List pending; edit without confirming; validate confirm once; retain rejection and permanently deduplicate its source. Confirmed-only totals exclude transfers. The existing shared review enum needs agreement about `rejected`. |
-| Budget and summary | Selected-month totals, category usage, weekly/monthly periods, thresholds, and persisted limits. Safe spending uses total limits minus all confirmed expenses, clamps once at zero, and exposes shortfall. Return reproducible inputs for overall/per-category recommendations. |
-| Recurring Bill | Proposal versus active status, merchant, expected amount, cadence, due date, and optional cancellation URL. Track/dismiss only through explicit User action; cancellation is guidance. |
-| Reminder | Persist both budget threshold events and bill offsets, including rearming and once-per-trigger semantics. Current UI warnings are snapshots, not scheduler or dedupe evidence. Delivery, verified WhatsApp opt-in, quiet hours, limits and templates remain backend work. |
-| Gmail Connection | Server-owned connection IDs, status, sync progress/results, reconnect/disconnect, and server-enforced three-mailbox limit. Google sign-in remains separate. |
-| Chat | Authenticated messages/tool operations, safe action receipts, undo and explicit confirmations. An ambiguous network failure must not claim that a financial write did not happen. The current adapter always rejects without doing a write. |
+| Transaction fields | Map `merchant`/`amount`/`date`/`time`/`method` to `merchantName`/`money`/`occurredOn`/`occurredTime` and owned Financial Account IDs. Transfer source/destination are separate UUID fields; never turn sample labels into authorization. Preserve nullable uncertain values and canonical source identity. |
+| Money | The [published shape](../packages/contracts/src/common.ts) is `{ amountMinor: string, currency: "IDR" }`, with signed/positive variants and up to 20 integer digits. The sample editor uses safe integer numbers, which cannot represent the full transport range. Use validated decimal strings and `bigint` without a lossy `Number` conversion; `bigint` itself is not JSON. |
+| Dates and confidence | Dates use `occurredOn` calendar values, with nullable `occurredTime`; version timestamps are ISO values with a timezone. Shared confidence is 0–1, while sample review labels use 0–100: convert explicitly. User-timezone behavior still needs end-to-end agreement and evidence. |
+| Review status | [Transactions](../packages/contracts/src/transactions.ts) already define `pending`, `confirmed`, and `rejected`. Use edit-pending/confirm/reject operations, preserve durable rejection/source deduplication, and refresh confirmed-only totals. Transfers remain excluded from spending/income. |
+| Mutations and recovery | Creates use `clientRequestId`; updates/review transitions use `expectedUpdatedAt` where their schema requires it. Preserve structured field/conflict/dependency errors. Action receipts and bound destructive confirmations replace memory-only Undo when integrated; agree on the exposed undo operation before enabling it. Ambiguous network failures must not claim a financial write did not happen. |
+| Financial Accounts / Categories | Use owned UUID resources from the backend, including account activity and category archive state. Keep default categories and renames consistent rather than mapping through display text. |
+| Budgets and summaries | Backend operations cover budgets/usage and `get_dashboard`; adapt their validated results rather than duplicating authorization in components. Shared usage currently returns `over` at exact equality, while the UI distinguishes “At limit” from actual excess: derive that label from exact used/limit amounts or coordinate an enum change. Weekly/monthly UI and integration remain pending. |
+| Recommendations | Safe spending subtracts all confirmed expenses from total limits, clamps the overall remainder once and exposes shortfall/per-category inputs. Forecasts, unusual flags and accepted budget suggestions still require ZO9 integration; never invent missing recommendations. |
+| Recurring Bills | Proposal versus active status, merchant, expected amount, cadence, next due date and optional cancellation URL. Current Track/dismiss is session-only; real detection and persistent management remain pending. Cancellation is guidance, not a Monara action. |
+| Gmail Connection | Owned lifecycle APIs and Composio adapters exist. Connect the screen to validated statuses and server-enforced mailbox limits; last-sync/counts/recovery need real ingestion results. Google sign-in remains separate consent. |
+| Chat / WhatsApp | The Agent `/chat` runtime exists, but the rich web UI has no authenticated bridge to it. Preserve server-derived identity, action receipts and explicit confirmations. WhatsApp channel/verification code exists; app link initiation, supported backend operations and deployment still need coordinated integration. |
+| Reminders | Current UI warnings are snapshots, not scheduler/delivery/deduplication evidence. Persist threshold/bill events, rearming and once-per-trigger semantics. Delivery, verified opt-in, quiet hours and daily-limit enforcement require their owners' end-to-end acceptance. |
 
-## Decisions before connecting live data
+## Remaining integration checks
 
-1. Confirm money transport and the rejected state with Zoe/Abhip; reconcile the embedded ERD's IDs and entities with PRD v2.1 before generating database types.
-2. Implement and test session/resource ownership before enabling sign-in/Gmail or financial controls.
-3. Replace demo state through an adapter into validated shared contracts, preserving missing values and clear error states.
-4. Confirm calculations, reminder delivery and tool permissions with their owners; do not use demo helpers as production authorization or scheduling.
+1. Use the implemented Google session/profile boundary; keep sample financial state visibly labelled until adapters read and write owned resources. Do not regress safe sign-in return paths, sign-out, CSRF/origin checks or private/no-store responses.
+2. Wire validated financial DTOs, pagination, versions and idempotency to the screens. Test User A versus User B, pending/confirmed transitions, rejected-source deduplication, exact money outside the sample-number range and stale edits/Undo.
+3. Agree with Zoe on exact budget equality labels and User-timezone aggregates. Agree with Argya on the web Chat bridge, supported operation set and verified WhatsApp linking; with Adlyn on import counts and bill detection; with Abhip on persistent Reminders and delivery evidence.
+4. Refresh owner documentation after integration. The merged Agent draft still describes backend operations as Planned even though financial routes now exist; Argya should reconcile that status. Do not treat that older sentence, a passing local build, or a UI fixture as proof of either missing runtime code or deployed functionality.
 
-Foundation checkpoint: 14 October. UI documentation: 16 October. Device/PWA verification: 18 October. The competition deadline is 20 October at 22:59 WIB; other owners' integrations and final submission evidence remain separate work.
+The 14 October tracker marks ZO1–ZO5 Done, ZO6–ZO8 In progress, and ZO9 Not started; ER4–ER10 and ER12 remain In progress. Foundation checkpoint: 14 October at 20:00 WIB. UI documentation: 16 October. Device/PWA verification: 18 October. Competition deadline: 20 October at 22:59 WIB. No external status or deadline was changed by this handoff update.

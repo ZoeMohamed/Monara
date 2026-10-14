@@ -161,7 +161,7 @@ function MailboxCard({
         {mailbox.status === "active" ? (
           <Button
             className="min-h-11"
-            aria-label={`Sync now for ${mailbox.email}`}
+            aria-label={`Sync ${mailbox.email} now`}
             isDisabled={!actions || busy || syncing}
             onPress={() => actions?.sync(mailbox.id)}
           >

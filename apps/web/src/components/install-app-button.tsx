@@ -61,14 +61,9 @@ export function InstallAppButton() {
       setShowHelp(true);
       return;
     }
-    // A deferred install event can prompt only once, whatever the User chooses.
-    installEvent.current = null;
-    try {
-      await promptEvent.prompt();
-      await promptEvent.userChoice;
-    } catch {
-      setShowHelp(true);
-    }
+    await promptEvent.prompt();
+    const choice = await promptEvent.userChoice;
+    if (choice.outcome === "accepted") installEvent.current = null;
   };
 
   return (

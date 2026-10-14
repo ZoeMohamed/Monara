@@ -1,21 +1,23 @@
 "use client";
 
-import { Avatar, Button, Card, Label, Switch } from "@monara/ui";
+import { Button, Card, Label, Switch } from "@monara/ui";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Icon } from "@/components/icon";
 import { InstallAppButton } from "@/components/install-app-button";
+import { MonaraMascot } from "@/components/monara-mascot";
+import { SectionTitle } from "@/components/visual";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
 
 function Row({ title, detail, end }: { title: string; detail?: string; end?: ReactNode }) {
   return (
-    <div className="flex min-h-14 items-center gap-3 py-2.5">
+    <div className="flex min-h-16 items-center gap-3 py-2.5">
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{title}</p>
-        {detail ? <p className="mt-0.5 text-xs text-muted">{detail}</p> : null}
+        <p className="text-sm font-medium">{title}</p>
+        {detail ? <p className="mt-1 text-xs leading-5 text-muted">{detail}</p> : null}
       </div>
-      {end ? <div className="shrink-0 text-sm text-muted">{end}</div> : null}
+      {end ? <div className="shrink-0 text-right text-xs font-medium text-muted">{end}</div> : null}
     </div>
   );
 }
@@ -23,12 +25,12 @@ function Row({ title, detail, end }: { title: string; detail?: string; end?: Rea
 function LinkRow({ href, title, detail }: { href: string; title: string; detail: string }) {
   return (
     <Link
-      className="-mx-4 flex min-h-14 items-center gap-3 px-4 py-2.5 transition-colors duration-100 active:bg-surface-secondary"
+      className="-mx-4 flex min-h-16 items-center gap-3 px-4 py-2.5 transition-colors duration-100 hover:bg-surface-secondary focus-visible:bg-surface-secondary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus active:bg-surface-secondary"
       href={href}
     >
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">{title}</p>
-        <p className="mt-0.5 text-xs text-muted">{detail}</p>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-muted">{detail}</p>
       </div>
       <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
     </Link>
@@ -38,10 +40,8 @@ function LinkRow({ href, title, detail }: { href: string; title: string; detail:
 function Group({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className="mt-5">
-      <h2 id={id} className="px-1 text-xs font-bold uppercase tracking-[0.12em] text-muted">
-        {title}
-      </h2>
-      <Card className="mt-2 block gap-0 rounded-2xl border border-border px-4 py-0.5">
+      <SectionTitle id={id} title={title} />
+      <Card className="mt-2 block gap-0 overflow-hidden rounded-2xl border border-border px-4 py-0.5">
         <div className="divide-y divide-separator">{children}</div>
       </Card>
     </section>
@@ -57,29 +57,34 @@ export function ProfileScreen({
 }) {
   return (
     <div>
-      <h1 className="text-2xl font-black tracking-[-0.05em] sm:text-4xl">Profile</h1>
+      <h1 className="text-2xl font-bold tracking-[-0.035em] sm:text-3xl">Profile</h1>
 
-      <Card className="mt-3 block gap-0 rounded-2xl bg-accent-soft p-4">
-        <div className="flex items-center gap-3">
-          <Avatar
-            aria-label={`${profile.displayName} profile`}
-            className="h-11 w-11 rounded-xl bg-surface text-accent"
-          >
-            <Avatar.Fallback>{profile.initials}</Avatar.Fallback>
-          </Avatar>
-          <div className="min-w-0">
-            <p className="truncate font-bold">{profile.displayName}</p>
-            <p className="mt-0.5 break-all text-xs text-accent-soft-foreground">
-              {profile.email ?? "Google account"} · IDR · Asia/Jakarta
-            </p>
+      <Card className="mt-4 block gap-0 rounded-2xl border border-border p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          <MonaraMascot className="h-16 w-16 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold tracking-[-0.025em] [overflow-wrap:anywhere]">
+              {profile.displayName}
+            </h2>
+            <p className="mt-1 break-all text-sm text-muted">{profile.email ?? "Google account"}</p>
           </div>
         </div>
+        <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-separator pt-4 text-xs">
+          <div>
+            <dt className="text-muted">Currency</dt>
+            <dd className="mt-1 font-medium">IDR</dd>
+          </div>
+          <div>
+            <dt className="text-muted">Time zone</dt>
+            <dd className="mt-1 font-medium">Asia/Jakarta</dd>
+          </div>
+        </dl>
       </Card>
 
       <Group id="connections" title="Connections">
         <Row detail="Separate from Gmail access" end="Connected" title="Google sign-in" />
         <LinkRow
-          detail="Up to 3 mailboxes · not connected"
+          detail="Manage connections · up to 3 mailboxes"
           href="/connections/gmail"
           title="Gmail"
         />
@@ -91,8 +96,8 @@ export function ProfileScreen({
       </Group>
 
       <Group id="account" title="Account">
-        <div className="flex min-h-14 items-center justify-between gap-3 py-2.5">
-          <div>
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2.5">
+          <div className="min-w-0">
             <p className="text-sm font-semibold">Current session</p>
             <p className="mt-0.5 text-xs text-muted">Sign out on this device.</p>
           </div>
@@ -105,17 +110,23 @@ export function ProfileScreen({
       </Group>
 
       <Group id="reminders" title="Reminders">
-        <Row detail="Budget and bill reminders in the app." end="Always on" title="In-app" />
-        <div className="py-2.5">
-          <Switch isDisabled isSelected={false}>
-            <Switch.Content className="flex w-full items-center justify-between gap-3">
-              <Label className="text-sm font-semibold">WhatsApp reminders</Label>
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-            </Switch.Content>
-          </Switch>
-          <p className="mt-0.5 text-xs text-muted">Link and verify WhatsApp first.</p>
+        <Row
+          detail="Budget and bill reminders in the app."
+          end={<span className="text-success">Always on</span>}
+          title="In-app"
+        />
+        <div className="flex items-start gap-3 py-2.5">
+          <div className="min-w-0 flex-1">
+            <Switch isDisabled isSelected={false}>
+              <Switch.Content className="flex w-full items-center justify-between gap-3">
+                <Label className="text-sm font-medium">WhatsApp reminders</Label>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+              </Switch.Content>
+            </Switch>
+            <p className="mt-1 text-xs leading-5 text-muted">Link and verify WhatsApp first.</p>
+          </div>
         </div>
         <Row detail="WhatsApp reminders wait until 07:00." end="22:00–07:00" title="Quiet hours" />
         <Row detail="Extra reminders are combined." end="3 a day" title="WhatsApp limit" />
@@ -135,17 +146,14 @@ export function ProfileScreen({
           detail={online ? "Live operations need a connection." : "Reconnect for live operations."}
           title="Connection"
         />
-        <div className="flex min-h-14 items-center justify-between gap-3 py-2.5">
-          <div>
-            <p className="text-sm font-semibold">Install Monara</p>
-            <p className="mt-0.5 text-xs text-muted">Add it to your home screen.</p>
-          </div>
-          <InstallAppButton />
-        </div>
+        <Row
+          detail="Add it to your home screen."
+          end={<InstallAppButton />}
+          title="Install Monara"
+        />
       </Group>
 
-      <p className="mt-4 flex items-start gap-2 px-1 text-xs text-muted">
-        <Icon className="mt-px h-4 w-4 shrink-0 text-accent" name="shield" />
+      <p className="mt-4 px-1 text-xs leading-5 text-muted">
         Your records are private to you. Monara never stores Gmail passwords or OAuth tokens, and
         nothing financial is saved for offline use.
       </p>
