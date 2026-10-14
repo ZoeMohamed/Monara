@@ -156,10 +156,16 @@ describe("browser OAuth origin", () => {
   });
 
   it("trusts the developer's own NGROK_DOMAIN and no other ngrok host", () => {
-    process.env.NGROK_DOMAIN = "example.ngrok-free.dev";
     const tunnel = (host) => new Request("http://0.0.0.0:3005/", { headers: { host } });
-    assert.equal(browserOrigin(tunnel("example.ngrok-free.dev")), "https://example.ngrok-free.dev");
-    assert.equal(browserOrigin(tunnel("other.ngrok-free.dev")), "http://0.0.0.0:3005");
-    delete process.env.NGROK_DOMAIN;
+    try {
+      process.env.NGROK_DOMAIN = "https://EXAMPLE.ngrok-free.dev/";
+      assert.equal(
+        browserOrigin(tunnel("example.ngrok-free.dev")),
+        "https://example.ngrok-free.dev",
+      );
+      assert.equal(browserOrigin(tunnel("other.ngrok-free.dev")), "http://0.0.0.0:3005");
+    } finally {
+      delete process.env.NGROK_DOMAIN;
+    }
   });
 });

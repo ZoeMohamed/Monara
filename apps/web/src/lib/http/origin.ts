@@ -12,7 +12,11 @@ export function browserOrigin(request: Request): string {
   const host = request.headers.get("host")?.trim();
   if (!host) return url.origin;
   // The developer's own `pnpm dev:tunnel` domain, which ngrok serves over HTTPS.
-  if (process.env.NGROK_DOMAIN && host === process.env.NGROK_DOMAIN) return `https://${host}`;
+  const ngrokDomain = process.env.NGROK_DOMAIN?.trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+  if (ngrokDomain && host.toLowerCase() === ngrokDomain) return `https://${host}`;
   try {
     const candidate = new URL(`${url.protocol}//${host}`);
     return ["localhost", "127.0.0.1", "[::1]"].includes(candidate.hostname)
