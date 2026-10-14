@@ -344,7 +344,6 @@ function SpendingBlock({
   model,
   transactions,
   openTransaction,
-  openBudgets,
   openReview,
   openAdd,
   openConnectGmail,
@@ -355,7 +354,6 @@ function SpendingBlock({
   model: OverviewModel;
   transactions: Transaction[];
   openTransaction: (transaction: Transaction) => void;
-  openBudgets: () => void;
   openReview: () => void;
   openAdd?: () => void;
   openConnectGmail?: () => void;
@@ -367,7 +365,6 @@ function SpendingBlock({
   const categories = financialMonth(transactions, month, today).categories;
   const selected = selection?.month === month ? selection.category : null;
   const months = Array.from({ length: 13 }, (_, index) => shiftMonth(currentMonth, -index));
-  const budgetLeft = budgetLeftOf(model);
 
   return (
     <section aria-labelledby="spending-title" className={styles.block}>
@@ -414,52 +411,29 @@ function SpendingBlock({
           </div>
         </div>
       ) : (
-        <>
-          <ul className={styles.categoryList}>
-            {categories.map((category, index) => {
-              const key = categoryKey(category);
-              const budget = model.usage.find((item) =>
-                categoryMatchesBudget(category, item.budget),
-              );
-              return (
-                <CategoryItem
-                  amount={category.amount}
-                  budgetLimit={budget?.limit ?? null}
-                  index={index}
-                  key={key}
-                  name={category.name}
-                  onToggle={() => setSelection(selected === key ? null : { month, category: key })}
-                  open={selected === key}
-                  openTransaction={openTransaction}
-                  payments={model.summary.confirmed.filter(
-                    (item) =>
-                      item.kind === "expense" && categoryContainsTransaction(category, item),
-                  )}
-                  paymentsId={paymentsId}
-                  scale={budget?.limit ?? categories[0].amount}
-                />
-              );
-            })}
-          </ul>
-
-          {model.budgetTotal > BigInt(0) ? (
-            <button className={styles.meter} onClick={openBudgets} type="button">
-              <span aria-hidden className={styles.meterTrack}>
-                <span style={{ width: `${Math.min(model.percent, 100)}%` }} />
-              </span>
-              <span className={styles.meterText}>
-                <strong data-amount>{compactAmount(budgetLeft)}</strong> budget left
-                {model.safeToSpend ? (
-                  <>
-                    {" · "}
-                    <span data-amount>{compactAmount(model.safeToSpend.perDay)}</span> a day for{" "}
-                    {model.safeToSpend.daysLeft} days
-                  </>
-                ) : null}
-              </span>
-            </button>
-          ) : null}
-        </>
+        <ul className={styles.categoryList}>
+          {categories.map((category, index) => {
+            const key = categoryKey(category);
+            const budget = model.usage.find((item) => categoryMatchesBudget(category, item.budget));
+            return (
+              <CategoryItem
+                amount={category.amount}
+                budgetLimit={budget?.limit ?? null}
+                index={index}
+                key={key}
+                name={category.name}
+                onToggle={() => setSelection(selected === key ? null : { month, category: key })}
+                open={selected === key}
+                openTransaction={openTransaction}
+                payments={model.summary.confirmed.filter(
+                  (item) => item.kind === "expense" && categoryContainsTransaction(category, item),
+                )}
+                paymentsId={paymentsId}
+                scale={budget?.limit ?? categories[0].amount}
+              />
+            );
+          })}
+        </ul>
       )}
     </section>
   );
@@ -542,6 +516,104 @@ function Feature({
   );
 }
 
+function attentionLine(model: OverviewModel) {
+  const attention = model.attentionBudget;
+  if (!attention) return "Every category is on track";
+  const name = attention.budget.category;
+  if (attention.state === "over") return `${name} is ${compactAmount(-attention.remaining)} over`;
+  if (attention.state === "at-limit") return `${name} is at its limit`;
+  return `${name} has ${compactAmount(attention.remaining)} left`;
+}
+
+function paceOf(model: OverviewModel) {
+  if (model.overBudgetCount > 0) return "over";
+  return model.percent > model.elapsedPercent ? "ahead" : "on-track";
+}
+
+function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
+  return (
+    <button className={styles.safe} onClick={openBudgets} type="button">
+      <span className={styles.featureName}>
+        <span aria-hidden className={styles.featureIcon} data-tone="green">
+          <Icon name="budgets" />
+        </span>
+        Safe to spend today
+      </span>
+      <strong className={styles.safeEmpty}>Set monthly budgets</strong>
+      <span className={styles.safeNote}>Monara will turn them into a daily spending guide.</span>
+    </button>
+  );
+}
+
+// Explains the headline: the daily split this month, or the budget total for a past month.
+function SafeToSpendNote({ month, model }: { month: string; model: OverviewModel }) {
+  const safe = model.safeToSpend;
+  if (!safe) {
+    return (
+      <span className={styles.safeNote}>
+        of <strong data-amount>{formatRupiah(model.budgetTotal)}</strong> in {monthName(month)}{" "}
+        budgets
+      </span>
+    );
+  }
+  if (safe.shortfall > BigInt(0)) {
+    return (
+      <span className={styles.safeNote}>
+        Spending is <strong data-amount>{formatRupiah(safe.shortfall)}</strong> over your total
+        limits.
+      </span>
+    );
+  }
+  return (
+    <span className={styles.safeNote}>
+      <strong data-amount>{formatRupiah(safe.remaining)}</strong> left in budgets ÷ {safe.daysLeft}{" "}
+      {safe.daysLeft === 1 ? "day" : "days"}, including today
+    </span>
+  );
+}
+
+// The daily guide: what can still be spent today without breaking the month's total limits.
+function SafeToSpendCard({
+  month,
+  model,
+  openBudgets,
+}: {
+  month: string;
+  model: OverviewModel;
+  openBudgets: () => void;
+}) {
+  if (model.budgetTotal === BigInt(0)) return <SafeToSpendSetup openBudgets={openBudgets} />;
+  const safe = model.safeToSpend;
+  return (
+    <button className={styles.safe} onClick={openBudgets} type="button">
+      <span className={styles.featureName}>
+        <span aria-hidden className={styles.featureIcon} data-tone="green">
+          <Icon name="budgets" />
+        </span>
+        {safe ? "Safe to spend today" : "Budgets left"}
+      </span>
+      <span className={styles.safeAmount}>
+        <strong data-amount>{formatRupiah(safe ? safe.perDay : model.remaining)}</strong>
+        {safe ? <small>/day</small> : null}
+      </span>
+      <SafeToSpendNote model={model} month={month} />
+      <span aria-hidden className={styles.pace} data-pace={paceOf(model)}>
+        <span className={styles.paceFill} style={{ width: `${Math.min(model.percent, 100)}%` }} />
+        {model.isCurrentMonth ? (
+          <span className={styles.paceMarker} style={{ left: `${model.elapsedPercent}%` }} />
+        ) : null}
+      </span>
+      <span className={styles.paceCaption}>
+        <span>
+          <strong>{model.percent}%</strong> of budgets used
+          {model.isCurrentMonth ? ` · ${model.elapsedPercent}% of month gone` : ""}
+        </span>
+        <span data-state={model.attentionBudget?.state ?? "on-track"}>{attentionLine(model)}</span>
+      </span>
+    </button>
+  );
+}
+
 function FeatureGrid({
   today,
   model,
@@ -566,9 +638,6 @@ function FeatureGrid({
   let billValue = `${bills.filter((bill) => bill.status === "active").length} tracked`;
   if (nextBill && nextBillDays === 0) billValue = `${nextBill.merchant} today`;
   else if (nextBill) billValue = `${nextBill.merchant} in ${nextBillDays}d`;
-  let budgetHint = "Monthly limits on track";
-  if (model.overBudgetCount > 0) budgetHint = `${model.overBudgetCount} over budget`;
-  else if (model.attentionBudget) budgetHint = `${model.attentionBudget.budget.category} is close`;
 
   return (
     <section aria-labelledby="features-title" className={styles.features}>
@@ -576,30 +645,6 @@ function FeatureGrid({
         Your features
       </h2>
       <div className={styles.featureGrid}>
-        <button className={styles.featureWide} onClick={openBudgets} type="button">
-          <span className={styles.featureName}>
-            <span aria-hidden className={styles.featureIcon} data-tone="green">
-              <Icon name="budgets" />
-            </span>
-            Monthly budgets
-          </span>
-          <strong data-amount>{compactAmount(budgetLeftOf(model))} left</strong>
-          <span className={styles.featureHint}>{budgetHint}</span>
-          <span aria-hidden className={styles.bars}>
-            {model.usage.slice(0, 6).map((item, index) => (
-              <span key={item.budget.id}>
-                <span
-                  className={styles.fill}
-                  data-state={item.state}
-                  style={{
-                    height: `${Math.max(Math.min(item.percent, 100), 8)}%`,
-                    animationDelay: `${index * 40}ms`,
-                  }}
-                />
-              </span>
-            ))}
-          </span>
-        </button>
         {showBills ? (
           <Feature
             hint={nextBill ? "Coming up this week" : "Nothing due this week"}
@@ -712,7 +757,6 @@ export function MobileOverview({
             model={model}
             month={month}
             openAdd={openAdd}
-            openBudgets={openBudgets}
             openConnectGmail={openConnectGmail}
             openReview={openReview}
             openTransaction={openTransaction}
@@ -721,6 +765,7 @@ export function MobileOverview({
             transactions={transactions}
           />
           <div className={styles.aside}>
+            <SafeToSpendCard model={model} month={month} openBudgets={openBudgets} />
             {model.isCurrentMonth ? (
               <TodayCard
                 model={model}

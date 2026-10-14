@@ -5,7 +5,6 @@ import { useSyncExternalStore } from "react";
 export type TourMode = "demo" | "live";
 
 const tourEvent = "monara-tour";
-const mobileQuery = "(width < 1024px)";
 const sessionSeen: Partial<Record<TourMode, boolean>> = {};
 
 function storageKey(mode: TourMode) {
@@ -13,18 +12,15 @@ function storageKey(mode: TourMode) {
 }
 
 function subscribe(callback: () => void) {
-  const media = window.matchMedia(mobileQuery);
   const onStorage = (event: StorageEvent) => {
     for (const mode of ["demo", "live"] as const) {
       if (event.key === null || event.key === storageKey(mode)) delete sessionSeen[mode];
     }
     callback();
   };
-  media.addEventListener("change", callback);
   window.addEventListener("storage", onStorage);
   window.addEventListener(tourEvent, callback);
   return () => {
-    media.removeEventListener("change", callback);
     window.removeEventListener("storage", onStorage);
     window.removeEventListener(tourEvent, callback);
   };
@@ -55,11 +51,11 @@ export function replayTour(mode: TourMode) {
   writeTourSeen(mode, false);
 }
 
-/** Whether the first-run tour should run: phone layout, Home, not yet finished. */
+/** Whether the first-run tour should run: on Home and not yet finished, at any width. */
 export function useTourPending(mode: TourMode, onHome: boolean): boolean {
   const pending = useSyncExternalStore(
     subscribe,
-    () => window.matchMedia(mobileQuery).matches && !readSeen(mode),
+    () => !readSeen(mode),
     () => false,
   );
   return pending && onHome;

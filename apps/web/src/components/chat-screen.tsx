@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReversibleResourceType } from "@monara/contracts";
-import { Button, Card, InputGroup, Label, Spinner, TextField } from "@monara/ui";
+import { Button, InputGroup, Label, Spinner, TextField } from "@monara/ui";
 import { type FormEvent, useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { ChatActionResult, type ChatReply } from "@/components/chat-action-result";
@@ -18,11 +18,11 @@ type ChatMessage = {
 };
 
 // Prompts mirror the PRD scenarios so a demo can run them from the web (F11).
-const suggestions: { text: string; hint: string }[] = [
-  { text: "kopi 25rb", hint: "Log an expense" },
-  { text: "Where did my money go?", hint: "Ask about spending" },
-  { text: "Can I afford a 300k dinner?", hint: "Check your budget" },
-  { text: "What bills are due?", hint: "See upcoming bills" },
+const suggestions = [
+  "kopi 25rb",
+  "Where did my money go?",
+  "Can I afford a 300k dinner?",
+  "What bills are due?",
 ];
 
 export function ChatScreen({
@@ -124,16 +124,10 @@ export function ChatScreen({
   }, [initialPrompt]);
 
   return (
-    <div
-      className={`${styles.shell} flex min-h-[calc(100dvh-14rem)] flex-col lg:min-h-[calc(100dvh-12rem)]`}
-      ref={shellRef}
-    >
+    <div className={`${styles.shell} flex flex-col`} ref={shellRef}>
       <div aria-hidden className={styles.handle} />
-      <div className={`${styles.header} flex flex-wrap items-center justify-between gap-3`}>
-        <h1 className="text-[32px] font-extrabold tracking-[-0.04em]">
-          <span className={styles.desktopTitle}>Chat</span>
-          <span className={styles.mobileTitle}>Ask Monara</span>
-        </h1>
+      <div className={styles.header}>
+        <h1 className="font-extrabold">Ask Monara</h1>
         {demo ? (
           <DemoIndicator
             className={`${styles.connectionStatus} text-xs font-medium text-muted lg:hidden`}
@@ -166,54 +160,34 @@ export function ChatScreen({
       <div
         aria-label="Conversation"
         aria-live="polite"
-        className={`${styles.conversation} mt-4 flex-1`}
+        className={`${styles.conversation} flex-1`}
         ref={conversationRef}
         role="log"
       >
         {messages.length === 0 ? (
-          <Card
-            className={`${styles.intro} block gap-0 overflow-hidden rounded-2xl border border-border p-0`}
-          >
-            <Card.Content className={`${styles.introContent} block px-4 py-5 sm:px-6`}>
-              <div className={`${styles.introHeading} flex items-center gap-3 sm:gap-4`}>
-                <MonaraMascot className="h-16 w-16" />
-                <h2 className="text-lg font-semibold tracking-[-0.025em]">Hey, I’m Monara.</h2>
-              </div>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-muted">
-                Ask how your month is going, or log a payment like “kopi 25rb”. Answers come from
-                your confirmed records.
-              </p>
-            </Card.Content>
-            <ul
-              className={`${styles.suggestions} divide-y divide-separator border-t border-separator`}
-            >
+          <div className={styles.intro}>
+            <div className={styles.introHeading}>
+              <MonaraMascot className="h-16 w-16 shrink-0" />
+              <h2>Hey, I’m Monara.</h2>
+            </div>
+            <p>
+              Ask how your month is going, or log a payment like “kopi 25rb”. Answers come from your
+              confirmed records.
+            </p>
+            <ul aria-label="Suggestions" className={styles.suggestions}>
               {suggestions.map((suggestion) => (
-                <li key={suggestion.text}>
+                <li key={suggestion}>
                   <button
-                    className={`${styles.suggestion} flex min-h-16 w-full items-center gap-4 px-4 py-3 text-left transition-colors duration-100 hover:bg-surface-secondary focus-visible:bg-surface-secondary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus active:bg-surface-secondary sm:px-6`}
-                    onClick={() => void sendText(suggestion.text)}
+                    className={styles.suggestion}
+                    onClick={() => void sendText(suggestion)}
                     type="button"
                   >
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={`${styles.suggestionText} block text-sm font-medium leading-5`}
-                      >
-                        {suggestion.text}
-                      </span>
-                      <span className={styles.suggestionLabel}>{suggestion.hint}</span>
-                      <span className={`${styles.suggestionHint} mt-1 block text-xs text-muted`}>
-                        {suggestion.hint}
-                      </span>
-                    </span>
-                    <Icon
-                      className={`${styles.suggestionArrow} h-4 w-4 shrink-0 text-muted`}
-                      name="chevron-right"
-                    />
+                    {suggestion}
                   </button>
                 </li>
               ))}
             </ul>
-          </Card>
+          </div>
         ) : (
           <ol className="space-y-2">
             {messages.map((message) => (
@@ -257,11 +231,8 @@ export function ChatScreen({
         )}
       </div>
 
-      <form
-        className={`${styles.composer} sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom,0px))] mt-3 bg-background pt-2 pb-1 lg:bottom-4`}
-        onSubmit={send}
-      >
-        <div className={`${styles.composerControls} flex items-center gap-2`}>
+      <form className={styles.composer} onSubmit={send}>
+        <div className={styles.composerControls}>
           <TextField
             className="min-w-0 flex-1"
             isDisabled={sending}
@@ -269,7 +240,7 @@ export function ChatScreen({
             value={draft}
           >
             <Label className="sr-only">Message Monara</Label>
-            <InputGroup className={`${styles.inputGroup} rounded-2xl`}>
+            <InputGroup className={styles.inputGroup}>
               <InputGroup.Input
                 autoComplete="off"
                 className={`${styles.input} text-base`}
@@ -282,7 +253,7 @@ export function ChatScreen({
           </TextField>
           <Button
             aria-label="Send message"
-            className={`${styles.sendButton} rounded-2xl`}
+            className={styles.sendButton}
             isDisabled={sending || draft.trim() === ""}
             isIconOnly
             type="submit"

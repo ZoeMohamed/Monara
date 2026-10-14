@@ -471,4 +471,9 @@
     width: 18px;
     height: 18px;
   }
+
+  /* Chat is a full-height sheet; the page itself should not scroll around it. */
+  .shell[data-screen="chat"] .main {
+    padding-bottom: 16px;
+  }
 }

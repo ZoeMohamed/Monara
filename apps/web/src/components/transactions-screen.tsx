@@ -180,7 +180,7 @@ function LedgerFilters({
       </TextField>
       <fieldset
         aria-label="Filter by transaction type"
-        className="mt-3 flex gap-2 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
+        className="mt-3 flex min-w-0 gap-2 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
       >
         {kindFilters.map((filter) => (
           <Button

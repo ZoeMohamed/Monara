@@ -295,7 +295,7 @@
 
 .prompts button:active,
 .category:active,
-.meter:active,
+.safe:active,
 .featureGrid > button:active,
 .todayAction:active {
   transform: scale(0.98);
@@ -462,43 +462,6 @@
   border-top: 1px solid var(--separator);
 }
 
-.meter {
-  display: block;
-  width: 100%;
-  margin-top: 14px;
-  text-align: left;
-  transition: transform 160ms ease-out;
-}
-
-.meterTrack {
-  display: block;
-  height: 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--surface-tertiary);
-}
-
-.meterTrack > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--ink);
-  transform-origin: left;
-  animation: grow-x 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.meterText {
-  display: block;
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.meterText strong {
-  color: var(--foreground);
-}
-
 .empty {
   display: grid;
   justify-items: center;
@@ -625,12 +588,6 @@
   transition: transform 160ms ease-out;
 }
 
-.featureGrid > .featureWide {
-  grid-column: 1 / -1;
-  min-height: 124px;
-  padding-right: 128px;
-}
-
 .featureName {
   display: inline-flex;
   align-items: center;
@@ -686,42 +643,128 @@
   line-height: 1.4;
 }
 
-.bars {
-  position: absolute;
-  top: 50%;
-  right: 20px;
-  display: flex;
-  height: 56px;
-  align-items: flex-end;
-  gap: 6px;
-  transform: translateY(-50%);
-}
+/* Safe to spend --------------------------------------------------- */
 
-.bars > span {
+.safe {
   display: flex;
-  width: 12px;
-  height: 100%;
-  align-items: flex-end;
-  overflow: hidden;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--success) 14%, var(--surface));
-}
-
-.fill {
   width: 100%;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--success) 75%, white);
-  transform-origin: bottom;
-  animation: grow-y 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  margin-top: 24px;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 18px;
+  border-radius: 24px;
+  background: var(--surface-secondary);
+  text-align: left;
+  transition: transform 160ms ease-out;
 }
 
-.fill[data-state="warning"],
-.fill[data-state="at-limit"] {
+.safe .featureName {
+  margin-bottom: 6px;
+}
+
+.safeAmount {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.safeAmount strong {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.safeAmount small {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.safeEmpty {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.safeNote {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.safeNote strong,
+.paceCaption strong {
+  color: var(--foreground);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.pace {
+  position: relative;
+  display: block;
+  height: 8px;
+  margin-top: 14px;
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.paceFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success);
+  transform-origin: left;
+  animation: grow-x 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.pace[data-pace="ahead"] .paceFill {
   background: var(--warning);
 }
 
-.fill[data-state="over"] {
+.pace[data-pace="over"] .paceFill {
   background: var(--danger);
+}
+
+/* The marker shows how much of the month has passed, so the fill reads as ahead or behind. */
+.paceMarker {
+  position: absolute;
+  top: -4px;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--ink);
+  transform: translateX(-50%);
+}
+
+.paceCaption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.paceCaption [data-state="warning"],
+.paceCaption [data-state="at-limit"] {
+  color: var(--warning-soft-foreground);
+  font-weight: 700;
+}
+
+.paceCaption [data-state="over"] {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* An odd card out spans the row instead of leaving a hole. */
+.featureGrid > button:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  min-height: 0;
 }
 
 /* Desktop ------------------------------------------------------------
@@ -807,12 +850,14 @@
 
   .block,
   .todayCard,
+  .safe,
   .features {
     margin-top: 0;
   }
 
   .block,
-  .todayCard {
+  .todayCard,
+  .safe {
     padding: 28px;
     border: 1px solid var(--border);
     border-radius: 28px;
@@ -824,8 +869,17 @@
     gap: 24px;
   }
 
-  .todayAction {
+  .aside .featureGrid {
+    margin-top: 0;
+  }
+
+  .todayAction,
+  .pace {
     background: var(--surface-secondary);
+  }
+
+  .safeAmount strong {
+    font-size: 36px;
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -840,6 +894,16 @@
     .prompts button:hover,
     .featureGrid > button:hover {
       background: var(--surface-tertiary);
+    }
+
+    .safe {
+      transition:
+        transform 160ms ease-out,
+        border-color 160ms ease-out;
+    }
+
+    .safe:hover {
+      border-color: color-mix(in srgb, var(--success) 40%, var(--border));
     }
 
     .chip:hover {
@@ -904,12 +968,6 @@
   to {
     opacity: 0.35;
     transform: translateY(-48px);
-  }
-}
-
-@keyframes grow-y {
-  from {
-    transform: scaleY(0);
   }
 }
 

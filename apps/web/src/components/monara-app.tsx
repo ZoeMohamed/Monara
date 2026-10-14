@@ -124,7 +124,7 @@ function DesktopSidebar({
           <DemoIndicator className="block text-sm font-bold" />
         )}
       </div>
-      <button className={styles.sideAdd} onClick={onAdd} type="button">
+      <button className={styles.sideAdd} data-tour="add" onClick={onAdd} type="button">
         <Icon name="plus" strokeWidth={2.4} />
         Add transaction
       </button>

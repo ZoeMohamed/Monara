@@ -32,7 +32,9 @@ const steps: TourStep[] = [
 ];
 
 type Rect = { top: number; left: number; width: number; height: number };
-type Placement = { rect: Rect | null; top: number };
+type Placement = { rect: Rect | null; top: number; left: number | null };
+
+const bubbleWidth = 420;
 
 function visibleTarget(target: string): HTMLElement | null {
   for (const element of document.querySelectorAll<HTMLElement>(`[data-tour="${target}"]`)) {
@@ -111,7 +113,12 @@ export function ProductTour({ mode, onFinish }: { mode: TourMode; onFinish?: () 
         viewportTop + 16,
         Math.min(preferred, viewportBottom - bubbleHeight - 16),
       );
-      setPlacement({ rect, top });
+      // Wide screens anchor the explanation beside its target instead of centring it.
+      const left =
+        rect && window.innerWidth >= 1024
+          ? Math.max(16, Math.min(rect.left, window.innerWidth - bubbleWidth - 16))
+          : null;
+      setPlacement({ rect, top, left });
     };
     update();
     const observer = new ResizeObserver(update);
@@ -163,7 +170,16 @@ export function ProductTour({ mode, onFinish }: { mode: TourMode; onFinish?: () 
       <section
         className={styles.bubble}
         ref={bubbleRef}
-        style={placement ? { top: placement.top } : { bottom: 120 }}
+        style={
+          placement
+            ? {
+                top: placement.top,
+                ...(placement.left === null
+                  ? {}
+                  : { left: placement.left, right: "auto", marginInline: 0, width: bubbleWidth }),
+              }
+            : { bottom: 120 }
+        }
       >
         <div aria-live="polite">
           <p className={styles.progress}>
