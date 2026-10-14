@@ -228,6 +228,19 @@ function SceneHero({
             </span>
           </Button>
         </div>
+        <nav aria-label="Ask Monara" className={styles.prompts}>
+          {prompts.map((item) => (
+            <Button
+              variant="ghost"
+              key={item.text}
+              onPress={() => openChat(item.prompt)}
+              type="button"
+            >
+              <Icon name={item.icon} />
+              {item.text}
+            </Button>
+          ))}
+        </nav>
       </div>
     </section>
   );
@@ -980,19 +993,6 @@ export function MobileOverview({
       />
 
       <div className={styles.sheet}>
-        <nav aria-label="Ask Monara" className={styles.prompts}>
-          {prompts.map((item) => (
-            <Button
-              variant="ghost"
-              key={item.text}
-              onClick={() => openChat(item.prompt)}
-              type="button"
-            >
-              <Icon name={item.icon} />
-              {item.text}
-            </Button>
-          ))}
-        </nav>
         {setup}
         <div className={styles.columns}>
           <div className={styles.lead}>
