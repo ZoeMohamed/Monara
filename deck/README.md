@@ -52,5 +52,7 @@ The script needs Google Chrome (set `CHROME` to override the path) and network a
 
 `research/` holds the two research reports the deck's numbers come from. They were written by a separate research agent and are kept as received, including its citation markers.
 
+The reports used an earlier team brief with a US$1.60 Premium price and a 94-user break-even scenario. The current slide sources supersede those team-supplied assumptions with US$1.50 per month, US$200 one-time setup cost, US$40 monthly running cost, and about 27 Premium users for monthly operating break-even. External market evidence remains unchanged; do not reuse the reports' older pricing calculations in the current deck.
+
 - `research/sea-market-competition-compliance.md`: SEA market sizing, competitors, Chinese fintech relevance, privacy law per market, pricing benchmarks and the WeBank audience.
 - `research/sea-evidence-pain-intent-ability.md`: comparable cross-country evidence for the problem slide (tracking, cushion, intent to use AI help, ability to pay), with a list of what can and cannot be plotted together and which claims not to make.

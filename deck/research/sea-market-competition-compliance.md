@@ -202,7 +202,7 @@ A useful distinction for the judges is that Chinese fintech's SEA presence is mu
 | **Tencent / WeChat Pay** | Relevant to Chinese consumers, Chinese merchant/payment connectivity and regional cross-border acceptance. | **No**, not as a standalone SEA budgeting assistant. | SEA-specific user number **unverified**. | Shows why a regional agent should be channel/rail agnostic rather than tied to one Western payment ecosystem. |
 | **GCash / Mynt** | Core Philippine wallet and financial-superapp ecosystem; frequently discussed alongside Ant-linked investment relationships. | **Partial overlap**, because wallets increasingly include savings/financial services, but not the same independent budgeting-agent proposition. | A current primary-source number meeting this report's verification standard was **not verified**. | Important potential integration/distribution ecosystem for a Philippine expansion. Primary ownership details should be sourced before making "China-linked" claims onstage. |
 | **DANA** | Major Indonesian wallet and payment ecosystem with historical China-linked corporate relationships frequently reported in the market. | **Partial overlap**, not a direct budgeting-agent substitute. | Current user count and ownership linkage **unverified here from a primary 2024-2026 source**. | Monara should describe DANA as a potential transaction source/ecosystem, not casually as a "Chinese app." |
-| **WeBank** | Shenzhen-based, technology-driven digital bank focused on broad consumers and MSMEs, with strong emphasis on technology, inclusive finance and risk control. | **No verified direct SEA retail PFM competitor found.** | SEA retail user number **not applicable / unverified**. | This is the strongest judge-alignment story: safe AI that helps ordinary consumers use digital finance better. | 
+| **WeBank** | Shenzhen-based, technology-driven digital bank focused on broad consumers and MSMEs, with strong emphasis on technology, inclusive finance and risk control. | **No verified direct SEA retail PFM competitor found.** | SEA retail user number **not applicable / unverified**. | This is the strongest judge-alignment story: safe AI that helps ordinary consumers use digital finance better. |
 | **Qianji / Suishouji** | Chinese bookkeeping products. | Potential conceptual comparison. | **SEA operating presence unverified.** | Do not put them in a "SEA competitors" logo wall unless regional operation can be sourced. |
 
 WeBank's own public description calls it a technology-driven digital bank focused on providing convenient financial services to MSMEs and the general public. Its about page also explicitly emphasizes compliant operation and strict risk control. citeturn26search2turn26search21
@@ -365,37 +365,48 @@ The following figures or claims should **not** be presented as researched facts 
 
 **Claims the current deck should stop making or soften**
 
-**Stop:** "Monara has no direct competitor."  
+**Stop:** "Monara has no direct competitor."
+
 **Replace with:** "The market validates conversational expense tracking, but Monara differentiates through source-backed transactions, pending confirmation, safe agent actions and regional channel architecture." Aiccountant, Oyenza, Rekafin and Moneko make the old claim indefensible. [Aiccountant](https://aiccountant.id/en); [Oyenza](https://oyenza.com/); [Rekafin](https://rekafin.id/); [Moneko](https://moneko.io/pricing).
 
-**Stop:** "Gmail + WhatsApp is unique."  
+**Stop:** "Gmail + WhatsApp is unique."
+
 **Replace with:** "Monara combines passive evidence capture with a conservative agent-control model." Aiccountant already advertises Gmail transaction import and WhatsApp entry. [Source](https://aiccountant.id/en).
 
-**Stop:** "WhatsApp-first is the SEA strategy."  
+**Stop:** "WhatsApp-first is the SEA strategy."
+
 **Replace with:** "WhatsApp is the Indonesia/Malaysia/Singapore beachhead channel; the agent core is channel-independent." Thailand's **56M LINE MAU** and Vietnam's **78.3M Zalo MAU** make this distinction essential. [Thailand](https://datareportal.com/reports/digital-2026-thailand); [Vietnam](https://datareportal.com/reports/digital-2026-vietnam). citeturn8view3turn8view4
 
-**Stop:** "Most transactions can be captured from email."  
+**Stop:** "Most transactions can be captured from email."
+
 **Replace with:** "Email receipts are one permissioned automation source alongside chat, receipts and future local integrations." The actual transaction-to-email coverage rate is unverified.
 
-**Soften:** "TAM is all internet users."  
+**Soften:** "TAM is all internet users."
+
 **Replace with:** "Audience TAM is internet users." The SEA-6 audience TAM is **522.58M**, while a modelled online age 18-44 SAM is approximately **214.7M**. [DataReportal country inputs, 2026](https://datareportal.com/). citeturn10view0turn10view1turn10view2turn10view3turn10view4turn10view5
 
-**Stop:** "SAM is 116.3M Indonesian Millennials + Gen Z."  
+**Stop:** "SAM is 116.3M Indonesian Millennials + Gen Z."
+
 **Replace with:** a defined age-based methodology. This report estimates **≈93.5M online Indonesians aged 18-44**, under the stated uniform-penetration assumption. [DataReportal, 2026](https://datareportal.com/reports/digital-2026-indonesia). citeturn10view0
 
-**Stop:** "5% conversion is conservative."  
+**Stop:** "5% conversion is conservative."
+
 **Replace with:** "5% is our base-case assumption to validate in pilot." No suitable SEA PFM conversion benchmark was verified.
 
-**Soften:** "Break-even is 94 Premium users."  
+**Soften:** "Break-even is 94 Premium users."
+
 **Replace with:** "At our current internal cost assumptions, the model reaches break-even at 94 paying users." Then show the cost stack. At US$1.60 (≈ RMB 10.77) per user, that corresponds to approximately US$150.40 (≈ RMB 1,012.39) monthly subscription revenue before fees and taxes; the customer and cost assumptions come from the team brief.
 
-**Stop:** "OJK inclusion means 93.61% of Indonesians are banked."  
+**Stop:** "OJK inclusion means 93.61% of Indonesians are banked."
+
 **Replace with:** "OJK's broad 2026 financial-inclusion index is 93.61%." Do not equate it with World Bank account ownership. [OJK/BPS/LPS, 2026](https://ojk.go.id/id/berita-dan-kegiatan/siaran-pers/Pages/Hasil-SNLIK-Tahun-2026.aspx). citeturn4search4
 
-**Stop:** "Monara is an AI financial adviser."  
+**Stop:** "Monara is an AI financial adviser."
+
 **Replace with:** "Monara is an AI personal-finance assistant for tracking, budgeting, reminders and explanations based on user-confirmed data." This keeps the product story closer to its actual behavior and reduces unnecessary regulatory exposure.
 
-**Stop:** "Monara is compliant across SEA."  
+**Stop:** "Monara is compliant across SEA."
+
 **Replace with:** "Monara is designed around consent, least-privilege access, data minimization, transaction provenance and user confirmation, with country-specific compliance review before expansion."
 
 **Slide-ready facts**
