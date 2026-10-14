@@ -1,4 +1,6 @@
 # Copy to .dev.vars for local development. Never commit real values.
+# MONARA_AGENT_BACKEND_SECRET is shared with the web backend: it authenticates
+# /chat in one direction and the backend operations in the other.
 MONARA_BACKEND_URL=http://localhost:3000
 MONARA_AGENT_BACKEND_SECRET=
 COMPOSIO_API_KEY=

@@ -104,8 +104,7 @@ export function ReviewQueue({
         <Chip variant="soft">{pending.length} pending</Chip>
       </div>
       <p className="mt-3 text-sm leading-6 text-muted">
-        Every import needs your review, whatever its confidence. Pending items stay out of totals.
-        Changes to this demo last until you leave or reload.
+        Review each import before it counts toward totals.
       </p>
       <div className="mt-4 space-y-3">
         {pending.map((transaction) => (

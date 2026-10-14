@@ -46,6 +46,26 @@ button {
   }
 }
 
+/* Shared entrance motion for Tailwind arbitrary animations. Reduced motion disables them below. */
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes gauge {
+  from {
+    stroke-dasharray: 0 100;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
 ::selection {
   background: var(--accent-soft);
   color: var(--accent-soft-foreground);

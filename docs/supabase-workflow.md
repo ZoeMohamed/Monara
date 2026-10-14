@@ -1,8 +1,8 @@
 # Supabase workflow for Monara
 
-The [11 October action tracker](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.5tiin0qzk1mg) assigns Supabase connection (ZO2), ERD (ZO3), and migrations/RLS (ZO4) to Zoe, and migration validation (AB3) to Abhip. Coordinate generated database types and backend contracts with those feature owners. Daptek owns shared UI under ER1–ER3; see [the UI design system](ui-design-system.md), [repository ownership](repository-structure.md), and the [runtime boundaries](adr/0001-initial-runtime-boundaries.md).
+The [Action Tracker reviewed on 14 October](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.5tiin0qzk1mg) assigns Supabase connection (ZO2), ERD (ZO3), and migrations/RLS (ZO4) to Zoe, and migration validation (AB3) to Abhip. Coordinate generated database types and backend contracts with those feature owners. Daptek owns shared UI under ER1–ER3; see [the UI design system](ui-design-system.md), [repository ownership](repository-structure.md), and the [runtime boundaries](adr/0001-initial-runtime-boundaries.md).
 
-The repository contains local Supabase configuration and client constructors, a local migration validation command, and a database CI job supporting AB3. No financial migrations, database policy tests, or generated schema baseline exist yet, so the gate reports a skip. Google sign-in, financial persistence, and hosted migration deployment still need implementation; a working local scaffold does not complete ZO2–ZO4.
+The repository now contains the financial schema migrations, RLS/ownership tests, synthetic seed, generated database types, Google sign-in/server sessions and financial services. The migration validation command and database CI job support AB3; an existing-schema checkout must replay and verify its migrations rather than treating the earlier empty-schema skip as current evidence. The final tracker refresh on 14 October marks ZO1–ZO8 Done and ZO9 Not started. UI service adapters, live configuration and hosted migration deployment are separate integration/acceptance work.
 
 ## Start this checkout's database
 
@@ -22,7 +22,7 @@ Use `pnpm db:stop` when finished. Before removing a linked worktree, run `pnpm w
 
 ## Make a schema change
 
-Review Zoe's ERD work (ZO3) and agree the relevant tables, ownership, and operations before adding a migration under ZO4. Settle the User, Financial Account, transaction, Gmail Connection, and WhatsApp Link relationships needed by the feature.
+Review the accepted [ERD](erd.md), existing migrations and shared contracts before extending the schema. Settle the User, Financial Account, transaction, Gmail Connection, and WhatsApp Link relationships needed by the feature.
 
 Create a timestamped migration using the CLI:
 
@@ -45,7 +45,7 @@ pnpm exec supabase db lint --local --schema public --level warning --fail-on war
 
 Reset checks that the SQL chain and seed execute from an empty database. Lint checks database functions; `--fail-on warning` makes findings fail the command. Add any application schemas beyond `public` to the schema list. Neither check establishes resource ownership or application correctness. [Supabase CLI: reset and lint](https://supabase.com/docs/reference/cli/supabase-db-lint).
 
-With the first financial schema, add pgTAP tests under `supabase/tests/database/` and run:
+Keep pgTAP ownership/RLS coverage under `supabase/tests/database/` with each schema change, and run:
 
 ```bash
 pnpm exec supabase test db --local
@@ -78,7 +78,7 @@ Test the backend service boundary as its implementation arrives: resolve identit
 | Stored data | Required values, foreign keys, uniqueness, and agreed value constraints | SQL migrations in `supabase/migrations` |
 | Database access | Which roles may perform which operations on whose rows | Grants and RLS policies, with local database tests |
 
-The existing contract schemas cover UUID identifiers, pending/confirmed status, Gmail jobs, and verified WhatsApp input. They are starter contracts, not a finished financial schema. A parsed caller-supplied User ID does not prove identity. A service-role key does not replace server authorization. UI in `packages/ui` stays presentation-only, and the agent requests financial writes through the backend.
+The shared schemas now define UUID resources; pending/confirmed/rejected transactions; exact decimal-string IDR money; budget/dashboard operations; and Gmail/channel inputs. Use these accepted shapes with the generated database types instead of restoring starter-only contracts. A parsed caller-supplied User ID does not prove identity, and a service-role key does not replace server authorization. UI in `packages/ui` stays presentation-only; financial writes go through the backend.
 
 ## Database validation command and CI
 

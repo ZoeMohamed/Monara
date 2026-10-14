@@ -130,7 +130,57 @@ export const initialTransactions: Transaction[] = [
     status: "pending",
     kind: null,
   },
+  ...history([
+    // Synthetic confirmed history lets the demo compare recorded months.
+    ["Payday · salary", null, 8000000, "2026-09-01", "09:00", "BCA", "💼", "income"],
+    ["Netflix", "Digital", 186000, "2026-09-01", "06:00", "Jago", "📺"],
+    ["Gojek · GoRide", "Transport", 24000, "2026-09-03", "08:12", "GoPay", "🛵"],
+    ["Warteg Bahari", "Food & Drinks", 32000, "2026-09-04", "12:30", "Cash", "🍛"],
+    ["Indomaret", "Shopping", 61500, "2026-09-07", "19:05", "BCA", "🏪"],
+    ["Spotify Premium", "Digital", 54990, "2026-09-10", "07:02", "Jago", "🎧"],
+    ["Telkomsel data plan", "Digital", 100000, "2026-09-14", "10:00", "BCA", "📶"],
+    ["Sushi Tei", "Food & Drinks", 245000, "2026-09-16", "19:40", "Mandiri", "🍣"],
+    ["Pertamina", "Transport", 150000, "2026-09-18", "07:50", "BCA", "⛽"],
+    ["Uniqlo", "Shopping", 299000, "2026-09-20", "15:10", "Mandiri", "👕"],
+    ["Grab · GrabCar", "Transport", 58000, "2026-09-23", "21:15", "GoPay", "🚕"],
+    ["Kopi Kenangan", "Food & Drinks", 28000, "2026-09-25", "08:15", "BCA", "☕"],
+    ["Lotte Mart", "Shopping", 248000, "2026-09-27", "11:20", "BCA", "🛒"],
+    ["Payday · salary", null, 8000000, "2026-08-01", "09:00", "BCA", "💼", "income"],
+    ["Netflix", "Digital", 186000, "2026-08-01", "06:00", "Jago", "📺"],
+    ["Spotify Premium", "Digital", 54990, "2026-08-10", "07:02", "Jago", "🎧"],
+    ["Gojek · GoRide", "Transport", 96000, "2026-08-15", "08:12", "GoPay", "🛵"],
+    ["Sate Khas Senayan", "Food & Drinks", 312000, "2026-08-17", "19:34", "Mandiri", "🍽️"],
+    ["Alfamart", "Shopping", 143000, "2026-08-24", "18:20", "BCA", "🏪"],
+  ]),
 ];
+
+type HistoryRow = [
+  merchant: string,
+  category: string | null,
+  amount: number,
+  date: string,
+  time: string,
+  method: string,
+  emoji: string,
+  kind?: "expense" | "income",
+];
+
+function history(rows: HistoryRow[]): Transaction[] {
+  return rows.map(([merchant, category, amount, date, time, method, emoji, kind], index) => ({
+    id: `00000000-0000-4000-8000-000000000${301 + index}`,
+    merchant,
+    category,
+    amount,
+    date,
+    time,
+    method,
+    emoji,
+    confidence: null,
+    status: "confirmed",
+    kind: kind ?? "expense",
+    currency: "IDR",
+  }));
+}
 
 export const budgets: Budget[] = [
   {

@@ -118,13 +118,16 @@ describe("Composio Gmail client", () => {
     assert.equal(calls.length, 1);
   });
 
-  it("still deletes when revoke is unsupported or the connection is not active", async () => {
+  it("keeps the connection when Composio does not confirm revocation", async () => {
     for (const status of [400, 409]) {
-      const { calls, fetcher } = fakeFetch({ status }, { status: 404 });
-      await client(fetcher).deleteConnection("ca_1");
+      const { calls, fetcher } = fakeFetch({ status });
+      await assert.rejects(
+        client(fetcher).deleteConnection("ca_1"),
+        (error) => error instanceof ComposioRequestError && error.status === status,
+      );
       assert.deepEqual(
         calls.map((call) => call.method),
-        ["POST", "DELETE"],
+        ["POST"],
       );
     }
   });

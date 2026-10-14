@@ -84,6 +84,82 @@ export function updatePendingTransaction(
   );
 }
 
+export function updateConfirmedTransaction(
+  transactions: Transaction[],
+  id: string,
+  values: TransactionValues,
+): Transaction[] {
+  const existing = transactions.find((transaction) => transaction.id === id);
+  if (
+    existing?.status !== "confirmed" ||
+    Object.keys(transactionErrors(existing)).length > 0 ||
+    Object.keys(transactionErrors(values)).length > 0
+  ) {
+    return transactions;
+  }
+  const { merchant, category, amount, currency, date, time, method, kind } = values;
+  const corrected: Transaction = {
+    ...existing,
+    merchant,
+    category,
+    amount,
+    currency,
+    date,
+    time,
+    method,
+    kind,
+  };
+  return transactions.map((transaction) => (transaction === existing ? corrected : transaction));
+}
+
+// An undo must never overwrite a newer edit or restore the whole ledger snapshot.
+export function undoTransactionUpdate(
+  transactions: Transaction[],
+  before: Transaction,
+  expected: Transaction,
+): Transaction[] {
+  if (before.id !== expected.id || !transactions.some((transaction) => transaction === expected)) {
+    return transactions;
+  }
+  return transactions.map((transaction) => (transaction === expected ? before : transaction));
+}
+
+// Session-only deletion requires the exact reviewed record, so stale views cannot remove a newer edit.
+export function deleteConfirmedTransaction(
+  transactions: Transaction[],
+  expected: Transaction,
+): Transaction[] {
+  const matches = transactions.filter((transaction) => transaction.id === expected.id);
+  if (
+    matches.length !== 1 ||
+    matches[0] !== expected ||
+    expected.status !== "confirmed" ||
+    Object.keys(transactionErrors(expected)).length > 0
+  ) {
+    return transactions;
+  }
+  return transactions.filter((transaction) => transaction !== expected);
+}
+
+// Restore only the deleted record; never replace newer records or a whole ledger snapshot.
+export function undoTransactionDeletion(
+  transactions: Transaction[],
+  deleted: Transaction,
+  index: number,
+): Transaction[] {
+  if (
+    deleted.status !== "confirmed" ||
+    Object.keys(transactionErrors(deleted)).length > 0 ||
+    !Number.isSafeInteger(index) ||
+    index < 0 ||
+    transactions.some((transaction) => transaction.id === deleted.id)
+  ) {
+    return transactions;
+  }
+  const insertionIndex = Math.min(index, transactions.length);
+  return [...transactions.slice(0, insertionIndex), deleted, ...transactions.slice(insertionIndex)];
+}
+
 export function rejectPendingTransaction(transactions: Transaction[], id: string): Transaction[] {
   return transactions.map((transaction) =>
     transaction.id === id && transaction.status === "pending"
@@ -95,9 +171,19 @@ export function rejectPendingTransaction(transactions: Transaction[], id: string
 // A calendar month as "YYYY-MM". The dashboard summarizes one selected month (PRD D-010).
 export const demoMonth = demoToday.slice(0, 7);
 
+// Reports include five previous months, all within the four-digit calendar-year range.
+export const earliestReportMonth = "0000-06";
+
 export function shiftMonth(month: string, delta: number): string {
-  const [year, index] = month.split("-").map(Number);
-  return new Date(Date.UTC(year, index - 1 + delta, 1)).toISOString().slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(month) || !isCalendarDate(`${month}-01`)) {
+    throw new Error("Choose a valid calendar month.");
+  }
+  if (!Number.isSafeInteger(delta)) throw new Error("Choose a whole number of months.");
+  const index = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + delta;
+  if (index < 0 || index > 9999 * 12 + 11) {
+    throw new Error("Month shift leaves the supported calendar range, 0000–9999.");
+  }
+  return `${String(Math.floor(index / 12)).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
 }
 
 export function formatMonth(month: string): string {
@@ -109,8 +195,9 @@ export function formatMonth(month: string): string {
 }
 
 export function daysInMonth(month: string): number {
-  const [year, index] = month.split("-").map(Number);
-  return new Date(Date.UTC(year, index, 0)).getUTCDate();
+  const date = new Date(`${month}-01T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() + 1, 0);
+  return date.getUTCDate();
 }
 
 export function formatDay(date: string): string {
@@ -165,14 +252,20 @@ export function budgetUsage(transactions: Transaction[], budget: Budget, month =
   const limit = BigInt(budget.limit);
   const percent =
     limit > BigInt(0) ? Number((used * BigInt(100)) / limit) : used > BigInt(0) ? 100 : 0;
-  const state: "on-track" | "warning" | "over" =
-    percent >= 100 ? "over" : percent >= budget.warningPercent ? "warning" : "on-track";
+  const state: "on-track" | "warning" | "at-limit" | "over" =
+    used > limit
+      ? "over"
+      : limit > BigInt(0) && used === limit
+        ? "at-limit"
+        : percent >= budget.warningPercent
+          ? "warning"
+          : "on-track";
   return { used, limit, remaining: limit - used, percent, state };
 }
 
 // PRD F9: remaining budget divided by remaining days, counting today.
 // Overall spending includes every confirmed expense, even without a Category budget.
-// Clamp only the overall recommendation; overspending still reduces the other budgets' headroom.
+// Clamp only the overall recommendation; overspending reduces the other budgets' headroom.
 export function safeToSpendToday(
   transactions: Transaction[],
   budgets: Budget[],
@@ -234,7 +327,8 @@ export function demoReminders(
   for (const budget of budgets) {
     const usage = budgetUsage(transactions, budget, month);
     if (usage.state === "on-track") continue;
-    const threshold = usage.state === "over" ? 100 : budget.warningPercent;
+    const threshold =
+      usage.state === "over" || usage.state === "at-limit" ? 100 : budget.warningPercent;
     const left = usage.remaining > BigInt(0) ? usage.remaining : BigInt(0);
     reminders.push({
       id: `budget:${budget.id}:${month}:${threshold}`,

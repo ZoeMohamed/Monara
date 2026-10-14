@@ -1,0 +1,23 @@
+.mascot {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+  transform-origin: 50% 70%;
+  transition: transform 180ms var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mascot:hover {
+    transform: rotate(-3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot {
+    transition: none;
+  }
+
+  .mascot:hover {
+    transform: none;
+  }
+}

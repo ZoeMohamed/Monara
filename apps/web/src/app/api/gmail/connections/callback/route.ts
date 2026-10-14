@@ -1,7 +1,8 @@
 import { GmailConnectionError } from "@monara/core";
 import type { NextRequest } from "next/server";
-import { browserOrigin, gmailConnectionService } from "@/lib/gmail/service";
-import { getSignedInUserId } from "@/lib/supabase/session";
+import { gmailConnectionService } from "@/lib/gmail/service";
+import { browserOrigin } from "@/lib/http/origin";
+import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 const RESULT_PAGE = "/connections/gmail";
 
@@ -17,8 +18,8 @@ export async function GET(request: NextRequest) {
     return Response.redirect(target, 303);
   };
 
-  const userId = await getSignedInUserId();
-  if (!userId) return finish("UNAUTHENTICATED");
+  const identity = await getAuthenticatedIdentity();
+  if (!identity) return finish("UNAUTHENTICATED");
 
   // Without a session_uri the Composio project has no verifier URL set, so the
   // returning User cannot be confirmed. Fail rather than trust query parameters.
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
   if (!sessionUri) return finish("VALIDATION_FAILED");
 
   try {
-    await gmailConnectionService().complete(userId, sessionUri);
+    await gmailConnectionService().complete(identity.id, sessionUri);
     return finish("connected");
   } catch (error) {
     return finish(error instanceof GmailConnectionError ? error.code : "DEPENDENCY_UNAVAILABLE");

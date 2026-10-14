@@ -17,6 +17,8 @@ const config: KnipConfig = {
     "apps/agent": {
       // Feature owners wire these module entry points into the worker as they implement them.
       entry: ["src/*/index.ts"],
+      // `cloudflare:workers` is a module the Workers runtime provides, not a package.
+      ignoreDependencies: ["cloudflare"],
     },
     // Scaffolded packages declare the documented dependency direction before any code imports it.
     "packages/*": {},

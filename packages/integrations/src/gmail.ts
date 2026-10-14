@@ -183,10 +183,10 @@ export function createComposioGmailClient(config: ComposioGmailConfig) {
       const revoked = await request("POST", `${path}/revoke`);
       // Already gone is the state we want.
       if (revoked.status === 404) return;
-      // Other 4xx: revoke is unsupported, the connection is not ACTIVE, or the
-      // User already revoked it at Google. Deleting is still correct. Server
-      // errors stop here so the connection stays visible and can be retried.
-      if (!revoked.ok && (revoked.status < 400 || revoked.status >= 500)) {
+      // Fail closed unless Composio confirms revocation. Deleting the local
+      // connection after an unsupported or rejected revoke could leave usable
+      // Google credentials hidden upstream.
+      if (!revoked.ok) {
         throw new ComposioRequestError("Composio did not revoke the connection.", revoked.status);
       }
 

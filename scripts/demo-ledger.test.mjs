@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   budgetUsage,
   daysInMonth,
+  deleteConfirmedTransaction,
   demoReminders,
   demoSummary,
   formatMonth,
@@ -13,6 +14,9 @@ import {
   safeToSpendToday,
   shiftMonth,
   transactionErrors,
+  undoTransactionDeletion,
+  undoTransactionUpdate,
+  updateConfirmedTransaction,
   updatePendingTransaction,
 } from "../apps/web/src/data/demo-ledger.ts";
 
@@ -40,7 +44,7 @@ function valuesOf(transaction) {
 }
 
 test("calendar validation accepts leap days and rejects normalized or malformed dates", () => {
-  for (const date of ["2024-02-29", "2000-02-29", "2026-02-28", "2026-12-31"]) {
+  for (const date of ["0000-02-29", "2024-02-29", "2000-02-29", "2026-02-28", "2026-12-31"]) {
     assert.equal(isCalendarDate(date), true, date);
   }
   for (const date of [
@@ -48,6 +52,7 @@ test("calendar validation accepts leap days and rejects normalized or malformed 
     "",
     "2026-02-29",
     "1900-02-29",
+    "0100-02-29",
     "2026-04-31",
     "2026-00-10",
     "2026-13-10",
@@ -257,6 +262,163 @@ test("rejection retains the record but excludes it and cannot be reversed by edi
   }
 });
 
+test("a correction updates exact totals once while preserving identity and unrelated records", () => {
+  const confirmed = Object.freeze(syntheticTransaction({ status: "confirmed" }));
+  const other = Object.freeze(
+    syntheticTransaction({ id: "other", status: "confirmed", amount: 67000 }),
+  );
+  const original = Object.freeze([confirmed, other]);
+  const correctedValues = {
+    ...valuesOf(confirmed),
+    merchant: "Corrected merchant",
+    amount: 31000,
+    time: "09:30",
+    method: "Jago",
+  };
+  const corrected = updateConfirmedTransaction(original, confirmed.id, correctedValues);
+  assert.equal(demoSummary(original).spending, 95000n);
+  assert.equal(demoSummary(corrected).spending, 98000n);
+  assert.equal(corrected.length, original.length);
+  assert.deepEqual(corrected[0], { ...confirmed, ...correctedValues });
+  assert.equal(corrected[1], other);
+  assert.equal(confirmed.amount, 28000);
+  const repeated = updateConfirmedTransaction(corrected, confirmed.id, correctedValues);
+  assert.equal(demoSummary(repeated).spending, 98000n);
+  assert.equal(repeated.length, 2);
+});
+
+test("correcting month and category moves the expense between the affected summaries and budgets", () => {
+  const confirmed = syntheticTransaction({ status: "confirmed" });
+  const food = {
+    id: "food",
+    category: "Food & Drinks",
+    limit: 100000,
+    warningPercent: 80,
+    cadence: "monthly",
+    emoji: "✦",
+  };
+  const transport = { ...food, id: "transport", category: "Transport" };
+  const corrected = updateConfirmedTransaction([confirmed], confirmed.id, {
+    ...valuesOf(confirmed),
+    category: "Transport",
+    date: "2026-09-30",
+  });
+  assert.equal(demoSummary(corrected, "2026-10").spending, 0n);
+  assert.equal(demoSummary(corrected, "2026-09").spending, 28000n);
+  assert.equal(budgetUsage(corrected, food, "2026-10").used, 0n);
+  assert.equal(budgetUsage(corrected, transport, "2026-09").used, 28000n);
+  assert.equal(budgetUsage(corrected, food, "2026-09").used, 0n);
+});
+
+test("correcting an expense to income or transfer recomputes totals without treating transfers as money out", () => {
+  const confirmed = syntheticTransaction({ status: "confirmed" });
+  const original = [confirmed];
+  const income = updateConfirmedTransaction(original, confirmed.id, {
+    ...valuesOf(confirmed),
+    kind: "income",
+  });
+  assert.equal(demoSummary(income).spending, 0n);
+  assert.equal(demoSummary(income).income, 28000n);
+  const transfer = updateConfirmedTransaction(income, confirmed.id, {
+    ...valuesOf(income[0]),
+    kind: "transfer",
+    method: "BCA → Jago",
+  });
+  assert.equal(demoSummary(transfer).spending, 0n);
+  assert.equal(demoSummary(transfer).income, 0n);
+  assert.equal(demoSummary(transfer).confirmed.length, 1);
+});
+
+test("invalid corrections, unconfirmed records, and unknown identifiers leave the ledger unchanged", () => {
+  const confirmed = Object.freeze(syntheticTransaction({ status: "confirmed" }));
+  const original = Object.freeze([confirmed]);
+  for (const overrides of [
+    { amount: null },
+    { amount: 0 },
+    { amount: Number.NaN },
+    { amount: Number.MAX_SAFE_INTEGER + 1 },
+    { date: "2026-02-30" },
+    { kind: null },
+    { currency: "USD" },
+    { kind: "transfer", method: "BCA" },
+  ]) {
+    assert.equal(
+      updateConfirmedTransaction(original, confirmed.id, { ...valuesOf(confirmed), ...overrides }),
+      original,
+    );
+  }
+  assert.equal(updateConfirmedTransaction(original, "missing", valuesOf(confirmed)), original);
+  for (const overrides of [
+    { status: "pending" },
+    { status: "rejected" },
+    { status: "confirmed", amount: null },
+  ]) {
+    const record = syntheticTransaction(overrides);
+    const records = [record];
+    assert.equal(updateConfirmedTransaction(records, record.id, valuesOf(confirmed)), records);
+  }
+});
+
+test("correction inputs cannot overwrite record identity, review status, or extraction metadata", () => {
+  const confirmed = syntheticTransaction({ status: "confirmed" });
+  const [corrected] = updateConfirmedTransaction([confirmed], confirmed.id, {
+    ...valuesOf(confirmed),
+    amount: 31000,
+    id: "injected-id",
+    status: "pending",
+    confidence: 100,
+    emoji: "injected",
+  });
+  assert.equal(corrected.id, confirmed.id);
+  assert.equal(corrected.status, "confirmed");
+  assert.equal(corrected.confidence, confirmed.confidence);
+  assert.equal(corrected.emoji, confirmed.emoji);
+  assert.equal(corrected.amount, 31000);
+});
+
+test("undo restores only the corrected record and preserves later unrelated changes", () => {
+  const before = Object.freeze(syntheticTransaction({ status: "confirmed" }));
+  const other = syntheticTransaction({ id: "other", status: "confirmed" });
+  const corrected = updateConfirmedTransaction([before, other], before.id, {
+    ...valuesOf(before),
+    amount: 31000,
+  });
+  const expected = corrected[0];
+  const withLaterChange = updateConfirmedTransaction(corrected, other.id, {
+    ...valuesOf(other),
+    amount: 40000,
+  });
+  const added = Object.freeze(
+    syntheticTransaction({ id: "later", status: "confirmed", amount: 7 }),
+  );
+  const current = Object.freeze([...withLaterChange, added]);
+  const undone = undoTransactionUpdate(current, before, expected);
+  assert.equal(undone[0], before);
+  assert.equal(undone[1], current[1]);
+  assert.equal(undone[2], added);
+  assert.equal(demoSummary(undone).spending, 68007n);
+  assert.equal(undoTransactionUpdate(undone, before, expected), undone);
+});
+
+test("a stale undo cannot overwrite a newer correction, a deleted record, or a different identity", () => {
+  const before = syntheticTransaction({ status: "confirmed" });
+  const corrected = updateConfirmedTransaction([before], before.id, {
+    ...valuesOf(before),
+    amount: 31000,
+  });
+  const newer = updateConfirmedTransaction(corrected, before.id, {
+    ...valuesOf(before),
+    amount: 40000,
+  });
+  assert.equal(undoTransactionUpdate(newer, before, corrected[0]), newer);
+  const deleted = [];
+  assert.equal(undoTransactionUpdate(deleted, before, corrected[0]), deleted);
+  assert.equal(
+    undoTransactionUpdate(corrected, { ...before, id: "different" }, corrected[0]),
+    corrected,
+  );
+});
+
 test("unknown identifiers leave every record unchanged", () => {
   const records = [
     syntheticTransaction(),
@@ -356,10 +518,29 @@ test("month helpers cross year boundaries and know month lengths", () => {
   assert.equal(shiftMonth("2026-01", -1), "2025-12");
   assert.equal(shiftMonth("2026-12", 1), "2027-01");
   assert.equal(shiftMonth("2026-10", -12), "2025-10");
+  assert.equal(shiftMonth("0099-12", 1), "0100-01");
+  assert.equal(shiftMonth("0100-01", -1), "0099-12");
+  assert.equal(shiftMonth("0000-02", -1), "0000-01");
+  assert.equal(daysInMonth("0000-02"), 29);
+  assert.equal(daysInMonth("0099-02"), 28);
+  assert.equal(daysInMonth("0100-02"), 28);
   assert.equal(daysInMonth("2024-02"), 29);
   assert.equal(daysInMonth("2026-02"), 28);
   assert.equal(daysInMonth("2026-10"), 31);
   assert.equal(formatMonth("2026-10"), "October 2026");
+});
+
+test("month shifts reject calendar underflow, overflow and invalid inputs", () => {
+  assert.equal(shiftMonth("0000-01", 0), "0000-01");
+  assert.equal(shiftMonth("9999-12", 0), "9999-12");
+  assert.throws(() => shiftMonth("0000-01", -1), /supported calendar range/);
+  assert.throws(() => shiftMonth("9999-12", 1), /supported calendar range/);
+  for (const month of ["", "2026-1", "2026-00", "2026-13", "2026-10-01"]) {
+    assert.throws(() => shiftMonth(month, 1), /valid calendar month/);
+  }
+  for (const delta of [0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => shiftMonth("2026-10", delta), /whole number of months/);
+  }
 });
 
 const syntheticBudget = {
@@ -393,14 +574,146 @@ test("budget usage counts only confirmed expenses of that category in that month
   assert.equal(usage.state, "on-track");
 });
 
-test("budget state crosses the warning threshold at exactly 80% and over at exactly 100%", () => {
+test("budget state distinguishes the warning threshold, exactly at limit, and one rupiah over", () => {
   const at = (amount) =>
     budgetUsage([syntheticTransaction({ status: "confirmed", amount })], syntheticBudget).state;
   assert.equal(at(79999), "on-track");
   assert.equal(at(80000), "warning");
   assert.equal(at(99999), "warning");
-  assert.equal(at(100000), "over");
+  assert.equal(at(100000), "at-limit");
+  assert.equal(at(100001), "over");
   assert.equal(at(150000), "over");
+  const oneOver = budgetUsage(
+    [syntheticTransaction({ status: "confirmed", amount: 100001 })],
+    syntheticBudget,
+  );
+  assert.equal(oneOver.percent, 100);
+  assert.equal(oneOver.remaining, -1n);
+});
+
+test("high extraction confidence never promotes a pending import into confirmed totals", () => {
+  const pending = syntheticTransaction({ confidence: 100 });
+  assert.deepEqual(transactionErrors(valuesOf(pending)), {});
+  assert.ok(!reviewFlags(pending).includes("Low confidence"));
+  assert.equal(pending.status, "pending");
+  assert.equal(demoSummary([pending]).spending, 0n);
+  const confirmed = updatePendingTransaction([pending], pending.id, valuesOf(pending), "confirm");
+  assert.equal(confirmed[0].status, "confirmed");
+  assert.equal(demoSummary(confirmed).spending, 28000n);
+});
+
+test("confirmed deletion updates exact spending and budgets without touching other records", () => {
+  const deleted = syntheticTransaction({
+    id: "delete",
+    status: "confirmed",
+    amount: Number.MAX_SAFE_INTEGER,
+  });
+  const remaining = syntheticTransaction({
+    id: "keep",
+    status: "confirmed",
+    amount: Number.MAX_SAFE_INTEGER,
+  });
+  const income = syntheticTransaction({
+    id: "income",
+    status: "confirmed",
+    kind: "income",
+    amount: 8000000,
+  });
+  const records = [deleted, remaining, income];
+  const next = deleteConfirmedTransaction(records, deleted);
+  assert.equal(demoSummary(records).spending, 18014398509481982n);
+  assert.equal(demoSummary(next).spending, 9007199254740991n);
+  assert.equal(demoSummary(next).income, 8000000n);
+  assert.equal(budgetUsage(next, syntheticBudget).used, 9007199254740991n);
+  assert.deepEqual(next, [remaining, income]);
+  assert.equal(next[0], remaining);
+  assert.deepEqual(records, [deleted, remaining, income]);
+});
+
+test("deletion handles income and transfer without changing unrelated totals", () => {
+  const expense = syntheticTransaction({ id: "expense", status: "confirmed", amount: 100 });
+  const income = syntheticTransaction({
+    id: "income",
+    status: "confirmed",
+    kind: "income",
+    amount: 200,
+  });
+  const transfer = syntheticTransaction({
+    id: "transfer",
+    status: "confirmed",
+    kind: "transfer",
+    method: "BCA → Jago",
+    amount: 300,
+  });
+  const records = [expense, income, transfer];
+  const withoutIncome = demoSummary(deleteConfirmedTransaction(records, income));
+  assert.equal(withoutIncome.spending, 100n);
+  assert.equal(withoutIncome.income, 0n);
+  const withoutTransfer = demoSummary(deleteConfirmedTransaction(records, transfer));
+  assert.equal(withoutTransfer.spending, 100n);
+  assert.equal(withoutTransfer.income, 200n);
+  assert.equal(withoutTransfer.difference, 100n);
+});
+
+test("deletion refuses pending, rejected, invalid, missing, ambiguous and stale records", () => {
+  for (const overrides of [
+    { status: "pending" },
+    { status: "rejected" },
+    { status: "confirmed", amount: 0 },
+    { status: "confirmed", date: null },
+  ]) {
+    const target = syntheticTransaction(overrides);
+    const records = [target];
+    assert.equal(deleteConfirmedTransaction(records, target), records);
+  }
+  const target = syntheticTransaction({ status: "confirmed" });
+  const empty = [];
+  assert.equal(deleteConfirmedTransaction(empty, target), empty);
+  const newer = { ...target, amount: 50000 };
+  const changed = [newer];
+  assert.equal(deleteConfirmedTransaction(changed, target), changed);
+  const duplicate = [target, { ...target }];
+  assert.equal(deleteConfirmedTransaction(duplicate, target), duplicate);
+});
+
+test("deletion undo restores the record and totals while retaining unrelated edits and additions", () => {
+  const first = syntheticTransaction({ id: "first", status: "confirmed", amount: 100 });
+  const deleted = syntheticTransaction({ id: "deleted", status: "confirmed", amount: 200 });
+  const last = syntheticTransaction({ id: "last", status: "confirmed", amount: 300 });
+  const records = [first, deleted, last];
+  const next = deleteConfirmedTransaction(records, deleted);
+  const restored = undoTransactionDeletion(next, deleted, 1);
+  assert.deepEqual(restored, records);
+  assert.equal(restored[1], deleted);
+  assert.equal(demoSummary(restored).spending, 600n);
+  const edited = { ...first, amount: 150 };
+  const added = syntheticTransaction({ id: "added", status: "confirmed", amount: 400 });
+  const later = [added, edited, last];
+  const restoredLater = undoTransactionDeletion(later, deleted, 1);
+  assert.equal(
+    restoredLater.find(({ id }) => id === first.id),
+    edited,
+  );
+  assert.equal(
+    restoredLater.find(({ id }) => id === added.id),
+    added,
+  );
+  assert.equal(demoSummary(restoredLater).spending, 1050n);
+  assert.equal(later.length, 3);
+});
+
+test("deletion undo never duplicates an ID or replaces a recreated record", () => {
+  const deleted = syntheticTransaction({ status: "confirmed" });
+  const recreated = { ...deleted, amount: 50000 };
+  const records = [recreated];
+  assert.equal(undoTransactionDeletion(records, deleted, 0), records);
+  const empty = [];
+  for (const index of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(undoTransactionDeletion(empty, deleted, index), empty);
+  }
+  assert.equal(undoTransactionDeletion(empty, { ...deleted, status: "pending" }, 0), empty);
+  assert.equal(undoTransactionDeletion(empty, { ...deleted, amount: 0 }, 0), empty);
+  assert.deepEqual(undoTransactionDeletion(empty, deleted, 5), [deleted]);
 });
 
 test("overall safe-to-spend subtracts cross-category overspending before dividing by days left", () => {
@@ -558,7 +871,10 @@ test("reminder previews use threshold IDs and include active bills 3 days ahead 
 
 test("a zero budget limit reports 0% when unused and over budget when spent, without throwing", () => {
   const zero = { ...syntheticBudget, limit: 0 };
-  assert.equal(budgetUsage([], zero).percent, 0);
+  const unused = budgetUsage([], zero);
+  assert.equal(unused.percent, 0);
+  assert.equal(unused.state, "on-track");
+  assert.deepEqual(demoReminders([], [zero], []), []);
   const spent = budgetUsage([syntheticTransaction({ status: "confirmed", amount: 1 })], zero);
   assert.equal(spent.percent, 100);
   assert.equal(spent.state, "over");
@@ -584,15 +900,4 @@ test("newest-first ordering uses date then time and puts undated records last", 
     [...records].sort(newestFirst).map(({ id }) => id),
     ["newest", "earlier-today", "older", "undated"],
   );
-});
-
-test("high extraction confidence never promotes a pending import into confirmed totals", () => {
-  const pending = syntheticTransaction({ confidence: 100 });
-  assert.deepEqual(transactionErrors(valuesOf(pending)), {});
-  assert.ok(!reviewFlags(pending).includes("Low confidence"));
-  assert.equal(pending.status, "pending");
-  assert.equal(demoSummary([pending]).spending, 0n);
-  const confirmed = updatePendingTransaction([pending], pending.id, valuesOf(pending), "confirm");
-  assert.equal(confirmed[0].status, "confirmed");
-  assert.equal(demoSummary(confirmed).spending, 28000n);
 });
