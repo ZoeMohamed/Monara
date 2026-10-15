@@ -4,6 +4,7 @@ export * from "./common.ts";
 export * from "./dashboard.ts";
 export * from "./gmail.ts";
 export * from "./gmail-extraction.ts";
+export * from "./insights.ts";
 export * from "./ledger.ts";
 export * from "./recurring-bills.ts";
 export * from "./reminders.ts";

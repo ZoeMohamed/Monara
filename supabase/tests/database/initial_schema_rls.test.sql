@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(45);
+select plan(49);
 
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'financial_accounts', 'financial_accounts exists');
@@ -113,6 +113,43 @@ select ok(
       ])
   ),
   'every public product table enables and forces RLS'
+);
+
+select ok(
+  (
+    select bool_and(not has_table_privilege('authenticated', c.oid, 'select'))
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = any(array[
+        'gmail_connections',
+        'processed_gmail_messages',
+        'reminder_deliveries',
+        'whatsapp_links',
+        'agent_action_logs',
+        'agent_action_states'
+      ])
+  ),
+  'authenticated clients cannot read backend-only connection and action tables'
+);
+
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.claim_gmail_message(uuid,text,timestamp with time zone)',
+    'execute'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.record_gmail_extraction(uuid,text,jsonb)',
+    'execute'
+  )
+  and not has_function_privilege(
+    'authenticated',
+    'public.mark_gmail_connection_synced(uuid,timestamp with time zone)',
+    'execute'
+  ),
+  'authenticated clients cannot execute Gmail ingestion operations'
 );
 
 insert into auth.users (id, email, raw_user_meta_data)
@@ -291,6 +328,15 @@ select throws_ok(
   '42501'::char(5),
   null::text,
   'authenticated browser cannot bypass the backend financial writer'::text
+);
+
+select throws_ok(
+  $$update public.profiles
+    set display_name = 'Forged browser update'
+    where id = 'a0000000-0000-4000-8000-000000000001'$$::text,
+  '42501'::char(5),
+  null::text,
+  'authenticated browser cannot write even its own profile directly'::text
 );
 
 set local request.jwt.claim.sub = 'b0000000-0000-4000-8000-000000000002';
@@ -475,6 +521,16 @@ select is(
   80::smallint,
   'budget warning threshold defaults to 80 percent'
 );
+
+set local role authenticated;
+set local request.jwt.claim.sub = 'b0000000-0000-4000-8000-000000000002';
+
+select is_empty(
+  $$select id from public.budgets$$,
+  'another user cannot read the owner Budget'
+);
+
+reset role;
 
 insert into public.reminders (
   user_id,

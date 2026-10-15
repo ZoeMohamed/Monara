@@ -57,9 +57,9 @@ The Agent reads and changes records only through the Next.js backend (`src/conve
 | `request_destructive_action` | `{ action, input }` (`requestDestructiveActionInputSchema`) | `destructiveActionConfirmationSchema`. Nothing is deleted. |
 | `confirm_destructive_action` | `confirmDestructiveActionInputSchema` | Ignored. The backend checks the confirmation is this User's, unused, and not expired. |
 
-`apps/web/src/app/api/agent/operations/[operation]/route.ts` implements the authenticated operation boundary, and `apps/web/src/app/api/chat/route.ts` implements the web-session bridge. `apps/web/src/lib/finance/service.ts` is the authoritative allowlist. Transaction/account/category/budget reads and supported transaction/review/budget writes exist; `get_summary` computes totals from transaction reads. Transaction/budget deletion requires a bound, expiring confirmation. Stored action receipts do not execute reversal.
+`apps/web/src/app/api/agent/operations/[operation]/route.ts` implements the authenticated operation boundary, and `apps/web/src/app/api/chat/route.ts` implements the web-session bridge. `apps/web/src/lib/finance/service.ts` is the authoritative allowlist. Transaction/account/category/budget reads, read-only three-month Budget suggestions and supported transaction/review/budget writes exist; `get_summary` computes totals from transaction reads. Transaction/budget deletion requires a bound, expiring confirmation. Stored action receipts do not execute reversal.
 
-The worker still advertises `suggest_budget`, `list_recurring_bills`, `list_reminders`, `set_reminder_preferences`, `undo_action` and `delete_bill`, which the Agent backend does not support. New list/read/dismiss notification operations are web-only. Unsupported operations fail explicitly. Reconcile this catalog before claiming every scenario works against the live backend.
+The worker still advertises `list_recurring_bills`, `list_reminders`, `set_reminder_preferences`, `undo_action` and `delete_bill`, which the Agent backend does not support. New list/read/dismiss notification operations are web-only. Unsupported operations fail explicitly. Reconcile this catalog before claiming every scenario works against the live backend.
 
 ## Gmail ingestion
 

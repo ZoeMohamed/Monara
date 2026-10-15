@@ -1,9 +1,12 @@
 import {
   type Budget,
   type BudgetPage,
+  type BudgetSuggestion,
   type BudgetUsage,
   budgetMutationResultSchema,
   budgetPeriodForDate,
+  budgetSuggestionInputSchema,
+  budgetSuggestionSchema,
   budgetUsageSchema,
   type Category,
   type CategoryPage,
@@ -32,7 +35,9 @@ import {
   dismissReminderInputSchema,
   type FinancialAccount,
   type FinancialAccountPage,
+  type FinancialInsights,
   financialAccountMutationResultSchema,
+  financialInsightsSchema,
   type GetDashboardInput,
   getDashboardInputSchema,
   type ListBudgetsInput,
@@ -241,6 +246,41 @@ function lastDayOfMonth(month: string): string {
   return formatDate(date);
 }
 
+function shiftMonth(month: string, offset: number): string {
+  const year = Number(month.slice(0, 4));
+  const monthIndex = Number(month.slice(5, 7)) - 1;
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(year, monthIndex + offset, 1);
+  const shiftedYear = date.getUTCFullYear();
+  if (shiftedYear < 0 || shiftedYear > 9999) {
+    throw new RangeError("Month extends beyond supported calendar dates.");
+  }
+  return `${shiftedYear.toString().padStart(4, "0")}-${(date.getUTCMonth() + 1)
+    .toString()
+    .padStart(2, "0")}`;
+}
+
+function previousThreeMonthRange(month: string): { startsOn: string; endsOn: string } | null {
+  try {
+    return {
+      startsOn: `${shiftMonth(month, -3)}-01`,
+      endsOn: lastDayOfMonth(shiftMonth(month, -1)),
+    };
+  } catch (error) {
+    if (error instanceof RangeError) return null;
+    throw error;
+  }
+}
+
+function inclusiveDays(startsOn: string, endsOn: string): number {
+  return Math.round((parseDate(endsOn).getTime() - parseDate(startsOn).getTime()) / 86_400_000) + 1;
+}
+
+function roundedRatio(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator / 2n) / denominator;
+}
+
 export { budgetPeriodForDate };
 
 /** Read complete active cycles while keeping calendar-month aggregates separate. */
@@ -297,6 +337,173 @@ export function calculateBudgetUsage(
   });
 }
 
+export function calculateFinancialInsights(input: {
+  month: string;
+  asOf: string;
+  income: bigint;
+  spending: bigint;
+  transactions: Transaction[];
+  historyTransactions: Transaction[];
+  budgetUsage: BudgetUsage[];
+  categories: Category[];
+}): FinancialInsights {
+  const categoryNames = new Map(input.categories.map((category) => [category.id, category.name]));
+  const monthStart = `${input.month}-01`;
+  const monthEnd = lastDayOfMonth(input.month);
+  const difference = input.income - input.spending;
+  const splitRemaining = (limit: bigint, spending: bigint) => {
+    const raw = limit - spending;
+    return {
+      remaining: raw > 0n ? raw : 0n,
+      shortfall: raw < 0n ? -raw : 0n,
+    };
+  };
+
+  const byCategory = input.budgetUsage.map((usage) => {
+    const limit = amountOf(usage.budget.limit);
+    const spending = amountOf(usage.used);
+    const { remaining, shortfall } = splitRemaining(limit, spending);
+    const remainingDays = inclusiveDays(input.asOf, usage.periodEndsOn);
+    return {
+      budgetId: usage.budget.id,
+      categoryId: usage.budget.categoryId,
+      categoryName: categoryNames.get(usage.budget.categoryId) ?? usage.budget.name,
+      periodStartsOn: usage.periodStartsOn,
+      periodEndsOn: usage.periodEndsOn,
+      limit: idr(limit),
+      spending: idr(spending),
+      remaining: idr(remaining),
+      shortfall: idr(shortfall),
+      remainingDays,
+      dailyAmount: idr(remaining / BigInt(remainingDays)),
+    };
+  });
+
+  const calendarUsage = input.budgetUsage.filter(
+    (usage) => usage.periodStartsOn === monthStart && usage.periodEndsOn === monthEnd,
+  );
+  const overallLimit = calendarUsage.reduce((sum, usage) => sum + amountOf(usage.budget.limit), 0n);
+  const overallRemaining = splitRemaining(overallLimit, input.spending);
+  const overallDays = inclusiveDays(input.asOf, monthEnd);
+  const overall =
+    calendarUsage.length === 0
+      ? null
+      : {
+          limit: idr(overallLimit),
+          spending: idr(input.spending),
+          remaining: idr(overallRemaining.remaining),
+          shortfall: idr(overallRemaining.shortfall),
+          remainingDays: overallDays,
+          dailyAmount: idr(overallRemaining.remaining / BigInt(overallDays)),
+        };
+
+  const overspendForecasts = input.budgetUsage
+    .map((usage) => {
+      const elapsedDays = inclusiveDays(usage.periodStartsOn, input.asOf);
+      const periodDays = inclusiveDays(usage.periodStartsOn, usage.periodEndsOn);
+      const spending = amountOf(usage.used);
+      const limit = amountOf(usage.budget.limit);
+      const projectedSpending = roundedRatio(spending * BigInt(periodDays), BigInt(elapsedDays));
+      return {
+        budgetId: usage.budget.id,
+        categoryId: usage.budget.categoryId,
+        categoryName: categoryNames.get(usage.budget.categoryId) ?? usage.budget.name,
+        periodStartsOn: usage.periodStartsOn,
+        periodEndsOn: usage.periodEndsOn,
+        elapsedDays,
+        periodDays,
+        limit: idr(limit),
+        spending: idr(spending),
+        projectedSpending: idr(projectedSpending),
+        projectedOverspend: idr(projectedSpending > limit ? projectedSpending - limit : 0n),
+      };
+    })
+    .filter((forecast) => BigInt(forecast.projectedOverspend.amountMinor) > 0n)
+    .sort((first, second) => {
+      const a = BigInt(first.projectedOverspend.amountMinor);
+      const b = BigInt(second.projectedOverspend.amountMinor);
+      return a < b ? 1 : a > b ? -1 : 0;
+    });
+
+  const historyByCategory = new Map<string, bigint[]>();
+  for (const transaction of input.historyTransactions) {
+    if (
+      transaction.deletedAt ||
+      transaction.reviewStatus !== "confirmed" ||
+      transaction.kind !== "expense" ||
+      !transaction.categoryId ||
+      !transaction.money
+    ) {
+      continue;
+    }
+    const amounts = historyByCategory.get(transaction.categoryId) ?? [];
+    amounts.push(amountOf(transaction.money));
+    historyByCategory.set(transaction.categoryId, amounts);
+  }
+  for (const amounts of historyByCategory.values()) {
+    amounts.sort((first, second) => (first < second ? -1 : first > second ? 1 : 0));
+  }
+
+  const unusualTransactions = input.transactions
+    .flatMap((transaction) => {
+      if (
+        transaction.deletedAt ||
+        transaction.reviewStatus !== "confirmed" ||
+        transaction.kind !== "expense" ||
+        !transaction.categoryId ||
+        !transaction.money ||
+        !transaction.occurredOn ||
+        transaction.occurredOn > input.asOf
+      ) {
+        return [];
+      }
+      const history = historyByCategory.get(transaction.categoryId);
+      if (!history || history.length < 3) return [];
+      const middle = Math.floor(history.length / 2);
+      const median =
+        history.length % 2 === 1
+          ? (history[middle] ?? 0n)
+          : roundedRatio((history[middle - 1] ?? 0n) + (history[middle] ?? 0n), 2n);
+      const amount = amountOf(transaction.money);
+      if (median <= 0n || amount < median * 2n) return [];
+      return [
+        {
+          transactionId: transaction.id,
+          categoryId: transaction.categoryId,
+          categoryName: categoryNames.get(transaction.categoryId) ?? "Other",
+          amount: idr(amount),
+          historyMedian: idr(median),
+          historyTransactionCount: history.length,
+          multipleOfMedian: Number((amount * 100n) / median) / 100,
+          severityNumerator: amount,
+          severityDenominator: median,
+        },
+      ];
+    })
+    .sort((first, second) => {
+      const left = first.severityNumerator * second.severityDenominator;
+      const right = second.severityNumerator * first.severityDenominator;
+      return left < right ? 1 : left > right ? -1 : 0;
+    })
+    .slice(0, 10)
+    .map(
+      ({ severityNumerator: _numerator, severityDenominator: _denominator, ...insight }) => insight,
+    );
+
+  return financialInsightsSchema.parse({
+    asOf: input.asOf,
+    savingsRate: {
+      income: idr(input.income),
+      spending: idr(input.spending),
+      difference: signedIdr(difference),
+      ratePercent: input.income > 0n ? Number((difference * 1_000n) / input.income) / 10 : null,
+    },
+    safeToSpend: { overall, byCategory },
+    overspendForecasts,
+    unusualTransactions,
+  });
+}
+
 export function calculateDashboard(input: {
   month: string;
   today: string;
@@ -305,6 +512,7 @@ export function calculateDashboard(input: {
   budgets: Budget[];
   categories: Category[];
   reminders: DashboardSummary["activeReminders"];
+  historyTransactions?: Transaction[];
 }): DashboardSummary {
   const monthStart = `${input.month}-01`;
   const monthEnd = lastDayOfMonth(input.month);
@@ -335,13 +543,30 @@ export function calculateDashboard(input: {
     }
   }
 
+  const budgetTransactions = input.budgetTransactions ?? confirmed;
   const budgetUsage = input.budgets.flatMap((budget) => {
     if (!budget.isActive || budget.deletedAt || asOf < budget.startsOn) return [];
     const period = budgetPeriodForDate(budget, asOf);
-    return period
-      ? [calculateBudgetUsage(budget, period, input.budgetTransactions ?? confirmed)]
-      : [];
+    return period ? [calculateBudgetUsage(budget, period, budgetTransactions)] : [];
   });
+  const confirmedAsOf = confirmed.filter(
+    (transaction) => transaction.occurredOn !== null && transaction.occurredOn <= asOf,
+  );
+  const insightBudgetTransactions = budgetTransactions.filter(
+    (transaction) => transaction.occurredOn !== null && transaction.occurredOn <= asOf,
+  );
+  const insightBudgetUsage = input.budgets.flatMap((budget) => {
+    if (!budget.isActive || budget.deletedAt || asOf < budget.startsOn) return [];
+    const period = budgetPeriodForDate(budget, asOf);
+    return period ? [calculateBudgetUsage(budget, period, insightBudgetTransactions)] : [];
+  });
+  let insightIncome = 0n;
+  let insightSpending = 0n;
+  for (const transaction of confirmedAsOf) {
+    if (!transaction.money || transaction.kind === "transfer") continue;
+    if (transaction.kind === "income") insightIncome += amountOf(transaction.money);
+    if (transaction.kind === "expense") insightSpending += amountOf(transaction.money);
+  }
   const remainingBudget = budgetUsage.reduce(
     (sum, usage) => sum + BigInt(usage.remaining.amountMinor),
     0n,
@@ -376,6 +601,16 @@ export function calculateDashboard(input: {
         sharePercent: spending > 0n ? Number((total * 10_000n) / spending) / 100 : 0,
       })),
     budgetUsage,
+    insights: calculateFinancialInsights({
+      month: input.month,
+      asOf,
+      income: insightIncome,
+      spending: insightSpending,
+      transactions: confirmedAsOf,
+      historyTransactions: input.historyTransactions ?? [],
+      budgetUsage: insightBudgetUsage,
+      categories: input.categories,
+    }),
     recentTransactions: [...confirmed]
       .sort((first, second) => {
         const date = (second.occurredOn ?? "").localeCompare(first.occurredOn ?? "");
@@ -886,6 +1121,62 @@ export function createFinanceService(
       return repository.listBudgets(verified.userId, listBudgetsInputSchema.parse(input));
     },
 
+    async suggestBudget(operationCaller: FinanceCaller, input: unknown): Promise<BudgetSuggestion> {
+      const verified = caller(operationCaller);
+      const values = budgetSuggestionInputSchema.parse(input);
+      const currentMonth = now().slice(0, 7);
+      const basedOnStartsOn = `${shiftMonth(currentMonth, -3)}-01`;
+      const basedOnEndsOn = lastDayOfMonth(shiftMonth(currentMonth, -1));
+      const [categories, transactions] = await Promise.all([
+        repository.listAllCategories(verified.userId),
+        repository.listTransactionsForDateRange(verified.userId, basedOnStartsOn, basedOnEndsOn),
+      ]);
+      if (!categories.some((category) => category.id === values.categoryId)) {
+        throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+      }
+
+      let confirmedIncome = 0n;
+      let confirmedSpending = 0n;
+      for (const transaction of transactions) {
+        if (
+          transaction.deletedAt ||
+          transaction.reviewStatus !== "confirmed" ||
+          !transaction.money
+        ) {
+          continue;
+        }
+        if (transaction.kind === "income") {
+          confirmedIncome += amountOf(transaction.money);
+        } else if (transaction.kind === "expense" && transaction.categoryId === values.categoryId) {
+          confirmedSpending += amountOf(transaction.money);
+        }
+      }
+      if (confirmedSpending === 0n) {
+        throw new FinanceOperationError(
+          "CONFLICT",
+          "At least one confirmed expense in the previous three full months is required.",
+        );
+      }
+
+      const normalizedLimit =
+        values.cadence === "monthly"
+          ? roundedRatio(confirmedSpending, 3n)
+          : roundedRatio(
+              confirmedSpending * 7n,
+              BigInt(inclusiveDays(basedOnStartsOn, basedOnEndsOn)),
+            );
+      const proposedLimit = normalizedLimit > 0n ? normalizedLimit : 1n;
+      return budgetSuggestionSchema.parse({
+        categoryId: values.categoryId,
+        cadence: values.cadence,
+        proposedLimit: idr(proposedLimit),
+        basedOnStartsOn,
+        basedOnEndsOn,
+        confirmedIncome: idr(confirmedIncome),
+        confirmedSpending: idr(confirmedSpending),
+      });
+    },
+
     async createBudget(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
       const budget = await repository.createBudget(
@@ -1012,12 +1303,22 @@ export function createFinanceService(
       const verified = caller(operationCaller);
       const parsed: GetDashboardInput = getDashboardInputSchema.parse(input);
       const today = now().slice(0, 10);
-      const [transactions, budgets, categories, reminders] = await Promise.all([
-        repository.listTransactionsForMonth(verified.userId, parsed.month),
-        repository.listAllBudgets(verified.userId),
-        repository.listAllCategories(verified.userId),
-        repository.listUnreadReminders(verified.userId, 10),
-      ]);
+      const historyRange = previousThreeMonthRange(parsed.month);
+      const [transactions, budgets, categories, reminders, historyTransactions] = await Promise.all(
+        [
+          repository.listTransactionsForMonth(verified.userId, parsed.month),
+          repository.listAllBudgets(verified.userId),
+          repository.listAllCategories(verified.userId),
+          repository.listUnreadReminders(verified.userId, 10),
+          historyRange
+            ? repository.listTransactionsForDateRange(
+                verified.userId,
+                historyRange.startsOn,
+                historyRange.endsOn,
+              )
+            : Promise.resolve([]),
+        ],
+      );
       const monthStart = `${parsed.month}-01`;
       const monthEnd = lastDayOfMonth(parsed.month);
       const asOf = today < monthStart ? monthStart : today > monthEnd ? monthEnd : today;
@@ -1035,6 +1336,7 @@ export function createFinanceService(
         budgets,
         categories,
         reminders,
+        historyTransactions,
       });
     },
   };

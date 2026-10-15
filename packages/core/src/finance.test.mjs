@@ -5,6 +5,7 @@ import {
   budgetPeriodForDate,
   calculateBudgetUsage,
   calculateDashboard,
+  calculateFinancialInsights,
   createFinanceService,
   FinanceOperationError,
 } from "./finance.ts";
@@ -220,6 +221,115 @@ describe("dashboard aggregates", () => {
     assert.equal(summary.pace.averageDailySpending.amountMinor, "53");
     assert.equal(summary.categoryBreakdown[0].categoryName, "Food & Drinks");
     assert.equal(summary.categoryBreakdown[0].sharePercent, 100);
+    assert.equal(summary.insights.savingsRate.ratePercent, 60);
+    assert.equal(summary.insights.safeToSpend.overall.dailyAmount.amountMinor, "11");
+    assert.equal(summary.insights.overspendForecasts[0].projectedOverspend.amountMinor, "653");
+  });
+});
+
+describe("financial insights", () => {
+  it("flags only reproducible outliers against three months of confirmed category history", () => {
+    const historyTransactions = [100, 110, 120].map((amount, index) =>
+      transaction({
+        id: crypto.randomUUID(),
+        occurredOn: `2026-0${7 + index}-10`,
+        money: { amountMinor: String(amount), currency: "IDR" },
+      }),
+    );
+    historyTransactions.push(
+      transaction({
+        id: crypto.randomUUID(),
+        occurredOn: "2026-09-11",
+        reviewStatus: "pending",
+        money: { amountMinor: "1", currency: "IDR" },
+      }),
+    );
+    const current = transaction();
+    const insights = calculateFinancialInsights({
+      month: "2026-10",
+      asOf: "2026-10-15",
+      income: 2000n,
+      spending: 800n,
+      transactions: [current],
+      historyTransactions,
+      budgetUsage: [
+        calculateBudgetUsage(budget, { startsOn: "2026-10-01", endsOn: "2026-10-31" }, [current]),
+      ],
+      categories: [category],
+    });
+    assert.equal(insights.unusualTransactions.length, 1);
+    assert.equal(insights.unusualTransactions[0].historyMedian.amountMinor, "110");
+    assert.equal(insights.unusualTransactions[0].historyTransactionCount, 3);
+    assert.equal(insights.unusualTransactions[0].multipleOfMedian, 7.27);
+    assert.equal(insights.safeToSpend.byCategory[0].dailyAmount.amountMinor, "11");
+  });
+});
+
+describe("Budget suggestions", () => {
+  it("uses the previous three complete months and never invents missing history", async () => {
+    let requestedRange;
+    const history = [
+      transaction({ occurredOn: "2026-07-10", money: { amountMinor: "200", currency: "IDR" } }),
+      transaction({
+        id: crypto.randomUUID(),
+        occurredOn: "2026-08-10",
+        money: { amountMinor: "300", currency: "IDR" },
+      }),
+      transaction({
+        id: crypto.randomUUID(),
+        occurredOn: "2026-09-10",
+        money: { amountMinor: "400", currency: "IDR" },
+      }),
+      transaction({
+        id: crypto.randomUUID(),
+        occurredOn: "2026-09-15",
+        kind: "income",
+        categoryId: null,
+        money: { amountMinor: "9000", currency: "IDR" },
+      }),
+      transaction({
+        id: crypto.randomUUID(),
+        occurredOn: "2026-09-20",
+        reviewStatus: "pending",
+        money: { amountMinor: "9999", currency: "IDR" },
+      }),
+    ];
+    const repository = {
+      async listAllCategories() {
+        return [category];
+      },
+      async listTransactionsForDateRange(_userId, startsOn, endsOn) {
+        requestedRange = { startsOn, endsOn };
+        return history;
+      },
+    };
+    const service = createFinanceService(repository, {
+      now: () => new Date("2026-10-16T05:00:00.000Z"),
+    });
+    const caller = {
+      userId: "60000000-0000-4000-8000-000000000006",
+      channel: "web",
+    };
+    const monthly = await service.suggestBudget(caller, {
+      categoryId: category.id,
+      cadence: "monthly",
+    });
+    assert.deepEqual(requestedRange, { startsOn: "2026-07-01", endsOn: "2026-09-30" });
+    assert.equal(monthly.proposedLimit.amountMinor, "300");
+    assert.equal(monthly.confirmedIncome.amountMinor, "9000");
+    assert.equal(monthly.confirmedSpending.amountMinor, "900");
+
+    const weekly = await service.suggestBudget(caller, {
+      categoryId: category.id,
+      cadence: "weekly",
+    });
+    assert.equal(weekly.proposedLimit.amountMinor, "68");
+
+    history.splice(0);
+    await assert.rejects(
+      service.suggestBudget(caller, { categoryId: category.id, cadence: "monthly" }),
+      (error) => error instanceof FinanceOperationError && error.code === "CONFLICT",
+    );
   });
 });
 

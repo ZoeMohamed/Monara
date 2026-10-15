@@ -23,6 +23,7 @@ const FINANCE_OPERATIONS = [
   "create_category",
   "update_category",
   "list_budgets",
+  "suggest_budget",
   "create_budget",
   "edit_budget",
   "delete_budget",
@@ -115,6 +116,8 @@ export async function runFinanceOperation(
       return service.updateCategory(caller, input);
     case "list_budgets":
       return service.listBudgets(caller, input);
+    case "suggest_budget":
+      return service.suggestBudget(caller, input);
     case "create_budget":
       return service.createBudget(caller, input);
     case "edit_budget":

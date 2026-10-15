@@ -109,6 +109,18 @@ const emptyDashboard = {
   },
   categoryBreakdown: [],
   budgetUsage: [],
+  insights: {
+    asOf: "2026-10-14",
+    savingsRate: {
+      income: { amountMinor: "0", currency: "IDR" },
+      spending: { amountMinor: "0", currency: "IDR" },
+      difference: { amountMinor: "0", currency: "IDR" },
+      ratePercent: null,
+    },
+    safeToSpend: { overall: null, byCategory: [] },
+    overspendForecasts: [],
+    unusualTransactions: [],
+  },
   recentTransactions: [],
   activeReminders: [],
 };
@@ -275,6 +287,30 @@ describe("owned financial presentation", () => {
 });
 
 describe("financial HTTP boundary", () => {
+  it("treats a validated Budget suggestion as a read-only operation", async () => {
+    const input = { categoryId, cadence: "monthly" };
+    const suggestion = {
+      ...input,
+      proposedLimit: { amountMinor: "300000", currency: "IDR" },
+      basedOnStartsOn: "2026-07-01",
+      basedOnEndsOn: "2026-09-30",
+      confirmedIncome: { amountMinor: "9000000", currency: "IDR" },
+      confirmedSpending: { amountMinor: "900000", currency: "IDR" },
+    };
+    const result = await callFinanceOperation("suggest_budget", input, async (path, options) => {
+      assert.equal(path, "/api/finance/operations/suggest_budget");
+      assert.deepEqual(JSON.parse(options.body), input);
+      return Response.json(suggestion);
+    });
+    assert.deepEqual(result, suggestion);
+    await assert.rejects(
+      callFinanceOperation("suggest_budget", input, async () => {
+        throw new TypeError("network");
+      }),
+      (error) => error instanceof FinanceClientError && !error.actionMayHaveCompleted,
+    );
+  });
+
   it("validates owned notification read state and round-trips persisted read receipts", async () => {
     const reminderId = "00000000-0000-4000-8000-000000000601";
     const saved = {

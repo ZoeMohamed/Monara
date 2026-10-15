@@ -1,5 +1,6 @@
 "use client";
 
+import type { FinancialInsights } from "@monara/contracts";
 import { Button, Input, Label, TextField } from "@monara/ui";
 import Image from "next/image";
 import { type CSSProperties, type ReactNode, useId, useState, useSyncExternalStore } from "react";
@@ -936,6 +937,62 @@ function FactsCard({
   );
 }
 
+function BackendInsightsCard({
+  insights,
+  transactions,
+  openBudgets,
+  openTransaction,
+}: {
+  insights?: FinancialInsights;
+  transactions: Transaction[];
+  openBudgets: () => void;
+  openTransaction: (transaction: Transaction) => void;
+}) {
+  const { formatRupiah } = useAmountDisplay();
+  if (
+    !insights ||
+    (insights.overspendForecasts.length === 0 && insights.unusualTransactions.length === 0)
+  ) {
+    return null;
+  }
+  return (
+    <section aria-labelledby="backend-insights-title" className={styles.attention}>
+      <h2 className={styles.cardLabel} id="backend-insights-title">
+        Forecasts and flags
+      </h2>
+      <ul className={styles.alerts}>
+        {insights.overspendForecasts.slice(0, 2).map((forecast) => (
+          <Fact icon="trend-up" key={forecast.budgetId} onOpen={openBudgets} tone="down">
+            <strong>{forecast.categoryName}</strong> may exceed its budget by{" "}
+            <strong data-amount>
+              {formatRupiah(BigInt(forecast.projectedOverspend.amountMinor))}
+            </strong>
+            {` — ${formatRupiah(BigInt(forecast.spending.amountMinor))} spent in ${forecast.elapsedDays} of ${forecast.periodDays} days; projected ${formatRupiah(BigInt(forecast.projectedSpending.amountMinor))} vs ${formatRupiah(BigInt(forecast.limit.amountMinor))} limit`}
+          </Fact>
+        ))}
+        {insights.unusualTransactions.slice(0, 2).map((flag) => {
+          const transaction = transactions.find((item) => item.id === flag.transactionId);
+          if (!transaction) return null;
+          return (
+            <Fact
+              icon="sparkle"
+              key={flag.transactionId}
+              onOpen={() => openTransaction(transaction)}
+              tone="down"
+            >
+              <strong>{transaction.merchant ?? "Payment"}</strong> at{" "}
+              <strong data-amount>{formatRupiah(BigInt(flag.amount.amountMinor))}</strong> is{" "}
+              {flag.multipleOfMedian}× the {flag.categoryName} median of{" "}
+              <strong data-amount>{formatRupiah(BigInt(flag.historyMedian.amountMinor))}</strong>
+              {` across ${flag.historyTransactionCount} earlier payments`}
+            </Fact>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 // Shortcuts into the deeper screens; what needs action lives in Needs attention.
 function FeatureGrid({
   model,
@@ -1010,6 +1067,7 @@ export function MobileOverview({
   setMonth,
   today,
   model,
+  insights,
   transactions,
   amountsHidden,
   toggleAmounts,
@@ -1027,6 +1085,7 @@ export function MobileOverview({
   setMonth: (month: string) => void;
   today: string;
   model: OverviewModel;
+  insights?: FinancialInsights;
   transactions: Transaction[];
   amountsHidden: boolean;
   toggleAmounts: () => void;
@@ -1097,6 +1156,12 @@ export function MobileOverview({
               month={month}
               openReports={openReports}
               openTransaction={openTransaction}
+            />
+            <BackendInsightsCard
+              insights={insights}
+              openBudgets={openBudgets}
+              openTransaction={openTransaction}
+              transactions={transactions}
             />
             <FeatureGrid
               model={model}

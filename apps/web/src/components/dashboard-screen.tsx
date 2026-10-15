@@ -1,5 +1,6 @@
 "use client";
 
+import type { FinancialInsights } from "@monara/contracts";
 import type { ReactNode } from "react";
 
 import { MobileOverview } from "@/components/mobile-overview";
@@ -16,6 +17,7 @@ export function DashboardScreen({
   budgets,
   today = demoToday,
   bills = noBills,
+  insights,
   amountsHidden = false,
   toggleAmounts,
   openTransaction,
@@ -35,6 +37,7 @@ export function DashboardScreen({
   budgets: Budget[];
   today?: string;
   bills?: RecurringBill[];
+  insights?: FinancialInsights;
   amountsHidden?: boolean;
   toggleAmounts: () => void;
   openTransaction: (transaction: Transaction) => void;
@@ -47,13 +50,35 @@ export function DashboardScreen({
   openConnectGmail?: () => void;
   openAccounts?: () => void;
 }) {
-  const model = overviewModel(transactions, budgets, bills, month, today);
+  const presentationModel = overviewModel(transactions, budgets, bills, month, today);
+  const safeBasis = insights?.safeToSpend.overall;
+  const model = insights
+    ? {
+        ...presentationModel,
+        savingsRate: insights.savingsRate.ratePercent,
+        safeToSpend:
+          presentationModel.safeToSpend && safeBasis
+            ? {
+                ...presentationModel.safeToSpend,
+                limit: BigInt(safeBasis.limit.amountMinor),
+                spending: BigInt(safeBasis.spending.amountMinor),
+                rawRemaining:
+                  BigInt(safeBasis.remaining.amountMinor) - BigInt(safeBasis.shortfall.amountMinor),
+                shortfall: BigInt(safeBasis.shortfall.amountMinor),
+                remaining: BigInt(safeBasis.remaining.amountMinor),
+                daysLeft: safeBasis.remainingDays,
+                perDay: BigInt(safeBasis.dailyAmount.amountMinor),
+              }
+            : presentationModel.safeToSpend,
+      }
+    : presentationModel;
 
   return (
     <MobileOverview
       setup={setup}
       amountsHidden={amountsHidden}
       model={model}
+      insights={insights}
       month={month}
       openAdd={openAdd}
       openBudgets={openBudgets}
