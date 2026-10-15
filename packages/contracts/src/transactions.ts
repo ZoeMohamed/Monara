@@ -5,14 +5,12 @@ import {
   categoryIdSchema,
   clientRequestIdSchema,
   financialAccountIdSchema,
-  gmailConnectionIdSchema,
   isoDateTimeSchema,
   localTimeSchema,
   paginationInputSchema,
   positiveMoneySchema,
   reversibleActionReceiptSchema,
   transactionIdSchema,
-  userIdSchema,
 } from "./common.ts";
 
 export const transactionKindSchema = z.enum(["expense", "income", "transfer"]);
@@ -244,15 +242,6 @@ export const transactionMutationResultSchema = z
   })
   .strict();
 
-export const gmailExtractionJobSchema = z
-  .object({
-    kind: z.literal("gmail.extract"),
-    userId: userIdSchema,
-    connectionId: gmailConnectionIdSchema,
-    messageId: z.string().min(1).max(500),
-  })
-  .strict();
-
 export type TransactionKind = z.infer<typeof transactionKindSchema>;
 export type TransactionReviewStatus = z.infer<typeof transactionReviewStatusSchema>;
 export type TransactionSource = z.infer<typeof transactionSourceSchema>;
@@ -267,4 +256,3 @@ export type DeleteTransactionInput = z.input<typeof deleteTransactionInputSchema
 export type ListTransactionsInput = z.input<typeof listTransactionsInputSchema>;
 export type TransactionPage = z.infer<typeof transactionPageSchema>;
 export type TransactionMutationResult = z.infer<typeof transactionMutationResultSchema>;
-export type GmailExtractionJob = z.infer<typeof gmailExtractionJobSchema>;

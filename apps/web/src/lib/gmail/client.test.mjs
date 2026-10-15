@@ -7,6 +7,7 @@ import {
   gmailCallbackError,
   gmailConnectionsErrorState,
   loadGmailConnections,
+  requestGmailSync,
   startGmailConnection,
 } from "./client.ts";
 
@@ -219,6 +220,47 @@ describe("Gmail disconnect boundary", () => {
       {
         message: "Could not confirm the Gmail change. Reload your connections before trying again.",
       },
+    );
+  });
+});
+
+describe("Gmail manual sync boundary", () => {
+  it("queues only a validated owned connection and verifies the response", async () => {
+    const result = await requestGmailSync(connectionId, {
+      fetcher: async (path, init) => {
+        assert.equal(path, `/api/gmail/connections/${connectionId}/sync`);
+        assert.equal(init.method, "POST");
+        assert.equal(init.cache, "no-store");
+        assert.equal(init.credentials, "same-origin");
+        assert.equal(init.body, undefined);
+        return Response.json({
+          status: "queued",
+          counts: { imported: 2, skipped: 3, failed: 0, inProgress: 1, importedTransactions: 2 },
+        });
+      },
+    });
+    assert.equal(result.status, "queued");
+    assert.equal(result.counts.inProgress, 1);
+
+    let calls = 0;
+    await assert.rejects(
+      requestGmailSync("../other-user", {
+        fetcher: async () => {
+          calls += 1;
+          return Response.json({});
+        },
+      }),
+      { message: "Invalid Gmail connection id." },
+    );
+    assert.equal(calls, 0);
+  });
+
+  it("rejects an unverified queue response", async () => {
+    await assert.rejects(
+      requestGmailSync(connectionId, {
+        fetcher: async () => Response.json({ status: "queued" }),
+      }),
+      { message: "Gmail did not confirm that the sync was queued." },
     );
   });
 });

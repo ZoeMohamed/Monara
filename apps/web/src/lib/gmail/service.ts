@@ -2,7 +2,9 @@ import type { OperationErrorCode } from "@monara/contracts";
 import {
   createGmailConnectionService,
   createSupabaseGmailConnectionRepository,
+  createSupabaseGmailIngestionRepository,
   GmailConnectionError,
+  GmailIngestionError,
 } from "@monara/core";
 import { createMonaraServiceRoleClient } from "@monara/db";
 import { createComposioGmailClient } from "@monara/integrations";
@@ -20,6 +22,16 @@ export function gmailConnectionService() {
       authConfigId: process.env.COMPOSIO_GMAIL_AUTH_CONFIG_ID ?? "",
     }),
   });
+}
+
+/**
+ * Gmail ingestion storage for the agent worker and Sync Now. Callers must first
+ * authenticate the agent, or scope every call to the signed-in User.
+ */
+export function gmailIngestionRepository() {
+  return createSupabaseGmailIngestionRepository(
+    createMonaraServiceRoleClient(publicSupabaseConfig(), process.env.SUPABASE_SERVICE_ROLE_KEY),
+  );
 }
 
 const STATUS: Record<OperationErrorCode, number> = {
@@ -46,6 +58,8 @@ export const unauthenticated = () => errorResponse("UNAUTHENTICATED", "Sign in t
 
 /** Maps service errors to their status; anything else hides its details. */
 export function gmailErrorResponse(error: unknown) {
-  if (error instanceof GmailConnectionError) return errorResponse(error.code, error.message);
+  if (error instanceof GmailConnectionError || error instanceof GmailIngestionError) {
+    return errorResponse(error.code, error.message);
+  }
   return errorResponse("DEPENDENCY_UNAVAILABLE", "Gmail connections are unavailable right now.");
 }

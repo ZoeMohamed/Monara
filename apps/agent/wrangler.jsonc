@@ -8,5 +8,21 @@
   "durable_objects": {
     "bindings": [{ "name": "CONVERSATIONS", "class_name": "WhatsAppConversation" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WhatsAppConversation"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WhatsAppConversation"] }],
+  // Declared only. The queue is created in Cloudflare by an authorized deploy, never by local commands.
+  "queues": {
+    "producers": [{ "binding": "GMAIL_JOBS", "queue": "monara-gmail-jobs" }],
+    "consumers": [
+      {
+        "queue": "monara-gmail-jobs",
+        "max_batch_size": 5,
+        "max_batch_timeout": 5,
+        // Keep in sync with GMAIL_QUEUE_MAX_RETRIES in src/gmail/worker.ts.
+        "max_retries": 3
+      }
+    ]
+  },
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  }
 }

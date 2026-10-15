@@ -14,7 +14,7 @@ export type GmailConnectionsProps = {
     sync?: (id: string) => void;
     disconnect: (id: string) => void;
   };
-  pendingAction?: { id: string; kind: "disconnect" | "reconnect" } | { kind: "connect" };
+  pendingAction?: { id: string; kind: "disconnect" | "reconnect" | "sync" } | { kind: "connect" };
   actionError?: string;
   onRetry?: () => void;
 };
@@ -143,7 +143,10 @@ type MailboxCardProps = {
 
 function MailboxActions({ mailbox, actions, pendingAction, onDisconnect }: MailboxCardProps) {
   const busy = pendingAction !== undefined;
-  const syncing = mailbox.sync.state === "queued" || mailbox.sync.state === "running";
+  const syncing =
+    mailbox.sync.state === "queued" ||
+    mailbox.sync.state === "running" ||
+    (pendingAction?.kind === "sync" && pendingAction.id === mailbox.id);
   return (
     <div className="mt-5 flex flex-wrap gap-3">
       {mailbox.status === "active" ? (
@@ -153,7 +156,11 @@ function MailboxActions({ mailbox, actions, pendingAction, onDisconnect }: Mailb
           isDisabled={!actions?.sync || busy || syncing}
           onPress={() => actions?.sync?.(mailbox.id)}
         >
-          {syncing ? "Sync in progress…" : "Sync now"}
+          {mailbox.sync.state === "queued"
+            ? "Sync queued"
+            : syncing
+              ? "Sync in progress…"
+              : "Sync now"}
         </Button>
       ) : (
         <Button
@@ -202,7 +209,11 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
       )}
       {pendingAction && "id" in pendingAction && pendingAction.id === mailbox.id && (
         <p role="status" className="mt-3 text-sm text-muted">
-          {pendingAction.kind === "disconnect" ? "Disconnecting…" : "Reconnecting…"}
+          {pendingAction.kind === "disconnect"
+            ? "Disconnecting…"
+            : pendingAction.kind === "reconnect"
+              ? "Reconnecting…"
+              : "Queueing sync…"}
         </p>
       )}
     </Card>

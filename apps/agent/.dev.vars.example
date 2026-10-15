@@ -3,6 +3,7 @@
 # /chat in one direction and the backend operations in the other.
 MONARA_BACKEND_URL=http://localhost:3000
 MONARA_AGENT_BACKEND_SECRET=
+COMPOSIO_API_URL=https://backend.composio.dev/api/v3.1
 COMPOSIO_API_KEY=
 KAPSO_API_KEY=
 KAPSO_WEBHOOK_SECRET=

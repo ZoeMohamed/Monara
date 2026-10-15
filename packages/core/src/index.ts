@@ -11,5 +11,13 @@ export {
   type GmailConnectionService,
   type StoredGmailConnection,
 } from "./gmail-connections.ts";
+export {
+  GmailIngestionError,
+  type GmailIngestionOperation,
+  type GmailIngestionRepository,
+  isGmailIngestionOperation,
+  runGmailIngestionOperation,
+} from "./gmail-ingestion.ts";
 export { createSupabaseFinanceRepository } from "./supabase-finance-repository.ts";
+export { createSupabaseGmailIngestionRepository } from "./supabase-gmail-ingestion-repository.ts";
 export * from "./whatsapp-link.ts";
