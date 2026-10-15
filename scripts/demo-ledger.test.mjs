@@ -880,6 +880,25 @@ test("a zero budget limit reports 0% when unused and over budget when spent, wit
   assert.equal(spent.state, "over");
 });
 
+test("payday usage respects its as-of date, excludes the previous cycle, and suppresses the calendar daily guide", () => {
+  const paydayBudget = { ...syntheticBudget, startsOn: "2026-09-25" };
+  const entries = [
+    syntheticTransaction({ id: "before", status: "confirmed", date: "2026-09-24", amount: 40000 }),
+    syntheticTransaction({ id: "payday", status: "confirmed", date: "2026-09-25", amount: 20000 }),
+    syntheticTransaction({ id: "today", status: "confirmed", date: "2026-10-11", amount: 10000 }),
+    syntheticTransaction({ id: "next", status: "confirmed", date: "2026-10-25", amount: 50000 }),
+  ];
+  const usage = budgetUsage(entries, paydayBudget, "2026-10", "2026-10-11");
+  assert.equal(usage.used, 30000n);
+  assert.equal(usage.periodStartsOn, "2026-09-25");
+  assert.equal(usage.periodEndsOn, "2026-10-24");
+  assert.equal(safeToSpendToday(entries, [paydayBudget], "2026-10-11").dailyGuideAvailable, false);
+  const future = { ...syntheticBudget, startsOn: "2026-10-12" };
+  assert.equal(budgetUsage(entries, future, "2026-10", "2026-10-11").periodStartsOn, null);
+  assert.equal(safeToSpendToday(entries, [future], "2026-10-11").limit, 0n);
+  assert.equal(safeToSpendToday(entries, [future], "2026-10-11").dailyGuideAvailable, false);
+});
+
 test("a transfer missing its accounts gets one flag, not two", () => {
   const flags = reviewFlags(syntheticTransaction({ kind: "transfer", method: null }));
   assert.ok(flags.includes("Transfer accounts missing or invalid"));

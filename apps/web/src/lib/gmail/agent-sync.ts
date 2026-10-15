@@ -1,4 +1,4 @@
-import type { GmailConnectionId } from "@monara/contracts";
+import { type RequestGmailSyncInput, requestGmailSyncInputSchema } from "@monara/contracts";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -17,7 +17,7 @@ export class AgentSyncError extends Error {
  * Asks the agent worker to queue a sync for a connection. Call it only after
  * checking that the signed-in User owns the connection and that it is active.
  */
-export async function requestAgentSync(connectionId: GmailConnectionId): Promise<void> {
+export async function requestAgentSync(input: RequestGmailSyncInput): Promise<void> {
   const baseUrl = process.env.MONARA_AGENT_URL?.trim().replace(/\/+$/, "");
   const secret = process.env.MONARA_AGENT_BACKEND_SECRET?.trim();
   if (!baseUrl || !secret) throw new AgentSyncError(null);
@@ -27,7 +27,7 @@ export async function requestAgentSync(connectionId: GmailConnectionId): Promise
     response = await fetch(`${baseUrl}/gmail/sync`, {
       method: "POST",
       headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ connectionId }),
+      body: JSON.stringify(requestGmailSyncInputSchema.parse(input)),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {

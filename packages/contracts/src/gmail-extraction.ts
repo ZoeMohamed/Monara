@@ -88,6 +88,15 @@ export const resolveGmailConnectionInputSchema = z
   })
   .strict();
 
+/** Manual sync input from the authenticated web backend to the Agent. */
+export const requestGmailSyncInputSchema = z
+  .object({
+    connectionId: gmailConnectionIdSchema,
+    /** Null only for the first import; later syncs overlap the previous cursor. */
+    since: isoDateTimeSchema.nullable(),
+  })
+  .strict();
+
 export const resolvedGmailConnectionSchema = z
   .object({
     connectionId: gmailConnectionIdSchema,
@@ -178,6 +187,7 @@ export type ListActiveGmailConnectionsResult = z.infer<
   typeof listActiveGmailConnectionsResultSchema
 >;
 export type ResolveGmailConnectionInput = z.input<typeof resolveGmailConnectionInputSchema>;
+export type RequestGmailSyncInput = z.input<typeof requestGmailSyncInputSchema>;
 export type ResolvedGmailConnection = z.infer<typeof resolvedGmailConnectionSchema>;
 export type ClaimGmailMessageInput = z.input<typeof claimGmailMessageInputSchema>;
 export type ClaimGmailMessageResult = z.infer<typeof claimGmailMessageResultSchema>;

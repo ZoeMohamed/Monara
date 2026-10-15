@@ -1,7 +1,10 @@
 "use client";
 
+import type { Category, FinancialAccount } from "@monara/contracts";
 import { Button, FieldError, Form, Input, Label, ListBox, Select, TextField } from "@monara/ui";
 import { type FormEvent, useReducer, useRef } from "react";
+import { BrandLogoField } from "@/components/brand-logo-field";
+import { FinanceRecovery } from "@/components/budget-manager";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import {
@@ -14,6 +17,15 @@ import {
   type TransactionValues,
   transactionErrors,
 } from "@/data/demo-ledger";
+import { demoTransactionSelection, demoTransferSelection } from "@/data/demo-resources";
+import { FinanceClientError } from "@/lib/finance/client";
+import { FinancePresentationError, parseDraftAmount } from "@/lib/finance/presentation";
+
+type TransactionEditorResources = {
+  financialAccounts: FinancialAccount[];
+  categories: Category[];
+  demo?: boolean;
+};
 
 export type TransactionDraft = {
   merchant: string;
@@ -24,6 +36,8 @@ export type TransactionDraft = {
   currency: Transaction["currency"];
   category: string | null;
   method: string | null;
+  fromAccount?: string | null;
+  toAccount?: string | null;
 };
 
 type EditorAction = "edit" | "confirm" | "correct";
@@ -31,50 +45,100 @@ type TransactionEditorProps = {
   transaction?: Transaction;
   initialDraft?: TransactionDraft;
   pristineDraft?: TransactionDraft;
+  resources?: TransactionEditorResources;
+  today?: string;
   onDraftChange?: (draft: TransactionDraft) => void;
   onClose: () => void;
   onSave: (values: TransactionValues, action: EditorAction) => void | Promise<void>;
+  refreshRequired?: boolean;
+  onRefreshRecords?: () => Promise<void>;
 };
 type EditorState = {
   draft: TransactionDraft;
   errors: TransactionErrors;
   phase: "editing" | "saving" | "discard";
-  saveFailed: boolean;
+  saveError: string | null;
+  uncertain: boolean;
 };
 type StateAction =
   | { type: "change"; draft: TransactionDraft }
   | { type: "validate"; errors: TransactionErrors }
   | { type: "phase"; phase: EditorState["phase"] }
-  | { type: "failed" };
+  | { type: "failed"; message: string; errors?: TransactionErrors; uncertain?: boolean };
 
 function editorReducer(state: EditorState, action: StateAction): EditorState {
   switch (action.type) {
     case "change": {
       const errors = { ...state.errors };
       for (const key of Object.keys(action.draft) as (keyof TransactionDraft)[]) {
-        if (action.draft[key] !== state.draft[key]) delete errors[key];
+        if (action.draft[key] !== state.draft[key]) {
+          const field = key === "fromAccount" || key === "toAccount" ? "method" : key;
+          delete errors[field];
+        }
       }
       return { ...state, draft: action.draft, errors };
     }
     case "validate":
-      return { ...state, errors: action.errors, saveFailed: false };
+      return { ...state, errors: action.errors, saveError: null };
     case "phase":
       return { ...state, phase: action.phase };
     case "failed":
-      return { ...state, phase: "editing", saveFailed: true };
+      return {
+        ...state,
+        phase: "editing",
+        saveError: action.message,
+        errors: action.errors ?? state.errors,
+        uncertain: state.uncertain || Boolean(action.uncertain),
+      };
   }
 }
 
-function draftOf(transaction?: Transaction): TransactionDraft {
+function draftOf(
+  transaction?: Transaction,
+  resources?: TransactionEditorResources,
+  today = demoToday,
+): TransactionDraft {
+  const demoTransfer = resources?.demo
+    ? demoTransferSelection(resources.financialAccounts, transaction?.method ?? null)
+    : null;
   return {
-    merchant: transaction?.merchant ?? "",
+    merchant: transaction?.backend
+      ? (transaction.backend.merchantName ?? "")
+      : (transaction?.merchant ?? ""),
     amount: transaction?.amount?.toString() ?? "",
-    date: transaction ? (transaction.date ?? "") : demoToday,
+    date: transaction ? (transaction.date ?? "") : today,
     time: transaction?.time ?? "",
     kind: transaction?.kind ?? null,
     currency: transaction ? transaction.currency : "IDR",
-    category: transaction?.category ?? null,
-    method: transaction?.method ?? null,
+    category: resources
+      ? (transaction?.backend?.categoryId ??
+        (resources.demo
+          ? resources.categories.find((category) => category.name === transaction?.category)?.id
+          : null) ??
+        null)
+      : (transaction?.category ?? null),
+    method: resources
+      ? (transaction?.backend?.financialAccountId ??
+        transaction?.financialAccountId ??
+        (resources.demo
+          ? resources.financialAccounts.find((account) => account.name === transaction?.method)?.id
+          : null) ??
+        null)
+      : (transaction?.method ?? null),
+    ...(resources
+      ? {
+          fromAccount:
+            transaction?.backend?.fromFinancialAccountId ??
+            transaction?.fromFinancialAccountId ??
+            demoTransfer?.from ??
+            null,
+          toAccount:
+            transaction?.backend?.toFinancialAccountId ??
+            transaction?.toFinancialAccountId ??
+            demoTransfer?.to ??
+            null,
+        }
+      : {}),
   };
 }
 
@@ -92,7 +156,7 @@ function ChoiceField({
 }: {
   name: string;
   label: string;
-  options: string[];
+  options: (string | { id: string; label: string; disabled?: boolean })[];
   value: string | null;
   error?: string;
   disabled: boolean;
@@ -117,12 +181,20 @@ function ChoiceField({
       </Select.Trigger>
       <Select.Popover>
         <ListBox>
-          {options.map((option) => (
-            <ListBox.Item key={option} id={option} textValue={option}>
-              {option}
-              <ListBox.ItemIndicator />
-            </ListBox.Item>
-          ))}
+          {options.map((option) => {
+            const choice = typeof option === "string" ? { id: option, label: option } : option;
+            return (
+              <ListBox.Item
+                key={choice.id}
+                id={choice.id}
+                textValue={choice.label}
+                isDisabled={choice.disabled}
+              >
+                {choice.label}
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+            );
+          })}
         </ListBox>
       </Select.Popover>
       <FieldError>{error}</FieldError>
@@ -154,6 +226,7 @@ function TransactionFields({
         <Input autoFocus className="min-h-11 text-base" placeholder="e.g. Kopi Kenangan" />
         <FieldError>{errors.merchant}</FieldError>
       </TextField>
+      <BrandLogoField disabled={disabled} label={draft.merchant} scope="merchant" />
       <TextField
         name="amount"
         type="number"
@@ -182,16 +255,34 @@ function TransactionFields({
   );
 }
 
-function valuesOf(draft: TransactionDraft): TransactionValues {
+function valuesOf(
+  draft: TransactionDraft,
+  resources?: TransactionEditorResources,
+): TransactionValues {
   return {
     merchant: draft.merchant.trim() || null,
-    amount: draft.amount.trim() ? Number(draft.amount) : null,
+    amount: parseDraftAmount(draft.amount),
     date: draft.date.trim() || null,
     time: draft.time.trim() || null,
     kind: draft.kind,
     currency: draft.currency,
-    category: draft.category,
-    method: draft.method,
+    ...(resources?.demo
+      ? demoTransactionSelection(draft, resources)
+      : {
+          category: draft.category,
+          categoryIcon: resources?.categories.find((category) => category.id === draft.category)
+            ?.icon,
+          method: draft.method,
+          ...(resources
+            ? {
+                categoryId: draft.category,
+                financialAccountId: draft.kind === "transfer" ? null : draft.method,
+                fromFinancialAccountId:
+                  draft.kind === "transfer" ? (draft.fromAccount ?? null) : null,
+                toFinancialAccountId: draft.kind === "transfer" ? (draft.toAccount ?? null) : null,
+              }
+            : {}),
+        }),
   };
 }
 
@@ -199,17 +290,35 @@ function validateDraft(
   draft: TransactionDraft,
   action: EditorAction,
   transaction?: Transaction,
+  resources?: TransactionEditorResources,
 ): TransactionErrors {
-  const values = valuesOf(draft);
+  let values: TransactionValues;
+  try {
+    values = valuesOf(draft, resources);
+  } catch (error) {
+    if (error instanceof FinancePresentationError) return { amount: error.message };
+    throw error;
+  }
   const validation = transactionErrors(values);
   if (action === "edit") {
     for (const field of ["kind", "amount", "currency", "date", "method"] as const) {
       if (values[field] === null) delete validation[field];
     }
+    if (resources && values.amount !== null && values.currency !== "IDR") {
+      validation.currency = "Choose IDR for this amount.";
+    }
+    if (
+      resources &&
+      values.kind === "transfer" &&
+      values.fromFinancialAccountId &&
+      values.fromFinancialAccountId === values.toFinancialAccountId
+    ) {
+      validation.method = "Choose different source and destination accounts.";
+    }
   }
   if (!transaction) {
     if (!values.merchant) validation.merchant = "Enter a merchant or income source.";
-    if (!values.method) validation.method = "Choose an account.";
+    if (!values.method && values.kind !== "transfer") validation.method = "Choose an account.";
   }
   return validation;
 }
@@ -239,7 +348,11 @@ function saveActionOf(transaction: Transaction | undefined, event: Event): Edito
   return submitter instanceof HTMLButtonElement && submitter.value === "edit" ? "edit" : "confirm";
 }
 
-function kindChange(draft: TransactionDraft, label: string | null): Partial<TransactionDraft> {
+function kindChange(
+  draft: TransactionDraft,
+  label: string | null,
+  resources?: TransactionEditorResources,
+): Partial<TransactionDraft> {
   const kind =
     label === "Expense"
       ? "expense"
@@ -251,7 +364,10 @@ function kindChange(draft: TransactionDraft, label: string | null): Partial<Tran
   const allowed = kind === "transfer" ? demoTransferMethods : demoMethods;
   return {
     kind,
-    method: draft.method && !allowed.includes(draft.method) ? null : draft.method,
+    ...(resources ? { method: null, fromAccount: null, toAccount: null } : {}),
+    ...(!resources
+      ? { method: draft.method && !allowed.includes(draft.method) ? null : draft.method }
+      : {}),
   };
 }
 
@@ -276,13 +392,20 @@ function TransactionChoices({
   errors,
   disabled,
   onChange,
+  resources,
 }: {
   draft: TransactionDraft;
   errors: TransactionErrors;
   disabled: boolean;
   onChange: (patch: Partial<TransactionDraft>) => void;
+  resources?: TransactionEditorResources;
 }) {
   const transfer = draft.kind === "transfer";
+  const accounts = resources?.financialAccounts.map((account) => ({
+    id: account.id,
+    label: `${account.name}${account.lastFour ? ` · ${account.lastFour}` : ""}`,
+    disabled: !account.isActive,
+  }));
   return (
     <>
       <ChoiceField
@@ -292,7 +415,7 @@ function TransactionChoices({
         value={draft.kind ? typeLabels[draft.kind] : null}
         error={errors.kind}
         disabled={disabled}
-        onChange={(label) => onChange(kindChange(draft, label))}
+        onChange={(label) => onChange(kindChange(draft, label, resources))}
       />
       <ChoiceField
         name="currency"
@@ -303,19 +426,52 @@ function TransactionChoices({
         disabled={disabled}
         onChange={(currency) => onChange({ currency: currency === "IDR" ? "IDR" : null })}
       />
-      <ChoiceField
-        name="method"
-        label={transfer ? "From → To" : "Account"}
-        options={transfer ? demoTransferMethods : demoMethods}
-        value={draft.method}
-        error={errors.method}
-        disabled={disabled}
-        onChange={(method) => onChange({ method })}
-      />
+      {transfer && resources ? (
+        <>
+          <ChoiceField
+            name="method"
+            label="From account"
+            options={accounts ?? []}
+            value={draft.fromAccount ?? null}
+            error={errors.method}
+            disabled={disabled}
+            onChange={(fromAccount) => onChange({ fromAccount })}
+          />
+          <ChoiceField
+            name="toAccount"
+            label="To account"
+            options={(accounts ?? []).map((account) => ({
+              ...account,
+              disabled: account.disabled || account.id === draft.fromAccount,
+            }))}
+            value={draft.toAccount ?? null}
+            disabled={disabled}
+            onChange={(toAccount) => onChange({ toAccount })}
+          />
+        </>
+      ) : (
+        <ChoiceField
+          name="method"
+          label={transfer ? "From → To" : "Account"}
+          options={accounts ?? (transfer ? demoTransferMethods : demoMethods)}
+          value={draft.method}
+          error={errors.method}
+          disabled={disabled}
+          onChange={(method) => onChange({ method })}
+        />
+      )}
       <ChoiceField
         name="category"
         label="Category"
-        options={demoCategoryNames}
+        options={
+          resources
+            ? resources.categories.map((category) => ({
+                id: category.id,
+                label: category.name,
+                disabled: category.isArchived,
+              }))
+            : demoCategoryNames
+        }
         value={draft.category}
         disabled={disabled}
         onChange={(category) => onChange({ category })}
@@ -331,40 +487,47 @@ function useTransactionEditorState({
   onDraftChange,
   onClose,
   onSave,
+  resources,
+  today,
+  refreshRequired,
 }: TransactionEditorProps) {
   const [state, dispatch] = useReducer(
     editorReducer,
     null,
     (): EditorState => ({
-      draft: initialDraft ?? draftOf(transaction),
+      draft: initialDraft ?? draftOf(transaction, resources, today),
       errors: {},
       phase: "editing",
-      saveFailed: false,
+      saveError: null,
+      uncertain: false,
     }),
   );
   const saving = useRef(false);
+  const submitted = useRef<{ values: TransactionValues; action: EditorAction } | null>(null);
   const { draft } = state;
-  const original = pristineDraft ?? draftOf(transaction);
+  const original = pristineDraft ?? draftOf(transaction, resources, today);
   const dirty = Object.keys(original).some(
     (key) => draft[key as keyof TransactionDraft] !== original[key as keyof TransactionDraft],
   );
 
   const changeDraft = (patch: Partial<TransactionDraft>) => {
+    if (state.uncertain || refreshRequired) return;
     const next = { ...draft, ...patch };
     dispatch({ type: "change", draft: next });
     onDraftChange?.(next);
   };
   const requestClose = () => {
     if (saving.current) return;
+    if (state.uncertain) return onClose();
     if (state.phase === "discard") dispatch({ type: "phase", phase: "editing" });
     else if (dirty) dispatch({ type: "phase", phase: "discard" });
     else onClose();
   };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (saving.current) return;
+    if (saving.current || refreshRequired) return;
     const action = saveActionOf(transaction, event.nativeEvent);
-    const validation = validateDraft(draft, action, transaction);
+    const validation = validateDraft(draft, action, transaction, resources);
     dispatch({ type: "validate", errors: validation });
     const firstInvalid = Object.keys(validation)[0];
     if (firstInvalid) {
@@ -376,13 +539,42 @@ function useTransactionEditorState({
       return;
     }
     saving.current = true;
+    submitted.current ??= { values: valuesOf(draft, resources), action };
     dispatch({ type: "phase", phase: "saving" });
     try {
-      await onSave(valuesOf(draft), action);
+      await onSave(submitted.current.values, submitted.current.action);
       // Successful saves close through the parent. Keep submissions blocked during navigation.
-    } catch {
+    } catch (error) {
       saving.current = false;
-      dispatch({ type: "failed" });
+      const uncertain = error instanceof FinanceClientError && error.actionMayHaveCompleted;
+      if (!uncertain && !state.uncertain) submitted.current = null;
+      const fieldMap: Record<string, keyof TransactionValues> = {
+        merchantName: "merchant",
+        money: "amount",
+        occurredOn: "date",
+        kind: "kind",
+        categoryId: "category",
+        financialAccountId: "method",
+        fromFinancialAccountId: "method",
+        toFinancialAccountId: "method",
+      };
+      const errors: TransactionErrors = {};
+      if (error instanceof FinanceClientError && error.fieldErrors) {
+        for (const [key, messages] of Object.entries(error.fieldErrors)) {
+          const path = key.replace(/^(?:values|changes)\./, "").split(".")[0];
+          const field = fieldMap[path];
+          if (field && messages[0]) errors[field] = messages[0];
+        }
+      }
+      dispatch({
+        type: "failed",
+        message:
+          error instanceof FinanceClientError
+            ? error.message
+            : "Your entries are kept. Check your records and try again.",
+        errors,
+        uncertain,
+      });
     }
   };
 
@@ -400,6 +592,7 @@ export function TransactionEditor(props: TransactionEditorProps) {
     useTransactionEditorState(props);
   const { draft, errors } = state;
   const isSaving = state.phase === "saving";
+  const locked = isSaving || state.uncertain || Boolean(props.refreshRequired);
   const labels = editorLabels(props.transaction, isSaving);
 
   return (
@@ -418,7 +611,9 @@ export function TransactionEditor(props: TransactionEditorProps) {
               <h2 id="transaction-editor-title" className="text-xl font-bold">
                 {labels.title}
               </h2>
-              <p className="mt-1 text-sm text-muted">Sample data · This session only</p>
+              {props.resources && !props.resources.demo ? (
+                <p className="mt-1 text-sm text-muted">Your private ledger</p>
+              ) : null}
             </div>
             <Button
               isIconOnly
@@ -433,24 +628,31 @@ export function TransactionEditor(props: TransactionEditorProps) {
           <TransactionFields
             draft={draft}
             errors={errors}
-            disabled={isSaving}
+            disabled={locked}
             onChange={changeDraft}
           />
           <TransactionChoices
             draft={draft}
             errors={errors}
-            disabled={isSaving}
+            disabled={locked}
             onChange={changeDraft}
+            resources={props.resources}
           />
           {Object.keys(errors).length > 0 && (
             <p role="alert" className="text-sm text-danger">
               Check the marked fields.
             </p>
           )}
-          {state.saveFailed && (
+          {state.saveError && (
             <p role="alert" className="text-sm text-danger">
-              Not saved. Your entries are kept. Try saving again.
+              {state.saveError}
             </p>
+          )}
+          {(props.refreshRequired || state.uncertain) && (
+            <FinanceRecovery
+              message="Refresh your records before retrying. A retry will use the same submitted values."
+              onRefreshRecords={props.onRefreshRecords}
+            />
           )}
           <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-5">
             <Button
@@ -468,13 +670,17 @@ export function TransactionEditor(props: TransactionEditorProps) {
                 type="submit"
                 name="action"
                 value="edit"
-                isDisabled={isSaving}
+                isDisabled={locked}
               >
                 Save changes
               </Button>
             )}
-            <Button className="min-h-11" type="submit" isDisabled={isSaving}>
-              {labels.save}
+            <Button
+              className="min-h-11"
+              type="submit"
+              isDisabled={isSaving || Boolean(props.refreshRequired)}
+            >
+              {state.uncertain && !isSaving ? "Retry same change" : labels.save}
             </Button>
           </div>
         </Form>

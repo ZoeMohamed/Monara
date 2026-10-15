@@ -13,6 +13,7 @@ import {
   noStoreHeaders,
   unauthenticated,
 } from "@/lib/gmail/service";
+import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 type Context = RouteContext<"/api/gmail/connections/[connectionId]/sync">;
@@ -38,7 +39,10 @@ export async function GET(_request: NextRequest, context: Context) {
 }
 
 /** Sync Now: queues a background sync of one of the signed-in User's active connections. */
-export async function POST(_request: NextRequest, context: Context) {
+export async function POST(request: NextRequest, context: Context) {
+  if (!isSameOriginRequest(request)) {
+    return errorResponse("FORBIDDEN", "This request must come from Monara.");
+  }
   const identity = await getAuthenticatedIdentity();
   if (!identity) return unauthenticated();
   const connectionId = await readConnectionId(context);
@@ -55,7 +59,7 @@ export async function POST(_request: NextRequest, context: Context) {
 
     // Read counts first: once the sync is queued, nothing after it may fail and invite a retry.
     const counts = await gmailIngestionRepository().syncCounts(identity.id, connectionId);
-    await requestAgentSync(connectionId);
+    await requestAgentSync({ connectionId, since: connection.lastSyncedAt });
     return Response.json(gmailSyncResultSchema.parse({ status: "queued", counts }), {
       headers: noStoreHeaders,
       status: 202,

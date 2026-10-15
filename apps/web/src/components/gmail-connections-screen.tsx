@@ -4,33 +4,19 @@ import { Button, Card, Chip } from "@monara/ui";
 import Link from "next/link";
 import { useState } from "react";
 import { ModalDialog } from "@/components/modal-dialog";
+import type { GmailConnectionsState, GmailMailbox } from "@/lib/gmail/client";
 
-type SyncState =
-  | { state: "idle" | "queued" | "running" }
-  | { state: "completed"; imported: number; skipped: number; failed: number }
-  | { state: "failed"; message: string };
-
-type Mailbox = {
-  id: string;
-  email: string;
-  status: "active" | "reconnect-required";
-  lastSyncedAt: string | null;
-  sync: SyncState;
-};
-
-type GmailConnectionsProps = {
-  state:
-    | { status: "unavailable" | "loading" | "requires-sign-in" }
-    | { status: "error"; message: string }
-    | { status: "ready"; mailboxes: Mailbox[] };
+export type GmailConnectionsProps = {
+  state: GmailConnectionsState;
   actions?: {
     connect: () => void;
     reconnect: (id: string) => void;
-    sync: (id: string) => void;
+    sync?: (id: string) => void;
     disconnect: (id: string) => void;
   };
-  pendingAction?: { id: string; kind: "disconnect" | "reconnect" } | { kind: "connect" };
+  pendingAction?: { id: string; kind: "disconnect" | "reconnect" | "sync" } | { kind: "connect" };
   actionError?: string;
+  onRetry?: () => void;
 };
 
 const syncDateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -47,7 +33,7 @@ function lastSyncLabel(value: string | null) {
     : `${syncDateFormatter.format(date)} WIB`;
 }
 
-function SyncStatus({ sync }: { sync: SyncState }) {
+function SyncStatus({ sync }: { sync: GmailMailbox["sync"] }) {
   if (sync.state === "idle") return null;
   if (sync.state === "failed")
     return (
@@ -68,13 +54,13 @@ function SyncStatus({ sync }: { sync: SyncState }) {
   );
 }
 
-function ConnectionNotice({ state }: Pick<GmailConnectionsProps, "state">) {
+function ConnectionNotice({ state, onRetry }: Pick<GmailConnectionsProps, "state" | "onRetry">) {
   const showSignIn = state.status === "requires-sign-in";
   return (
     <>
       {state.status === "unavailable" && (
         <p className="mt-4 text-sm leading-6 text-muted">
-          Gmail connections are not available yet. This demo has no connected mailboxes.
+          Gmail connections are unavailable right now. Try again later.
         </p>
       )}
       {state.status === "requires-sign-in" && (
@@ -82,7 +68,7 @@ function ConnectionNotice({ state }: Pick<GmailConnectionsProps, "state">) {
       )}
       {showSignIn && (
         <Link
-          href="/sign-in"
+          href="/sign-in?next=/connections/gmail"
           className="mt-4 inline-flex min-h-11 items-center font-semibold text-accent hover:underline"
         >
           Go to sign in →
@@ -103,15 +89,26 @@ function ConnectionNotice({ state }: Pick<GmailConnectionsProps, "state">) {
           {state.message}
         </p>
       )}
+      {(state.status === "error" || state.status === "unavailable") && onRetry && (
+        <Button className="mt-4 min-h-11" variant="secondary" onPress={onRetry}>
+          Retry loading connections
+        </Button>
+      )}
     </>
   );
 }
 
-function ConnectionIntro({ state, actions, pendingAction, actionError }: GmailConnectionsProps) {
+function ConnectionIntro({
+  state,
+  actions,
+  pendingAction,
+  actionError,
+  onRetry,
+}: GmailConnectionsProps) {
   const count = state.status === "ready" ? state.mailboxes.length : 0;
   const canConnect = state.status === "ready" && count < 3 && !!actions && !pendingAction;
   return (
-    <Card className="block gap-0 mt-4 rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <Card className="block gap-0 mt-4 rounded-2xl border border-border bg-surface p-5 sm:p-6">
       <h2 className="text-lg font-bold">Connect Gmail separately</h2>
       <p className="mt-2 text-sm leading-6 text-muted">
         Google sign-in opens your Monara account. Connecting Gmail gives permission to import
@@ -122,31 +119,75 @@ function ConnectionIntro({ state, actions, pendingAction, actionError }: GmailCo
           ? "Connecting…"
           : "Connect Gmail"}
       </Button>
-      <ConnectionNotice state={state} />
+      <ConnectionNotice state={state} onRetry={onRetry} />
       {actionError && (
         <p className="mt-4 text-sm text-danger" role="alert">
           {actionError}
         </p>
       )}
+      {actionError && state.status === "ready" && onRetry && (
+        <Button className="mt-4 min-h-11" variant="secondary" onPress={onRetry}>
+          Reload connections
+        </Button>
+      )}
     </Card>
   );
 }
 
-function MailboxCard({
-  mailbox,
-  actions,
-  pendingAction,
-  onDisconnect,
-}: {
-  mailbox: Mailbox;
+type MailboxCardProps = {
+  mailbox: GmailMailbox;
   actions: GmailConnectionsProps["actions"];
   pendingAction: GmailConnectionsProps["pendingAction"];
   onDisconnect: (id: string) => void;
-}) {
+};
+
+function MailboxActions({ mailbox, actions, pendingAction, onDisconnect }: MailboxCardProps) {
   const busy = pendingAction !== undefined;
-  const syncing = mailbox.sync.state === "queued" || mailbox.sync.state === "running";
+  const syncing =
+    mailbox.sync.state === "queued" ||
+    mailbox.sync.state === "running" ||
+    (pendingAction?.kind === "sync" && pendingAction.id === mailbox.id);
   return (
-    <Card className="block gap-0 rounded-2xl border border-border bg-surface p-4 sm:p-5">
+    <div className="mt-5 flex flex-wrap gap-3">
+      {mailbox.status === "active" ? (
+        <Button
+          className="min-h-11"
+          aria-label={`Sync ${mailbox.email} now`}
+          isDisabled={!actions?.sync || busy || syncing}
+          onPress={() => actions?.sync?.(mailbox.id)}
+        >
+          {mailbox.sync.state === "queued"
+            ? "Sync queued"
+            : syncing
+              ? "Sync in progress…"
+              : "Sync now"}
+        </Button>
+      ) : (
+        <Button
+          className="min-h-11"
+          aria-label={`Reconnect ${mailbox.email}`}
+          isDisabled={!actions || busy}
+          onPress={() => actions?.reconnect(mailbox.id)}
+        >
+          Reconnect
+        </Button>
+      )}
+      <Button
+        variant="secondary"
+        className="min-h-11"
+        aria-label={`Disconnect ${mailbox.email}`}
+        isDisabled={!actions || busy}
+        onPress={() => onDisconnect(mailbox.id)}
+      >
+        Disconnect
+      </Button>
+    </div>
+  );
+}
+
+function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxCardProps) {
+  return (
+    <Card className="block gap-0 rounded-2xl border border-border bg-surface p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="min-w-0 break-all font-bold">{mailbox.email}</h2>
         <Chip variant="soft" color={mailbox.status === "active" ? "success" : "warning"}>
@@ -157,39 +198,22 @@ function MailboxCard({
         Last successful sync: {lastSyncLabel(mailbox.lastSyncedAt)}
       </p>
       <SyncStatus sync={mailbox.sync} />
-      <div className="mt-5 flex flex-wrap gap-3">
-        {mailbox.status === "active" ? (
-          <Button
-            className="min-h-11"
-            aria-label={`Sync ${mailbox.email} now`}
-            isDisabled={!actions || busy || syncing}
-            onPress={() => actions?.sync(mailbox.id)}
-          >
-            {syncing ? "Sync in progress…" : "Sync now"}
-          </Button>
-        ) : (
-          <Button
-            className="min-h-11"
-            aria-label={`Reconnect ${mailbox.email}`}
-            isDisabled={!actions || busy}
-            onPress={() => actions?.reconnect(mailbox.id)}
-          >
-            Reconnect
-          </Button>
-        )}
-        <Button
-          variant="secondary"
-          className="min-h-11"
-          aria-label={`Disconnect ${mailbox.email}`}
-          isDisabled={!actions || busy}
-          onPress={() => onDisconnect(mailbox.id)}
-        >
-          Disconnect
-        </Button>
-      </div>
+      <MailboxActions
+        mailbox={mailbox}
+        actions={actions}
+        pendingAction={pendingAction}
+        onDisconnect={onDisconnect}
+      />
+      {mailbox.status === "active" && !actions?.sync && (
+        <p className="mt-3 text-sm text-muted">Manual sync is not available yet.</p>
+      )}
       {pendingAction && "id" in pendingAction && pendingAction.id === mailbox.id && (
         <p role="status" className="mt-3 text-sm text-muted">
-          {pendingAction.kind === "disconnect" ? "Disconnecting…" : "Reconnecting…"}
+          {pendingAction.kind === "disconnect"
+            ? "Disconnecting…"
+            : pendingAction.kind === "reconnect"
+              ? "Reconnecting…"
+              : "Queueing sync…"}
         </p>
       )}
     </Card>
@@ -201,6 +225,7 @@ export function GmailConnectionsScreen({
   actions,
   pendingAction,
   actionError,
+  onRetry,
 }: GmailConnectionsProps) {
   const [disconnectId, setDisconnectId] = useState<string | null>(null);
   const mailboxes = state.status === "ready" ? state.mailboxes : [];
@@ -218,7 +243,7 @@ export function GmailConnectionsScreen({
       <div className="mt-5 flex flex-wrap items-start justify-between gap-5">
         <div>
           <p className="text-sm font-semibold text-accent">Connections</p>
-          <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
+          <h1 className="mt-2 text-[32px] font-extrabold tracking-[-0.04em]">
             Your Gmail mailboxes
           </h1>
         </div>
@@ -233,6 +258,7 @@ export function GmailConnectionsScreen({
         actions={actions}
         pendingAction={pendingAction}
         actionError={actionError}
+        onRetry={onRetry}
       />
       {state.status === "ready" && mailboxes.length === 0 && (
         <p className="mt-7 rounded-2xl border border-dashed border-border p-8 text-center text-muted">

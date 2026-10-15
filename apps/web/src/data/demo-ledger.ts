@@ -1,10 +1,19 @@
-// Presentation-only, synthetic session data. Backend contracts and writes belong to Zoe.
+import {
+  type Budget as BackendBudget,
+  type BudgetUsage as BackendBudgetUsage,
+  type Reminder as BackendReminder,
+  type Transaction as BackendTransaction,
+  budgetPeriodForDate,
+} from "@monara/contracts";
+
+// Presentation models support both explicit demo data and validated owned backend records.
 type TransactionKind = "expense" | "income" | "transfer";
 type ReviewStatus = "pending" | "confirmed" | "rejected";
 export type Transaction = {
   id: string;
   merchant: string | null;
   category: string | null;
+  categoryIcon?: string;
   amount: number | null;
   currency: "IDR" | null;
   date: string | null;
@@ -14,11 +23,28 @@ export type Transaction = {
   emoji: string;
   confidence: number | null;
   status: ReviewStatus;
+  backend?: BackendTransaction;
+  categoryId?: string | null;
+  financialAccountId?: string | null;
+  fromFinancialAccountId?: string | null;
+  toFinancialAccountId?: string | null;
 };
 
 export type TransactionValues = Pick<
   Transaction,
-  "merchant" | "category" | "amount" | "currency" | "date" | "time" | "method" | "kind"
+  | "merchant"
+  | "category"
+  | "categoryIcon"
+  | "amount"
+  | "currency"
+  | "date"
+  | "time"
+  | "method"
+  | "kind"
+  | "categoryId"
+  | "financialAccountId"
+  | "fromFinancialAccountId"
+  | "toFinancialAccountId"
 >;
 export type TransactionErrors = Partial<Record<keyof TransactionValues, string>>;
 
@@ -43,7 +69,16 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
   }
   if (values.currency !== "IDR") errors.currency = "Choose IDR. Monara supports rupiah only.";
   if (!isCalendarDate(values.date)) errors.date = "Enter a valid transaction date.";
-  if (values.kind === "transfer" && !demoTransferMethods.includes(values.method ?? "")) {
+  const owned =
+    values.financialAccountId !== undefined || values.fromFinancialAccountId !== undefined;
+  if (
+    values.kind === "transfer" &&
+    (owned
+      ? !values.fromFinancialAccountId ||
+        !values.toFinancialAccountId ||
+        values.fromFinancialAccountId === values.toFinancialAccountId
+      : !demoTransferMethods.includes(values.method ?? ""))
+  ) {
     errors.method = "Choose the source and destination Financial Accounts.";
   }
   return errors;
@@ -108,6 +143,16 @@ export function updateConfirmedTransaction(
     time,
     method,
     kind,
+    ...(values.categoryIcon === undefined ? {} : { categoryIcon: values.categoryIcon }),
+    ...(values.financialAccountId === undefined
+      ? {}
+      : { financialAccountId: values.financialAccountId }),
+    ...(values.fromFinancialAccountId === undefined
+      ? {}
+      : { fromFinancialAccountId: values.fromFinancialAccountId }),
+    ...(values.toFinancialAccountId === undefined
+      ? {}
+      : { toFinancialAccountId: values.toFinancialAccountId }),
   };
   return transactions.map((transaction) => (transaction === existing ? corrected : transaction));
 }
@@ -241,26 +286,73 @@ export type Budget = {
   cadence: "monthly";
   limit: number;
   warningPercent: number;
+  icon?: string;
+  categoryId?: string;
+  startsOn?: string;
+  usage?: BackendBudgetUsage;
+  usageMonth?: string;
+  backend?: BackendBudget;
 };
 
-export function budgetUsage(transactions: Transaction[], budget: Budget, month = demoMonth) {
+export function budgetUsage(
+  transactions: Transaction[],
+  budget: Budget,
+  month = demoMonth,
+  today = demoToday,
+) {
+  const date =
+    month === today.slice(0, 7) ? today : `${month}-${String(daysInMonth(month)).padStart(2, "0")}`;
+  const period = budgetPeriodForDate(
+    { cadence: budget.cadence, startsOn: budget.startsOn ?? `${month}-01` },
+    date,
+  );
   const used = sumAmounts(
-    demoSummary(transactions, month).confirmed.filter(
-      (transaction) => transaction.kind === "expense" && transaction.category === budget.category,
+    transactions.filter(
+      (transaction) =>
+        period !== null &&
+        transaction.status === "confirmed" &&
+        Object.keys(transactionErrors(transaction)).length === 0 &&
+        transaction.date !== null &&
+        transaction.date >= period.startsOn &&
+        transaction.date <= period.endsOn &&
+        transaction.kind === "expense" &&
+        (budget.categoryId
+          ? transaction.categoryId === budget.categoryId
+          : transaction.category === budget.category),
     ),
   );
+  const actualUsed =
+    budget.usage && budget.usageMonth === month ? BigInt(budget.usage.used.amountMinor) : used;
   const limit = BigInt(budget.limit);
   const percent =
-    limit > BigInt(0) ? Number((used * BigInt(100)) / limit) : used > BigInt(0) ? 100 : 0;
+    limit > BigInt(0)
+      ? Number((actualUsed * BigInt(100)) / limit)
+      : actualUsed > BigInt(0)
+        ? 100
+        : 0;
   const state: "on-track" | "warning" | "at-limit" | "over" =
-    used > limit
+    actualUsed > limit
       ? "over"
-      : limit > BigInt(0) && used === limit
+      : limit > BigInt(0) && actualUsed === limit
         ? "at-limit"
         : percent >= budget.warningPercent
           ? "warning"
           : "on-track";
-  return { used, limit, remaining: limit - used, percent, state };
+  return {
+    used: actualUsed,
+    limit,
+    remaining: limit - actualUsed,
+    percent,
+    state,
+    periodStartsOn:
+      (budget.usageMonth === month ? budget.usage?.periodStartsOn : undefined) ??
+      period?.startsOn ??
+      null,
+    periodEndsOn:
+      (budget.usageMonth === month ? budget.usage?.periodEndsOn : undefined) ??
+      period?.endsOn ??
+      null,
+  };
 }
 
 // PRD F9: remaining budget divided by remaining days, counting today.
@@ -273,17 +365,24 @@ export function safeToSpendToday(
 ) {
   const month = today.slice(0, 7);
   const daysLeft = daysInMonth(month) - Number(today.slice(8, 10)) + 1;
-  const limit = budgets.reduce((sum, budget) => sum + BigInt(budget.limit), BigInt(0));
+  const activeBudgets = budgets.filter((budget) => !budget.startsOn || budget.startsOn <= today);
+  const limit = activeBudgets.reduce((sum, budget) => sum + BigInt(budget.limit), BigInt(0));
   const spending = demoSummary(transactions, month).spending;
   const rawRemaining = limit - spending;
   const remaining = rawRemaining > BigInt(0) ? rawRemaining : BigInt(0);
   const shortfall = rawRemaining < BigInt(0) ? -rawRemaining : BigInt(0);
-  const perCategory = budgets.map((budget) => {
-    const usage = budgetUsage(transactions, budget, month);
+  const perCategory = activeBudgets.map((budget) => {
+    const usage = budgetUsage(transactions, budget, month, today);
     const available = usage.remaining > BigInt(0) ? usage.remaining : BigInt(0);
     return { budget, ...usage, available, perDay: available / BigInt(daysLeft) };
   });
   return {
+    dailyGuideAvailable:
+      budgets.length > 0 &&
+      budgets.every(
+        (budget) =>
+          !budget.startsOn || (budget.startsOn.endsWith("-01") && budget.startsOn <= today),
+      ),
     limit,
     spending,
     rawRemaining,
@@ -308,7 +407,15 @@ export type RecurringBill = {
   status: "active" | "suggested";
 };
 
-export type Reminder = { id: string; kind: "budget" | "bill"; message: string };
+export type Reminder = {
+  id: string;
+  kind: "budget" | "bill";
+  message: string;
+  title?: string;
+  status?: "unread" | "read" | "dismissed";
+  scheduledFor?: string;
+  backend?: BackendReminder;
+};
 
 // PRD F13: bill reminders fire 3 days before and on the due date.
 const BILL_REMINDER_OFFSETS = [3, 0];
@@ -322,18 +429,20 @@ export function demoReminders(
   today = demoToday,
 ): Reminder[] {
   const month = today.slice(0, 7);
-  const periodEnd = `${month}-${String(daysInMonth(month)).padStart(2, "0")}`;
   const reminders: Reminder[] = [];
   for (const budget of budgets) {
-    const usage = budgetUsage(transactions, budget, month);
+    const usage = budgetUsage(transactions, budget, month, today);
     if (usage.state === "on-track") continue;
     const threshold =
       usage.state === "over" || usage.state === "at-limit" ? 100 : budget.warningPercent;
     const left = usage.remaining > BigInt(0) ? usage.remaining : BigInt(0);
     reminders.push({
-      id: `budget:${budget.id}:${month}:${threshold}`,
+      id: `budget:${budget.id}:${budget.startsOn ? usage.periodStartsOn : month}:${threshold}`,
       kind: "budget",
-      message: `Heads up: you have used ${usage.percent}% of your ${budget.category} budget (${formatRupiah(usage.used)} of ${formatRupiah(usage.limit)}). ${formatRupiah(left)} is left until ${formatDay(periodEnd)}.`,
+      title: `${budget.category} budget`,
+      status: "unread",
+      scheduledFor: today,
+      message: `Heads up: you have used ${usage.percent}% of your ${budget.category} budget (${formatRupiah(usage.used)} of ${formatRupiah(usage.limit)}). ${formatRupiah(left)} is left until ${formatDay(usage.periodEndsOn ?? `${month}-${daysInMonth(month)}`)}.`,
     });
   }
   for (const bill of bills) {
@@ -342,6 +451,9 @@ export function demoReminders(
     reminders.push({
       id: `bill:${bill.id}:${bill.nextDue}:${offset}`,
       kind: "bill",
+      title: `${bill.merchant} due`,
+      status: "unread",
+      scheduledFor: today,
       message: `Reminder: ${formatRupiah(bill.expectedAmount)} of ${bill.merchant} is due on ${formatDay(bill.nextDue)}.`,
     });
   }

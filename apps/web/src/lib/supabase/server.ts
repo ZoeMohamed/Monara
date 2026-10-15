@@ -2,13 +2,13 @@ import { createMonaraServerClient } from "@monara/db";
 import { cookies } from "next/headers";
 
 import { identityFromVerifiedClaims } from "@/lib/auth/identity";
-import { publicSupabaseConfig } from "@/lib/supabase/config";
+import { availablePublicSupabaseConfig, publicSupabaseConfig } from "@/lib/supabase/config";
 
 /** Creates one request-scoped server client backed by Supabase Auth cookies. */
-export async function createServerSupabaseClient() {
+export async function createServerSupabaseClient(config = publicSupabaseConfig()) {
   const cookieStore = await cookies();
 
-  return createMonaraServerClient(publicSupabaseConfig(), {
+  return createMonaraServerClient(config, {
     getAll: () => cookieStore.getAll(),
     setAll: (cookiesToSet) => {
       try {
@@ -24,7 +24,10 @@ export async function createServerSupabaseClient() {
 
 /** Verifies the JWT signature before trusting the caller's identity. */
 export async function getAuthenticatedIdentity() {
-  const supabase = await createServerSupabaseClient();
+  const config = availablePublicSupabaseConfig();
+  if (!config) return null;
+
+  const supabase = await createServerSupabaseClient(config);
   const { data, error } = await supabase.auth.getClaims();
   if (error) return null;
   return identityFromVerifiedClaims(data?.claims);

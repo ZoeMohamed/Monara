@@ -1,7 +1,9 @@
 // Reads Gmail through Composio tool execution. The connection must already be
 // resolved to its owner by the backend before any of these calls are made.
 
-const REQUEST_TIMEOUT_MS = 20_000;
+// Gmail list calls through Composio regularly take more than 20 seconds for a
+// full page. Keep a finite ceiling while allowing the provider to finish.
+const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_PAGE_SIZE = 100;
 
 type Fetcher = (input: string, init: RequestInit) => Promise<Response>;

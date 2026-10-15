@@ -119,6 +119,7 @@ function cleanText(value: string | null, maxLength: number): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+const RUPIAH_CURRENCY_MARKER = /(?:\bIDR\b|\bRp(?=\s|[.\d]))/i;
 const FOREIGN_CURRENCY_MARKERS = /\$|€|£|¥|\b(?:USD|SGD|EUR|GBP|JPY|MYR|AUD|US\$)\b/i;
 
 /**
@@ -127,9 +128,11 @@ const FOREIGN_CURRENCY_MARKERS = /\$|€|£|¥|\b(?:USD|SGD|EUR|GBP|JPY|MYR|AUD|
  * fractional Rupiah are rejected rather than rounded. Returns null when unsure.
  */
 export function parseRupiahAmount(amountText: string): string | null {
-  if (FOREIGN_CURRENCY_MARKERS.test(amountText)) return null;
+  if (!RUPIAH_CURRENCY_MARKER.test(amountText) || FOREIGN_CURRENCY_MARKERS.test(amountText)) {
+    return null;
+  }
   const matches = amountText.match(/\d[\d.,\s]*\d|\d/g);
-  if (!matches || matches.length !== 1) return null;
+  if (matches?.length !== 1) return null;
   const numeral = matches[0].replace(/\s/g, "");
 
   let integerPart = numeral;

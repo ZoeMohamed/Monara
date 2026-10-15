@@ -36,11 +36,11 @@ const closedPopups = {
   remindersOpen: false,
 };
 
-export function useAppNavigation() {
+export function useAppNavigation(defaultMonth?: string) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const view = parseAppView(pathname, searchParams);
+  const view = parseAppView(pathname, searchParams, defaultMonth);
   const returnFocus = useRef<HTMLElement | null>(null);
   const popupOpen = hasPopup(view);
 
@@ -61,6 +61,7 @@ export function useAppNavigation() {
     const current = parseAppView(
       window.location.pathname,
       new URLSearchParams(window.location.search),
+      defaultMonth,
     );
     const changingScreen = patch.screen && patch.screen !== current.screen;
     const next = { ...(changingScreen ? clearedView(current, patch.screen) : current), ...patch };
@@ -92,6 +93,7 @@ export function useAppNavigation() {
     const current = parseAppView(
       window.location.pathname,
       new URLSearchParams(window.location.search),
+      defaultMonth,
     );
     if (returnHref() === buildAppHref(clearedView(current))) {
       window.history.back();
@@ -114,7 +116,11 @@ export function useAppNavigation() {
       navigate({ ...closedPopups, remindersOpen: true }, hasPopup(view) ? "replace" : "push"),
     openReject: (id: string) =>
       navigate({ ...closedPopups, rejectId: id }, hasPopup(view) ? "replace" : "push"),
-    openGmail: () => router.push("/connections/gmail"),
+    // The demo has no account, so connecting a mailbox starts with sign-in.
+    openGmail: () =>
+      router.push(
+        view.basePath === "/demo" ? "/sign-in?next=/connections/gmail" : "/connections/gmail",
+      ),
     setMonth: (month: string) => navigate({ month }),
   };
 }

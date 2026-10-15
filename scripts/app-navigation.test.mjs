@@ -28,8 +28,11 @@ const secondId = "00000000-0000-4000-8000-000000000002";
 
 function view(overrides = {}) {
   return {
+    basePath: "",
     screen: "home",
     month: demoMonth,
+    reportPeriod: "monthly",
+    reportYear: (overrides.month ?? demoMonth).slice(0, 4),
     reviewOpen: false,
     kindFilter: "all",
     transactionId: null,
@@ -53,6 +56,48 @@ test("each screen has a canonical route with an explicit month and no default fi
     assert.deepEqual(parse(pathname), state);
     assert.deepEqual(parse(buildAppHref(state)), state);
   }
+});
+
+test("yearly Reports use allowlisted period and year fields and retain them in transaction detail links", () => {
+  const state = view({
+    screen: "reports",
+    reportPeriod: "yearly",
+    reportYear: "2024",
+    transactionId: firstId,
+  });
+  const href = buildAppHref(state);
+  assert.equal(href, `/reports?month=${demoMonth}&period=yearly&year=2024&transaction=${firstId}`);
+  assert.deepEqual(parse(href), state);
+  assert.deepEqual(
+    parse(buildAppHref(clearedView(state))),
+    view({ screen: "reports", reportPeriod: "yearly", reportYear: "2024" }),
+  );
+  assert.deepEqual(clearedView(state, "transactions"), view({ screen: "transactions" }));
+  for (const year of ["0000", "0099", "2024", "9999"]) {
+    assert.equal(parse(`/reports?period=yearly&year=${year}`).reportYear, year);
+  }
+});
+
+test("invalid report periods and years are discarded and annual fields do not leak into other screens", () => {
+  for (const year of ["", "24", "10000", "-2024", "2024-01", "2024&merchant=private", "2024 "]) {
+    assert.equal(
+      parse(`/reports?period=yearly&year=${encodeURIComponent(year)}`).reportYear,
+      "2026",
+    );
+  }
+  assert.deepEqual(parse("/reports?period=week&year=2024"), view({ screen: "reports" }));
+  assert.deepEqual(
+    parse("/transactions?period=yearly&year=2024"),
+    view({ screen: "transactions" }),
+  );
+  assert.equal(
+    buildAppHref(view({ screen: "reports", reportPeriod: "yearly", reportYear: "private" })),
+    `/reports?month=${demoMonth}&period=yearly&year=2026`,
+  );
+  assert.equal(
+    buildAppHref(view({ screen: "transactions", reportPeriod: "yearly", reportYear: "2024" })),
+    `/transactions?month=${demoMonth}`,
+  );
 });
 
 test("ledger filters and popup states survive a serialized history roundtrip", () => {
@@ -300,4 +345,28 @@ test("URLs only contain approved navigation fields and cannot redirect or disclo
       `/?month=${demoMonth}`,
     );
   }
+});
+
+test("the public demo keeps every screen and popup under /demo", () => {
+  for (const [screen, pathname] of Object.entries(screenPaths)) {
+    const demoPath = screen === "home" ? "/demo" : `/demo${pathname}`;
+    const state = view({ basePath: "/demo", screen });
+    assert.equal(buildAppHref(state), `${demoPath}?month=${demoMonth}`);
+    assert.deepEqual(parse(demoPath), state);
+    assert.deepEqual(clearedView(state, "reports").basePath, "/demo");
+  }
+  const popup = view({ basePath: "/demo", screen: "transactions", transactionId: firstId });
+  assert.equal(buildAppHref(popup), `/demo/transactions?month=${demoMonth}&transaction=${firstId}`);
+  assert.equal(parse("/demonstration").basePath, "");
+  assert.equal(parse("/demonstration").screen, "home");
+  assert.equal(buildAppHref(view({ basePath: "//elsewhere.example" })), `/?month=${demoMonth}`);
+});
+
+test("a missing or invalid month falls back to the supplied current month", () => {
+  assert.equal(parseAppView("/", new URLSearchParams(), "2026-11").month, "2026-11");
+  assert.equal(
+    parseAppView("/", new URLSearchParams({ month: "2026-13" }), "2026-11").month,
+    "2026-11",
+  );
+  assert.equal(parseAppView("/", new URLSearchParams(), "not-a-month").month, demoMonth);
 });

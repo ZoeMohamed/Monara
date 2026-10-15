@@ -10,8 +10,6 @@ import { createMonaraServiceRoleClient } from "@monara/db";
 import { createComposioGmailClient } from "@monara/integrations";
 import { publicSupabaseConfig } from "@/lib/supabase/config";
 
-export const GMAIL_CALLBACK_PATH = "/api/gmail/connections/callback";
-
 /** Builds the service from server-only configuration; missing values fail closed. */
 export function gmailConnectionService() {
   return createGmailConnectionService({

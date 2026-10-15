@@ -1,0 +1,88 @@
+.categoryCard {
+  display: block;
+  min-width: 0;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  padding: 0.5rem;
+}
+
+.budgetList > li + li {
+  border-top: 1px solid var(--separator);
+}
+
+/* A hovered row reads as one rounded shape, so the rules touching it step aside. */
+@media (hover: hover) {
+  .budgetList > li:hover,
+  .budgetList > li:hover + li {
+    border-top-color: transparent;
+  }
+}
+
+.budgetRow {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 8.5rem;
+  border: 0;
+  border-radius: 1.125rem;
+  padding: 1rem;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  transition: background-color 180ms ease;
+}
+
+.budgetRow:hover,
+.budgetRow:focus-visible,
+.budgetRow[data-hovered="true"],
+.budgetRow[data-focus-visible="true"] {
+  background: var(--surface-secondary);
+}
+
+.budgetRow:focus-visible,
+.budgetRow[data-focus-visible="true"] {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.budgetRow:active,
+.budgetRow[data-pressed="true"] {
+  background: var(--surface-tertiary);
+  transform: none;
+}
+
+.addRow {
+  display: flex;
+  width: 100%;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  border: 1.5px dashed var(--border);
+  border-radius: 1.125rem;
+  color: var(--accent);
+  font-size: 0.875rem;
+  font-weight: 700;
+  --button-bg-hover: var(--accent-soft);
+  --button-bg-pressed: var(--accent-soft);
+}
+
+.addRow:active,
+.addRow[data-pressed="true"] {
+  transform: none;
+}
+
+@media (max-width: 360px) {
+  .budgetRow {
+    padding: 1rem 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .budgetRow {
+    transition: none;
+  }
+}

@@ -1,0 +1,25 @@
+.ledgerGroup {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.ledgerGroup > button {
+  border-radius: 0;
+}
+
+.ledgerGroup > button + button {
+  border-top: 1px solid var(--separator);
+}
+
+@media (min-width: 1024px) {
+  .ledgerGroup {
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--surface);
+  }
+
+  .ledgerGroup > button {
+    padding-inline: 20px;
+  }
+}

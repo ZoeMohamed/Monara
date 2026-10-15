@@ -19,6 +19,7 @@ import {
   recordGmailExtractionInputSchema,
   reminderPreferencesSchema,
   reportGmailConnectionErrorInputSchema,
+  requestGmailSyncInputSchema,
   setReminderPreferencesInputSchema,
   transactionSchema,
   updateBudgetInputSchema,
@@ -506,5 +507,25 @@ describe("Gmail extraction contracts", () => {
     const job = { kind: "gmail.extract", connectionId, gmailMessageId: "m1", receivedAt: null };
     assert.equal(gmailJobSchema.safeParse(job).success, true);
     assert.equal(gmailJobSchema.safeParse({ ...job, userId: ids.accountA }).success, false);
+  });
+
+  it("requires the backend to send the previous sync cursor without identity", () => {
+    assert.equal(
+      requestGmailSyncInputSchema.safeParse({ connectionId, since: timestamp }).success,
+      true,
+    );
+    assert.equal(
+      requestGmailSyncInputSchema.safeParse({ connectionId, since: null }).success,
+      true,
+    );
+    assert.equal(requestGmailSyncInputSchema.safeParse({ connectionId }).success, false);
+    assert.equal(
+      requestGmailSyncInputSchema.safeParse({
+        connectionId,
+        since: timestamp,
+        userId: ids.accountA,
+      }).success,
+      false,
+    );
   });
 });

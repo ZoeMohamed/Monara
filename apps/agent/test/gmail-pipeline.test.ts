@@ -218,6 +218,16 @@ describe("syncConnection", () => {
     assert.deepEqual(calls.synced, []);
   });
 
+  it("processes a small manual fallback without queue writes or advancing the cursor", async () => {
+    const { pipeline, calls } = setup();
+    assert.equal(await pipeline.processRecent(syncJob, 5), "listed");
+    assert.equal(calls.listed[0]?.query, "newer_than:30d");
+    assert.deepEqual(calls.enqueued, []);
+    assert.deepEqual(calls.synced, []);
+    assert.deepEqual(calls.fetched, ["m1"]);
+    assert.equal(calls.record[0]?.outcome, "transactions");
+  });
+
   it("schedules a sync per active connection from its last sync time", async () => {
     const { pipeline, calls } = setup();
     assert.equal(await pipeline.scheduleSyncs(), 1);

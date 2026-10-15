@@ -20,17 +20,29 @@ const FINANCE_OPERATIONS = [
   "create_financial_account",
   "update_financial_account",
   "list_categories",
+  "create_category",
   "update_category",
   "list_budgets",
   "create_budget",
   "edit_budget",
   "delete_budget",
   "list_budget_usage",
+  "list_reminders",
+  "mark_reminder_read",
+  "dismiss_reminder",
   "get_dashboard",
 ] as const;
 
 export type FinanceOperation = (typeof FINANCE_OPERATIONS)[number];
-type AgentFinanceOperation = Exclude<FinanceOperation, "delete_transaction" | "delete_budget">;
+type AgentFinanceOperation = Exclude<
+  FinanceOperation,
+  | "create_category"
+  | "delete_transaction"
+  | "delete_budget"
+  | "list_reminders"
+  | "mark_reminder_read"
+  | "dismiss_reminder"
+>;
 const AGENT_CONFIRMATION_OPERATIONS = [
   "request_destructive_action",
   "confirm_destructive_action",
@@ -51,7 +63,14 @@ export function isFinanceOperation(value: string): value is FinanceOperation {
 }
 
 function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinanceOperation {
-  return value !== "delete_transaction" && value !== "delete_budget";
+  return (
+    value !== "create_category" &&
+    value !== "delete_transaction" &&
+    value !== "delete_budget" &&
+    value !== "list_reminders" &&
+    value !== "mark_reminder_read" &&
+    value !== "dismiss_reminder"
+  );
 }
 
 export function isAgentOperation(value: string): value is AgentOperation {
@@ -90,6 +109,8 @@ export async function runFinanceOperation(
       return service.updateFinancialAccount(caller, input);
     case "list_categories":
       return service.listCategories(caller, input);
+    case "create_category":
+      return service.createCategory(caller, input);
     case "update_category":
       return service.updateCategory(caller, input);
     case "list_budgets":
@@ -102,6 +123,12 @@ export async function runFinanceOperation(
       return service.deleteBudget(caller, input);
     case "list_budget_usage":
       return service.listBudgetUsage(caller, input);
+    case "list_reminders":
+      return service.listReminders(caller, input);
+    case "mark_reminder_read":
+      return service.markReminderRead(caller, input);
+    case "dismiss_reminder":
+      return service.dismissReminder(caller, input);
     case "get_dashboard":
       return service.getDashboard(caller, input);
   }

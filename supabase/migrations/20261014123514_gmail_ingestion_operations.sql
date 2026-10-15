@@ -21,7 +21,8 @@ begin
     into v_user_id
     from public.gmail_connections as connection
     where connection.id = p_connection_id
-      and connection.status = 'active';
+      and connection.status = 'active'
+    for share of connection;
   if v_user_id is null then
     raise exception using errcode = 'P0002', message = 'Gmail connection is not active.';
   end if;

@@ -1,9 +1,11 @@
 "use client";
 
-import { Card } from "@monara/ui";
+import { Button, Card } from "@monara/ui";
 import { useId, useState } from "react";
-
+import { useAmountDisplay } from "@/components/app-session-context";
+import { BrandMark } from "@/components/brand-mark";
 import { EmptyLedgerState } from "@/components/empty-ledger-state";
+import { FinancialSummary } from "@/components/financial-summary";
 import {
   CashFlowChart,
   CategoryBreakdown,
@@ -12,25 +14,45 @@ import {
 } from "@/components/financial-visuals";
 import { Icon } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
+import periodStyles from "@/components/period-selector.module.css";
+import styles from "@/components/reports-screen.module.css";
 import { SpendingFlow } from "@/components/spending-flow";
 import { TransactionRow } from "@/components/transaction-row";
-import { SectionTitle, Wash } from "@/components/visual";
-import { demoSummary, formatMonth, formatRupiah, type Transaction } from "@/data/demo-ledger";
-import { chartRatio, compactAmount, monthComparison } from "@/data/finance-analytics";
-import { spendingPlaces } from "@/data/spending-flow";
+import { useMerchantLogo } from "@/components/use-brand-logo";
+import { SectionTitle } from "@/components/visual";
+import type { ReportPeriod } from "@/data/app-navigation";
+import { categoryIcon } from "@/data/category-style";
+import { demoSummary, demoToday, type Transaction } from "@/data/demo-ledger";
+import { financialSummaryModel, financialYear } from "@/data/finance-analytics";
+import { biggestExpenses, spendingPlaces } from "@/data/spending-flow";
+
+function PlaceMark({ name, category }: { name: string; category: string | null }) {
+  const brand = useMerchantLogo(name);
+  return brand ? (
+    <BrandMark brand={brand} size={32} />
+  ) : (
+    <span
+      aria-hidden
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"
+    >
+      <Icon className="h-4 w-4" name={categoryIcon(category ?? "Uncategorized")} />
+    </span>
+  );
+}
 
 function TopPlaces({
   transactions,
-  month,
+  period,
   openTransaction,
 }: {
   transactions: Transaction[];
-  month: string;
+  period: string;
   openTransaction?: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const paymentsId = useId();
-  const places = spendingPlaces(transactions, month).slice(0, 6);
+  const places = spendingPlaces(transactions, period).slice(0, 6);
   const selected = places.find((place) => place.name === selectedName);
 
   function openPlace(place: (typeof places)[number]) {
@@ -42,70 +64,65 @@ function TopPlaces({
   }
 
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
-      <SectionTitle title="Top places" />
-      <ol className="mt-2 divide-y divide-separator">
+    <Card className={styles.rankingCard}>
+      <div className={styles.rankingHeading}>
+        <SectionTitle title="Top places" />
+        <p className="mt-1 text-sm text-muted">
+          Total spent at each place this {period.length === 4 ? "year" : "month"}.
+        </p>
+      </div>
+      <ol className={styles.rankingList}>
         {places.map((place, index) => (
           <li key={place.name}>
-            <button
-              aria-controls={place.transactions.length > 1 ? paymentsId : undefined}
-              aria-expanded={
-                place.transactions.length > 1 ? selectedName === place.name : undefined
+            <Button
+              aria-controls={
+                place.transactions.length > 1 || !openTransaction ? paymentsId : undefined
               }
-              aria-label={`${place.name}, ${formatRupiah(place.amount)}, ${place.transactions.length} ${place.transactions.length === 1 ? "payment" : "payments"}. Show payments.`}
-              className="relative isolate flex min-h-12 w-full cursor-pointer items-center gap-3 overflow-hidden rounded-xl px-2 py-2 text-left text-sm transition-[background-color,transform] duration-150 ease-out hover:bg-surface-secondary active:scale-[0.98] aria-expanded:bg-accent-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus focus-visible:active:scale-100 motion-reduce:transform-none"
-              onClick={() => openPlace(place)}
+              aria-expanded={
+                place.transactions.length > 1 || !openTransaction
+                  ? selectedName === place.name
+                  : undefined
+              }
+              aria-label={`${place.name}, ${formatRupiah(place.amount)}, ${place.transactions.length} ${place.transactions.length === 1 ? "payment" : "payments"}. ${place.transactions.length === 1 && openTransaction ? "Open transaction." : "Show payments."}`}
+              className={styles.placeRow}
+              onPress={() => openPlace(place)}
               type="button"
+              variant="ghost"
             >
-              <span
-                aria-hidden
-                className="absolute inset-y-1 left-0 -z-10 origin-left rounded-lg bg-accent/8 motion-safe:animate-[grow-x_700ms_var(--ease-out)_both]"
-                style={{
-                  width: `${Math.max(chartRatio(place.amount, places[0].amount) * 100, 4)}%`,
-                  animationDelay: `${index * 70}ms`,
-                }}
-              />
               <span
                 aria-hidden
                 className="w-5 shrink-0 text-center text-xs font-semibold text-muted tabular-nums"
               >
                 {index + 1}
               </span>
-              <span className="min-w-0 flex-1 truncate font-semibold">{place.name}</span>
-              <span className="shrink-0 text-xs text-muted tabular-nums">
-                {place.transactions.length}×
+              <PlaceMark name={place.name} category={place.transactions[0]?.category ?? null} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold">{place.name}</span>
+                <span className="mt-0.5 block text-xs font-normal text-muted">
+                  {place.transactions.length}{" "}
+                  {place.transactions.length === 1 ? "payment" : "payments"}
+                </span>
               </span>
-              <strong className="max-w-[43%] break-words text-right tabular-nums">
+              <strong className="max-w-[43%] text-right tabular-nums [overflow-wrap:anywhere]">
                 {formatRupiah(place.amount)}
               </strong>
               <Icon aria-hidden className="h-3 w-3 shrink-0 text-muted" name="arrow" />
-            </button>
+            </Button>
           </li>
         ))}
       </ol>
       <section aria-live="polite" id={paymentsId}>
         {selected ? (
-          <div className="mt-3 rounded-xl bg-surface-secondary p-3">
-            <h3 className="text-sm font-semibold">{selected.name} payments</h3>
-            <ul className="mt-1 divide-y divide-separator">
+          <div className={styles.selectedPlace}>
+            <h3 className="px-5 pt-4 pb-2 text-sm font-semibold">{selected.name} payments</h3>
+            <ul className={styles.rankingList}>
               {selected.transactions.map((transaction) => (
                 <li key={transaction.id}>
-                  {openTransaction ? (
-                    <TransactionRow
-                      onClick={() => openTransaction(transaction)}
-                      showDate
-                      transaction={transaction}
-                    />
-                  ) : (
-                    <p className="flex flex-wrap justify-between gap-2 py-3 text-sm">
-                      <span>
-                        {transaction.date} · {transaction.category ?? "Uncategorized"}
-                      </span>
-                      <strong className="tabular-nums">
-                        {formatRupiah(transaction.amount ?? 0)}
-                      </strong>
-                    </p>
-                  )}
+                  <TransactionRow
+                    onClick={openTransaction ? () => openTransaction(transaction) : undefined}
+                    showDate
+                    transaction={transaction}
+                  />
                 </li>
               ))}
             </ul>
@@ -116,91 +133,221 @@ function TopPlaces({
   );
 }
 
-function ReportSummary({
-  summary,
+function BiggestExpenses({
   transactions,
-  month,
+  period,
+  openTransaction,
 }: {
-  summary: ReturnType<typeof demoSummary>;
   transactions: Transaction[];
-  month: string;
+  period: string;
+  openTransaction?: (transaction: Transaction) => void;
 }) {
-  const comparison = monthComparison(transactions, month);
-  const change = comparison.current - comparison.previous;
-  const previousName = formatMonth(comparison.previousMonth).split(" ")[0];
+  const payments = biggestExpenses(transactions, period).slice(0, 5);
   return (
-    <Wash className="mt-4 p-5 sm:p-7" tone="blue">
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <p className="break-words text-[clamp(2.25rem,6vw,3.75rem)] font-black leading-none tracking-[-0.06em] tabular-nums">
-            {formatRupiah(summary.spending)}
-          </p>
-          <p className="mt-1 text-sm font-semibold text-muted">spent in {formatMonth(month)}</p>
-        </div>
+    <Card className={styles.rankingCard}>
+      <div className={styles.rankingHeading}>
+        <SectionTitle title="Biggest expenses" />
+        <p className="mt-1 text-sm text-muted">Largest single payments, highest first.</p>
       </div>
-      <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-4 text-xs sm:grid-cols-3">
-        <div className="min-w-0">
-          <dt className="text-muted">Income</dt>
-          <dd className="mt-1 break-words text-sm font-semibold tabular-nums">
-            {formatRupiah(summary.income)}
-          </dd>
-        </div>
-        <div className="min-w-0">
-          <dt className="text-muted">Net income</dt>
-          <dd className="mt-1 break-words text-sm font-semibold tabular-nums">
-            {compactAmount(summary.difference)}
-          </dd>
-        </div>
-        {comparison.state === "available" ? (
-          <div className="col-span-2 min-w-0 sm:col-span-1">
-            <dt className="text-muted">
-              Spending vs {previousName}
-              {comparison.throughDay ? ` by day ${comparison.throughDay}` : ""}
-            </dt>
-            <dd className="mt-1 break-words text-sm font-semibold tabular-nums">
-              {change === BigInt(0)
-                ? "Same spending"
-                : `${compactAmount(change < BigInt(0) ? -change : change)} ${change > BigInt(0) ? "more" : "less"}`}
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-    </Wash>
+      <ol className={styles.rankingList}>
+        {payments.map((transaction) => (
+          <li key={transaction.id}>
+            <TransactionRow
+              onClick={openTransaction ? () => openTransaction(transaction) : undefined}
+              showDate
+              transaction={transaction}
+            />
+          </li>
+        ))}
+      </ol>
+    </Card>
   );
 }
 
-function BiggestExpenses({
-  expenses,
-  openTransaction,
+function YearSelector({
+  year,
+  currentYear,
+  onChange,
 }: {
-  expenses: Transaction[];
-  openTransaction?: (transaction: Transaction) => void;
+  year: string;
+  currentYear: string;
+  onChange: (year: string) => void;
 }) {
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
-      <SectionTitle title="Biggest expenses" />
-      <ul className="mt-1 divide-y divide-separator">
-        {expenses.map((item) => (
-          <li key={item.id}>
-            {openTransaction ? (
-              <TransactionRow onClick={() => openTransaction(item)} showDate transaction={item} />
-            ) : (
-              <p className="flex justify-between gap-2 py-3 text-sm">
-                {item.merchant ?? "Merchant unassigned"}
-                <strong className="tabular-nums">{formatRupiah(item.amount ?? 0)}</strong>
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
-    </Card>
+    <fieldset aria-label="Selected year" className={periodStyles.selector}>
+      <Button
+        aria-label="Previous year"
+        className={periodStyles.arrow}
+        isDisabled={year === "0000"}
+        isIconOnly
+        onPress={() => onChange(String(Number(year) - 1).padStart(4, "0"))}
+        variant="ghost"
+      >
+        <Icon name="chevron-left" />
+      </Button>
+      <span aria-live="polite" className={`${periodStyles.label} min-w-16`}>
+        {year}
+      </span>
+      <Button
+        aria-label="Next year"
+        className={periodStyles.arrow}
+        isDisabled={year >= currentYear}
+        isIconOnly
+        onPress={() => onChange(String(Number(year) + 1).padStart(4, "0"))}
+        variant="ghost"
+      >
+        <Icon name="chevron-right" />
+      </Button>
+    </fieldset>
+  );
+}
+
+function ReportPeriodSelector({
+  period,
+  onChange,
+}: {
+  period: ReportPeriod;
+  onChange: (period: ReportPeriod) => void;
+}) {
+  return (
+    <fieldset aria-label="Report period" className={styles.periodTabs}>
+      {(["monthly", "yearly"] as const).map((value) => (
+        <Button
+          aria-pressed={period === value}
+          className="min-h-11 min-w-0 flex-1 rounded-xl px-4 text-sm"
+          key={value}
+          onPress={() => onChange(value)}
+          variant={period === value ? "secondary" : "ghost"}
+        >
+          {value === "monthly" ? "Monthly" : "Yearly"}
+        </Button>
+      ))}
+    </fieldset>
+  );
+}
+
+type ReportDataProps = {
+  transactions: Transaction[];
+  month: string;
+  today: string;
+  openTransaction?: (transaction: Transaction) => void;
+};
+
+function MonthlyCharts({ transactions, month, today, openTransaction }: ReportDataProps) {
+  const expenses = demoSummary(transactions, month).spending > BigInt(0);
+  return (
+    <>
+      <div
+        className={`${styles.charts} mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]`}
+      >
+        <div className={`${styles.primaryColumn} min-w-0 space-y-4`}>
+          {expenses && (
+            <div className={styles.chart}>
+              <SpendingTrend month={month} today={today} transactions={transactions} />
+            </div>
+          )}
+          <div className={`${styles.chart} ${styles.calendar}`}>
+            <SpendingCalendar
+              month={month}
+              today={today}
+              onOpenTransaction={openTransaction}
+              transactions={transactions}
+            />
+          </div>
+        </div>
+        <div className={`${styles.secondaryColumn} min-w-0 space-y-4`}>
+          {expenses && (
+            <div className={styles.chart}>
+              <CategoryBreakdown
+                month={month}
+                today={today}
+                onOpenTransaction={openTransaction}
+                transactions={transactions}
+              />
+            </div>
+          )}
+          <div className={styles.chart}>
+            <CashFlowChart month={month} today={today} transactions={transactions} />
+          </div>
+        </div>
+      </div>
+      {expenses && (
+        <div className={`${styles.chart} ${styles.flow} mt-4`}>
+          <SpendingFlow
+            month={month}
+            onOpenTransaction={openTransaction}
+            transactions={transactions}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+function YearlyCharts({
+  transactions,
+  year,
+  today,
+  openTransaction,
+}: Omit<ReportDataProps, "month"> & { year: string }) {
+  const expenses = financialYear(transactions, year, today).spending > BigInt(0);
+  return (
+    <div
+      className={`${styles.charts} mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]`}
+    >
+      <div className={styles.chart}>
+        <CashFlowChart key={year} year={year} today={today} transactions={transactions} />
+      </div>
+      {expenses && (
+        <div className={styles.chart}>
+          <CategoryBreakdown
+            key={year}
+            year={year}
+            today={today}
+            onOpenTransaction={openTransaction}
+            transactions={transactions}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExpenseRankings({
+  transactions,
+  period,
+  openTransaction,
+}: Pick<ReportDataProps, "transactions" | "openTransaction"> & { period: string }) {
+  return (
+    <div className={`${styles.places} mt-4 grid items-start gap-4 lg:grid-cols-2`}>
+      <div className="min-w-0">
+        <TopPlaces
+          key={period}
+          period={period}
+          openTransaction={openTransaction}
+          transactions={transactions}
+        />
+      </div>
+      <div className="min-w-0">
+        <BiggestExpenses
+          period={period}
+          openTransaction={openTransaction}
+          transactions={transactions}
+        />
+      </div>
+    </div>
   );
 }
 
 export function ReportsScreen({
   transactions,
   month,
+  today = demoToday,
   setMonth,
+  reportPeriod,
+  reportYear,
+  setReportPeriod,
+  setReportYear,
   openTransaction,
   openAdd,
   openReview,
@@ -208,24 +355,38 @@ export function ReportsScreen({
 }: {
   transactions: Transaction[];
   month: string;
+  today?: string;
   setMonth: (month: string) => void;
+  reportPeriod: ReportPeriod;
+  reportYear: string;
+  setReportPeriod: (period: ReportPeriod) => void;
+  setReportYear: (year: string) => void;
   openTransaction?: (transaction: Transaction) => void;
   openAdd?: () => void;
   openReview?: () => void;
   openConnectGmail?: () => void;
 }) {
-  const summary = demoSummary(transactions, month);
+  const yearly = reportPeriod === "yearly";
+  const period = yearly ? reportYear : month;
+  const model = financialSummaryModel(transactions, period, today);
   const pendingCount = transactions.filter((item) => item.status === "pending").length;
-  const hasFinancialActivity = summary.confirmed.some((item) => item.kind !== "transfer");
-  const expenses = summary.confirmed.filter((item) => item.kind === "expense");
-  const biggest = [...expenses]
-    .sort((left, right) => (right.amount ?? 0) - (left.amount ?? 0))
-    .slice(0, 5);
+  const hasFinancialActivity = model.income > BigInt(0) || model.spending > BigInt(0);
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-[-0.035em] sm:text-3xl">Reports</h1>
-        <MonthSelector month={month} onChange={setMonth} />
+    <div className="min-w-0">
+      <div className={`${styles.header} flex flex-wrap items-center justify-between gap-3`}>
+        <h1 className="text-[32px] font-extrabold tracking-[-0.04em]">Reports</h1>
+        <div className={styles.controls}>
+          <ReportPeriodSelector period={reportPeriod} onChange={setReportPeriod} />
+          {yearly ? (
+            <YearSelector
+              year={reportYear}
+              currentYear={today.slice(0, 4)}
+              onChange={setReportYear}
+            />
+          ) : (
+            <MonthSelector currentMonth={today.slice(0, 7)} month={month} onChange={setMonth} />
+          )}
+        </div>
       </div>
       {!hasFinancialActivity ? (
         <EmptyLedgerState
@@ -233,68 +394,36 @@ export function ReportsScreen({
           onConnectGmail={openConnectGmail}
           onReview={openReview}
           pendingCount={pendingCount}
-          title={
-            transactions.length === 0
-              ? "Start tracking"
-              : summary.confirmed.length > 0
-                ? "No income or expenses this month"
-                : "No transactions this month"
-          }
+          title={`No income or expenses in ${model.label}`}
         />
       ) : (
         <>
-          <ReportSummary
-            key={`summary-${month}`}
-            month={month}
-            summary={summary}
-            transactions={transactions}
-          />
-          <div
-            className="mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]"
-            key={month}
-          >
-            <div className="min-w-0 space-y-4">
-              {expenses.length > 0 ? (
-                <SpendingTrend month={month} transactions={transactions} />
-              ) : null}
-              <SpendingCalendar
-                month={month}
-                onOpenTransaction={openTransaction}
+          <FinancialSummary model={model} />
+          <div className={styles.reportBody}>
+            {yearly ? (
+              <YearlyCharts
                 transactions={transactions}
+                year={reportYear}
+                today={today}
+                openTransaction={openTransaction}
               />
-            </div>
-            <div className="min-w-0 space-y-4">
-              {expenses.length > 0 ? (
-                <CategoryBreakdown
-                  month={month}
-                  onOpenTransaction={openTransaction}
-                  transactions={transactions}
-                />
-              ) : null}
-              <CashFlowChart month={month} transactions={transactions} />
-            </div>
+            ) : (
+              <MonthlyCharts
+                key={month}
+                transactions={transactions}
+                month={month}
+                today={today}
+                openTransaction={openTransaction}
+              />
+            )}
+            {model.spending > BigInt(0) && (
+              <ExpenseRankings
+                transactions={transactions}
+                period={period}
+                openTransaction={openTransaction}
+              />
+            )}
           </div>
-          {expenses.length > 0 ? (
-            <>
-              <div className="mt-4">
-                <SpendingFlow
-                  key={month}
-                  month={month}
-                  onOpenTransaction={openTransaction}
-                  transactions={transactions}
-                />
-              </div>
-              <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
-                <TopPlaces
-                  key={month}
-                  month={month}
-                  openTransaction={openTransaction}
-                  transactions={transactions}
-                />
-                <BiggestExpenses expenses={biggest} openTransaction={openTransaction} />
-              </div>
-            </>
-          ) : null}
         </>
       )}
     </div>
