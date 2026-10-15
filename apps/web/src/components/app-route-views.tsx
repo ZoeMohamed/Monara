@@ -42,6 +42,11 @@ export function OverviewRoute() {
       budgets={session.budgets}
       today={session.today}
       bills={session.bills}
+      insights={
+        session.financeSnapshot?.month === navigation.view.month
+          ? session.financeSnapshot.dashboard.insights
+          : undefined
+      }
       amountsHidden={session.amountsHidden}
       toggleAmounts={session.toggleAmounts}
       openTransaction={(transaction) => navigation.openTransaction(transaction.id)}

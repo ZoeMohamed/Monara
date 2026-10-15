@@ -66,8 +66,9 @@ sequenceDiagram
 | --- | --- |
 | Transaction/account/category/budget reads, transaction/review/budget writes | Implemented with owned resources and validated inputs |
 | `get_summary` | Computed by the worker using supported paginated transaction reads |
+| `suggest_budget` | Implemented as a read-only proposal from the previous three full months of confirmed owned records |
 | Transaction/budget destructive requests and confirmation | Implemented; direct Agent deletion is denied |
-| `suggest_budget`, `list_recurring_bills`, `list_reminders`, `set_reminder_preferences`, `undo_action`, `delete_bill` | Unsupported by the Agent operation endpoint |
+| `list_recurring_bills`, `list_reminders`, `set_reminder_preferences`, `undo_action`, `delete_bill` | Unsupported by the Agent operation endpoint |
 
 Web notification list/read/dismiss operations do not expose the worker's `list_reminders` tool. T1 and destructive-confirmation action logs exist; complete per-tool/failure audit coverage remains Planned. Also Planned: `resolve-sender` and verified link initiation, `confirm_recurring_bill`, `bulk_edit`, media extraction and configured-provider acceptance. Receipt photos and voice notes get a fixed reply today.
 

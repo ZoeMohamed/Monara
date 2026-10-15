@@ -2,7 +2,7 @@
 
 The [Action Tracker reviewed on 14 October](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.5tiin0qzk1mg) assigns Supabase connection (ZO2), ERD (ZO3), and migrations/RLS (ZO4) to Zoe, and migration validation (AB3) to Abhip. Coordinate generated database types and backend contracts with those feature owners. Daptek owns shared UI under ER1–ER3; see [the UI design system](ui-design-system.md), [repository ownership](repository-structure.md), and the [runtime boundaries](adr/0001-initial-runtime-boundaries.md).
 
-The repository now contains the financial schema migrations, RLS/ownership tests, synthetic seed, generated database types, Google sign-in/server sessions and financial services. The migration validation command and database CI job support AB3; an existing-schema checkout must replay and verify its migrations rather than treating the earlier empty-schema skip as current evidence. The final tracker refresh on 14 October marks ZO1–ZO8 Done and ZO9 Not started. UI service adapters, live configuration and hosted migration deployment are separate integration/acceptance work.
+The repository now contains the financial schema migrations, RLS/ownership tests, synthetic seed, generated database types, Google sign-in/server sessions, financial services, and deterministic F9 insight calculations. The migration validation command and database CI job support AB3; an existing-schema checkout must replay and verify its migrations rather than treating the earlier empty-schema skip as current evidence. UI service adapters, live configuration and hosted migration deployment are separate integration/acceptance work.
 
 ## Start this checkout's database
 

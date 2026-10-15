@@ -7,6 +7,7 @@ import {
   moneySchema,
   signedMoneySchema,
 } from "./common.ts";
+import { financialInsightsSchema } from "./insights.ts";
 import { reminderSchema } from "./reminders.ts";
 import { transactionSchema } from "./transactions.ts";
 
@@ -41,6 +42,7 @@ export const dashboardSummarySchema = z
     pace: dashboardPaceSchema,
     categoryBreakdown: z.array(dashboardCategoryTotalSchema),
     budgetUsage: z.array(budgetUsageSchema),
+    insights: financialInsightsSchema,
     recentTransactions: z.array(transactionSchema).max(10),
     activeReminders: z.array(reminderSchema).max(10),
   })

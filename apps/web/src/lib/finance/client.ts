@@ -2,6 +2,8 @@ import {
   budgetMutationResultSchema,
   budgetPageSchema,
   budgetSchema,
+  budgetSuggestionInputSchema,
+  budgetSuggestionSchema,
   budgetUsageSchema,
   categoryMutationResultSchema,
   categoryPageSchema,
@@ -52,6 +54,7 @@ const operations = {
   create_category: { input: createCategoryInputSchema, output: createCategoryResultSchema },
   update_category: { input: updateCategoryInputSchema, output: categoryMutationResultSchema },
   list_budgets: { input: listBudgetsInputSchema, output: budgetPageSchema },
+  suggest_budget: { input: budgetSuggestionInputSchema, output: budgetSuggestionSchema },
   list_budget_usage: { input: getDashboardInputSchema, output: budgetUsageSchema.array() },
   list_reminders: { input: listRemindersInputSchema, output: reminderPageSchema },
   mark_reminder_read: { input: markReminderReadInputSchema, output: reminderSchema },
@@ -129,7 +132,10 @@ export async function callFinanceOperation<Operation extends FinanceClientOperat
       fieldErrors,
     );
   }
-  const mutation = !operation.startsWith("list_") && operation !== "get_dashboard";
+  const mutation =
+    !operation.startsWith("list_") &&
+    operation !== "get_dashboard" &&
+    operation !== "suggest_budget";
   let response: Response;
   try {
     response = await fetcher(`/api/finance/operations/${operation}`, {
