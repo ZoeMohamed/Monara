@@ -61,7 +61,7 @@ function transaction(overrides = {}) {
 }
 
 describe("budget periods and usage", () => {
-  it("uses calendar months and anchored seven-day weekly periods", () => {
+  it("keeps first-day monthly and anchored seven-day weekly periods", () => {
     assert.deepEqual(budgetPeriodForDate(budget, "2026-10-14"), {
       startsOn: "2026-10-01",
       endsOn: "2026-10-31",
@@ -71,6 +71,91 @@ describe("budget periods and usage", () => {
       { startsOn: "2026-10-10", endsOn: "2026-10-16" },
     );
     assert.equal(budgetPeriodForDate(budget, "2026-09-30"), null);
+  });
+
+  it("anchors monthly periods to payday across years without spending before activation", () => {
+    const payday = { cadence: "monthly", startsOn: "2026-09-25" };
+    assert.deepEqual(budgetPeriodForDate(payday, "2026-10-14"), {
+      startsOn: "2026-09-25",
+      endsOn: "2026-10-24",
+    });
+    assert.deepEqual(budgetPeriodForDate(payday, "2026-10-25"), {
+      startsOn: "2026-10-25",
+      endsOn: "2026-11-24",
+    });
+    assert.deepEqual(budgetPeriodForDate(payday, "2027-01-01"), {
+      startsOn: "2026-12-25",
+      endsOn: "2027-01-24",
+    });
+    assert.equal(budgetPeriodForDate(payday, "2026-09-24"), null);
+  });
+
+  it("clamps 29th, 30th, and 31st anchors in short months without losing the original day", () => {
+    for (const day of [29, 30, 31]) {
+      const anchored = { cadence: "monthly", startsOn: `2026-01-${day}` };
+      assert.deepEqual(budgetPeriodForDate(anchored, "2026-02-28"), {
+        startsOn: "2026-02-28",
+        endsOn: `2026-03-${day - 1}`,
+      });
+      assert.deepEqual(budgetPeriodForDate(anchored, `2026-03-${day}`), {
+        startsOn: `2026-03-${day}`,
+        endsOn: `2026-04-${Math.min(day, 30) - 1}`,
+      });
+    }
+    assert.deepEqual(
+      budgetPeriodForDate({ cadence: "monthly", startsOn: "2024-01-31" }, "2024-02-29"),
+      {
+        startsOn: "2024-02-29",
+        endsOn: "2024-03-30",
+      },
+    );
+    assert.deepEqual(
+      budgetPeriodForDate({ cadence: "monthly", startsOn: "2024-01-29" }, "2024-02-28"),
+      {
+        startsOn: "2024-01-29",
+        endsOn: "2024-02-28",
+      },
+    );
+  });
+
+  it("preserves supported years below 100 instead of remapping them to the twentieth century", () => {
+    assert.deepEqual(
+      budgetPeriodForDate({ cadence: "monthly", startsOn: "0000-01-31" }, "0000-02-29"),
+      {
+        startsOn: "0000-02-29",
+        endsOn: "0000-03-30",
+      },
+    );
+    assert.deepEqual(
+      budgetPeriodForDate({ cadence: "monthly", startsOn: "0099-01-30" }, "0099-02-28"),
+      {
+        startsOn: "0099-02-28",
+        endsOn: "0099-03-29",
+      },
+    );
+  });
+
+  it("accepts the last supported calendar-month period and rejects intervals extending past year 9999", () => {
+    assert.deepEqual(
+      budgetPeriodForDate({ cadence: "monthly", startsOn: "9999-12-01" }, "9999-12-31"),
+      {
+        startsOn: "9999-12-01",
+        endsOn: "9999-12-31",
+      },
+    );
+    assert.deepEqual(
+      budgetPeriodForDate({ cadence: "weekly", startsOn: "9999-12-25" }, "9999-12-31"),
+      {
+        startsOn: "9999-12-25",
+        endsOn: "9999-12-31",
+      },
+    );
+    for (const cadence of ["monthly", "weekly"]) {
+      assert.throws(() => budgetPeriodForDate({ cadence, startsOn: "9999-12-26" }, "9999-12-31"), {
+        name: "RangeError",
+        message: "Budget period extends beyond supported calendar dates.",
+      });
+    }
   });
 
   it("counts only confirmed, non-deleted expenses in the category and period", () => {
@@ -469,6 +554,37 @@ function createMemoryFinanceRepository() {
         .slice(0, limit)
         .map((entry) => entry.value);
     },
+    async listReminders(ownerId, input) {
+      return page(
+        owned(reminders, ownerId).filter(
+          (entry) =>
+            (!input.status || entry.value.status === input.status) &&
+            (!input.kind || entry.value.kind === input.kind),
+        ),
+        input,
+      );
+    },
+    async findReminder(ownerId, reminderId) {
+      return (
+        reminders.find((entry) => entry.ownerId === ownerId && entry.value.id === reminderId)
+          ?.value ?? null
+      );
+    },
+    async updateReminder(input) {
+      const entry = reminders.find(
+        (item) => item.ownerId === input.userId && item.value.id === input.reminderId,
+      );
+      if (!entry) throw new FinanceOperationError("NOT_FOUND", "Notification not found.");
+      if (entry.value.status !== input.expectedStatus)
+        throw new FinanceOperationError("CONFLICT", "Notification changed.");
+      entry.value = {
+        ...entry.value,
+        status: input.status,
+        readAt: input.readAt,
+        updatedAt: stamp(),
+      };
+      return entry.value;
+    },
     async createBudgetThresholdReminder(input) {
       const scopedKey = `${input.userId}:${input.dedupeKey}`;
       if (reminderKeys.has(scopedKey)) return;
@@ -566,6 +682,246 @@ function createMemoryFinanceRepository() {
 const ownerA = "60000000-0000-4000-8000-000000000006";
 const ownerB = "70000000-0000-4000-8000-000000000007";
 const callerA = { userId: ownerA, channel: "web", directSource: "manual_form" };
+
+describe("owned notification read and dismissal", () => {
+  it("isolates Users, preserves read receipts, checks stale state, and permits safe retries", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-14T12:00:00Z"),
+    });
+    await memory.repository.createBudgetThresholdReminder({
+      userId: ownerA,
+      budget,
+      periodStartsOn: "2026-10-01",
+      thresholdPercent: 80,
+      usage: { amountMinor: "800", currency: "IDR" },
+      scheduledFor: "2026-10-14T12:00:00Z",
+      dedupeKey: "synthetic-reminder",
+    });
+    const notification = (await service.listReminders(callerA, {})).items[0];
+    assert.equal((await service.listReminders({ ...callerA, userId: ownerB }, {})).items.length, 0);
+    await assert.rejects(
+      service.markReminderRead(
+        { ...callerA, userId: ownerB },
+        { reminderId: notification.id, expectedStatus: "unread" },
+      ),
+      { code: "NOT_FOUND" },
+    );
+    const read = await service.markReminderRead(callerA, {
+      reminderId: notification.id,
+      expectedStatus: "unread",
+    });
+    assert.equal(read.status, "read");
+    assert.equal(read.readAt, "2026-10-14T12:00:00.000Z");
+    assert.deepEqual(
+      await service.markReminderRead(callerA, {
+        reminderId: notification.id,
+        expectedStatus: "unread",
+      }),
+      read,
+    );
+    assert.equal(
+      (await service.getDashboard(callerA, { month: "2026-10" })).activeReminders.length,
+      0,
+    );
+    await assert.rejects(
+      service.dismissReminder(callerA, { reminderId: notification.id, expectedStatus: "unread" }),
+      { code: "CONFLICT" },
+    );
+    const dismissed = await service.dismissReminder(callerA, {
+      reminderId: notification.id,
+      expectedStatus: "read",
+    });
+    assert.equal(dismissed.readAt, read.readAt);
+    assert.equal(dismissed.status, "dismissed");
+    assert.deepEqual(
+      await service.dismissReminder(callerA, {
+        reminderId: notification.id,
+        expectedStatus: "read",
+      }),
+      dismissed,
+    );
+    await assert.rejects(
+      service.markReminderRead(callerA, { reminderId: notification.id, expectedStatus: "read" }),
+      { code: "CONFLICT" },
+    );
+    assert.equal(memory.state.transactions.length, 0);
+  });
+});
+
+describe("payday budget usage reads across month boundaries", () => {
+  it("uses the same future-month cycle and activation date as the dashboard", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-14T12:00:00Z"),
+    });
+    for (const [clientRequestId, startsOn] of [
+      ["synthetic-upcoming-cycle", "2026-09-25"],
+      ["synthetic-later-activation", "2026-11-25"],
+    ]) {
+      await service.createBudget(callerA, {
+        clientRequestId,
+        categoryId: category.id,
+        name: "Payday food",
+        cadence: "monthly",
+        startsOn,
+        limit: { amountMinor: "1000", currency: "IDR" },
+      });
+    }
+    for (const [occurredOn, amountMinor] of [
+      ["2026-10-26", "200"],
+      ["2026-11-05", "300"],
+      ["2026-11-26", "900"],
+    ]) {
+      memory.seedPending(ownerA, {
+        reviewStatus: "confirmed",
+        occurredOn,
+        money: { amountMinor, currency: "IDR" },
+      });
+    }
+
+    const usage = await service.listBudgetUsage(callerA, { month: "2026-11" });
+    const dashboard = await service.getDashboard(callerA, { month: "2026-11" });
+    assert.deepEqual(usage, dashboard.budgetUsage);
+    assert.equal(usage.length, 1);
+    assert.equal(usage[0].periodStartsOn, "2026-10-25");
+    assert.equal(usage[0].periodEndsOn, "2026-11-24");
+    assert.equal(usage[0].used.amountMinor, "500");
+  });
+
+  it("loads the following month's confirmed payments inside the active cycle without changing monthly totals", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-28T12:00:00Z"),
+    });
+    await service.createBudget(callerA, {
+      clientRequestId: "synthetic-next-month-payday",
+      categoryId: category.id,
+      name: "Payday food",
+      cadence: "monthly",
+      startsOn: "2026-10-25",
+      limit: { amountMinor: "1000", currency: "IDR" },
+    });
+    memory.seedPending(ownerA, {
+      reviewStatus: "confirmed",
+      occurredOn: "2026-11-05",
+      money: { amountMinor: "800", currency: "IDR" },
+    });
+    for (const occurredOn of ["2026-10-24", "2026-11-25"]) {
+      memory.seedPending(ownerA, {
+        reviewStatus: "confirmed",
+        occurredOn,
+        money: { amountMinor: "100", currency: "IDR" },
+      });
+    }
+    memory.seedPending(ownerA, {
+      occurredOn: "2026-11-10",
+      money: { amountMinor: "100", currency: "IDR" },
+    });
+    memory.seedPending(ownerB, {
+      reviewStatus: "confirmed",
+      occurredOn: "2026-11-05",
+      money: { amountMinor: "900", currency: "IDR" },
+    });
+    const [usage] = await service.listBudgetUsage(callerA, { month: "2026-10" });
+    assert.equal(usage.periodStartsOn, "2026-10-25");
+    assert.equal(usage.periodEndsOn, "2026-11-24");
+    assert.equal(usage.used.amountMinor, "800");
+    const dashboard = await service.getDashboard(callerA, { month: "2026-10" });
+    assert.deepEqual(dashboard.budgetUsage[0], usage);
+    assert.equal(dashboard.spending.amountMinor, "100");
+    assert.equal(dashboard.recentTransactions.length, 1);
+    assert.equal(dashboard.recentTransactions[0].occurredOn, "2026-10-24");
+  });
+
+  it("loads the final supported month without reading year 10000 and fails explicitly on unsupported active cycles", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("9999-12-31T12:00:00Z"),
+    });
+    await service.createBudget(callerA, {
+      clientRequestId: "synthetic-final-month",
+      categoryId: category.id,
+      name: "Final calendar month",
+      cadence: "monthly",
+      startsOn: "9999-12-01",
+      limit: { amountMinor: "1000", currency: "IDR" },
+    });
+    memory.seedPending(ownerA, {
+      reviewStatus: "confirmed",
+      occurredOn: "9999-12-31",
+      money: { amountMinor: "800", currency: "IDR" },
+    });
+    const [usage] = await service.listBudgetUsage(callerA, { month: "9999-12" });
+    assert.equal(usage.periodStartsOn, "9999-12-01");
+    assert.equal(usage.periodEndsOn, "9999-12-31");
+    assert.equal(usage.used.amountMinor, "800");
+    const dashboard = await service.getDashboard(callerA, { month: "9999-12" });
+    assert.deepEqual(dashboard.budgetUsage[0], usage);
+    assert.equal(dashboard.spending.amountMinor, "800");
+    await memory.repository.createBudget(ownerA, {
+      clientRequestId: "synthetic-unsupported-cycle",
+      categoryId: category.id,
+      name: "Unsupported cycle",
+      cadence: "weekly",
+      startsOn: "9999-12-26",
+      limit: { amountMinor: "1000", currency: "IDR" },
+      warningPercent: 80,
+    });
+    const failure = {
+      name: "RangeError",
+      message: "Budget period extends beyond supported calendar dates.",
+    };
+    await assert.rejects(service.listBudgetUsage(callerA, { month: "9999-12" }), failure);
+    await assert.rejects(service.getDashboard(callerA, { month: "9999-12" }), failure);
+  });
+
+  it("loads preceding-month spending and excludes earlier, pending, and next-cycle records", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-14T12:00:00Z"),
+    });
+    await service.createBudget(callerA, {
+      clientRequestId: "synthetic-payday",
+      categoryId: category.id,
+      name: "Payday food",
+      cadence: "monthly",
+      startsOn: "2026-09-25",
+      limit: { amountMinor: "1000", currency: "IDR" },
+    });
+    memory.seedPending(ownerA, {
+      reviewStatus: "confirmed",
+      occurredOn: "2026-09-25",
+      money: { amountMinor: "100", currency: "IDR" },
+    });
+    memory.seedPending(ownerA, {
+      reviewStatus: "confirmed",
+      occurredOn: "2026-10-14",
+      money: { amountMinor: "200", currency: "IDR" },
+    });
+    memory.seedPending(ownerA, {
+      reviewStatus: "confirmed",
+      occurredOn: "2026-09-24",
+      money: { amountMinor: "500", currency: "IDR" },
+    });
+    memory.seedPending(ownerA, {
+      reviewStatus: "confirmed",
+      occurredOn: "2026-10-25",
+      money: { amountMinor: "500", currency: "IDR" },
+    });
+    memory.seedPending(ownerA, {
+      occurredOn: "2026-10-14",
+      money: { amountMinor: "500", currency: "IDR" },
+    });
+    const usage = (await service.listBudgetUsage(callerA, { month: "2026-10" }))[0];
+    assert.equal(usage.used.amountMinor, "300");
+    assert.equal(usage.periodStartsOn, "2026-09-25");
+    assert.equal(usage.periodEndsOn, "2026-10-24");
+    const dashboard = await service.getDashboard(callerA, { month: "2026-10" });
+    assert.equal(dashboard.budgetUsage[0].used.amountMinor, "300");
+    assert.equal(dashboard.spending.amountMinor, "700");
+  });
+});
 
 describe("ZO6 Review Queue service simulation", () => {
   it("edits, confirms, rejects, and isolates pending Gmail transactions by User", async () => {

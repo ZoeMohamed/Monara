@@ -1,0 +1,186 @@
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.reportBody {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.periodTabs {
+  display: flex;
+  min-width: 0;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.rankingCard {
+  display: block;
+  min-width: 0;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.rankingHeading {
+  padding: 20px 20px 12px;
+}
+
+.rankingList {
+  margin: 0;
+  padding: 0 8px 8px;
+  list-style: none;
+}
+
+.rankingList > li + li {
+  border-top: 1px solid var(--separator);
+}
+
+.rankingList > li > button,
+.rankingList > li > div,
+.placeRow {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 68px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px 12px;
+  border-radius: 16px;
+  text-align: left;
+  white-space: normal;
+  --button-bg-hover: var(--surface-secondary);
+  --button-bg-pressed: var(--surface-tertiary);
+}
+
+.placeRow {
+  font-size: 14px;
+}
+
+.placeRow[aria-expanded="true"] {
+  background: var(--accent-soft);
+}
+
+.rankingList > li:has(> [aria-expanded="true"]),
+.rankingList > li:has(> [aria-expanded="true"]) + li {
+  border-top-color: transparent;
+}
+
+.placeRow:active,
+.placeRow[data-pressed="true"] {
+  transform: none;
+}
+
+.rankingList > li > button:focus-visible,
+.rankingList > li > button[data-focus-visible="true"] {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.selectedPlace {
+  border-top: 1px solid var(--separator);
+  background: var(--surface-secondary);
+}
+
+@media (hover: hover) {
+  .placeRow:hover,
+  .placeRow[data-hovered="true"] {
+    background: var(--surface-secondary);
+  }
+
+  /* The hovered row reads as one rounded shape, so the rules touching it step aside. */
+  .rankingList > li:hover,
+  .rankingList > li:hover + li {
+    border-top-color: transparent;
+  }
+}
+
+@media (max-width: 767px) {
+  .header {
+    align-items: flex-start;
+    row-gap: 20px;
+  }
+
+  .header h1 {
+    font-size: 32px;
+    line-height: 1.15;
+  }
+
+  .controls {
+    display: contents;
+  }
+
+  .periodTabs {
+    width: 154px;
+    margin-left: auto;
+  }
+
+  .periodTabs button {
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .controls > fieldset:not(:where(.periodTabs)) {
+    margin-left: auto;
+  }
+
+  .controls > fieldset:not(:where(.periodTabs)) > span {
+    padding-inline: 12px;
+    font-size: 15px;
+  }
+
+  .charts {
+    margin-top: 36px;
+    gap: 36px;
+  }
+
+  .primaryColumn,
+  .secondaryColumn {
+    display: flex;
+    flex-direction: column;
+    gap: 36px;
+  }
+
+  .primaryColumn > *,
+  .secondaryColumn > * {
+    margin-block: 0;
+  }
+
+  .chart > :first-child {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .chart h2 {
+    font-size: 20px;
+    line-height: 1.35;
+    font-weight: 650;
+    letter-spacing: -0.025em;
+  }
+
+  /* On a phone the category list already answers what the flow diagram shows. */
+  .flow {
+    display: none;
+  }
+
+  .places {
+    gap: 36px;
+    margin-top: 36px;
+  }
+}

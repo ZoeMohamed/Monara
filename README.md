@@ -1,6 +1,6 @@
 # Monara
 
-Monara is a mobile-first personal-finance PWA built with Next.js. The UI currently uses sample data and browser state. The repository now includes scaffolding for a Next.js backend, Supabase, a Cloudflare agent, shared packages, and LLM experiments. Those integrations are not implemented or connected yet.
+Monara is a mobile-first personal-finance PWA built with Next.js. Visitors can explore an interactive demo before signing in. Signed-in screens load owned financial records and use the financial APIs for transactions, review, budgets, and financial accounts. The repository also includes Gmail connection lifecycle screens, an authenticated in-app Chat bridge, database migrations/RLS tests, and a Cloudflare Agent runtime. Implemented source does not establish deployed configuration or live-provider acceptance.
 
 See [repository structure and team ownership](docs/repository-structure.md), [architecture decisions](docs/adr/0001-initial-runtime-boundaries.md), [UI design system](docs/ui-design-system.md), [Supabase workflow](docs/supabase-workflow.md), and [agent instructions](AGENTS.md).
 
@@ -20,6 +20,8 @@ pnpm dev
 ```
 
 Open `http://localhost:3000`.
+
+Explore sample finances at `/demo` without signing in. Personal financial routes require Google sign-in and load the User's records. Without valid public Supabase configuration, Monara shows an unavailable sign-in state and denies financial requests; failed ledger loads show a recovery screen. See the [Supabase workflow](docs/supabase-workflow.md) for local database setup and [environment configuration](docs/repository-structure.md#environment-configuration) for the empty templates and required settings.
 
 ## Test on another phone or laptop
 
@@ -87,4 +89,6 @@ Jika deployment gagal, buka status **Vercel** pada commit GitHub untuk melihat b
 
 ## Product scope
 
-The UI uses shared HeroUI components and a light theme from `packages/ui`. Transactions are demo data. Changes live only in browser state and reset on reload. Database CI checks migration prerequisites and skips until SQL migrations exist; `pnpm db:check --reset` runs the local database gate once the schema, ownership tests, and generated types are added. The next implementation scope is Google sign-in, financial accounts, transaction tracking, dashboard, Gmail ingestion through Composio, and a WhatsApp agent through Kapso. Other features remain placeholders. See the architecture decision for the agreed runtime, review, and ownership boundaries.
+The UI uses shared HeroUI components and a light theme from `packages/ui`. The public demo uses labelled synthetic records, keeps edits in memory, and resets on reload. Personal financial screens use persisted records through owned UUID resources and exact IDR contracts. The live UI supports transaction creation and editing, review, deletion, budget management, and adding financial accounts. Reads and writes fail explicitly when the backend is unavailable; sample records are never substituted for failed personal ledger loads.
+
+Database migrations, ownership/RLS tests, and generated types are present. `pnpm check` validates their prerequisites without Docker; `pnpm db:check --reset` replays and tests this checkout's disposable local database. Gmail authorization is separate from Google sign-in, and its screens load mailbox status and support connection and disconnection. Live Chat uses the authenticated bridge when the Agent runtime is configured; demo Chat uses sample answers. Automatic Gmail ingestion, live recurring bills, verified WhatsApp linking, persistent Reminder delivery, and device/PWA acceptance still need integration or acceptance evidence. See the [UI backend handoff](docs/ui-backend-handoff.md) for the current boundaries and remaining acceptance checks.

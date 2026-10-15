@@ -2,16 +2,18 @@
 
 import { Button, Card, InputGroup, Label, TextField } from "@monara/ui";
 import { useState } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 
+import { FinancialSummary } from "@/components/financial-summary";
 import { Icon } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
 import { ReviewQueue } from "@/components/review-queue";
 import { TransactionRow } from "@/components/transaction-row";
-import { Wash } from "@/components/visual";
+import styles from "@/components/transactions-screen.module.css";
 import type { LedgerKind } from "@/data/app-navigation";
-import { categoryColor } from "@/data/category-style";
-import { demoSummary, formatMonth, formatRupiah, type Transaction } from "@/data/demo-ledger";
-import { chartRatio, financialMonth } from "@/data/finance-analytics";
+import { demoSummary, demoToday, formatMonth, type Transaction } from "@/data/demo-ledger";
+
+import { financialSummaryModel } from "@/data/finance-analytics";
 
 type KindFilter = LedgerKind;
 
@@ -65,6 +67,8 @@ function TransactionViewSelector({
   pendingCount: number;
   onChange: (review: boolean) => void;
 }) {
+  const tab = (active: boolean) =>
+    `min-h-11 w-full min-w-0 rounded-xl px-3 text-sm font-semibold ${active ? "bg-surface text-foreground shadow-sm" : "text-muted"}`;
   return (
     <fieldset
       aria-label="Transaction view"
@@ -72,76 +76,30 @@ function TransactionViewSelector({
     >
       <Button
         aria-pressed={!reviewOpen}
-        className={`min-h-11 min-w-0 rounded-xl px-2 text-xs sm:text-sm ${reviewOpen ? "text-muted" : "bg-surface text-foreground"}`}
+        className={tab(!reviewOpen)}
         onPress={() => onChange(false)}
         variant="ghost"
       >
         Confirmed
       </Button>
       <Button
+        aria-label={`To review, ${pendingCount} waiting`}
         aria-pressed={reviewOpen}
-        className={`min-h-11 min-w-0 rounded-xl px-2 text-xs sm:text-sm ${reviewOpen ? "bg-surface text-foreground" : "text-muted"}`}
+        className={tab(reviewOpen)}
         onPress={() => onChange(true)}
         variant="ghost"
       >
-        Review Queue · {pendingCount}
+        To review
+        {pendingCount > 0 ? (
+          <span
+            aria-hidden
+            className="grid h-5 min-w-5 place-items-center rounded-full bg-warning px-1.5 text-[11px] font-bold text-warning-foreground tabular-nums"
+          >
+            {pendingCount}
+          </span>
+        ) : null}
       </Button>
     </fieldset>
-  );
-}
-
-function LedgerSummary({
-  summary,
-  categories,
-}: {
-  summary: ReturnType<typeof demoSummary>;
-  categories: ReturnType<typeof financialMonth>["categories"];
-}) {
-  return (
-    <Wash className="mt-4 p-4 sm:p-5" tone="blue">
-      <p className="text-sm font-medium text-muted">Confirmed spending</p>
-      <p className="mt-2 text-3xl font-bold tracking-[-0.04em] tabular-nums [overflow-wrap:anywhere] sm:text-4xl">
-        {formatRupiah(summary.spending)}
-      </p>
-      <p className="mt-2 text-sm text-muted">
-        Income{" "}
-        <span className="font-medium text-foreground tabular-nums">
-          {formatRupiah(summary.income)}
-        </span>
-        {" · "}transfers excluded
-      </p>
-      {categories.length > 0 ? (
-        <>
-          <div aria-hidden className="mt-4 flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full">
-            {categories.map((category, index) => (
-              <span
-                className="h-full"
-                key={category.name}
-                style={{
-                  flexGrow: chartRatio(category.amount, summary.spending) * 1000,
-                  background: categoryColor(category.name, index),
-                }}
-              />
-            ))}
-          </div>
-          <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
-            {categories.map((category, index) => (
-              <li className="flex items-center gap-1.5" key={category.name}>
-                <span
-                  aria-hidden
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: categoryColor(category.name, index) }}
-                />
-                {category.name}{" "}
-                <span className="tabular-nums">
-                  {Math.round(chartRatio(category.amount, summary.spending) * 100)}%
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-    </Wash>
   );
 }
 
@@ -172,11 +130,14 @@ function LedgerFilters({
           />
         </InputGroup>
       </TextField>
-      <fieldset aria-label="Filter by transaction type" className="mt-3 flex flex-wrap gap-2">
+      <fieldset
+        aria-label="Filter by transaction type"
+        className="mt-3 flex min-w-0 gap-2 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
+      >
         {kindFilters.map((filter) => (
           <Button
             aria-pressed={kindFilter === filter.id}
-            className={`min-h-11 min-w-0 rounded-full px-4 text-xs font-bold ${kindFilter === filter.id ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`}
+            className={`min-h-11 min-w-0 shrink-0 rounded-full px-4 text-xs font-bold ${kindFilter === filter.id ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`}
             key={filter.id}
             onPress={() => onKindChange(filter.id)}
             variant="ghost"
@@ -227,11 +188,12 @@ function GroupedLedger({
   transactions: Transaction[];
   openTransaction: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   return (
     <div className="mt-3 space-y-4">
       {groupByDate(transactions).map(([date, group]) => (
         <section aria-labelledby={`ledger-day-${date}`} key={date}>
-          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-2 lg:px-5">
             <h2 className="min-w-0 text-sm font-semibold" id={`ledger-day-${date}`}>
               <time dateTime={date}>
                 {ledgerDayFormatter.format(new Date(`${date}T00:00:00Z`))}
@@ -243,7 +205,7 @@ function GroupedLedger({
               </p>
             ) : null}
           </div>
-          <div className="divide-y divide-separator rounded-3xl border border-border bg-surface px-3">
+          <div className={styles.ledgerGroup}>
             {group.transactions.map((transaction) => (
               <TransactionRow
                 key={transaction.id}
@@ -315,6 +277,7 @@ function EmptyLedger({
 function ConfirmedLedger({
   transactions,
   month,
+  today,
   openTransaction,
   query,
   kindFilter,
@@ -327,6 +290,7 @@ function ConfirmedLedger({
 }: {
   transactions: Transaction[];
   month: string;
+  today: string;
   openTransaction: (transaction: Transaction) => void;
   query: string;
   kindFilter: KindFilter;
@@ -343,10 +307,7 @@ function ConfirmedLedger({
 
   return (
     <>
-      <LedgerSummary
-        categories={financialMonth(transactions, month).categories}
-        summary={summary}
-      />
+      <FinancialSummary model={financialSummaryModel(transactions, month, today)} />
       <LedgerFilters
         query={query}
         kindFilter={kindFilter}
@@ -384,6 +345,7 @@ export function TransactionsScreen({
   onConfirm,
   onReject,
   month,
+  today = demoToday,
   setMonth,
   query: controlledQuery,
   kindFilter: controlledKindFilter,
@@ -401,6 +363,7 @@ export function TransactionsScreen({
   onConfirm: (id: string) => void;
   onReject: (id: string) => void;
   month: string;
+  today?: string;
   setMonth: (month: string) => void;
   query?: string;
   kindFilter?: KindFilter;
@@ -440,8 +403,13 @@ export function TransactionsScreen({
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-[-0.035em] sm:text-3xl">Transactions</h1>
-        {!reviewOpen ? <MonthSelector month={month} onChange={setMonth} /> : null}
+        <h1 className="text-[32px] font-extrabold tracking-[-0.04em]">
+          <span className="lg:hidden">History</span>
+          <span className="max-lg:hidden">Transactions</span>
+        </h1>
+        {!reviewOpen ? (
+          <MonthSelector month={month} currentMonth={today.slice(0, 7)} onChange={setMonth} />
+        ) : null}
       </div>
       <TransactionViewSelector
         reviewOpen={reviewOpen}
@@ -459,6 +427,7 @@ export function TransactionsScreen({
         <ConfirmedLedger
           transactions={transactions}
           month={month}
+          today={today}
           openTransaction={openTransaction}
           query={query}
           kindFilter={kindFilter}

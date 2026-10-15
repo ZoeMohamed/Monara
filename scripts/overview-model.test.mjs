@@ -171,6 +171,137 @@ test("empty and transfer-only months have actionable empty state without invente
   assert.equal(transferOnly.recent.length, 1);
 });
 
+test("latest activity shows the five newest confirmed records, across months only for the current one", () => {
+  const ledger = [
+    record({ id: "oct-2", date: "2026-10-02", time: "09:00" }),
+    record({ id: "oct-1", date: "2026-10-01", time: "18:00" }),
+    record({ id: "oct-1-early", date: "2026-10-01", time: "07:00" }),
+    record({ id: "sep-30", date: "2026-09-30", time: "12:00" }),
+    record({ id: "sep-29", date: "2026-09-29", time: "12:00" }),
+    record({ id: "sep-28", date: "2026-09-28", time: "12:00" }),
+    record({ id: "future", date: "2026-10-20" }),
+    record({ id: "pending", date: "2026-10-02", time: "10:00", status: "pending" }),
+    record({ id: "invalid", date: "2026-10-02", time: "11:00", amount: 0 }),
+  ];
+  const current = overviewModel(ledger, [], [], "2026-10", "2026-10-02");
+  assert.deepEqual(
+    current.recent.map(({ id }) => id),
+    ["oct-2", "oct-1", "oct-1-early", "sep-30", "sep-29"],
+  );
+  const past = overviewModel(ledger, [], [], "2026-09", "2026-10-02");
+  assert.deepEqual(
+    past.recent.map(({ id }) => id),
+    ["sep-30", "sep-29", "sep-28"],
+  );
+});
+
+test("attention lists overdue bills first, then over-budget, due-soon, near-limit and review", () => {
+  const model = overviewModel(
+    [
+      record({ category: "Digital", amount: 150 }),
+      record({ category: "Transport", amount: 85 }),
+      record({ status: "pending" }),
+    ],
+    [budget("Transport", 100), budget("Digital", 100), budget("Food & Drinks", 100)],
+    [
+      bill({ id: "late", nextDue: "2026-10-08" }),
+      bill({ id: "soon", nextDue: "2026-10-13" }),
+      bill({ id: "later", nextDue: "2026-10-30" }),
+      bill({ id: "suggested", nextDue: "2026-10-05", status: "suggested" }),
+    ],
+    "2026-10",
+    "2026-10-11",
+  );
+  assert.deepEqual(
+    model.attention.map((item) =>
+      item.kind === "budget"
+        ? `budget:${item.usage.budget.category}:${item.usage.state}`
+        : item.kind === "review"
+          ? `review:${item.count}`
+          : `${item.kind}:${item.bill.id}:${item.days}`,
+    ),
+    [
+      "bill-overdue:late:3",
+      "budget:Digital:over",
+      "bill-due:soon:2",
+      "budget:Transport:warning",
+      "review:1",
+    ],
+  );
+  const past = overviewModel([], [], [bill({ nextDue: "2026-09-01" })], "2026-09", "2026-10-11");
+  assert.deepEqual(past.attention, []);
+});
+
+test("month facts state only what confirmed records show", () => {
+  const model = overviewModel(
+    [
+      record({ id: "big", category: "Digital", amount: 300, date: "2026-10-02" }),
+      record({ id: "small", category: "Transport", amount: 100, date: "2026-10-03" }),
+      record({ id: "pending", category: "Shopping", amount: 9000, status: "pending" }),
+    ],
+    [],
+    [],
+    "2026-10",
+    "2026-10-04",
+  );
+  assert.deepEqual(model.facts.topCategory, { name: "Digital", share: 75 });
+  assert.equal(model.facts.dailyAverage, 100n);
+  assert.equal(model.facts.largest?.id, "big");
+  const empty = overviewModel([], [], [], "2026-10", "2026-10-04");
+  assert.equal(empty.facts.topCategory, null);
+  assert.equal(empty.facts.dailyAverage, null);
+  assert.equal(empty.facts.largest, null);
+});
+
+test("current-month daily average excludes future confirmed payments", () => {
+  const model = overviewModel(
+    [
+      record({ id: "paid", amount: 400, date: "2026-10-02" }),
+      record({ id: "future", amount: 9000, date: "2026-10-20" }),
+    ],
+    [],
+    [],
+    "2026-10",
+    "2026-10-04",
+  );
+  assert.equal(model.summary.spending, 9400n);
+  assert.equal(model.facts.dailyAverage, 100n);
+  assert.deepEqual(
+    model.recent.map(({ id }) => id),
+    ["paid"],
+  );
+});
+
+test("payday budgets show actual period headroom without a calendar daily guide", () => {
+  const model = overviewModel(
+    [record({ amount: 30, date: "2026-09-28" }), record({ amount: 20, date: "2026-10-03" })],
+    [{ ...budget("Food & Drinks", 100), startsOn: "2026-09-25" }],
+    [],
+    "2026-10",
+    "2026-10-11",
+  );
+  assert.equal(model.calendarBudgetPeriods, false);
+  assert.equal(model.safeToSpend, null);
+  assert.equal(model.budgetUsed, 50n);
+  assert.equal(model.remaining, 50n);
+  assert.equal(model.usage[0].periodStartsOn, "2026-09-25");
+  assert.equal(model.usage[0].periodEndsOn, "2026-10-24");
+});
+
+test("budgets that have not started do not inflate active headroom", () => {
+  const model = overviewModel(
+    [],
+    [{ ...budget("Food & Drinks", 100), startsOn: "2026-10-25" }],
+    [],
+    "2026-10",
+    "2026-10-11",
+  );
+  assert.equal(model.budgetTotal, 0n);
+  assert.equal(model.remaining, 0n);
+  assert.equal(model.usage.length, 0);
+  assert.equal(model.safeToSpend, null);
+});
+
 test("greeting boundaries never change the sample financial period", () => {
   assert.equal(sceneTime(5), "night");
   assert.equal(sceneTime(6), "morning");

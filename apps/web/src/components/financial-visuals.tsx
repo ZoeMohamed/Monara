@@ -9,31 +9,37 @@ import {
   useId,
   useState,
 } from "react";
-
+import { useAmountDisplay } from "@/components/app-session-context";
 import donutStyles from "@/components/category-donut.module.css";
+import { CategoryAvatar } from "@/components/category-symbol";
 import chartStyles from "@/components/chart-navigation.module.css";
 import { Icon } from "@/components/icon";
 import { TransactionRow } from "@/components/transaction-row";
 import { SectionTitle } from "@/components/visual";
 import { categoryDonutGeometry, donutOutline } from "@/data/category-donut";
-import { categoryColor, categoryEmoji } from "@/data/category-style";
+import { categoryColor } from "@/data/category-style";
 import {
   demoToday,
   formatDay,
   formatMonth,
-  formatRupiah,
   shiftMonth,
   type Transaction,
+  transactionErrors,
 } from "@/data/demo-ledger";
 import {
   cashFlowMonths,
+  categoryContainsTransaction,
+  categoryKey,
   chartRatio,
-  compactAmount,
   financialMonth,
-  monthComparison,
+  financialYear,
 } from "@/data/finance-analytics";
 
-type FinanceProps = { transactions: Transaction[]; month: string };
+type FinanceProps = { transactions: Transaction[]; month: string; today?: string };
+type PeriodFinanceProps = { transactions: Transaction[]; today?: string } & (
+  | { month: string; year?: undefined }
+  | { month?: undefined; year: string }
+);
 
 function ChartHeading({
   title,
@@ -73,6 +79,7 @@ function ChartTransactions({
   onOpenTransaction?: (transaction: Transaction) => void;
   showDate?: boolean;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   return (
     <ul className="mt-2 divide-y divide-border">
       {records.map((record) => (
@@ -162,6 +169,7 @@ function spendingChartModel(
   previous: FinanceMonth,
   mode: TrendMode,
   selectedDay: number,
+  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
 ) {
   const cumulative = mode === "cumulative";
   const periodLength = Math.max(current.days.length, previous.days.length);
@@ -215,12 +223,12 @@ function TrendModeControls({
   return (
     <fieldset
       aria-label="Spending trend view"
-      className="flex min-w-0 rounded-full bg-surface-secondary p-1"
+      className="flex min-w-0 rounded-2xl bg-surface-secondary p-1"
     >
       {(["cumulative", "daily"] as const).map((view) => (
         <Button
           aria-pressed={mode === view}
-          className="min-h-11 rounded-full px-3 text-xs"
+          className="min-h-11 rounded-xl px-3 text-xs"
           key={view}
           onPress={() => onChange(view)}
           variant={mode === view ? "primary" : "ghost"}
@@ -252,6 +260,7 @@ function SpendingTrendPlot({
   onSelect: (day: number, keyboard: boolean) => void;
   keyboardSelection: boolean;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const titleId = useId();
   const gradientId = useId();
   function selectAt(event: PointerEvent<HTMLDivElement>) {
@@ -425,61 +434,28 @@ function SpendingTrendPlot({
   );
 }
 
-function ComparisonPill({ transactions, month }: FinanceProps) {
-  const comparison = monthComparison(transactions, month);
-  const previousName = formatMonth(comparison.previousMonth).split(" ")[0];
-  const difference = comparison.current - comparison.previous;
-  if (comparison.state === "future") {
-    return <p className={chartStyles.pill}>Comparison available once this month begins.</p>;
-  }
-  if (comparison.state === "no-baseline") {
-    return (
-      <p className={chartStyles.pill}>
-        No spending recorded in {previousName}
-        {comparison.throughDay ? ` by day ${comparison.throughDay}` : ""} to compare with.
-      </p>
-    );
-  }
-  return (
-    <p className={chartStyles.pill}>
-      {difference !== BigInt(0) ? (
-        <span
-          aria-hidden
-          className={chartStyles.pillArrow}
-          data-direction={difference > BigInt(0) ? "up" : "down"}
-        >
-          ↑
-        </span>
-      ) : null}
-      {difference === BigInt(0)
-        ? `Same as ${previousName}`
-        : `${compactAmount(difference < BigInt(0) ? -difference : difference)} ${difference > BigInt(0) ? "more" : "less"} than ${previousName}`}
-      {comparison.throughDay ? ` by day ${comparison.throughDay}` : ""}
-    </p>
-  );
-}
-
-function defaultTrendDay(month: FinanceMonth) {
-  const defaultDay = month.month === demoToday.slice(0, 7) ? Number(demoToday.slice(8)) : 1;
+function defaultTrendDay(month: FinanceMonth, today: string) {
+  const defaultDay = month.month === today.slice(0, 7) ? Number(today.slice(8)) : 1;
   return Math.min(
     month.days.length,
-    month.month < demoToday.slice(0, 7) ? month.days.length : defaultDay,
+    month.month < today.slice(0, 7) ? month.days.length : defaultDay,
   );
 }
 
-export function SpendingTrend({ transactions, month }: FinanceProps) {
+export function SpendingTrend({ transactions, month, today = demoToday }: FinanceProps) {
+  const { formatRupiah } = useAmountDisplay();
   const [mode, setMode] = useState<TrendMode>("cumulative");
   const [selection, setSelection] = useState<{
     month: string;
     day: number;
     keyboard: boolean;
   } | null>(null);
-  const current = financialMonth(transactions, month);
-  const previous = financialMonth(transactions, shiftMonth(month, -1));
-  const selectedDay = selection?.month === month ? selection.day : defaultTrendDay(current);
-  const model = spendingChartModel(current, previous, mode, selectedDay);
+  const current = financialMonth(transactions, month, today);
+  const previous = financialMonth(transactions, shiftMonth(month, -1), today);
+  const selectedDay = selection?.month === month ? selection.day : defaultTrendDay(current, today);
+  const model = spendingChartModel(current, previous, mode, selectedDay, formatRupiah);
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
+    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <ChartHeading
         action={<TrendModeControls mode={mode} onChange={setMode} />}
         title="Spending trend"
@@ -490,30 +466,32 @@ export function SpendingTrend({ transactions, month }: FinanceProps) {
         model={model}
         onSelect={(day, keyboard) => setSelection({ month, day, keyboard })}
       />
-      <ComparisonPill month={month} transactions={transactions} />
     </Card>
   );
 }
 
 type CashFlowPeriod = ReturnType<typeof cashFlowMonths>[number];
 
-function cashFlowLabel(period: CashFlowPeriod) {
+function cashFlowLabel(
+  period: CashFlowPeriod,
+  today: string,
+  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
+) {
   const periodName = formatMonth(period.month);
   if (period.confirmedCount === 0) {
-    return `${periodName}. ${period.month > demoToday.slice(0, 7) ? "Upcoming, no transactions recorded" : "No confirmed transactions recorded"}.`;
+    return `${periodName}. ${period.month > today.slice(0, 7) ? "Upcoming, no transactions recorded" : "No confirmed transactions recorded"}.`;
   }
   return `${periodName}. Income ${formatRupiah(period.income)}; expenses ${formatRupiah(period.spending)}; net income ${formatRupiah(period.difference)}.`;
 }
 
-function CashFlowDetails({ period }: { period: CashFlowPeriod }) {
+function CashFlowDetails({ period, today }: { period: CashFlowPeriod; today: string }) {
+  const { compactAmount } = useAmountDisplay();
   return (
     <span className={chartStyles.tooltipCard}>
       <strong>{formatMonth(period.month)}</strong>
       {period.confirmedCount === 0 ? (
         <span className="opacity-75">
-          {period.month > demoToday.slice(0, 7)
-            ? "Upcoming · nothing recorded"
-            : "Nothing recorded"}
+          {period.month > today.slice(0, 7) ? "Upcoming · nothing recorded" : "Nothing recorded"}
         </span>
       ) : (
         <>
@@ -526,25 +504,40 @@ function CashFlowDetails({ period }: { period: CashFlowPeriod }) {
   );
 }
 
-export function CashFlowChart({ transactions, month }: FinanceProps) {
+export function CashFlowChart({
+  transactions,
+  month,
+  today = demoToday,
+  year,
+}: PeriodFinanceProps) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const titleId = useId();
   const [selection, setSelection] = useState<{ month: string; keyboard: boolean } | null>(null);
-  const periods = cashFlowMonths(transactions, month);
-  const detail = periods.find((period) => period.month === selection?.month) ?? periods[5];
+  const periods =
+    year !== undefined
+      ? financialYear(transactions, year, today).months
+      : cashFlowMonths(transactions, month);
+  const defaultMonth = year === today.slice(0, 4) ? today.slice(0, 7) : periods.at(-1)?.month;
+  const detail =
+    periods.find((period) => period.month === selection?.month) ??
+    periods.find((period) => period.month === defaultMonth) ??
+    periods[periods.length - 1];
   const selectedIndex = periods.findIndex((period) => period.month === detail.month);
   const maximum = periods.reduce((largest, period) => {
     const tallest = period.income > period.spending ? period.income : period.spending;
     return tallest > largest ? tallest : largest;
   }, BigInt(0));
-  const columnX = (index: number) => 91 + index * 84;
+  const step = 504 / periods.length;
+  const columnX = (index: number) => 78 + step * (index + 0.5) - 10;
+  const barWidth = Math.min(18, step * 0.3);
   const detailTop = Math.max(
     chartRatio(detail.income, maximum),
     chartRatio(detail.spending, maximum),
   );
 
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
-      <ChartHeading meta="6 months" title="Cash flow" />
+    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
+      <ChartHeading meta={year ?? "6 months"} title={year ? "Income & spending" : "Cash flow"} />
       <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
         <span className="flex items-center gap-1.5">
           <LegendDot color="var(--success)" />
@@ -560,7 +553,7 @@ export function CashFlowChart({ transactions, month }: FinanceProps) {
         aria-valuemax={periods.length}
         aria-valuemin={1}
         aria-valuenow={selectedIndex + 1}
-        aria-valuetext={cashFlowLabel(detail)}
+        aria-valuetext={cashFlowLabel(detail, today, formatRupiah)}
         className={`${chartStyles.cursorArea} relative mt-2`}
         data-keyboard={selection?.keyboard ?? false}
         onKeyDown={(event) => {
@@ -570,7 +563,7 @@ export function CashFlowChart({ transactions, month }: FinanceProps) {
           setSelection({ month: periods[nextIndex].month, keyboard: true });
         }}
         onPointerDown={(event) => {
-          const index = Math.round((pointerChartX(event, 600) - 101) / 84);
+          const index = Math.floor((pointerChartX(event, 600) - 78) / step);
           setSelection({
             month: periods[Math.min(periods.length - 1, Math.max(0, index))].month,
             keyboard: false,
@@ -578,7 +571,7 @@ export function CashFlowChart({ transactions, month }: FinanceProps) {
         }}
         onPointerMove={(event) => {
           if (event.pointerType !== "mouse") return;
-          const index = Math.round((pointerChartX(event, 600) - 101) / 84);
+          const index = Math.floor((pointerChartX(event, 600) - 78) / step);
           setSelection({
             month: periods[Math.min(periods.length - 1, Math.max(0, index))].month,
             keyboard: false,
@@ -594,7 +587,7 @@ export function CashFlowChart({ transactions, month }: FinanceProps) {
           viewBox="0 0 600 216"
         >
           <title id={titleId}>
-            {`Confirmed monthly income and expenses, ${formatMonth(periods[0].month)} through ${formatMonth(month)}.`}
+            {`Confirmed monthly income and expenses, ${formatMonth(periods[0].month)} through ${formatMonth(periods[periods.length - 1].month)}.`}
           </title>
           {[0, 1, 2].map((step) => (
             <g key={step}>
@@ -623,8 +616,8 @@ export function CashFlowChart({ transactions, month }: FinanceProps) {
             fill="var(--surface-secondary)"
             height="176"
             rx="12"
-            style={{ transform: `translateX(${columnX(selectedIndex) - 20}px)` }}
-            width="64"
+            style={{ transform: `translateX(${columnX(selectedIndex) + 10 - step * 0.4}px)` }}
+            width={step * 0.8}
             y="16"
           />
           {periods.map((period, index) => {
@@ -640,8 +633,8 @@ export function CashFlowChart({ transactions, month }: FinanceProps) {
                   height={incomeHeight}
                   rx="4"
                   style={delay}
-                  width="18"
-                  x={x - 10}
+                  width={barWidth}
+                  x={x + 10 - barWidth - 2}
                   y={plotBottom - incomeHeight}
                 />
                 <rect
@@ -650,18 +643,24 @@ export function CashFlowChart({ transactions, month }: FinanceProps) {
                   height={expenseHeight}
                   rx="4"
                   style={delay}
-                  width="18"
-                  x={x + 13}
+                  width={barWidth}
+                  x={x + 12}
                   y={plotBottom - expenseHeight}
                 />
                 <text
                   fill={period.month === detail.month ? "var(--foreground)" : "var(--muted)"}
-                  className="text-[24px] font-semibold sm:text-[15px]"
+                  className={
+                    year
+                      ? "text-[20px] font-semibold sm:text-[14px]"
+                      : "text-[24px] font-semibold sm:text-[15px]"
+                  }
                   textAnchor="middle"
                   x={x + 10}
                   y="209"
                 >
-                  {formatMonth(period.month).slice(0, 3)}
+                  {year && index % 3 !== 0 && period.month !== detail.month
+                    ? ""
+                    : formatMonth(period.month).slice(0, 3)}
                 </text>
               </g>
             );
@@ -670,7 +669,7 @@ export function CashFlowChart({ transactions, month }: FinanceProps) {
         <div
           aria-hidden
           className={`${chartStyles.tooltip} ${chartStyles.tooltipAbove}`}
-          data-flip={selectedIndex >= 4}
+          data-flip={selectedIndex >= periods.length - 2}
           style={cursorStyle(
             columnX(selectedIndex) + 10,
             plotBottom - detailTop * plotHeight,
@@ -678,7 +677,7 @@ export function CashFlowChart({ transactions, month }: FinanceProps) {
             216,
           )}
         >
-          <CashFlowDetails period={detail} />
+          <CashFlowDetails period={detail} today={today} />
         </div>
       </div>
     </Card>
@@ -695,7 +694,10 @@ type SliceStyle = CSSProperties & {
   "--slice-delay": string;
 };
 
-function categoryLabel(segment: CategorySegment): string {
+function categoryLabel(
+  segment: CategorySegment,
+  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
+): string {
   return `${segment.name}, ${formatRupiah(segment.amount)}, ${(segment.proportion * 100).toFixed(1)}% of expenses. Show category details.`;
 }
 
@@ -703,23 +705,24 @@ function CategoryDonut({
   segments,
   highlighted,
   total,
-  month,
+  periodLabel,
   onSelect,
 }: {
   segments: CategorySegment[];
   highlighted?: CategorySegment;
   total: bigint;
-  month: string;
+  periodLabel: string;
   onSelect: (category: string, fromChart: boolean, keyboard: boolean) => void;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const titleId = useId();
   return (
     <fieldset className={donutStyles.chart}>
       <legend className="sr-only">Spending categories</legend>
-      <svg aria-labelledby={titleId} key={month} viewBox="-14 -14 248 248">
+      <svg aria-labelledby={titleId} key={periodLabel} viewBox="-14 -14 248 248">
         <title
           id={titleId}
-        >{`Spending categories for ${formatMonth(month)}. Select a slice to see payments.`}</title>
+        >{`Spending categories for ${periodLabel}. Select a slice to see payments.`}</title>
         {segments.length > 0 ? (
           <circle aria-hidden className={donutStyles.guide} cx="110" cy="110" fill="none" r="118" />
         ) : (
@@ -738,7 +741,7 @@ function CategoryDonut({
             aria-hidden
             className={donutStyles.outline}
             d={donutOutline(highlighted.start, highlighted.start + highlighted.proportion)}
-            key={highlighted.name}
+            key={categoryKey(highlighted)}
             stroke={highlighted.color}
           />
         ) : null}
@@ -756,17 +759,17 @@ function CategoryDonut({
               <foreignObject
                 className={donutStyles.sliceHost}
                 height="220"
-                key={segment.name}
+                key={categoryKey(segment)}
                 width="220"
                 x="0"
                 y="0"
               >
                 <button
-                  aria-label={categoryLabel(segment)}
-                  aria-pressed={highlighted?.name === segment.name}
+                  aria-label={categoryLabel(segment, formatRupiah)}
+                  aria-pressed={highlighted === segment}
                   className={donutStyles.slice}
-                  data-muted={Boolean(highlighted && highlighted.name !== segment.name)}
-                  onClick={(event) => onSelect(segment.name, true, event.detail === 0)}
+                  data-muted={Boolean(highlighted && highlighted !== segment)}
+                  onClick={(event) => onSelect(categoryKey(segment), true, event.detail === 0)}
                   style={style}
                   title={`${segment.name} · ${formatRupiah(segment.amount)} · ${(segment.proportion * 100).toFixed(1)}%`}
                   type="button"
@@ -781,7 +784,11 @@ function CategoryDonut({
             );
           })}
       </svg>
-      <div aria-live="polite" className={donutStyles.center} key={highlighted?.name ?? "all"}>
+      <div
+        aria-live="polite"
+        className={donutStyles.center}
+        key={highlighted ? categoryKey(highlighted) : "all"}
+      >
         <p className="max-w-full break-words text-xs text-muted">
           {highlighted ? highlighted.name : "Money out"}
         </p>
@@ -805,18 +812,25 @@ function prefersReducedMotion() {
 export function CategoryBreakdown({
   transactions,
   month,
+  today = demoToday,
   onSelectCategory,
   selectedCategory,
   onOpenTransaction,
-}: FinanceProps & {
+  year,
+}: PeriodFinanceProps & {
+  // Owned selection values are category UUIDs; demo values remain category names.
   onSelectCategory?: (category: string) => void;
   selectedCategory?: string | null;
   onOpenTransaction?: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const [localSelection, setLocalSelection] = useState<string | null>(null);
   const [keyboardSelection, setKeyboardSelection] = useState(false);
   const paymentsId = useId();
-  const summary = financialMonth(transactions, month);
+  const summary =
+    year !== undefined
+      ? financialYear(transactions, year, today)
+      : financialMonth(transactions, month, today);
   const selection = selectedCategory === undefined ? localSelection : selectedCategory;
   const geometry = categoryDonutGeometry(summary.categories.map((category) => category.amount));
   const segments = summary.categories.map((category, index) => ({
@@ -825,15 +839,20 @@ export function CategoryBreakdown({
     start: geometry.slice(0, index).reduce((sum, item) => sum + item.proportion, 0),
     color: categoryColor(category.name, index),
   }));
-  const highlighted = segments.find((category) => category.name === selection);
-  const countedDays =
-    month === demoToday.slice(0, 7) ? Number(demoToday.slice(8)) : summary.days.length;
+  const highlighted = segments.find((category) => categoryKey(category) === selection);
+  const periodLabel = year === undefined ? formatMonth(month) : year;
   const categoryRecords = highlighted
-    ? summary.days
-        .flatMap((day) => day.transactions)
+    ? transactions
         .filter(
           (record) =>
-            record.kind === "expense" && (record.category || "Uncategorized") === highlighted.name,
+            record.status === "confirmed" &&
+            (year ? record.date?.startsWith(`${year}-`) : record.date?.startsWith(`${month}-`)),
+        )
+        .filter(
+          (record) =>
+            record.kind === "expense" &&
+            categoryContainsTransaction(highlighted, record) &&
+            Object.keys(transactionErrors(record)).length === 0,
         )
         .sort((left, right) => (right.date ?? "").localeCompare(left.date ?? ""))
     : [];
@@ -855,13 +874,13 @@ export function CategoryBreakdown({
 
   return (
     <Card
-      className={`${donutStyles.breakdown} block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4`}
+      className={`${donutStyles.breakdown} block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5`}
       data-keyboard={keyboardSelection}
     >
       <ChartHeading title="Where the money went" />
       <CategoryDonut
         highlighted={highlighted}
-        month={month}
+        periodLabel={periodLabel}
         onSelect={selectCategory}
         segments={segments}
         total={summary.spending}
@@ -871,25 +890,27 @@ export function CategoryBreakdown({
           {segments.map((segment, index) => (
             <li
               className={donutStyles.row}
-              key={segment.name}
+              key={categoryKey(segment)}
               style={{ animationDelay: `${120 + index * 50}ms` }}
             >
               <button
-                aria-label={categoryLabel(segment)}
-                aria-pressed={selection === segment.name}
+                aria-label={categoryLabel(segment, formatRupiah)}
+                aria-pressed={selection === categoryKey(segment)}
                 className={donutStyles.rowButton}
-                onClick={(event) => selectCategory(segment.name, false, event.detail === 0)}
+                onClick={(event) => selectCategory(categoryKey(segment), false, event.detail === 0)}
                 style={{ "--slice-color": segment.color } as CSSProperties}
                 type="button"
               >
-                <span aria-hidden className={donutStyles.rowIcon}>
-                  {categoryEmoji(segment.name)}
-                </span>
+                <CategoryAvatar
+                  className={donutStyles.rowIcon}
+                  icon={segment.icon}
+                  name={segment.name}
+                />
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block break-words text-sm font-semibold">{segment.name}</span>
                   <span className="mt-0.5 block text-xs text-muted">
-                    {(segment.proportion * 100).toFixed(0)}% ·{" "}
-                    {compactAmount(segment.amount / BigInt(Math.max(countedDays, 1)))}/day
+                    {(segment.proportion * 100).toFixed(0)}% · {segment.count}{" "}
+                    {segment.count === 1 ? "payment" : "payments"}
                   </span>
                 </span>
                 <span className="max-w-[45%] break-words text-right text-sm font-bold tabular-nums">
@@ -904,14 +925,14 @@ export function CategoryBreakdown({
           ))}
         </ul>
       ) : (
-        <p className="mt-3 text-center text-xs text-muted">No expenses this month.</p>
+        <p className="mt-3 text-center text-xs text-muted">No expenses in this period.</p>
       )}
       {highlighted ? (
         <section
           aria-live="polite"
           className={`${donutStyles.payments} mt-3 scroll-mt-4 rounded-xl bg-surface-secondary p-3`}
           id={paymentsId}
-          key={highlighted.name}
+          key={categoryKey(highlighted)}
         >
           <h3 className="flex items-center gap-2 text-xs font-bold">
             <LegendDot color={highlighted.color} />
@@ -928,125 +949,175 @@ export function CategoryBreakdown({
   );
 }
 
+function CalendarPayments({
+  day,
+  today,
+  onOpenTransaction,
+}: {
+  day: FinanceDay;
+  today: string;
+  onOpenTransaction?: (transaction: Transaction) => void;
+}) {
+  const { formatRupiah } = useAmountDisplay();
+  const headingId = useId();
+  const count = day.transactions.length;
+  return (
+    <section
+      aria-labelledby={headingId}
+      aria-live="polite"
+      className={chartStyles.calendarPayments}
+    >
+      <div className={chartStyles.calendarPaymentHeading}>
+        <h3 id={headingId}>
+          {count === 0
+            ? "No payments"
+            : day.spending > BigInt(0)
+              ? `${formatRupiah(day.spending)} spent`
+              : `${formatRupiah(day.income)} received`}
+        </h3>
+        <span>
+          {formatDay(day.date)}
+          {day.date === today ? " · Today" : ""}
+        </span>
+      </div>
+      {count > 0 ? (
+        <>
+          <p className={chartStyles.calendarTotals}>
+            <span>
+              {count} {count === 1 ? "payment" : "payments"}
+            </span>
+            {day.spending > BigInt(0) && day.income > BigInt(0) ? (
+              <span className="text-success">{formatRupiah(day.income)} received</span>
+            ) : null}
+          </p>
+          <ChartTransactions onOpenTransaction={onOpenTransaction} records={day.transactions} />
+        </>
+      ) : (
+        <p className="mt-1 pb-2 text-xs text-muted">
+          {day.future ? "Upcoming day. Nothing recorded yet." : "Nothing recorded for this day."}
+        </p>
+      )}
+    </section>
+  );
+}
+
+const heatBackgrounds = [
+  "transparent",
+  "var(--accent-soft)",
+  "color-mix(in srgb, var(--accent) 25%, var(--surface))",
+  "color-mix(in srgb, var(--accent) 80%, var(--surface))",
+  "var(--accent)",
+];
+
 export function SpendingCalendar({
   transactions,
   month,
+  today = demoToday,
   onOpenTransaction,
 }: FinanceProps & {
   onOpenTransaction?: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const [selection, setSelection] = useState<string | null>(null);
-  const headingId = useId();
-  const summary = financialMonth(transactions, month);
+  const summary = financialMonth(transactions, month, today);
   const detail =
     summary.days.find((day) => day.date === selection) ??
-    summary.days.find((day) => day.date === demoToday) ??
+    summary.days.find((day) => day.date === today) ??
     summary.days.find((day) => day.transactions.length > 0) ??
     summary.days[0];
   const emptyColumns = Array.from({ length: summary.calendarOffset }, (_, index) => index);
-  const countedDays =
-    month === demoToday.slice(0, 7) ? Number(demoToday.slice(8)) : summary.days.length;
+  const countedDays = month === today.slice(0, 7) ? Number(today.slice(8)) : summary.days.length;
+  const dailyAverage = summary.spending / BigInt(Math.max(countedDays, 1));
 
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-4">
-      <ChartHeading
-        meta={`avg ${compactAmount(summary.spending / BigInt(Math.max(countedDays, 1)))}/day`}
-        title="Daily spending"
-      />
-      <fieldset
-        aria-label={`${formatMonth(month)} spending calendar`}
-        className="mt-4 grid min-w-0 grid-cols-7 gap-1"
-        key={month}
-      >
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((weekday) => (
-          <span className="pb-1 text-center text-[10px] font-semibold text-muted" key={weekday}>
-            {weekday}
+    <Card
+      className={`${chartStyles.calendarCard} block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5`}
+    >
+      <div className={chartStyles.calendarHeading}>
+        <h2>Daily spending</h2>
+        <p className={chartStyles.calendarAverage}>
+          <span className="sr-only">
+            Average confirmed spending {formatRupiah(dailyAverage)} per day.
           </span>
-        ))}
-        {emptyColumns.map((column) => (
-          <span aria-hidden key={`empty-${column}`} />
-        ))}
-        {summary.days.map((day, index) => {
-          const proportion = chartRatio(day.spending, summary.maxDailySpending);
-          const level = proportion === 0 ? 0 : Math.max(1, Math.ceil(proportion * 4));
-          const heat = [
-            "bg-surface-secondary text-muted",
-            "bg-accent-soft text-accent-soft-foreground",
-            "bg-accent/25 text-foreground",
-            "bg-accent/80 text-white",
-            "bg-accent text-white",
-          ][level];
-          const future = day.future && day.transactions.length === 0;
-          return (
-            <Button
-              aria-label={`${formatDay(day.date)}${day.date === demoToday ? ", sample today" : ""}: ${future ? "upcoming, no transactions recorded" : `${formatRupiah(day.spending)} spent, ${formatRupiah(day.income)} income`}. Show payments.`}
-              aria-pressed={day.date === detail.date}
-              className={`${chartStyles.calendarDay} min-h-11 w-full min-w-0 rounded-lg border px-0 text-xs font-semibold ${future ? "border-dashed border-border bg-surface text-muted" : `${heat} border-transparent`} ${day.date === detail.date ? "ring-2 ring-foreground ring-inset" : ""}`}
-              key={day.date}
-              onPress={() => setSelection(day.date)}
-              style={{ animationDelay: `${index * 12}ms` }}
-              variant="ghost"
-            >
-              {day.day}
-              {day.income > BigInt(0) ? (
-                <span
-                  aria-hidden
-                  className="absolute right-1 bottom-1 h-1.5 w-1.5 rounded-full bg-success"
-                />
-              ) : null}
-            </Button>
-          );
-        })}
-      </fieldset>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted">
-        <span className="flex items-center gap-1">
-          Less
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-surface-secondary" />
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent-soft" />
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent/25" />
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent/80" />
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent" />
-          More
-        </span>
-        <span className="flex items-center gap-1">
-          <LegendDot color="var(--success)" />
-          Income recorded
-        </span>
+          <span aria-hidden>Average {compactAmount(dailyAverage)} per day</span>
+        </p>
       </div>
-      <section
-        aria-labelledby={headingId}
-        aria-live="polite"
-        className="mt-4 rounded-xl bg-surface-secondary p-3"
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-1">
-          <h3 className="text-xs font-bold" id={headingId}>
-            {formatDay(detail.date)}
-            {detail.date === demoToday ? " · Sample today" : ""}
-          </h3>
-          <span className="text-[11px] text-muted">
-            {detail.transactions.length} {detail.transactions.length === 1 ? "payment" : "payments"}
-          </span>
-        </div>
-        {detail.future && detail.transactions.length === 0 ? null : (
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums">
-            <span>
-              Spent <strong>{formatRupiah(detail.spending)}</strong>
-            </span>
-            {detail.income > BigInt(0) ? (
-              <span className="text-success">
-                Income <strong>{formatRupiah(detail.income)}</strong>
+      <div className={chartStyles.calendarBody}>
+        <div>
+          <fieldset
+            aria-label={`${formatMonth(month)} spending calendar`}
+            className={chartStyles.calendarGrid}
+            key={month}
+          >
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((weekday) => (
+              <span aria-hidden className={chartStyles.calendarWeekday} key={weekday}>
+                {weekday.slice(0, 1)}
               </span>
-            ) : null}
+            ))}
+            {emptyColumns.map((column) => (
+              <span aria-hidden key={`empty-${column}`} />
+            ))}
+            {summary.days.map((day, index) => {
+              const proportion = chartRatio(day.spending, summary.maxDailySpending);
+              const level = proportion === 0 ? 0 : Math.max(1, Math.ceil(proportion * 4));
+              const future = day.future && day.transactions.length === 0;
+              const color =
+                future || level === 0
+                  ? "text-muted"
+                  : level >= 3
+                    ? "text-white"
+                    : "text-foreground";
+              return (
+                <Button
+                  aria-current={day.date === today ? "date" : undefined}
+                  aria-label={`${formatDay(day.date)}${day.date === today ? ", today" : ""}: ${future ? "upcoming, no transactions recorded" : `${formatRupiah(day.spending)} spent, ${formatRupiah(day.income)} income`}. Show payments.`}
+                  aria-pressed={day.date === detail.date}
+                  className={`${chartStyles.calendarDay} text-xs ${color}`}
+                  data-future={future}
+                  data-spent={level > 0}
+                  key={day.date}
+                  onPress={() => setSelection(day.date)}
+                  style={
+                    {
+                      "--day-background": future ? "transparent" : heatBackgrounds[level],
+                      animationDelay: `${index * 12}ms`,
+                    } as CSSProperties
+                  }
+                  variant="ghost"
+                >
+                  {day.day}
+                  {level > 0 ? (
+                    <span aria-hidden className={chartStyles.dayAmount}>
+                      {compactAmount(day.spending, false).slice(2)}
+                    </span>
+                  ) : null}
+                  {day.income > BigInt(0) ? (
+                    <span
+                      aria-hidden
+                      className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-success"
+                    />
+                  ) : null}
+                </Button>
+              );
+            })}
+          </fieldset>
+          <div className={chartStyles.calendarLegend}>
+            <span className="flex items-center gap-1">
+              Less
+              <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent-soft" />
+              <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent/25" />
+              <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent/80" />
+              <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent" />
+              More
+            </span>
+            <span className="flex items-center gap-1">
+              <LegendDot color="var(--success)" />
+              Income recorded
+            </span>
           </div>
-        )}
-        {detail.transactions.length > 0 ? (
-          <ChartTransactions onOpenTransaction={onOpenTransaction} records={detail.transactions} />
-        ) : (
-          <p className="mt-2 text-xs text-muted">
-            {detail.future ? "Upcoming day. No transactions." : "No transactions this day."}
-          </p>
-        )}
-      </section>
+        </div>
+        <CalendarPayments day={detail} today={today} onOpenTransaction={onOpenTransaction} />
+      </div>
     </Card>
   );
 }

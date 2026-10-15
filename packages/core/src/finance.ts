@@ -3,10 +3,12 @@ import {
   type BudgetPage,
   type BudgetUsage,
   budgetMutationResultSchema,
+  budgetPeriodForDate,
   budgetUsageSchema,
   type Category,
   type CategoryPage,
   type CreateBudgetInput,
+  type CreateCategoryInput,
   type CreateFinancialAccountInput,
   type CreateTransactionInput,
   categoryMutationResultSchema,
@@ -14,16 +16,20 @@ import {
   confirmedTransactionValuesSchema,
   confirmTransactionInputSchema,
   createBudgetInputSchema,
+  createCategoryInputSchema,
+  createCategoryResultSchema,
   createFinancialAccountInputSchema,
   createTransactionInputSchema,
   type DashboardSummary,
   type DeleteBudgetInput,
   type DeleteTransactionInput,
   type DestructiveActionConfirmation,
+  type DismissReminderInput,
   dashboardSummarySchema,
   deleteBudgetInputSchema,
   deleteTransactionInputSchema,
   destructiveActionConfirmationSchema,
+  dismissReminderInputSchema,
   type FinancialAccount,
   type FinancialAccountPage,
   financialAccountMutationResultSchema,
@@ -32,13 +38,18 @@ import {
   type ListBudgetsInput,
   type ListCategoriesInput,
   type ListFinancialAccountsInput,
+  type ListRemindersInput,
   type ListTransactionsInput,
   listBudgetsInputSchema,
   listCategoriesInputSchema,
   listFinancialAccountsInputSchema,
+  listRemindersInputSchema,
   listTransactionsInputSchema,
+  type MarkReminderReadInput,
   type Money,
+  markReminderReadInputSchema,
   type OperationErrorCode,
+  type Reminder,
   type ReversibleActionReceipt,
   rejectTransactionInputSchema,
   requestDestructiveActionInputSchema,
@@ -138,6 +149,7 @@ export interface FinanceRepository {
 
   listCategories(userId: string, input: ListCategoriesInput): Promise<CategoryPage>;
   listAllCategories(userId: string): Promise<Category[]>;
+  createCategory(userId: string, input: CreateCategoryInput): Promise<Category>;
   updateCategory(userId: string, input: UpdateCategoryInput): Promise<Category>;
 
   listBudgets(userId: string, input: ListBudgetsInput): Promise<BudgetPage>;
@@ -153,6 +165,18 @@ export interface FinanceRepository {
   }): Promise<Budget>;
 
   listUnreadReminders(userId: string, limit: number): Promise<DashboardSummary["activeReminders"]>;
+  listReminders(
+    userId: string,
+    input: ListRemindersInput,
+  ): Promise<{ items: Reminder[]; nextCursor: string | null }>;
+  findReminder(userId: string, reminderId: string): Promise<Reminder | null>;
+  updateReminder(input: {
+    userId: string;
+    reminderId: string;
+    expectedStatus: Reminder["status"];
+    status: Reminder["status"];
+    readAt: string | null;
+  }): Promise<Reminder>;
   createBudgetThresholdReminder(input: {
     userId: string;
     budget: Budget;
@@ -211,34 +235,26 @@ function formatDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-function addUtcDays(value: string, days: number): string {
-  const date = parseDate(value);
-  date.setUTCDate(date.getUTCDate() + days);
+function lastDayOfMonth(month: string): string {
+  const date = parseDate(`${month}-01`);
+  date.setUTCMonth(date.getUTCMonth() + 1, 0);
   return formatDate(date);
 }
 
-function daysBetween(first: string, second: string): number {
-  return Math.round((parseDate(second).getTime() - parseDate(first).getTime()) / 86_400_000);
-}
+export { budgetPeriodForDate };
 
-function lastDayOfMonth(month: string): string {
-  const [year, monthNumber] = month.split("-").map(Number);
-  return formatDate(new Date(Date.UTC(year, monthNumber, 0)));
-}
-
-export function budgetPeriodForDate(
-  budget: Pick<Budget, "cadence" | "startsOn">,
-  date: string,
-): { startsOn: string; endsOn: string } | null {
-  if (date < budget.startsOn) return null;
-  if (budget.cadence === "monthly") {
-    const month = date.slice(0, 7);
-    return { startsOn: `${month}-01`, endsOn: lastDayOfMonth(month) };
+/** Read complete active cycles while keeping calendar-month aggregates separate. */
+function budgetReadRange(budgets: Budget[], month: string, asOf: string) {
+  let startsOn = `${month}-01`;
+  let endsOn = lastDayOfMonth(month);
+  for (const budget of budgets) {
+    if (!budget.isActive || budget.deletedAt) continue;
+    const period = budgetPeriodForDate(budget, asOf);
+    if (!period) continue;
+    if (period.startsOn < startsOn) startsOn = period.startsOn;
+    if (period.endsOn > endsOn) endsOn = period.endsOn;
   }
-
-  const periodIndex = Math.floor(daysBetween(budget.startsOn, date) / 7);
-  const startsOn = addUtcDays(budget.startsOn, periodIndex * 7);
-  return { startsOn, endsOn: addUtcDays(startsOn, 6) };
+  return { startsOn, endsOn };
 }
 
 export function calculateBudgetUsage(
@@ -832,6 +848,16 @@ export function createFinanceService(
       return repository.listCategories(verified.userId, listCategoriesInputSchema.parse(input));
     },
 
+    async createCategory(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const category = await repository.createCategory(
+        verified.userId,
+        createCategoryInputSchema.parse(input),
+      );
+      // Creation has no durable undo operation; do not issue a reversible receipt.
+      return createCategoryResultSchema.parse({ category });
+    },
+
     async updateCategory(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
       const values = updateCategoryInputSchema.parse(input);
@@ -916,41 +942,94 @@ export function createFinanceService(
     async listBudgetUsage(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
       const parsed = getDashboardInputSchema.parse(input);
-      const [budgets, transactions] = await Promise.all([
-        repository.listAllBudgets(verified.userId),
-        repository.listTransactionsForDateRange(
-          verified.userId,
-          addUtcDays(`${parsed.month}-01`, -6),
-          lastDayOfMonth(parsed.month),
-        ),
-      ]);
-      const date =
-        parsed.month === now().slice(0, 7) ? now().slice(0, 10) : lastDayOfMonth(parsed.month);
+      const budgets = await repository.listAllBudgets(verified.userId);
+      const today = now().slice(0, 10);
+      const monthStart = `${parsed.month}-01`;
+      const monthEnd = lastDayOfMonth(parsed.month);
+      const date = today < monthStart ? monthStart : today > monthEnd ? monthEnd : today;
+      const coverage = budgetReadRange(budgets, parsed.month, date);
+      const transactions = await repository.listTransactionsForDateRange(
+        verified.userId,
+        coverage.startsOn,
+        coverage.endsOn,
+      );
       return budgets.flatMap((budget) => {
+        if (!budget.isActive || budget.deletedAt) return [];
         const period = budgetPeriodForDate(budget, date);
-        return period && budget.isActive && !budget.deletedAt
-          ? [calculateBudgetUsage(budget, period, transactions)]
-          : [];
+        return period ? [calculateBudgetUsage(budget, period, transactions)] : [];
+      });
+    },
+
+    async listReminders(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      return repository.listReminders(verified.userId, listRemindersInputSchema.parse(input));
+    },
+
+    async markReminderRead(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const parsed: MarkReminderReadInput = markReminderReadInputSchema.parse(input);
+      const previous = await repository.findReminder(verified.userId, parsed.reminderId);
+      if (!previous) throw new FinanceOperationError("NOT_FOUND", "Notification not found.");
+      // A retry after a lost response is safe; it cannot overwrite a dismissal.
+      if (previous.status === "read") return previous;
+      if (previous.status !== parsed.expectedStatus) {
+        throw new FinanceOperationError(
+          "CONFLICT",
+          "This notification changed. Refresh it and try again.",
+        );
+      }
+      return repository.updateReminder({
+        userId: verified.userId,
+        reminderId: parsed.reminderId,
+        expectedStatus: previous.status,
+        status: "read",
+        readAt: now(),
+      });
+    },
+
+    async dismissReminder(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const parsed: DismissReminderInput = dismissReminderInputSchema.parse(input);
+      const previous = await repository.findReminder(verified.userId, parsed.reminderId);
+      if (!previous) throw new FinanceOperationError("NOT_FOUND", "Notification not found.");
+      if (previous.status === "dismissed") return previous;
+      if (previous.status !== parsed.expectedStatus) {
+        throw new FinanceOperationError(
+          "CONFLICT",
+          "This notification changed. Refresh it and try again.",
+        );
+      }
+      return repository.updateReminder({
+        userId: verified.userId,
+        reminderId: parsed.reminderId,
+        expectedStatus: previous.status,
+        status: "dismissed",
+        readAt: previous.readAt,
       });
     },
 
     async getDashboard(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
       const parsed: GetDashboardInput = getDashboardInputSchema.parse(input);
-      const [transactions, budgetTransactions, budgets, categories, reminders] = await Promise.all([
+      const today = now().slice(0, 10);
+      const [transactions, budgets, categories, reminders] = await Promise.all([
         repository.listTransactionsForMonth(verified.userId, parsed.month),
-        repository.listTransactionsForDateRange(
-          verified.userId,
-          addUtcDays(`${parsed.month}-01`, -6),
-          lastDayOfMonth(parsed.month),
-        ),
         repository.listAllBudgets(verified.userId),
         repository.listAllCategories(verified.userId),
         repository.listUnreadReminders(verified.userId, 10),
       ]);
+      const monthStart = `${parsed.month}-01`;
+      const monthEnd = lastDayOfMonth(parsed.month);
+      const asOf = today < monthStart ? monthStart : today > monthEnd ? monthEnd : today;
+      const coverage = budgetReadRange(budgets, parsed.month, asOf);
+      const budgetTransactions = await repository.listTransactionsForDateRange(
+        verified.userId,
+        coverage.startsOn,
+        coverage.endsOn,
+      );
       return calculateDashboard({
         month: parsed.month,
-        today: now().slice(0, 10),
+        today,
         transactions,
         budgetTransactions,
         budgets,

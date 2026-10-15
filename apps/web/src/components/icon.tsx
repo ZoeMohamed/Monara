@@ -99,6 +99,144 @@ const glyphs = {
       <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
     </>
   ),
+  "chevron-down": <path d="m6 9 6 6 6-6" />,
+  calendar: (
+    <>
+      <rect height="16" rx="3" width="18" x="3" y="5" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  "eye-off": (
+    <>
+      <path d="M10.6 5.6A9.8 9.8 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.6 3.4M6.3 7.3A15.6 15.6 0 0 0 2.5 12S6 18.5 12 18.5a9.4 9.4 0 0 0 4.7-1.3" />
+      <path d="m4 4 16 16M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </>
+  ),
+  "trend-up": <path d="M12 19V5m0 0-6 6m6-6 6 6" />,
+  "trend-down": <path d="M12 5v14m0 0 6-6m-6 6-6-6" />,
+  inbox: (
+    <>
+      <path d="M3 13h5l1.5 3h5L16 13h5" />
+      <path d="M5.5 5h13L21 13v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5Z" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect height="14" rx="2.5" width="18" x="3" y="5" />
+      <path d="m4 7 8 6 8-6" />
+    </>
+  ),
+  compose: (
+    <>
+      <path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+      <path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L12 14.8 8 16l1.2-4Z" />
+    </>
+  ),
+  sparkle: (
+    <path d="M12 3c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7Z" />
+  ),
+  pulse: <path d="M3 12h4l2.5-6 5 12 2.5-6H21" />,
+  pie: (
+    <>
+      <path d="M12 3a9 9 0 1 0 9 9h-9Z" />
+      <path d="M15 3.5A9 9 0 0 1 20.5 9H15Z" />
+    </>
+  ),
+  food: (
+    <>
+      <path d="M4 11h16a8 8 0 0 1-16 0Z" />
+      <path d="M9 3c-1 1.5 1 2.5 0 4M13 3c-1 1.5 1 2.5 0 4M8 21h8" />
+    </>
+  ),
+  transport: (
+    <>
+      <path d="M5 16V9.5L7 5h10l2 4.5V16Z" />
+      <path d="M5 16v2.5M19 16v2.5M5 11h14" />
+      <circle cx="8.5" cy="13.5" r=".5" />
+      <circle cx="15.5" cy="13.5" r=".5" />
+    </>
+  ),
+  shopping: (
+    <>
+      <path d="M5 8h14l-1 12H6Z" />
+      <path d="M9 10V7a3 3 0 0 1 6 0v3" />
+    </>
+  ),
+  digital: (
+    <>
+      <rect height="18" rx="3" width="12" x="6" y="3" />
+      <path d="M11 17.5h2" />
+    </>
+  ),
+  bills: (
+    <>
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z" />
+      <path d="M9 8h6M9 12h3" />
+    </>
+  ),
+  heart: <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" />,
+  book: (
+    <>
+      <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3Z" />
+      <path d="M5 17a3 3 0 0 1 3-3h11" />
+    </>
+  ),
+  film: (
+    <>
+      <rect height="13" rx="2" width="18" x="3" y="6" />
+      <path d="m8 3 4 3 4-3" />
+    </>
+  ),
+  cash: (
+    <>
+      <rect height="12" rx="2" width="18" x="3" y="6" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6.5 9.5h.01M17.5 14.5h.01" />
+    </>
+  ),
+  bank: (
+    <>
+      <path d="m3 9 9-6 9 6H3ZM3 21h18M5 9v9M10 9v9M14 9v9M19 9v9" />
+    </>
+  ),
+  wallet: (
+    <>
+      <rect height="14" rx="2" width="18" x="3" y="6" />
+      <path d="M3 7V5a2 2 0 0 1 2-2h13v3M16 11h5v5h-5a2.5 2.5 0 0 1 0-5Z" />
+    </>
+  ),
+  store: (
+    <>
+      <path d="M4 10v10h16V10M3 10l2-6h14l2 6M8 20v-6h5v6" />
+      <path d="M3 10a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0" />
+    </>
+  ),
+  income: (
+    <>
+      <path d="M12 4v10m0 0 4-4m-4 4-4-4" />
+      <path d="M4 15v4h16v-4" />
+    </>
+  ),
+  transfer: <path d="M4 8h15l-3-3M20 16H5l3 3" />,
+  dot: <circle cx="12" cy="12" r="3" />,
+  whatsapp: (
+    <>
+      <path d="M4 20l1.3-3.9A8 8 0 1 1 8 18.8Z" />
+      <path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .8a4 4 0 0 1-1.8-1.8l.8-1-1-2Z" />
+    </>
+  ),
+  question: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.5M12 16.5v.5" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof glyphs;

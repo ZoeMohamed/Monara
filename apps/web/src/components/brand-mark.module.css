@@ -1,0 +1,30 @@
+.mark {
+  position: relative;
+  display: inline-flex;
+  width: var(--brand-size, 40px);
+  height: var(--brand-size, 40px);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+/* The official OVO wordmark is white; preserve it on its published header colour. */
+.mark[data-brand="ovo"] {
+  background: #4c2a86;
+}
+
+.mark img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+}
+
+/* Single-colour catalog marks need more clear space than full-bleed app icons. */
+.mark[data-vector="true"] img {
+  width: 58%;
+  height: 58%;
+}

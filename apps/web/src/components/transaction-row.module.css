@@ -1,0 +1,33 @@
+.row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 68px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 12px 10px;
+  border-radius: 12px;
+  text-align: left;
+  white-space: normal;
+  --button-bg-hover: var(--surface-secondary);
+  --button-bg-pressed: var(--surface-tertiary);
+}
+
+.row[data-pressed="true"],
+.row:active {
+  transform: none;
+}
+
+@media (hover: hover) {
+  button.row:hover,
+  button.row[data-hovered="true"] {
+    background: var(--surface-secondary);
+  }
+}
+
+.row[data-focus-visible="true"] {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
