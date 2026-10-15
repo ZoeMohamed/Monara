@@ -2,7 +2,10 @@
 
 import { Button } from "@monara/ui";
 
+import { BrandMark } from "@/components/brand-mark";
 import { Icon, type IconName } from "@/components/icon";
+import styles from "@/components/transaction-row.module.css";
+import { merchantBrand } from "@/data/brand-identity";
 import { categoryColor, categoryIcon } from "@/data/category-style";
 import { formatDay, formatRupiah, type Transaction } from "@/data/demo-ledger";
 
@@ -58,20 +61,23 @@ export function TransactionRow({
   showDate?: boolean;
 }) {
   const model = transactionRowModel(transaction, showDate);
-  const rowClassName =
-    "group flex h-auto min-h-11 w-full items-center justify-start gap-3 rounded-xl px-0 py-3 text-left whitespace-normal sm:px-2";
+  const brand = merchantBrand(transaction.merchant);
   const content = (
     <>
-      <span
-        aria-hidden
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-base"
-        style={{
-          background: `color-mix(in srgb, ${model.tint} 10%, var(--surface))`,
-          color: model.tint,
-        }}
-      >
-        <Icon name={model.icon} />
-      </span>
+      {brand ? (
+        <BrandMark brand={brand} />
+      ) : (
+        <span
+          aria-hidden
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-base"
+          style={{
+            background: `color-mix(in srgb, ${model.tint} 10%, var(--surface))`,
+            color: model.tint,
+          }}
+        >
+          <Icon name={model.icon} />
+        </span>
+      )}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-foreground">
           {model.merchant}
@@ -93,10 +99,10 @@ export function TransactionRow({
     </>
   );
   return onClick ? (
-    <Button className={rowClassName} onPress={onClick} type="button" variant="ghost">
+    <Button className={styles.row} onPress={onClick} type="button" variant="ghost">
       {content}
     </Button>
   ) : (
-    <div className={rowClassName}>{content}</div>
+    <div className={styles.row}>{content}</div>
   );
 }

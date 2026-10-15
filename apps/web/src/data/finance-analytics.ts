@@ -4,6 +4,8 @@ import {
   demoSummary,
   demoToday,
   earliestReportMonth,
+  formatDay,
+  formatMonth,
   isCalendarDate,
   shiftMonth,
   type Transaction,
@@ -179,4 +181,145 @@ export function cashFlowMonths(transactions: Transaction[], month: string) {
     const { income, spending, difference, confirmedCount } = financialMonth(transactions, period);
     return { month: period, income, spending, difference, confirmedCount };
   });
+}
+
+/** Twelve real calendar months; confirmed transfers stay in the ledger but never in totals. */
+export function financialYear(transactions: Transaction[], year: string, today = demoToday) {
+  if (!/^\d{4}$/.test(year) || !isCalendarDate(`${year}-01-01`)) {
+    throw new Error("Choose a valid calendar year.");
+  }
+  const months = Array.from({ length: 12 }, (_, index) =>
+    financialMonth(transactions, `${year}-${String(index + 1).padStart(2, "0")}`, today),
+  );
+  const confirmed = months.flatMap((period) => demoSummary(transactions, period.month).confirmed);
+  const categories = new Map<string, CategoryFinance>();
+  for (const month of months) {
+    for (const category of month.categories) {
+      const key = categoryKey(category);
+      const previous = categories.get(key);
+      categories.set(key, {
+        ...category,
+        amount: (previous?.amount ?? BigInt(0)) + category.amount,
+        count: (previous?.count ?? 0) + category.count,
+      });
+    }
+  }
+  const spending = months.reduce((total, month) => total + month.spending, BigInt(0));
+  const income = months.reduce((total, month) => total + month.income, BigInt(0));
+  return {
+    year,
+    spending,
+    income,
+    difference: income - spending,
+    confirmed,
+    months,
+    categories: Array.from(categories.values()).sort((left, right) =>
+      left.amount === right.amount
+        ? left.name.localeCompare(right.name, "en-US")
+        : left.amount > right.amount
+          ? -1
+          : 1,
+    ),
+  };
+}
+
+/** Current-year comparisons stop on the same month/day; February 29 caps at February 28. */
+export function yearComparison(transactions: Transaction[], year: string, today = demoToday) {
+  if (!isCalendarDate(today)) throw new Error("Choose a valid comparison date.");
+  const current = financialYear(transactions, year, today);
+  const throughDate = year === today.slice(0, 4) ? today : null;
+  const currentEnd = throughDate ?? `${year}-12-31`;
+  const expensesThrough = (records: Transaction[], end: string) =>
+    records.filter(
+      (record) => record.kind === "expense" && record.date !== null && record.date <= end,
+    );
+  const sum = (records: Transaction[]) =>
+    records.reduce((total, record) => total + BigInt(record.amount ?? 0), BigInt(0));
+  const currentSpending = sum(expensesThrough(current.confirmed, currentEnd));
+  if (year === "0000") {
+    return {
+      state: "no-baseline" as const,
+      previousYear: null,
+      throughDate,
+      current: currentSpending,
+      previous: BigInt(0),
+    };
+  }
+  const previousYear = String(Number(year) - 1).padStart(4, "0");
+  const previous = financialYear(transactions, previousYear, today);
+  const previousMonth = `${previousYear}-${(throughDate ?? currentEnd).slice(5, 7)}`;
+  const previousDay = Math.min(
+    Number((throughDate ?? currentEnd).slice(8, 10)),
+    daysInMonth(previousMonth),
+  );
+  const previousEnd = `${previousMonth}-${String(previousDay).padStart(2, "0")}`;
+  const previousExpenses = expensesThrough(previous.confirmed, previousEnd);
+  const state: "available" | "no-baseline" | "future" =
+    year > today.slice(0, 4) ? "future" : previousExpenses.length > 0 ? "available" : "no-baseline";
+  return {
+    state,
+    previousYear,
+    throughDate,
+    current: currentSpending,
+    previous: sum(previousExpenses),
+  };
+}
+
+export type FinancialSummaryModel = {
+  label: string;
+  spending: bigint;
+  income: bigint;
+  difference: bigint;
+  comparison: {
+    state: "available" | "no-baseline" | "future";
+    change: bigint;
+    previousLabel: string;
+    basisLabel: string;
+    caption: string | null;
+  };
+};
+
+/** Common summary data, with honest comparison periods for both calendar scales. */
+export function financialSummaryModel(
+  transactions: Transaction[],
+  period: string,
+  today = demoToday,
+): FinancialSummaryModel {
+  if (/^\d{4}$/.test(period)) {
+    const summary = financialYear(transactions, period, today);
+    const comparison = yearComparison(transactions, period, today);
+    return {
+      label: period,
+      spending: summary.spending,
+      income: summary.income,
+      difference: summary.difference,
+      comparison: {
+        state: comparison.state,
+        change: comparison.current - comparison.previous,
+        previousLabel: comparison.previousYear ?? "",
+        basisLabel: comparison.throughDate
+          ? `${period} from January 1 through ${formatDay(comparison.throughDate)}, compared with the same month and day in ${comparison.previousYear}; shorter Februarys end on February 28`
+          : `${period}, compared with the full year ${comparison.previousYear}`,
+        caption: comparison.throughDate ? `Jan–${formatDay(comparison.throughDate)}` : null,
+      },
+    };
+  }
+  const summary = demoSummary(transactions, period);
+  const comparison = monthComparison(transactions, period, today);
+  const days = comparison.throughDay;
+  return {
+    label: formatMonth(period),
+    spending: summary.spending,
+    income: summary.income,
+    difference: summary.difference,
+    comparison: {
+      state: comparison.state,
+      change: comparison.current - comparison.previous,
+      previousLabel: formatMonth(comparison.previousMonth).split(" ")[0].slice(0, 3),
+      basisLabel: days
+        ? `${formatMonth(period)} days 1–${days}, compared with ${formatMonth(comparison.previousMonth)} days 1–${Math.min(days, daysInMonth(comparison.previousMonth))}`
+        : `${formatMonth(period)}, compared with ${formatMonth(comparison.previousMonth)}`,
+      caption: days ? `1–${days}` : null,
+    },
+  };
 }

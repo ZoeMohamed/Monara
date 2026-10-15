@@ -3,13 +3,13 @@
 import { Button, Card, InputGroup, Label, TextField } from "@monara/ui";
 import { useState } from "react";
 
+import { FinancialSummary } from "@/components/financial-summary";
 import { Icon } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
 import { ReviewQueue } from "@/components/review-queue";
 import { TransactionRow } from "@/components/transaction-row";
-import { Wash } from "@/components/visual";
+import styles from "@/components/transactions-screen.module.css";
 import type { LedgerKind } from "@/data/app-navigation";
-import { categoryColor } from "@/data/category-style";
 import {
   demoSummary,
   demoToday,
@@ -17,7 +17,8 @@ import {
   formatRupiah,
   type Transaction,
 } from "@/data/demo-ledger";
-import { chartRatio, financialMonth } from "@/data/finance-analytics";
+
+import { financialSummaryModel } from "@/data/finance-analytics";
 
 type KindFilter = LedgerKind;
 
@@ -93,61 +94,6 @@ function TransactionViewSelector({
         Review Queue · {pendingCount}
       </Button>
     </fieldset>
-  );
-}
-
-function LedgerSummary({
-  summary,
-  categories,
-}: {
-  summary: ReturnType<typeof demoSummary>;
-  categories: ReturnType<typeof financialMonth>["categories"];
-}) {
-  return (
-    <Wash className="mt-4 p-4 max-lg:hidden sm:p-5" tone="blue">
-      <p className="text-sm font-medium text-muted">Confirmed spending</p>
-      <p className="mt-2 text-3xl font-bold tracking-[-0.04em] tabular-nums [overflow-wrap:anywhere] sm:text-4xl">
-        {formatRupiah(summary.spending)}
-      </p>
-      <p className="mt-2 text-sm text-muted">
-        Income{" "}
-        <span className="font-medium text-foreground tabular-nums">
-          {formatRupiah(summary.income)}
-        </span>
-        {" · "}transfers excluded
-      </p>
-      {categories.length > 0 ? (
-        <>
-          <div aria-hidden className="mt-4 flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full">
-            {categories.map((category, index) => (
-              <span
-                className="h-full"
-                key={category.categoryId ?? category.name}
-                style={{
-                  flexGrow: chartRatio(category.amount, summary.spending) * 1000,
-                  background: categoryColor(category.name, index),
-                }}
-              />
-            ))}
-          </div>
-          <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted">
-            {categories.map((category, index) => (
-              <li className="flex items-center gap-1.5" key={category.categoryId ?? category.name}>
-                <span
-                  aria-hidden
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: categoryColor(category.name, index) }}
-                />
-                {category.name}{" "}
-                <span className="tabular-nums">
-                  {Math.round(chartRatio(category.amount, summary.spending) * 100)}%
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-    </Wash>
   );
 }
 
@@ -252,7 +198,7 @@ function GroupedLedger({
               </p>
             ) : null}
           </div>
-          <div className="divide-y divide-separator rounded-3xl border border-border bg-surface px-5 max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent max-lg:px-0">
+          <div className={styles.ledgerGroup}>
             {group.transactions.map((transaction) => (
               <TransactionRow
                 key={transaction.id}
@@ -324,6 +270,7 @@ function EmptyLedger({
 function ConfirmedLedger({
   transactions,
   month,
+  today,
   openTransaction,
   query,
   kindFilter,
@@ -336,6 +283,7 @@ function ConfirmedLedger({
 }: {
   transactions: Transaction[];
   month: string;
+  today: string;
   openTransaction: (transaction: Transaction) => void;
   query: string;
   kindFilter: KindFilter;
@@ -352,10 +300,7 @@ function ConfirmedLedger({
 
   return (
     <>
-      <LedgerSummary
-        categories={financialMonth(transactions, month).categories}
-        summary={summary}
-      />
+      <FinancialSummary model={financialSummaryModel(transactions, month, today)} />
       <LedgerFilters
         query={query}
         kindFilter={kindFilter}
@@ -475,6 +420,7 @@ export function TransactionsScreen({
         <ConfirmedLedger
           transactions={transactions}
           month={month}
+          today={today}
           openTransaction={openTransaction}
           query={query}
           kindFilter={kindFilter}

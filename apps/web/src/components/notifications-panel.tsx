@@ -4,8 +4,10 @@ import { Button, Chip } from "@monara/ui";
 import { useEffect, useRef, useState } from "react";
 import { useAppSession } from "@/components/app-session-context";
 import { Icon } from "@/components/icon";
+import { RecurringBillSuggestion } from "@/components/recurring-bill-suggestion";
 import styles from "@/components/reminders-center.module.css";
 import { formatDay, type Reminder } from "@/data/demo-ledger";
+import type { FinancialAttention } from "@/data/financial-attention";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
 import {
   completeNotificationPage,
@@ -33,6 +35,7 @@ async function loadNotificationPage(cursor?: string | null) {
 }
 
 function useNotificationRecords(demo: boolean) {
+  const { rememberNotificationRecords } = useAppSession();
   const [attempt, setAttempt] = useState(0);
   const generation = useRef(0);
   const [result, setResult] = useState<NotificationPageState | null>(null);
@@ -43,8 +46,10 @@ function useNotificationRecords(demo: boolean) {
     let cancelled = false;
     void loadNotificationPage().then(
       (page) => {
-        if (!cancelled && generation.current === attempt)
+        if (!cancelled && generation.current === attempt) {
+          rememberNotificationRecords(page.items);
           setResult({ attempt, ...page, error: null });
+        }
       },
       (error: unknown) => {
         if (!cancelled && generation.current === attempt)
@@ -63,7 +68,7 @@ function useNotificationRecords(demo: boolean) {
       cancelled = true;
       if (inFlight.current?.attempt === attempt) inFlight.current = null;
     };
-  }, [demo, attempt]);
+  }, [demo, attempt, rememberNotificationRecords]);
   const loaded = result?.attempt === attempt;
   const loadMore = async () => {
     if (!loaded || !result.nextCursor || inFlight.current || generation.current !== attempt) return;
@@ -72,6 +77,7 @@ function useNotificationRecords(demo: boolean) {
     setPendingPage(request);
     try {
       const page = await loadNotificationPage(request.cursor);
+      if (generation.current === request.attempt) rememberNotificationRecords(page.items);
       setResult((previous) =>
         completeNotificationPage(previous, request, generation.current, page),
       );
@@ -93,7 +99,9 @@ function useNotificationRecords(demo: boolean) {
       }
     }
   };
-  const update = (item: Reminder) =>
+  const update = (item: Reminder) => {
+    if (generation.current !== attempt) return;
+    rememberNotificationRecords([item]);
     setResult((previous) =>
       previous && previous.attempt === attempt && generation.current === attempt
         ? {
@@ -102,6 +110,7 @@ function useNotificationRecords(demo: boolean) {
           }
         : previous,
     );
+  };
   return {
     items: loaded ? result.items : [],
     error: loaded ? result.error : null,
@@ -119,6 +128,23 @@ function useNotificationRecords(demo: boolean) {
   };
 }
 
+function StoredNotificationReceipt({ reminder }: { reminder: Reminder }) {
+  if (reminder.status === undefined || reminder.status === "unread") return null;
+  const readAt = reminder.backend?.readAt;
+  const label =
+    reminder.status === "dismissed"
+      ? "Archived"
+      : readAt
+        ? `Read ${formatDay(readAt.slice(0, 10))}`
+        : "Read";
+  return (
+    <p className={styles.receipt}>
+      <Icon className="h-3.5 w-3.5" name="check" />
+      {label}
+    </p>
+  );
+}
+
 function NotificationRow({
   reminder,
   disabled,
@@ -130,8 +156,8 @@ function NotificationRow({
   pending: boolean;
   onChange: (status: "read" | "dismissed") => void;
 }) {
+  const session = useAppSession();
   const unread = reminder.status === undefined || reminder.status === "unread";
-  const readAt = reminder.backend?.readAt;
   return (
     <li className={styles.item} data-unread={unread}>
       <span className={styles.symbol}>
@@ -148,18 +174,25 @@ function NotificationRow({
             </Chip>
           )}
         </div>
-        <p className={styles.message}>{reminder.message}</p>
-        {!unread && (
-          <p className={styles.receipt}>
-            <Icon className="h-3.5 w-3.5" name="check" />
-            {reminder.status === "dismissed"
-              ? "Archived"
-              : readAt
-                ? `Read ${formatDay(readAt.slice(0, 10))}`
-                : "Read for this demo visit"}
-          </p>
+        {reminder.scheduledFor && (
+          <p className={styles.meta}>{formatDay(reminder.scheduledFor.slice(0, 10))}</p>
         )}
+        <p className={styles.message}>{reminder.message}</p>
+        <StoredNotificationReceipt reminder={reminder} />
         <div className={styles.actions}>
+          <Button
+            className="min-h-11 rounded-full px-3 text-xs"
+            onPress={() =>
+              session.navigation.navigate({
+                screen: "budgets",
+                month: session.today.slice(0, 7),
+                remindersOpen: false,
+              })
+            }
+            variant="secondary"
+          >
+            {reminder.kind === "bill" ? "View bills" : "View budgets"}
+          </Button>
           {unread && (
             <Button
               aria-label={`Mark ${reminder.title ?? "notification"} read`}
@@ -168,7 +201,7 @@ function NotificationRow({
               onPress={() => onChange("read")}
               variant="secondary"
             >
-              {pending ? "Updating…" : "Mark read"}
+              {pending ? "Updating…" : "Read"}
             </Button>
           )}
           {reminder.status !== "dismissed" && (
@@ -263,6 +296,7 @@ function NotificationList({
   pending,
   disabled,
   onChange,
+  suppressEmpty,
 }: {
   records: ReturnType<typeof useNotificationRecords>;
   visible: Reminder[];
@@ -270,6 +304,7 @@ function NotificationList({
   pending: string | null;
   disabled: boolean;
   onChange: (reminder: Reminder, status: "read" | "dismissed") => Promise<void>;
+  suppressEmpty: boolean;
 }) {
   if (records.loading)
     return (
@@ -293,7 +328,7 @@ function NotificationList({
         ))}
       </ul>
     );
-  if (records.error) return null;
+  if (records.error || suppressEmpty) return null;
   return (
     <div className={styles.empty}>
       <span className={styles.emptyIcon}>
@@ -302,11 +337,6 @@ function NotificationList({
       <h4 className="text-sm font-bold">
         {archive ? "No archived notifications" : "You’re all caught up"}
       </h4>
-      <p className={styles.meta}>
-        {archive
-          ? "Archived updates appear here."
-          : "New budget and bill updates will appear here."}
-      </p>
     </div>
   );
 }
@@ -338,6 +368,175 @@ function NotificationRecovery({
   );
 }
 
+function SuggestedBills() {
+  const session = useAppSession();
+  const suggestions = session.bills.filter((bill) => bill.status === "suggested");
+  if (suggestions.length === 0) return null;
+  return (
+    <section aria-labelledby="suggested-bills-title" className="grid gap-3">
+      <h4 className="text-xs font-semibold text-muted" id="suggested-bills-title">
+        Bills to review
+      </h4>
+      <ul className={styles.list}>
+        {suggestions.map((bill) => (
+          <li key={bill.id}>
+            <RecurringBillSuggestion
+              bill={bill}
+              onConfirm={session.confirmBill}
+              onDismiss={session.dismissBill}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function AttentionNotificationRow({ attention }: { attention: FinancialAttention }) {
+  const session = useAppSession();
+  const unread = attention.status === "unread";
+  const open = () => {
+    if (attention.action === "review") session.openReview();
+    else
+      session.navigation.navigate({
+        screen: "budgets",
+        month: session.today.slice(0, 7),
+        remindersOpen: false,
+      });
+  };
+  return (
+    <li className={styles.item} data-unread={unread}>
+      <span className={styles.symbol}>
+        <Icon
+          className="h-5 w-5"
+          name={
+            attention.kind === "review"
+              ? "transactions"
+              : attention.kind === "budget"
+                ? "budgets"
+                : "bell"
+          }
+        />
+      </span>
+      <div className={styles.content}>
+        <h4 className={styles.title}>{attention.title}</h4>
+        <p className={styles.message}>{attention.message}</p>
+        {attention.status === "read" && (
+          <p className={styles.receipt}>
+            <Icon className="h-3.5 w-3.5" name="check" />
+            Read
+          </p>
+        )}
+        <div className={styles.actions}>
+          <Button className="min-h-11 rounded-full px-3 text-xs" onPress={open} variant="secondary">
+            {attention.action === "review"
+              ? "Review"
+              : attention.kind === "bill"
+                ? "View bills"
+                : "View budgets"}
+          </Button>
+          {unread && (
+            <Button
+              aria-label={`Mark ${attention.title} read`}
+              className="min-h-11 rounded-full px-3 text-xs"
+              onPress={() => session.setAttentionNotificationStatus(attention.id, "read")}
+              variant="ghost"
+            >
+              Read
+            </Button>
+          )}
+          {attention.status !== "dismissed" && (
+            <Button
+              aria-label={`Archive ${attention.title}`}
+              className="min-h-11 rounded-full px-3 text-xs"
+              onPress={() => session.setAttentionNotificationStatus(attention.id, "dismissed")}
+              variant="ghost"
+            >
+              Archive
+            </Button>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function AttentionNotifications({ archive }: { archive: boolean }) {
+  const session = useAppSession();
+  const alerts = session.attentionNotifications.filter(
+    (attention) => (attention.status === "dismissed") === archive,
+  );
+  if (alerts.length === 0) return null;
+  return (
+    <section aria-labelledby="financial-attention-title" className="grid gap-3">
+      <h4 className="text-xs font-semibold text-muted" id="financial-attention-title">
+        {archive ? "Archived attention" : "Needs attention"}
+      </h4>
+      <ul className={styles.list}>
+        {alerts.map((attention) => (
+          <AttentionNotificationRow attention={attention} key={attention.id} />
+        ))}
+      </ul>
+      {session.dataMode !== "demo" && (
+        <p className={styles.scope}>Read and archive for these alerts last for this visit.</p>
+      )}
+    </section>
+  );
+}
+
+function NotificationHistoryTabs({
+  archive,
+  onChange,
+}: {
+  archive: boolean;
+  onChange: (archive: boolean) => void;
+}) {
+  return (
+    <div className="flex gap-2">
+      <Button
+        aria-pressed={!archive}
+        className="min-h-11 rounded-full px-4 text-xs"
+        onPress={() => onChange(false)}
+        variant={!archive ? "secondary" : "ghost"}
+      >
+        Recent
+      </Button>
+      <Button
+        aria-pressed={archive}
+        className="min-h-11 rounded-full px-4 text-xs"
+        onPress={() => onChange(true)}
+        variant={archive ? "secondary" : "ghost"}
+      >
+        Archived
+      </Button>
+    </div>
+  );
+}
+
+function MoreNotifications({
+  available,
+  loading,
+  locked,
+  onLoad,
+}: {
+  available: boolean;
+  loading: boolean;
+  locked: boolean;
+  onLoad: () => Promise<void>;
+}) {
+  if (!available) return null;
+  return (
+    <Button
+      className="min-h-11 rounded-full"
+      isDisabled={locked}
+      onPress={onLoad}
+      variant="secondary"
+    >
+      {loading ? "Loading…" : "Load more notifications"}
+    </Button>
+  );
+}
+
 export function NotificationsPanel() {
   const session = useAppSession();
   const demo = session.dataMode === "demo";
@@ -345,9 +544,19 @@ export function NotificationsPanel() {
   const actions = useNotificationActions(records, demo);
   const [archive, setArchive] = useState(false);
   const items = demo ? session.reminders : records.items;
-  const visible = items.filter((reminder) => (reminder.status === "dismissed") === archive);
+  const covered = new Set(
+    session.attentionNotifications.flatMap((attention) => attention.coveredReminderIds),
+  );
+  const visible = items.filter(
+    (reminder) =>
+      (reminder.status === "dismissed") === archive && (archive || !covered.has(reminder.id)),
+  );
   const locked = actions.state.pending !== null || records.loadingMore;
   const recoveryRequired = !demo && session.refreshRequired;
+  const hasSuggestions = !archive && session.bills.some((bill) => bill.status === "suggested");
+  const hasAttention = session.attentionNotifications.some(
+    (attention) => (attention.status === "dismissed") === archive,
+  );
   const recoveryMessage =
     actions.state.error ??
     records.error ??
@@ -355,32 +564,13 @@ export function NotificationsPanel() {
   return (
     <section aria-labelledby="app-notifications-title" className="grid gap-4">
       <div>
-        <h3 className="text-base font-bold" id="app-notifications-title">
+        <h3 className="sr-only" id="app-notifications-title">
           From Monara
         </h3>
-        <p className={styles.meta}>
-          Budget updates and tracked bills. Reading a notification keeps the payment status
-          unchanged.
-        </p>
       </div>
-      <div className="flex gap-2">
-        <Button
-          aria-pressed={!archive}
-          className="min-h-11 rounded-full px-4 text-xs"
-          onPress={() => setArchive(false)}
-          variant={!archive ? "secondary" : "ghost"}
-        >
-          Updates
-        </Button>
-        <Button
-          aria-pressed={archive}
-          className="min-h-11 rounded-full px-4 text-xs"
-          onPress={() => setArchive(true)}
-          variant={archive ? "secondary" : "ghost"}
-        >
-          Archived
-        </Button>
-      </div>
+      <NotificationHistoryTabs archive={archive} onChange={setArchive} />
+      <AttentionNotifications archive={archive} />
+      {!archive && <SuggestedBills />}
       <NotificationList
         archive={archive}
         disabled={locked || recoveryRequired}
@@ -388,6 +578,7 @@ export function NotificationsPanel() {
         pending={actions.state.pending}
         records={records}
         visible={visible}
+        suppressEmpty={hasSuggestions || hasAttention}
       />
       <NotificationRecovery
         disabled={locked}
@@ -395,21 +586,13 @@ export function NotificationsPanel() {
         onRefresh={actions.refresh}
         pending={actions.state.pending === "refresh"}
       />
-      {records.nextCursor && (
-        <Button
-          className="min-h-11 rounded-full"
-          isDisabled={locked}
-          onPress={actions.loadMore}
-          variant="secondary"
-        >
-          {records.loadingMore ? "Loading…" : "Load more notifications"}
-        </Button>
-      )}
-      {demo && (
-        <p className="text-xs leading-5 text-muted">
-          Read and archive states last for this demo visit.
-        </p>
-      )}
+      <MoreNotifications
+        available={records.nextCursor !== null}
+        loading={records.loadingMore}
+        locked={locked}
+        onLoad={actions.loadMore}
+      />
+      {demo && <p className={styles.scope}>Demo visit only · Read keeps your ledger unchanged.</p>}
     </section>
   );
 }

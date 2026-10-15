@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppSession } from "@/components/app-session-context";
 import { useTransactionActions } from "@/components/transaction-actions";
 import type { TransactionDraft } from "@/components/transaction-editor";
@@ -8,8 +8,14 @@ import { useAppNavigation } from "@/components/use-app-navigation";
 import { useFinanceSync } from "@/components/use-finance-sync";
 import { replayTour, useTourPending } from "@/components/use-product-tour";
 import type { AppView } from "@/data/app-navigation";
-import type { Budget } from "@/data/demo-ledger";
+import type { Budget, Reminder } from "@/data/demo-ledger";
 import { demoReminders, demoToday, type RecurringBill } from "@/data/demo-ledger";
+import {
+  demoAttentionBudgets,
+  financialAttention,
+  mergeNotificationRecords,
+  notificationUpdatesCount,
+} from "@/data/financial-attention";
 import {
   duePersonalReminders,
   type PersonalReminder,
@@ -148,6 +154,13 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const [notificationStatuses, setNotificationStatuses] = useState<
     Record<string, "read" | "dismissed">
   >({});
+  const [attentionStatuses, setAttentionStatuses] = useState<Record<string, "read" | "dismissed">>(
+    {},
+  );
+  const [knownReminders, setKnownReminders] = useState<Reminder[]>([]);
+  const rememberNotificationRecords = useCallback((records: Reminder[]) => {
+    setKnownReminders((previous) => mergeNotificationRecords(previous, records));
+  }, []);
   const sync = useFinanceSync(initialFinance, view.month, today);
   const financeSnapshot = sync.snapshot;
   const [removedId, setRemovedId] = useState<string | null>(null);
@@ -173,6 +186,35 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
         ...reminder,
         status: notificationStatuses[reminder.id] ?? ("unread" as const),
       }));
+  const currentReminderRecords = mergeNotificationRecords(knownReminders, reminders);
+  const attentionBudgets = financeSnapshot
+    ? financeSnapshot.allBudgets.map((budget) => ({
+        id: budget.id,
+        name: budget.name,
+        category:
+          financeSnapshot.categories.find((category) => category.id === budget.categoryId)?.name ??
+          "Category unavailable",
+        categoryId: budget.categoryId,
+        cadence: budget.cadence,
+        startsOn: budget.startsOn,
+        limit: BigInt(budget.limit.amountMinor),
+        warningPercent: budget.warningPercent,
+        active: budget.isActive && budget.deletedAt === null,
+      }))
+    : demoAttentionBudgets(demoBudgets, today);
+  const attentionNotifications = financialAttention({
+    transactions,
+    budgets: attentionBudgets,
+    bills,
+    reminders: currentReminderRecords,
+    today,
+    states: attentionStatuses,
+  });
+  const updatesCount = notificationUpdatesCount(
+    currentReminderRecords,
+    attentionNotifications,
+    bills,
+  );
   const { mutationPending } = sync;
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -191,6 +233,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const openReview = () =>
     navigation.navigate({
       screen: "transactions",
+      remindersOpen: false,
       reviewOpen: true,
       kindFilter: "all",
       transactionId: null,
@@ -247,9 +290,12 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     runMutation: mutate,
     bills,
     reminders,
-    reminderCount:
-      reminders.filter((reminder) => reminder.status !== "read" && reminder.status !== "dismissed")
-        .length + duePersonalReminders(personalReminders, today),
+    attentionNotifications,
+    updatesCount,
+    rememberNotificationRecords,
+    setAttentionNotificationStatus: (id, status) =>
+      setAttentionStatuses((previous) => ({ ...previous, [id]: status })),
+    reminderCount: updatesCount + duePersonalReminders(personalReminders, today),
     personalReminders,
     updateDemoBudget: (budgetId, changes) => {
       if (live) return;

@@ -1,0 +1,2 @@
+# Keep original downloaded artwork byte-for-byte, including published line endings.
+*.svg -text

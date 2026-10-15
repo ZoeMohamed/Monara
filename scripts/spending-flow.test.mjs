@@ -210,6 +210,36 @@ test("biggest expenses rank individual payments separately from a place's total"
   assert.deepEqual(records, [first, second, largest]);
 });
 
+test("yearly rankings aggregate a place across months while individual payments retain their amount and identity", () => {
+  const first = Object.freeze(
+    record({ id: "january", date: "2024-01-01", merchant: "Regular place", amount: 100 }),
+  );
+  const second = Object.freeze(
+    record({
+      id: "february",
+      date: "2024-02-29",
+      merchant: "Regular place",
+      amount: 100,
+      category: "Transport",
+    }),
+  );
+  const largest = Object.freeze(
+    record({ id: "largest", date: "2024-12-31", merchant: "One payment", amount: 150 }),
+  );
+  const excluded = record({ id: "other-year", date: "2023-12-31", amount: 999 });
+  const places = spendingPlaces([first, second, largest, excluded], "2024");
+  assert.equal(places[0].name, "Regular place");
+  assert.equal(places[0].amount, 200n);
+  assert.deepEqual(places[0].transactions, [first, second]);
+  assert.deepEqual(biggestExpenses([first, second, largest, excluded], "2024"), [
+    largest,
+    second,
+    first,
+  ]);
+  assert.equal(spendingFlow([first, second, largest, excluded], "2024").spending, 350n);
+  assert.throws(() => spendingPlaces([], "10000"), /valid calendar month or year/);
+});
+
 test("single-payment ranking excludes unconfirmed, incomplete, income, transfer and other months", () => {
   const valid = record({ id: "valid", amount: Number.MAX_SAFE_INTEGER });
   const records = [

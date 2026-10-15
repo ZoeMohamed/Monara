@@ -5,18 +5,28 @@ import {
   personalReminderErrors,
 } from "../apps/web/src/data/personal-reminders.ts";
 
-const draft = { title: "Synthetic rent", kind: "payment", dueOn: "2026-10-14", amount: null };
+const draft = { title: "Synthetic rent", tag: null, dueOn: "2026-10-14", amount: null };
 
 test("reminders permit unknown payment amounts and validate entered money and calendar dates", () => {
   assert.deepEqual(personalReminderErrors(draft), {});
-  assert.deepEqual(personalReminderErrors({ ...draft, kind: "birthday" }), {});
+  assert.deepEqual(personalReminderErrors({ ...draft, tag: "Birthday" }), {});
   for (const amount of [0, -1, 0.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
     assert.ok(personalReminderErrors({ ...draft, amount }).amount);
   }
-  assert.ok(personalReminderErrors({ ...draft, kind: "birthday", amount: 100 }).amount);
+  assert.deepEqual(personalReminderErrors({ ...draft, tag: "A gift for Mum", amount: 100 }), {});
   assert.ok(personalReminderErrors({ ...draft, dueOn: "2026-02-29" }).dueOn);
   assert.deepEqual(personalReminderErrors({ ...draft, dueOn: "2024-02-29" }), {});
   assert.ok(personalReminderErrors({ ...draft, title: " " }).title);
+});
+
+test("custom tags support the User’s own labels without requiring predefined kinds", () => {
+  for (const tag of [null, "Rent", "Pet care", "Family plans", "家人", "x".repeat(32)]) {
+    assert.deepEqual(personalReminderErrors({ ...draft, tag }), {});
+  }
+  for (const tag of [" ", "x".repeat(33)]) {
+    assert.ok(personalReminderErrors({ ...draft, tag }).tag);
+  }
+  assert.deepEqual(personalReminderErrors({ ...draft, tag: "  Rent  " }), {});
 });
 
 test("notification badge counts only due personal reminders without treating acknowledgement as payment", () => {

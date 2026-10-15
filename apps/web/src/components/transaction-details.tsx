@@ -4,10 +4,12 @@ import type { FinancialAccount, TransactionSource } from "@monara/contracts";
 import { Button, Chip } from "@monara/ui";
 import { type CSSProperties, type ReactNode, type RefObject, useRef, useState } from "react";
 import { AccountBadge } from "@/components/account-badge";
+import { BrandMark } from "@/components/brand-mark";
 import { FinanceRecovery } from "@/components/budget-manager";
 import { Icon, type IconName } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import styles from "@/components/transaction-details.module.css";
+import { merchantBrand } from "@/data/brand-identity";
 import { categoryColor, categoryIcon } from "@/data/category-style";
 import {
   formatRupiah,
@@ -258,7 +260,9 @@ function CategoryMark({ name }: { name: string }) {
   );
 }
 
-function MerchantMark({ income }: { income: boolean }) {
+function MerchantMark({ income, name }: { income: boolean; name: string }) {
+  const brand = merchantBrand(name);
+  if (brand) return <BrandMark brand={brand} />;
   return (
     <span aria-hidden className={styles.mark} data-kind="merchant">
       <Icon name={income ? "income" : "store"} />
@@ -342,7 +346,7 @@ function PaymentMoneyFlow({ transaction, financialAccounts }: MoneyFlowProps) {
   const accountName = transaction.backend ? savedAccount?.name : transaction.method;
   const account = <AccountStop account={savedAccount} label={labels.account} name={accountName} />;
   const place = (
-    <Stop label={labels.place} visual={<MerchantMark income={income} />}>
+    <Stop label={labels.place} visual={<MerchantMark income={income} name={merchant} />}>
       {merchant}
     </Stop>
   );

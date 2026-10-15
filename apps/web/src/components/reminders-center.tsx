@@ -18,16 +18,14 @@ export function RemindersCenter({ onClose }: { onClose: () => void }) {
       ? "reminders"
       : "notifications",
   );
-  const unread = session.reminders.filter(
-    (reminder) => reminder.status !== "read" && reminder.status !== "dismissed",
-  ).length;
+  const unread = session.updatesCount;
   const todo = session.personalReminders.filter((reminder) => reminder.completedAt === null).length;
   return (
-    <ModalDialog labelledBy="reminders-center-title" onClose={onClose}>
+    <ModalDialog labelledBy="reminders-center-title" onClose={onClose} size="lg">
       <div className={styles.sheet}>
         <div className={styles.header}>
           <h2 className="text-xl font-bold tracking-[-0.03em]" id="reminders-center-title">
-            A little heads-up
+            Notifications
           </h2>
           <Button
             aria-label="Close reminders and notifications"
@@ -56,7 +54,7 @@ export function RemindersCenter({ onClose }: { onClose: () => void }) {
             variant={tab === "notifications" ? "primary" : "ghost"}
           >
             <Icon className="h-4 w-4" name="bell" />
-            Notifications{unread > 0 ? ` · ${unread}` : ""}
+            Updates{unread > 0 ? ` · ${unread}` : ""}
           </Button>
         </fieldset>
         {tab === "reminders" ? <PersonalRemindersPanel /> : <NotificationsPanel />}

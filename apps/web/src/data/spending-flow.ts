@@ -25,17 +25,29 @@ function compareSpending(
       : 1;
 }
 
-// Presentation-only flow: each recorded expense is counted once at every level.
-export function spendingFlow(transactions: Transaction[], month: string) {
-  if (!/^\d{4}-\d{2}$/.test(month) || !isCalendarDate(`${month}-01`)) {
-    throw new Error("Choose a valid calendar month.");
+function periodRecords(transactions: Transaction[], period: string) {
+  if (/^\d{4}$/.test(period) && isCalendarDate(`${period}-01-01`)) {
+    return Array.from(
+      { length: 12 },
+      (_, index) =>
+        demoSummary(transactions, `${period}-${String(index + 1).padStart(2, "0")}`).confirmed,
+    ).flat();
   }
-  const summary = demoSummary(transactions, month);
+  if (!/^\d{4}-\d{2}$/.test(period) || !isCalendarDate(`${period}-01`)) {
+    throw new Error("Choose a valid calendar month or year.");
+  }
+  return demoSummary(transactions, period).confirmed;
+}
+
+// Presentation-only flow: each recorded expense is counted once at every level.
+export function spendingFlow(transactions: Transaction[], period: string) {
+  const records = periodRecords(transactions, period);
+  let spending = BigInt(0);
   const categories = new Map<
     string,
     { name: string; categoryId?: string; amount: bigint; merchants: Map<string, MerchantSpending> }
   >();
-  for (const transaction of summary.confirmed) {
+  for (const transaction of records) {
     if (transaction.kind !== "expense") continue;
     const categoryName = transaction.category || "Uncategorized";
     const key = transaction.categoryId ? `id:${transaction.categoryId}` : `name:${categoryName}`;
@@ -52,6 +64,7 @@ export function spendingFlow(transactions: Transaction[], month: string) {
       transactions: [],
     };
     const amount = BigInt(transaction.amount ?? 0);
+    spending += amount;
     category.amount += amount;
     merchant.amount += amount;
     merchant.transactions.push(transaction);
@@ -68,13 +81,13 @@ export function spendingFlow(transactions: Transaction[], month: string) {
     ),
     merchants: Array.from(category.merchants.values()).sort(compareSpending),
   }));
-  return { spending: summary.spending, categories: grouped.sort(compareSpending) };
+  return { spending, categories: grouped.sort(compareSpending) };
 }
 
 // A place can have expenses in more than one category. The ranked list combines them.
-export function spendingPlaces(transactions: Transaction[], month: string): MerchantSpending[] {
+export function spendingPlaces(transactions: Transaction[], period: string): MerchantSpending[] {
   const places = new Map<string, MerchantSpending>();
-  for (const category of spendingFlow(transactions, month).categories) {
+  for (const category of spendingFlow(transactions, period).categories) {
     for (const merchant of category.merchants) {
       const place = places.get(merchant.name) ?? {
         name: merchant.name,
@@ -90,9 +103,9 @@ export function spendingPlaces(transactions: Transaction[], month: string): Merc
 }
 
 // Ranking a single payment never combines repeated titles or changes canonical records.
-export function biggestExpenses(transactions: Transaction[], month: string): Transaction[] {
-  return demoSummary(transactions, month)
-    .confirmed.filter((transaction) => transaction.kind === "expense")
+export function biggestExpenses(transactions: Transaction[], period: string): Transaction[] {
+  return periodRecords(transactions, period)
+    .filter((transaction) => transaction.kind === "expense")
     .sort((left, right) => {
       const leftAmount = BigInt(left.amount ?? 0);
       const rightAmount = BigInt(right.amount ?? 0);

@@ -2,7 +2,9 @@ import type { FinancialAccount } from "@monara/contracts";
 import type { CSSProperties } from "react";
 
 import styles from "@/components/account-badge.module.css";
+import { BrandMark } from "@/components/brand-mark";
 import { Icon } from "@/components/icon";
+import { institutionBrand } from "@/data/brand-identity";
 
 function initials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -24,6 +26,8 @@ export function AccountBadge({
 }) {
   const dimension = { "--badge-size": `${size}px` } as CSSProperties;
   const label = (account?.institution ?? name)?.trim();
+  const brand = institutionBrand(account ? account.institution : name);
+  if (brand) return <BrandMark brand={brand} size={size} />;
   if (!label) {
     return (
       <span aria-hidden className={styles.badge} data-kind="unknown" style={dimension}>

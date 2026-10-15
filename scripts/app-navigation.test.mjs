@@ -31,6 +31,8 @@ function view(overrides = {}) {
     basePath: "",
     screen: "home",
     month: demoMonth,
+    reportPeriod: "monthly",
+    reportYear: (overrides.month ?? demoMonth).slice(0, 4),
     reviewOpen: false,
     kindFilter: "all",
     transactionId: null,
@@ -54,6 +56,48 @@ test("each screen has a canonical route with an explicit month and no default fi
     assert.deepEqual(parse(pathname), state);
     assert.deepEqual(parse(buildAppHref(state)), state);
   }
+});
+
+test("yearly Reports use allowlisted period and year fields and retain them in transaction detail links", () => {
+  const state = view({
+    screen: "reports",
+    reportPeriod: "yearly",
+    reportYear: "2024",
+    transactionId: firstId,
+  });
+  const href = buildAppHref(state);
+  assert.equal(href, `/reports?month=${demoMonth}&period=yearly&year=2024&transaction=${firstId}`);
+  assert.deepEqual(parse(href), state);
+  assert.deepEqual(
+    parse(buildAppHref(clearedView(state))),
+    view({ screen: "reports", reportPeriod: "yearly", reportYear: "2024" }),
+  );
+  assert.deepEqual(clearedView(state, "transactions"), view({ screen: "transactions" }));
+  for (const year of ["0000", "0099", "2024", "9999"]) {
+    assert.equal(parse(`/reports?period=yearly&year=${year}`).reportYear, year);
+  }
+});
+
+test("invalid report periods and years are discarded and annual fields do not leak into other screens", () => {
+  for (const year of ["", "24", "10000", "-2024", "2024-01", "2024&merchant=private", "2024 "]) {
+    assert.equal(
+      parse(`/reports?period=yearly&year=${encodeURIComponent(year)}`).reportYear,
+      "2026",
+    );
+  }
+  assert.deepEqual(parse("/reports?period=week&year=2024"), view({ screen: "reports" }));
+  assert.deepEqual(
+    parse("/transactions?period=yearly&year=2024"),
+    view({ screen: "transactions" }),
+  );
+  assert.equal(
+    buildAppHref(view({ screen: "reports", reportPeriod: "yearly", reportYear: "private" })),
+    `/reports?month=${demoMonth}&period=yearly&year=2026`,
+  );
+  assert.equal(
+    buildAppHref(view({ screen: "transactions", reportPeriod: "yearly", reportYear: "2024" })),
+    `/transactions?month=${demoMonth}`,
+  );
 });
 
 test("ledger filters and popup states survive a serialized history roundtrip", () => {

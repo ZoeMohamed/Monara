@@ -2,8 +2,9 @@
 
 import { Button, Card } from "@monara/ui";
 import { useId, useState } from "react";
-
+import { BrandMark } from "@/components/brand-mark";
 import { EmptyLedgerState } from "@/components/empty-ledger-state";
+import { FinancialSummary } from "@/components/financial-summary";
 import {
   CashFlowChart,
   CategoryBreakdown,
@@ -15,29 +16,40 @@ import { MonthSelector } from "@/components/month-selector";
 import styles from "@/components/reports-screen.module.css";
 import { SpendingFlow } from "@/components/spending-flow";
 import { TransactionRow } from "@/components/transaction-row";
-import { SectionTitle, Wash } from "@/components/visual";
-import {
-  demoSummary,
-  demoToday,
-  formatMonth,
-  formatRupiah,
-  type Transaction,
-} from "@/data/demo-ledger";
-import { chartRatio, compactAmount, monthComparison } from "@/data/finance-analytics";
+import { SectionTitle } from "@/components/visual";
+import type { ReportPeriod } from "@/data/app-navigation";
+import { merchantBrand } from "@/data/brand-identity";
+import { categoryIcon } from "@/data/category-style";
+import { demoSummary, demoToday, formatRupiah, type Transaction } from "@/data/demo-ledger";
+import { chartRatio, financialSummaryModel, financialYear } from "@/data/finance-analytics";
 import { biggestExpenses, spendingPlaces } from "@/data/spending-flow";
+
+function PlaceMark({ name, category }: { name: string; category: string | null }) {
+  const brand = merchantBrand(name);
+  return brand ? (
+    <BrandMark brand={brand} size={32} />
+  ) : (
+    <span
+      aria-hidden
+      className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"
+    >
+      <Icon className="h-4 w-4" name={categoryIcon(category ?? "Uncategorized")} />
+    </span>
+  );
+}
 
 function TopPlaces({
   transactions,
-  month,
+  period,
   openTransaction,
 }: {
   transactions: Transaction[];
-  month: string;
+  period: string;
   openTransaction?: (transaction: Transaction) => void;
 }) {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const paymentsId = useId();
-  const places = spendingPlaces(transactions, month).slice(0, 6);
+  const places = spendingPlaces(transactions, period).slice(0, 6);
   const selected = places.find((place) => place.name === selectedName);
 
   function openPlace(place: (typeof places)[number]) {
@@ -51,7 +63,9 @@ function TopPlaces({
   return (
     <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <SectionTitle title="Top places" />
-      <p className="mt-1 text-sm text-muted">Total spent at each place this month.</p>
+      <p className="mt-1 text-sm text-muted">
+        Total spent at each place this {period.length === 4 ? "year" : "month"}.
+      </p>
       <ol className="mt-2 divide-y divide-separator">
         {places.map((place, index) => (
           <li key={place.name}>
@@ -65,7 +79,7 @@ function TopPlaces({
                   : undefined
               }
               aria-label={`${place.name}, ${formatRupiah(place.amount)}, ${place.transactions.length} ${place.transactions.length === 1 ? "payment" : "payments"}. ${place.transactions.length === 1 && openTransaction ? "Open transaction." : "Show payments."}`}
-              className="relative isolate flex h-auto min-h-12 w-full items-center gap-3 overflow-hidden rounded-xl px-2 py-3 text-left text-sm whitespace-normal aria-expanded:bg-accent-soft"
+              className={`${styles.placeRow} relative isolate flex h-auto min-h-12 w-full items-center gap-3 overflow-hidden rounded-xl px-2 py-3 text-left text-sm whitespace-normal aria-expanded:bg-accent-soft`}
               onPress={() => openPlace(place)}
               type="button"
               variant="ghost"
@@ -84,6 +98,7 @@ function TopPlaces({
               >
                 {index + 1}
               </span>
+              <PlaceMark name={place.name} category={place.transactions[0]?.category ?? null} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-semibold">{place.name}</span>
                 <span className="mt-0.5 block text-xs font-normal text-muted">
@@ -123,14 +138,14 @@ function TopPlaces({
 
 function BiggestExpenses({
   transactions,
-  month,
+  period,
   openTransaction,
 }: {
   transactions: Transaction[];
-  month: string;
+  period: string;
   openTransaction?: (transaction: Transaction) => void;
 }) {
-  const payments = biggestExpenses(transactions, month).slice(0, 5);
+  const payments = biggestExpenses(transactions, period).slice(0, 5);
   return (
     <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <SectionTitle title="Biggest expenses" />
@@ -150,76 +165,181 @@ function BiggestExpenses({
   );
 }
 
-function ReportSummary({
-  summary,
-  transactions,
-  month,
-  today,
+function YearSelector({
+  year,
+  currentYear,
+  onChange,
 }: {
-  summary: ReturnType<typeof demoSummary>;
+  year: string;
+  currentYear: string;
+  onChange: (year: string) => void;
+}) {
+  return (
+    <fieldset
+      aria-label="Selected year"
+      className="flex items-center rounded-full border border-border bg-surface p-0.5"
+    >
+      <Button
+        aria-label="Previous year"
+        className="shrink-0 rounded-full"
+        isDisabled={year === "0000"}
+        isIconOnly
+        onPress={() => onChange(String(Number(year) - 1).padStart(4, "0"))}
+        variant="ghost"
+      >
+        <Icon name="chevron-left" />
+      </Button>
+      <span aria-live="polite" className="min-w-16 px-3 text-center text-sm font-bold tabular-nums">
+        {year}
+      </span>
+      <Button
+        aria-label="Next year"
+        className="shrink-0 rounded-full"
+        isDisabled={year >= currentYear}
+        isIconOnly
+        onPress={() => onChange(String(Number(year) + 1).padStart(4, "0"))}
+        variant="ghost"
+      >
+        <Icon name="chevron-right" />
+      </Button>
+    </fieldset>
+  );
+}
+
+function ReportPeriodSelector({
+  period,
+  onChange,
+}: {
+  period: ReportPeriod;
+  onChange: (period: ReportPeriod) => void;
+}) {
+  return (
+    <fieldset aria-label="Report period" className={styles.periodTabs}>
+      {(["monthly", "yearly"] as const).map((value) => (
+        <Button
+          aria-pressed={period === value}
+          className="min-h-11 min-w-0 flex-1 rounded-full px-4 text-sm"
+          key={value}
+          onPress={() => onChange(value)}
+          variant={period === value ? "secondary" : "ghost"}
+        >
+          {value === "monthly" ? "Monthly" : "Yearly"}
+        </Button>
+      ))}
+    </fieldset>
+  );
+}
+
+type ReportDataProps = {
   transactions: Transaction[];
   month: string;
   today: string;
-}) {
-  const comparison = monthComparison(transactions, month, today);
-  const change = comparison.current - comparison.previous;
-  const previousName = formatMonth(comparison.previousMonth).split(" ")[0];
-  const spendingAmount = formatRupiah(summary.spending).replace(/^Rp\s*/, "");
+  openTransaction?: (transaction: Transaction) => void;
+};
+
+function MonthlyCharts({ transactions, month, today, openTransaction }: ReportDataProps) {
+  const expenses = demoSummary(transactions, month).spending > BigInt(0);
   return (
-    <Wash className={`${styles.summary} mt-4 p-5 sm:p-7`} tone="blue">
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <p className={styles.summaryLabel}>Money out</p>
-          <p
-            className={`${styles.amount} break-words text-[clamp(2.25rem,6vw,3.75rem)] font-black leading-none tracking-[-0.06em] tabular-nums`}
-          >
-            <span>Rp</span>
-            {spendingAmount}
-          </p>
-          <p className={`${styles.summaryMonth} mt-1 text-sm font-semibold text-muted`}>
-            spent in {formatMonth(month)}
-          </p>
-          <p className={styles.mobileStats}>
-            <span>
-              Income <strong className="text-success">{formatRupiah(summary.income)}</strong>
-            </span>
-            <span aria-hidden> · </span>
-            <span>
-              Net <strong>{formatRupiah(summary.difference)}</strong>
-            </span>
-          </p>
+    <>
+      <div
+        className={`${styles.charts} mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]`}
+      >
+        <div className={`${styles.primaryColumn} min-w-0 space-y-4`}>
+          {expenses && (
+            <div className={styles.chart}>
+              <SpendingTrend month={month} today={today} transactions={transactions} />
+            </div>
+          )}
+          <div className={`${styles.chart} ${styles.calendar}`}>
+            <SpendingCalendar
+              month={month}
+              today={today}
+              onOpenTransaction={openTransaction}
+              transactions={transactions}
+            />
+          </div>
+        </div>
+        <div className={`${styles.secondaryColumn} min-w-0 space-y-4`}>
+          {expenses && (
+            <div className={styles.chart}>
+              <CategoryBreakdown
+                month={month}
+                today={today}
+                onOpenTransaction={openTransaction}
+                transactions={transactions}
+              />
+            </div>
+          )}
+          <div className={styles.chart}>
+            <CashFlowChart month={month} today={today} transactions={transactions} />
+          </div>
         </div>
       </div>
-      <dl
-        className={`${styles.desktopStats} mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border pt-4 text-xs sm:grid-cols-3`}
-      >
-        <div className="min-w-0">
-          <dt className="text-muted">Income</dt>
-          <dd className="mt-1 break-words text-sm font-semibold tabular-nums">
-            {formatRupiah(summary.income)}
-          </dd>
+      {expenses && (
+        <div className={`${styles.chart} ${styles.flow} mt-4`}>
+          <SpendingFlow
+            month={month}
+            onOpenTransaction={openTransaction}
+            transactions={transactions}
+          />
         </div>
-        <div className="min-w-0">
-          <dt className="text-muted">Net income</dt>
-          <dd className="mt-1 break-words text-sm font-semibold tabular-nums">
-            {formatRupiah(summary.difference)}
-          </dd>
+      )}
+    </>
+  );
+}
+
+function YearlyCharts({
+  transactions,
+  year,
+  today,
+  openTransaction,
+}: Omit<ReportDataProps, "month"> & { year: string }) {
+  const expenses = financialYear(transactions, year, today).spending > BigInt(0);
+  return (
+    <div
+      className={`${styles.charts} mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]`}
+    >
+      <div className={styles.chart}>
+        <CashFlowChart key={year} year={year} today={today} transactions={transactions} />
+      </div>
+      {expenses && (
+        <div className={styles.chart}>
+          <CategoryBreakdown
+            key={year}
+            year={year}
+            today={today}
+            onOpenTransaction={openTransaction}
+            transactions={transactions}
+          />
         </div>
-        {comparison.state === "available" ? (
-          <div className="col-span-2 min-w-0 sm:col-span-1">
-            <dt className="text-muted">
-              Spending vs {previousName}
-              {comparison.throughDay ? ` by day ${comparison.throughDay}` : ""}
-            </dt>
-            <dd className="mt-1 break-words text-sm font-semibold tabular-nums">
-              {change === BigInt(0)
-                ? "Same spending"
-                : `${compactAmount(change < BigInt(0) ? -change : change)} ${change > BigInt(0) ? "more" : "less"}`}
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-    </Wash>
+      )}
+    </div>
+  );
+}
+
+function ExpenseRankings({
+  transactions,
+  period,
+  openTransaction,
+}: Pick<ReportDataProps, "transactions" | "openTransaction"> & { period: string }) {
+  return (
+    <div className={`${styles.places} mt-4 grid items-start gap-4 lg:grid-cols-2`}>
+      <div className={styles.chart}>
+        <TopPlaces
+          key={period}
+          period={period}
+          openTransaction={openTransaction}
+          transactions={transactions}
+        />
+      </div>
+      <div className={styles.chart}>
+        <BiggestExpenses
+          period={period}
+          openTransaction={openTransaction}
+          transactions={transactions}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -228,6 +348,10 @@ export function ReportsScreen({
   month,
   today = demoToday,
   setMonth,
+  reportPeriod,
+  reportYear,
+  setReportPeriod,
+  setReportYear,
   openTransaction,
   openAdd,
   openReview,
@@ -237,20 +361,36 @@ export function ReportsScreen({
   month: string;
   today?: string;
   setMonth: (month: string) => void;
+  reportPeriod: ReportPeriod;
+  reportYear: string;
+  setReportPeriod: (period: ReportPeriod) => void;
+  setReportYear: (year: string) => void;
   openTransaction?: (transaction: Transaction) => void;
   openAdd?: () => void;
   openReview?: () => void;
   openConnectGmail?: () => void;
 }) {
-  const summary = demoSummary(transactions, month);
+  const yearly = reportPeriod === "yearly";
+  const period = yearly ? reportYear : month;
+  const model = financialSummaryModel(transactions, period, today);
   const pendingCount = transactions.filter((item) => item.status === "pending").length;
-  const hasFinancialActivity = summary.confirmed.some((item) => item.kind !== "transfer");
-  const expenses = summary.confirmed.filter((item) => item.kind === "expense");
+  const hasFinancialActivity = model.income > BigInt(0) || model.spending > BigInt(0);
   return (
-    <div>
+    <div className="min-w-0">
       <div className={`${styles.header} flex flex-wrap items-center justify-between gap-3`}>
         <h1 className="text-[32px] font-extrabold tracking-[-0.04em]">Reports</h1>
-        <MonthSelector currentMonth={today.slice(0, 7)} month={month} onChange={setMonth} />
+        <div className={styles.controls}>
+          <ReportPeriodSelector period={reportPeriod} onChange={setReportPeriod} />
+          {yearly ? (
+            <YearSelector
+              year={reportYear}
+              currentYear={today.slice(0, 4)}
+              onChange={setReportYear}
+            />
+          ) : (
+            <MonthSelector currentMonth={today.slice(0, 7)} month={month} onChange={setMonth} />
+          )}
+        </div>
       </div>
       {!hasFinancialActivity ? (
         <EmptyLedgerState
@@ -258,87 +398,34 @@ export function ReportsScreen({
           onConnectGmail={openConnectGmail}
           onReview={openReview}
           pendingCount={pendingCount}
-          title={
-            transactions.length === 0
-              ? "Start tracking"
-              : summary.confirmed.length > 0
-                ? "No income or expenses this month"
-                : "No transactions this month"
-          }
+          title={`No income or expenses in ${model.label}`}
         />
       ) : (
         <>
-          <ReportSummary
-            key={`summary-${month}`}
-            month={month}
-            today={today}
-            summary={summary}
-            transactions={transactions}
-          />
-          <div
-            className={`${styles.charts} mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]`}
-            key={month}
-          >
-            <div className={`${styles.primaryColumn} min-w-0 space-y-4`}>
-              {expenses.length > 0 ? (
-                <div className={styles.chart}>
-                  <SpendingTrend month={month} today={today} transactions={transactions} />
-                </div>
-              ) : null}
-              <div className={`${styles.chart} ${styles.calendar}`}>
-                <SpendingCalendar
-                  month={month}
-                  today={today}
-                  onOpenTransaction={openTransaction}
-                  transactions={transactions}
-                />
-              </div>
-            </div>
-            <div className={`${styles.secondaryColumn} min-w-0 space-y-4`}>
-              {expenses.length > 0 ? (
-                <div className={styles.chart}>
-                  <CategoryBreakdown
-                    month={month}
-                    today={today}
-                    onOpenTransaction={openTransaction}
-                    transactions={transactions}
-                  />
-                </div>
-              ) : null}
-              <div className={styles.chart}>
-                <CashFlowChart month={month} today={today} transactions={transactions} />
-              </div>
-            </div>
-          </div>
-          {expenses.length > 0 ? (
-            <>
-              <div className={`${styles.chart} ${styles.flow} mt-4`}>
-                <SpendingFlow
-                  key={month}
-                  month={month}
-                  onOpenTransaction={openTransaction}
-                  transactions={transactions}
-                />
-              </div>
-              <div className={`${styles.places} mt-4 grid items-start gap-4 lg:grid-cols-2`}>
-                <div className={styles.chart}>
-                  <TopPlaces
-                    key={month}
-                    month={month}
-                    openTransaction={openTransaction}
-                    transactions={transactions}
-                  />
-                </div>
-                <div className={styles.chart}>
-                  <BiggestExpenses
-                    month={month}
-                    openTransaction={openTransaction}
-                    transactions={transactions}
-                  />
-                </div>
-              </div>
-            </>
-          ) : null}
+          <FinancialSummary model={model} />
+          {yearly ? (
+            <YearlyCharts
+              transactions={transactions}
+              year={reportYear}
+              today={today}
+              openTransaction={openTransaction}
+            />
+          ) : (
+            <MonthlyCharts
+              key={month}
+              transactions={transactions}
+              month={month}
+              today={today}
+              openTransaction={openTransaction}
+            />
+          )}
+          {model.spending > BigInt(0) && (
+            <ExpenseRankings
+              transactions={transactions}
+              period={period}
+              openTransaction={openTransaction}
+            />
+          )}
         </>
       )}
     </div>

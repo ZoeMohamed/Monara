@@ -19,8 +19,8 @@ import {
   Switch,
   TextField,
 } from "@monara/ui";
-import { type FormEvent, useEffect, useRef, useState } from "react";
-
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { BudgetDetails, type BudgetDetailsRecord } from "@/components/budget-details";
 import styles from "@/components/budget-manager.module.css";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
@@ -672,12 +672,162 @@ function useBudgetUsage(snapshot: FinanceSnapshot) {
   };
 }
 
-export function BudgetManager(props: FinanceManagerProps) {
-  const [panel, setPanel] = useState<
-    { kind: "create" } | { kind: "edit" | "delete"; id: string } | null
-  >(null);
+export type BudgetManagerPanel =
+  | { kind: "create" }
+  | { kind: "edit" | "delete"; id: string }
+  | null;
+
+type BudgetManagerProps = FinanceManagerProps & {
+  panel?: BudgetManagerPanel;
+  onPanelChange?: (panel: BudgetManagerPanel) => void;
+  collapseList?: boolean;
+  hiddenBudgetIds?: readonly string[];
+};
+
+function BudgetListContainer({
+  children,
+  count,
+  collapsed,
+}: {
+  children: ReactNode;
+  count: number;
+  collapsed?: boolean;
+}) {
+  if (!collapsed) return children;
+  return (
+    <details className="min-w-0">
+      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+        Other budgets · {count}
+        <Icon className="h-4 w-4 shrink-0" name="chevron-down" />
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
+function ownedBudgetDetails(
+  budget: Budget,
+  category: string,
+  usage: BudgetUsage | undefined,
+  today: string,
+): BudgetDetailsRecord {
+  const base = {
+    name: budget.name,
+    category,
+    cadence: budget.cadence,
+    limit: BigInt(budget.limit.amountMinor),
+    warningPercent: budget.warningPercent,
+    startsOn: budget.startsOn,
+  };
+  if (!budget.isActive) return { ...base, status: "Paused" };
+  if (!usage)
+    return { ...base, status: budget.startsOn > today ? "Not started" : "Progress unavailable" };
+  const used = BigInt(usage.used.amountMinor);
+  const status =
+    used > base.limit
+      ? "Over budget"
+      : used === base.limit
+        ? "At limit"
+        : usage.state === "warning"
+          ? "Near limit"
+          : "On track";
+  return {
+    ...base,
+    status,
+    usage: {
+      used,
+      remaining: BigInt(usage.remaining.amountMinor),
+      periodStartsOn: usage.periodStartsOn,
+      periodEndsOn: usage.periodEndsOn,
+    },
+  };
+}
+
+function ManagedBudgetRow({
+  budget,
+  category,
+  progress,
+  today,
+  onOpen,
+}: {
+  budget: Budget;
+  category: string;
+  progress?: BudgetUsage;
+  today: string;
+  onOpen: () => void;
+}) {
+  return (
+    <li>
+      <Button
+        aria-label={`View ${budget.name} budget details`}
+        className={`${styles.item} block h-auto w-full text-left transition-colors hover:bg-surface-tertiary`}
+        onPress={onOpen}
+        variant="ghost"
+      >
+        <div className={styles.row}>
+          <h3 className={styles.name}>{budget.name}</h3>
+          <strong className={styles.amount}>
+            {formatRupiah(BigInt(budget.limit.amountMinor))}
+          </strong>
+        </div>
+        <p className={styles.meta}>
+          {category} · {budget.cadence === "weekly" ? "Weekly" : "Monthly"}
+          {budget.isActive ? "" : " · Paused"}
+        </p>
+        {progress ? (
+          <BudgetProgress usage={progress} />
+        ) : budget.isActive && budget.startsOn > today ? (
+          <p className={styles.meta}>Starts {formatDay(budget.startsOn)}</p>
+        ) : null}
+        <div className="mt-3 flex justify-end">
+          <Icon className="h-4 w-4 text-muted" name="chevron-right" />
+        </div>
+      </Button>
+    </li>
+  );
+}
+
+function BudgetManagerDialog({
+  panel,
+  budget,
+  onClose,
+  ...props
+}: FinanceManagerProps & { panel: BudgetManagerPanel; budget?: Budget; onClose: () => void }) {
+  if (!panel) return null;
+  if (panel.kind === "create") return <BudgetEditor {...props} onClose={onClose} />;
+  if (!budget)
+    return (
+      <ModalDialog labelledBy="budget-unavailable-title" onClose={onClose}>
+        <div className={styles.form}>
+          <h2 className="text-xl font-bold" id="budget-unavailable-title">
+            Budget unavailable
+          </h2>
+          <p className="text-sm text-muted">This budget is no longer in your current records.</p>
+          <Button onPress={onClose}>Close</Button>
+        </div>
+      </ModalDialog>
+    );
+  if (panel.kind === "edit")
+    return <BudgetEditor {...props} budget={budget} key={budget.id} onClose={onClose} />;
+  return <BudgetDelete {...props} budget={budget} key={budget.id} onClose={onClose} />;
+}
+
+export function BudgetManager(props: BudgetManagerProps) {
+  const [localPanel, setLocalPanel] = useState<BudgetManagerPanel>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const panel = props.onPanelChange ? (props.panel ?? null) : localPanel;
+  const setPanel = props.onPanelChange ?? setLocalPanel;
   const usage = useBudgetUsage(props.snapshot);
   const budgets = props.snapshot.allBudgets.filter((budget) => budget.deletedAt === null);
+  const hiddenBudgetIds = new Set(props.hiddenBudgetIds);
+  const listedBudgets = budgets.filter((budget) => !hiddenBudgetIds.has(budget.id));
+  const detail = budgets.find((budget) => budget.id === detailId);
+  const detailCategory =
+    props.snapshot.categories.find((category) => category.id === detail?.categoryId)?.name ??
+    "Category unavailable";
+  const detailProgress = usage.items.find(
+    (item) => item.budget.id === detail?.id && item.budget.updatedAt === detail?.updatedAt,
+  );
   const selected =
     panel && panel.kind !== "create" ? budgets.find((budget) => budget.id === panel.id) : undefined;
   const close = () => setPanel(null);
@@ -685,7 +835,7 @@ export function BudgetManager(props: FinanceManagerProps) {
     <section aria-labelledby="manage-budgets-title" className={styles.manager}>
       <div className={styles.header}>
         <h2 className="text-base font-bold" id="manage-budgets-title">
-          Your budgets
+          Manage budgets
         </h2>
         <Button
           className="min-h-11 rounded-full"
@@ -712,78 +862,46 @@ export function BudgetManager(props: FinanceManagerProps) {
           </Button>
         </div>
       )}
-      {budgets.length === 0 ? (
-        <p className={`${styles.item} text-sm text-muted`}>
-          Set a weekly or monthly limit for a category to start tracking your spending.
-        </p>
-      ) : (
-        <ul className={styles.list}>
-          {budgets.map((budget) => {
-            const progress = usage.items.find(
-              (item) => item.budget.id === budget.id && item.budget.updatedAt === budget.updatedAt,
-            );
-            const category = props.snapshot.categories.find(
-              (item) => item.id === budget.categoryId,
-            );
-            return (
-              <li className={styles.item} key={budget.id}>
-                <div className={styles.row}>
-                  <h3 className={styles.name}>{budget.name}</h3>
-                  <strong className={styles.amount}>
-                    {formatRupiah(BigInt(budget.limit.amountMinor))}
-                  </strong>
-                </div>
-                <p className={styles.meta}>
-                  {category?.name ?? "Category unavailable"} ·{" "}
-                  {budget.cadence === "weekly" ? "Weekly" : "Monthly"}
-                  {budget.isActive ? "" : " · Paused"}
-                </p>
-                {progress ? (
-                  <BudgetProgress usage={progress} />
-                ) : budget.isActive && budget.startsOn > props.snapshot.today ? (
-                  <p className={styles.meta}>Starts {formatDay(budget.startsOn)}</p>
-                ) : null}
-                <div className={styles.actions}>
-                  <Button
-                    aria-label={`Edit ${budget.name} budget`}
-                    className="min-h-11 rounded-full px-4"
-                    onPress={() => setPanel({ kind: "edit", id: budget.id })}
-                    variant="ghost"
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    aria-label={`Delete ${budget.name} budget`}
-                    className="min-h-11 rounded-full px-4 text-danger"
-                    onPress={() => setPanel({ kind: "delete", id: budget.id })}
-                    variant="ghost"
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+      {listedBudgets.length > 0 && (
+        <BudgetListContainer collapsed={props.collapseList} count={listedBudgets.length}>
+          <ul className={styles.list}>
+            {listedBudgets.map((budget) => {
+              const progress = usage.items.find(
+                (item) =>
+                  item.budget.id === budget.id && item.budget.updatedAt === budget.updatedAt,
+              );
+              const category = props.snapshot.categories.find(
+                (item) => item.id === budget.categoryId,
+              );
+              return (
+                <ManagedBudgetRow
+                  budget={budget}
+                  category={category?.name ?? "Category unavailable"}
+                  key={budget.id}
+                  progress={progress}
+                  today={props.snapshot.today}
+                  onOpen={() => setDetailId(budget.id)}
+                />
+              );
+            })}
+          </ul>
+        </BudgetListContainer>
       )}
-      {panel?.kind === "create" && <BudgetEditor {...props} onClose={close} />}
-      {panel?.kind === "edit" && selected && (
-        <BudgetEditor {...props} budget={selected} key={selected.id} onClose={close} />
+      {detail && (
+        <BudgetDetails
+          record={ownedBudgetDetails(detail, detailCategory, detailProgress, props.snapshot.today)}
+          onClose={() => setDetailId(null)}
+          onEdit={() => {
+            setDetailId(null);
+            setPanel({ kind: "edit", id: detail.id });
+          }}
+          onDelete={() => {
+            setDetailId(null);
+            setPanel({ kind: "delete", id: detail.id });
+          }}
+        />
       )}
-      {panel?.kind === "delete" && selected && (
-        <BudgetDelete {...props} budget={selected} key={selected.id} onClose={close} />
-      )}
-      {panel && panel.kind !== "create" && !selected && (
-        <ModalDialog labelledBy="budget-unavailable-title" onClose={close}>
-          <div className={styles.form}>
-            <h2 className="text-xl font-bold" id="budget-unavailable-title">
-              Budget unavailable
-            </h2>
-            <p className="text-sm text-muted">This budget is no longer in your current records.</p>
-            <Button onPress={close}>Close</Button>
-          </div>
-        </ModalDialog>
-      )}
+      <BudgetManagerDialog {...props} panel={panel} budget={selected} onClose={close} />
     </section>
   );
 }

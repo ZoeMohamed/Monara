@@ -6,10 +6,9 @@ import { useAppSession } from "@/components/app-session-context";
 import { Icon } from "@/components/icon";
 import { PersonalReminderEditor } from "@/components/personal-reminder-editor";
 import styles from "@/components/reminders-center.module.css";
+import { categoryIcon } from "@/data/category-style";
 import { daysBetween, formatDay, formatRupiah } from "@/data/demo-ledger";
 import type { PersonalReminder } from "@/data/personal-reminders";
-
-const personalIcons = { payment: "bills", birthday: "heart", other: "bell" } as const;
 
 function dueReminderLabel(days: number): string {
   if (days < 0) return `${Math.abs(days)} ${days === -1 ? "day" : "days"} overdue`;
@@ -46,13 +45,19 @@ function PersonalReminderRow({
   onSetDone: (done: boolean) => void;
 }) {
   const done = reminder.completedAt !== null;
+  const glyph = categoryIcon(reminder.tag ?? reminder.title);
   return (
     <li className={styles.item}>
       <span className={styles.symbol} data-personal="true">
-        <Icon className="h-5 w-5" name={done ? "check" : personalIcons[reminder.kind]} />
+        <Icon className="h-5 w-5" name={done ? "check" : glyph === "dot" ? "bell" : glyph} />
       </span>
       <div className={styles.content}>
         <h4 className={styles.title}>{reminder.title}</h4>
+        {reminder.tag && (
+          <Chip className="mt-2 max-w-full [overflow-wrap:anywhere]" size="sm" variant="soft">
+            {reminder.tag}
+          </Chip>
+        )}
         <p className={styles.meta}>
           {formatDay(reminder.dueOn)}
           {reminder.amount === null ? "" : ` · ${formatRupiah(reminder.amount)}`}
@@ -70,7 +75,7 @@ function PersonalReminderRow({
             ) : (
               <>
                 <Icon className="h-4 w-4" name="check" />
-                Mark done
+                Done
               </>
             )}
           </Button>
@@ -101,13 +106,9 @@ function PersonalRemindersEmpty({
       <span className={styles.emptyIcon}>
         <Icon name={done ? "check" : "calendar"} />
       </span>
-      <h4 className="text-sm font-bold">
-        {done ? "Completed reminders appear here" : "Make room for one less thing to remember"}
-      </h4>
+      <h4 className="text-sm font-bold">{done ? "Nothing completed yet" : "What’s next?"}</h4>
       <p className={styles.meta}>
-        {done
-          ? "Mark a reminder done to keep a completion receipt."
-          : "Set a date for rent, a birthday, or your next payment."}
+        {done ? "Completed reminders stay here." : "Add a reminder with a date and your own tag."}
       </p>
       {!done && (
         <Button className="mt-4 min-h-11 rounded-full" onPress={onCreate}>
@@ -125,10 +126,7 @@ function LivePersonalReminders() {
         <Icon name="calendar" />
       </span>
       <h4 className="text-sm font-bold">Personal reminders are coming</h4>
-      <p className={styles.meta}>
-        Creating and scheduling your own reminders is available in the demo. Your live notifications
-        are in the next tab.
-      </p>
+      <p className={styles.meta}>Try creating one in the demo.</p>
     </div>
   );
 }
@@ -161,7 +159,6 @@ export function PersonalRemindersPanel() {
           <h3 className="text-base font-bold" id="personal-reminders-title">
             Your reminders
           </h3>
-          <p className={styles.meta}>Payments, birthdays, and things you choose.</p>
         </div>
         {demo && (
           <Button
@@ -210,10 +207,7 @@ export function PersonalRemindersPanel() {
           ) : (
             <PersonalRemindersEmpty onCreate={() => setEditor({})} view={view} />
           )}
-          <p className="text-xs leading-5 text-muted">
-            For this demo visit. Marking done records your acknowledgement; record payments in
-            Transactions to update your finances.
-          </p>
+          <p className={styles.scope}>Demo visit only · Done keeps your ledger unchanged.</p>
         </>
       ) : (
         <LivePersonalReminders />

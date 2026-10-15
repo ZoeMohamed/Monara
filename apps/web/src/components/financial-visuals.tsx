@@ -16,7 +16,7 @@ import { Icon } from "@/components/icon";
 import { TransactionRow } from "@/components/transaction-row";
 import { SectionTitle } from "@/components/visual";
 import { categoryDonutGeometry, donutOutline } from "@/data/category-donut";
-import { categoryColor, categoryEmoji } from "@/data/category-style";
+import { categoryColor, categoryIcon } from "@/data/category-style";
 import {
   demoToday,
   formatDay,
@@ -24,6 +24,7 @@ import {
   formatRupiah,
   shiftMonth,
   type Transaction,
+  transactionErrors,
 } from "@/data/demo-ledger";
 import {
   cashFlowMonths,
@@ -32,10 +33,14 @@ import {
   chartRatio,
   compactAmount,
   financialMonth,
-  monthComparison,
+  financialYear,
 } from "@/data/finance-analytics";
 
 type FinanceProps = { transactions: Transaction[]; month: string; today?: string };
+type PeriodFinanceProps = { transactions: Transaction[]; today?: string } & (
+  | { month: string; year?: undefined }
+  | { month?: undefined; year: string }
+);
 
 function ChartHeading({
   title,
@@ -427,40 +432,6 @@ function SpendingTrendPlot({
   );
 }
 
-function ComparisonPill({ transactions, month, today = demoToday }: FinanceProps) {
-  const comparison = monthComparison(transactions, month, today);
-  const previousName = formatMonth(comparison.previousMonth).split(" ")[0];
-  const difference = comparison.current - comparison.previous;
-  if (comparison.state === "future") {
-    return <p className={chartStyles.pill}>Comparison available once this month begins.</p>;
-  }
-  if (comparison.state === "no-baseline") {
-    return (
-      <p className={chartStyles.pill}>
-        No spending recorded in {previousName}
-        {comparison.throughDay ? ` by day ${comparison.throughDay}` : ""} to compare with.
-      </p>
-    );
-  }
-  return (
-    <p className={chartStyles.pill}>
-      {difference !== BigInt(0) ? (
-        <span
-          aria-hidden
-          className={chartStyles.pillArrow}
-          data-direction={difference > BigInt(0) ? "up" : "down"}
-        >
-          ↑
-        </span>
-      ) : null}
-      {difference === BigInt(0)
-        ? `Same as ${previousName}`
-        : `${compactAmount(difference < BigInt(0) ? -difference : difference)} ${difference > BigInt(0) ? "more" : "less"} than ${previousName}`}
-      {comparison.throughDay ? ` by day ${comparison.throughDay}` : ""}
-    </p>
-  );
-}
-
 function defaultTrendDay(month: FinanceMonth, today: string) {
   const defaultDay = month.month === today.slice(0, 7) ? Number(today.slice(8)) : 1;
   return Math.min(
@@ -492,7 +463,6 @@ export function SpendingTrend({ transactions, month, today = demoToday }: Financ
         model={model}
         onSelect={(day, keyboard) => setSelection({ month, day, keyboard })}
       />
-      <ComparisonPill month={month} today={today} transactions={transactions} />
     </Card>
   );
 }
@@ -526,17 +496,31 @@ function CashFlowDetails({ period, today }: { period: CashFlowPeriod; today: str
   );
 }
 
-export function CashFlowChart({ transactions, month, today = demoToday }: FinanceProps) {
+export function CashFlowChart({
+  transactions,
+  month,
+  today = demoToday,
+  year,
+}: PeriodFinanceProps) {
   const titleId = useId();
   const [selection, setSelection] = useState<{ month: string; keyboard: boolean } | null>(null);
-  const periods = cashFlowMonths(transactions, month);
-  const detail = periods.find((period) => period.month === selection?.month) ?? periods[5];
+  const periods =
+    year !== undefined
+      ? financialYear(transactions, year, today).months
+      : cashFlowMonths(transactions, month);
+  const defaultMonth = year === today.slice(0, 4) ? today.slice(0, 7) : periods.at(-1)?.month;
+  const detail =
+    periods.find((period) => period.month === selection?.month) ??
+    periods.find((period) => period.month === defaultMonth) ??
+    periods[periods.length - 1];
   const selectedIndex = periods.findIndex((period) => period.month === detail.month);
   const maximum = periods.reduce((largest, period) => {
     const tallest = period.income > period.spending ? period.income : period.spending;
     return tallest > largest ? tallest : largest;
   }, BigInt(0));
-  const columnX = (index: number) => 91 + index * 84;
+  const step = 504 / periods.length;
+  const columnX = (index: number) => 78 + step * (index + 0.5) - 10;
+  const barWidth = Math.min(18, step * 0.3);
   const detailTop = Math.max(
     chartRatio(detail.income, maximum),
     chartRatio(detail.spending, maximum),
@@ -544,7 +528,7 @@ export function CashFlowChart({ transactions, month, today = demoToday }: Financ
 
   return (
     <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
-      <ChartHeading meta="6 months" title="Cash flow" />
+      <ChartHeading meta={year ?? "6 months"} title={year ? "Income & spending" : "Cash flow"} />
       <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
         <span className="flex items-center gap-1.5">
           <LegendDot color="var(--success)" />
@@ -570,7 +554,7 @@ export function CashFlowChart({ transactions, month, today = demoToday }: Financ
           setSelection({ month: periods[nextIndex].month, keyboard: true });
         }}
         onPointerDown={(event) => {
-          const index = Math.round((pointerChartX(event, 600) - 101) / 84);
+          const index = Math.floor((pointerChartX(event, 600) - 78) / step);
           setSelection({
             month: periods[Math.min(periods.length - 1, Math.max(0, index))].month,
             keyboard: false,
@@ -578,7 +562,7 @@ export function CashFlowChart({ transactions, month, today = demoToday }: Financ
         }}
         onPointerMove={(event) => {
           if (event.pointerType !== "mouse") return;
-          const index = Math.round((pointerChartX(event, 600) - 101) / 84);
+          const index = Math.floor((pointerChartX(event, 600) - 78) / step);
           setSelection({
             month: periods[Math.min(periods.length - 1, Math.max(0, index))].month,
             keyboard: false,
@@ -594,7 +578,7 @@ export function CashFlowChart({ transactions, month, today = demoToday }: Financ
           viewBox="0 0 600 216"
         >
           <title id={titleId}>
-            {`Confirmed monthly income and expenses, ${formatMonth(periods[0].month)} through ${formatMonth(month)}.`}
+            {`Confirmed monthly income and expenses, ${formatMonth(periods[0].month)} through ${formatMonth(periods[periods.length - 1].month)}.`}
           </title>
           {[0, 1, 2].map((step) => (
             <g key={step}>
@@ -623,8 +607,8 @@ export function CashFlowChart({ transactions, month, today = demoToday }: Financ
             fill="var(--surface-secondary)"
             height="176"
             rx="12"
-            style={{ transform: `translateX(${columnX(selectedIndex) - 20}px)` }}
-            width="64"
+            style={{ transform: `translateX(${columnX(selectedIndex) + 10 - step * 0.4}px)` }}
+            width={step * 0.8}
             y="16"
           />
           {periods.map((period, index) => {
@@ -640,8 +624,8 @@ export function CashFlowChart({ transactions, month, today = demoToday }: Financ
                   height={incomeHeight}
                   rx="4"
                   style={delay}
-                  width="18"
-                  x={x - 10}
+                  width={barWidth}
+                  x={x + 10 - barWidth - 2}
                   y={plotBottom - incomeHeight}
                 />
                 <rect
@@ -650,18 +634,24 @@ export function CashFlowChart({ transactions, month, today = demoToday }: Financ
                   height={expenseHeight}
                   rx="4"
                   style={delay}
-                  width="18"
-                  x={x + 13}
+                  width={barWidth}
+                  x={x + 12}
                   y={plotBottom - expenseHeight}
                 />
                 <text
                   fill={period.month === detail.month ? "var(--foreground)" : "var(--muted)"}
-                  className="text-[24px] font-semibold sm:text-[15px]"
+                  className={
+                    year
+                      ? "text-[20px] font-semibold sm:text-[14px]"
+                      : "text-[24px] font-semibold sm:text-[15px]"
+                  }
                   textAnchor="middle"
                   x={x + 10}
                   y="209"
                 >
-                  {formatMonth(period.month).slice(0, 3)}
+                  {year && index % 3 !== 0 && period.month !== detail.month
+                    ? ""
+                    : formatMonth(period.month).slice(0, 3)}
                 </text>
               </g>
             );
@@ -670,7 +660,7 @@ export function CashFlowChart({ transactions, month, today = demoToday }: Financ
         <div
           aria-hidden
           className={`${chartStyles.tooltip} ${chartStyles.tooltipAbove}`}
-          data-flip={selectedIndex >= 4}
+          data-flip={selectedIndex >= periods.length - 2}
           style={cursorStyle(
             columnX(selectedIndex) + 10,
             plotBottom - detailTop * plotHeight,
@@ -703,23 +693,23 @@ function CategoryDonut({
   segments,
   highlighted,
   total,
-  month,
+  periodLabel,
   onSelect,
 }: {
   segments: CategorySegment[];
   highlighted?: CategorySegment;
   total: bigint;
-  month: string;
+  periodLabel: string;
   onSelect: (category: string, fromChart: boolean, keyboard: boolean) => void;
 }) {
   const titleId = useId();
   return (
     <fieldset className={donutStyles.chart}>
       <legend className="sr-only">Spending categories</legend>
-      <svg aria-labelledby={titleId} key={month} viewBox="-14 -14 248 248">
+      <svg aria-labelledby={titleId} key={periodLabel} viewBox="-14 -14 248 248">
         <title
           id={titleId}
-        >{`Spending categories for ${formatMonth(month)}. Select a slice to see payments.`}</title>
+        >{`Spending categories for ${periodLabel}. Select a slice to see payments.`}</title>
         {segments.length > 0 ? (
           <circle aria-hidden className={donutStyles.guide} cx="110" cy="110" fill="none" r="118" />
         ) : (
@@ -813,7 +803,8 @@ export function CategoryBreakdown({
   onSelectCategory,
   selectedCategory,
   onOpenTransaction,
-}: FinanceProps & {
+  year,
+}: PeriodFinanceProps & {
   // Owned selection values are category UUIDs; demo values remain category names.
   onSelectCategory?: (category: string) => void;
   selectedCategory?: string | null;
@@ -822,7 +813,10 @@ export function CategoryBreakdown({
   const [localSelection, setLocalSelection] = useState<string | null>(null);
   const [keyboardSelection, setKeyboardSelection] = useState(false);
   const paymentsId = useId();
-  const summary = financialMonth(transactions, month, today);
+  const summary =
+    year !== undefined
+      ? financialYear(transactions, year, today)
+      : financialMonth(transactions, month, today);
   const selection = selectedCategory === undefined ? localSelection : selectedCategory;
   const geometry = categoryDonutGeometry(summary.categories.map((category) => category.amount));
   const segments = summary.categories.map((category, index) => ({
@@ -832,12 +826,19 @@ export function CategoryBreakdown({
     color: categoryColor(category.name, index),
   }));
   const highlighted = segments.find((category) => categoryKey(category) === selection);
-  const countedDays = month === today.slice(0, 7) ? Number(today.slice(8)) : summary.days.length;
+  const periodLabel = year === undefined ? formatMonth(month) : year;
   const categoryRecords = highlighted
-    ? summary.days
-        .flatMap((day) => day.transactions)
+    ? transactions
         .filter(
-          (record) => record.kind === "expense" && categoryContainsTransaction(highlighted, record),
+          (record) =>
+            record.status === "confirmed" &&
+            (year ? record.date?.startsWith(`${year}-`) : record.date?.startsWith(`${month}-`)),
+        )
+        .filter(
+          (record) =>
+            record.kind === "expense" &&
+            categoryContainsTransaction(highlighted, record) &&
+            Object.keys(transactionErrors(record)).length === 0,
         )
         .sort((left, right) => (right.date ?? "").localeCompare(left.date ?? ""))
     : [];
@@ -865,7 +866,7 @@ export function CategoryBreakdown({
       <ChartHeading title="Where the money went" />
       <CategoryDonut
         highlighted={highlighted}
-        month={month}
+        periodLabel={periodLabel}
         onSelect={selectCategory}
         segments={segments}
         total={summary.spending}
@@ -887,13 +888,13 @@ export function CategoryBreakdown({
                 type="button"
               >
                 <span aria-hidden className={donutStyles.rowIcon}>
-                  {categoryEmoji(segment.name)}
+                  <Icon name={categoryIcon(segment.name)} />
                 </span>
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block break-words text-sm font-semibold">{segment.name}</span>
                   <span className="mt-0.5 block text-xs text-muted">
-                    {(segment.proportion * 100).toFixed(0)}% ·{" "}
-                    {compactAmount(segment.amount / BigInt(Math.max(countedDays, 1)))}/day
+                    {(segment.proportion * 100).toFixed(0)}% · {segment.count}{" "}
+                    {segment.count === 1 ? "payment" : "payments"}
                   </span>
                 </span>
                 <span className="max-w-[45%] break-words text-right text-sm font-bold tabular-nums">
@@ -908,7 +909,7 @@ export function CategoryBreakdown({
           ))}
         </ul>
       ) : (
-        <p className="mt-3 text-center text-xs text-muted">No expenses this month.</p>
+        <p className="mt-3 text-center text-xs text-muted">No expenses in this period.</p>
       )}
       {highlighted ? (
         <section

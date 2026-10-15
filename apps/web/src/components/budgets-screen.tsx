@@ -4,10 +4,14 @@ import { Button, Card, Chip, ProgressBar } from "@monara/ui";
 import { type ReactNode, useState } from "react";
 
 import { BillCalendar } from "@/components/bill-calendar";
+import { BrandMark } from "@/components/brand-mark";
+import { BudgetDetails } from "@/components/budget-details";
 import { type DemoBudgetChanges, DemoBudgetEditor } from "@/components/demo-budget-editor";
 import { Icon } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
+import { RecurringBillSuggestion } from "@/components/recurring-bill-suggestion";
 import { SectionTitle } from "@/components/visual";
+import { merchantBrand } from "@/data/brand-identity";
 import { categoryColor, categoryIcon } from "@/data/category-style";
 import {
   type Budget,
@@ -102,103 +106,106 @@ function BudgetRow({
   const color = categoryColor(budget.category, index);
   if (usage.periodStartsOn === null)
     return (
-      <li className="py-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">
-            {budget.category}
-          </h3>
-          <strong className="text-sm tabular-nums">{formatRupiah(budget.limit)}</strong>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted">
-            Starts {budget.startsOn ? formatDay(budget.startsOn) : "later"}
-          </p>
-          {onEdit && (
-            <Button
-              aria-label={`Edit ${budget.category} budget`}
-              className="min-h-11 rounded-full px-4 text-xs"
-              onPress={onEdit}
-              variant="ghost"
-            >
-              Edit budget
-            </Button>
-          )}
-        </div>
+      <li>
+        <Button
+          aria-label={`View ${budget.category} budget details`}
+          className="block h-auto min-h-11 w-full rounded-xl px-3 py-5 text-left transition-colors hover:bg-surface-secondary"
+          onPress={onEdit}
+          variant="ghost"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">
+              {budget.category}
+            </h3>
+            <strong className="text-sm tabular-nums">{formatRupiah(budget.limit)}</strong>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted">
+              Starts {budget.startsOn ? formatDay(budget.startsOn) : "later"}
+            </p>
+            <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+          </div>
+        </Button>
       </li>
     );
   return (
-    <li className="py-5">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold [overflow-wrap:anywhere]">
-            <span
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-secondary"
-              style={{ color }}
-            >
-              <Icon className="h-4 w-4" name={categoryIcon(budget.category)} />
+    <li>
+      <Button
+        aria-label={`View ${budget.category} budget details`}
+        className="block h-auto min-h-11 w-full rounded-xl px-3 py-5 text-left transition-colors hover:bg-surface-secondary"
+        onPress={onEdit}
+        variant="ghost"
+      >
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold [overflow-wrap:anywhere]">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-secondary"
+                style={{ color }}
+              >
+                <Icon className="h-4 w-4" name={categoryIcon(budget.category)} />
+              </span>
+              {budget.category}
+            </h3>
+            <span className={`text-xs font-medium ${textByState[usage.state]}`}>
+              {labelByState[usage.state]}
             </span>
-            {budget.category}
-          </h3>
-          <span className={`text-xs font-medium ${textByState[usage.state]}`}>
-            {labelByState[usage.state]}
-          </span>
-        </div>
-        <div className="mt-3">
-          <BudgetProgress
-            color={color}
-            label={`${budget.category} budget used`}
-            percent={usage.percent}
-            state={usage.state}
-          />
-        </div>
-        <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-2 text-xs tabular-nums">
-          <p className="min-w-0 text-muted [overflow-wrap:anywhere]">
-            <span className="font-medium text-foreground">{formatRupiah(usage.used)}</span> of{" "}
-            {formatRupiah(usage.limit)} spent · {usage.percent}%
-          </p>
-          <p
-            className={`min-w-0 text-sm font-bold [overflow-wrap:anywhere] ${usage.state === "over" ? "text-danger" : "text-foreground"}`}
-          >
-            {usage.state === "over"
-              ? `${formatRupiah(-usage.remaining)} over`
-              : `${formatRupiah(usage.remaining)} left`}
-          </p>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted">
-            {usage.periodStartsOn && usage.periodEndsOn
-              ? `${formatDay(usage.periodStartsOn)} – ${formatDay(usage.periodEndsOn)}`
-              : "Not started yet"}
-          </p>
-          {onEdit && (
-            <Button
-              aria-label={`Edit ${budget.category} budget`}
-              className="min-h-11 rounded-full px-4 text-xs"
-              onPress={onEdit}
-              variant="ghost"
+          </div>
+          <div className="mt-3">
+            <BudgetProgress
+              color={color}
+              label={`${budget.category} budget used`}
+              percent={usage.percent}
+              state={usage.state}
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-2 text-xs tabular-nums">
+            <p className="min-w-0 text-muted [overflow-wrap:anywhere]">
+              <span className="font-medium text-foreground">{formatRupiah(usage.used)}</span> of{" "}
+              {formatRupiah(usage.limit)} spent · {usage.percent}%
+            </p>
+            <p
+              className={`min-w-0 text-sm font-bold [overflow-wrap:anywhere] ${usage.state === "over" ? "text-danger" : "text-foreground"}`}
             >
-              Edit budget
-            </Button>
-          )}
+              {usage.state === "over"
+                ? `${formatRupiah(-usage.remaining)} over`
+                : `${formatRupiah(usage.remaining)} left`}
+            </p>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted">
+              {usage.periodStartsOn && usage.periodEndsOn
+                ? `${formatDay(usage.periodStartsOn)} – ${formatDay(usage.periodEndsOn)}`
+                : "Not started yet"}
+            </p>
+            <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+          </div>
         </div>
-      </div>
+      </Button>
     </li>
   );
 }
 
 function BillRow({ bill, today }: { bill: RecurringBill; today: string }) {
   const daysUntil = daysBetween(today, bill.nextDue);
+  const brand = merchantBrand(bill.merchant);
   return (
     <li className="py-4">
       <div className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
           <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold [overflow-wrap:anywhere]">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-soft-foreground">
-              <Icon
-                className="h-4 w-4"
-                name={categoryIcon(bill.merchant) === "dot" ? "bills" : categoryIcon(bill.merchant)}
-              />
-            </span>
+            {brand ? (
+              <BrandMark brand={brand} size={36} />
+            ) : (
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-soft-foreground">
+                <Icon
+                  className="h-4 w-4"
+                  name={
+                    categoryIcon(bill.merchant) === "dot" ? "bills" : categoryIcon(bill.merchant)
+                  }
+                />
+              </span>
+            )}
             {bill.merchant}
           </h3>
           <p className="min-w-0 text-sm font-semibold tabular-nums [overflow-wrap:anywhere]">
@@ -493,44 +500,6 @@ function CategoryBudgets({
   );
 }
 
-function SuggestedBill({
-  bill,
-  onConfirmBill,
-  onDismissBill,
-}: {
-  bill: RecurringBill;
-  onConfirmBill: (id: string) => void;
-  onDismissBill: (id: string) => void;
-}) {
-  return (
-    <Card className="mt-3 block min-w-0 gap-0 rounded-2xl border border-border p-5">
-      <div className="min-w-0">
-        <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
-          {bill.merchant} looks like a monthly bill
-        </h3>
-        <p className="mt-1 text-xs text-muted">
-          <span className="font-semibold text-foreground tabular-nums">
-            {formatRupiah(bill.expectedAmount)}
-          </span>{" "}
-          each month. Track its next due date?
-        </p>
-      </div>
-      <div className="mt-3 flex gap-2">
-        <Button className="min-h-11 min-w-0 flex-1 px-2" onPress={() => onConfirmBill(bill.id)}>
-          Track bill
-        </Button>
-        <Button
-          className="min-h-11 min-w-0 flex-1 px-2"
-          onPress={() => onDismissBill(bill.id)}
-          variant="secondary"
-        >
-          Not a bill
-        </Button>
-      </div>
-    </Card>
-  );
-}
-
 function RecurringBills({
   active,
   suggested,
@@ -563,12 +532,13 @@ function RecurringBills({
         )}
       </Card>
       {suggested.map((bill) => (
-        <SuggestedBill
-          bill={bill}
-          key={bill.id}
-          onConfirmBill={onConfirmBill}
-          onDismissBill={onDismissBill}
-        />
+        <div className="mt-3" key={bill.id}>
+          <RecurringBillSuggestion
+            bill={bill}
+            onConfirm={onConfirmBill}
+            onDismiss={onDismissBill}
+          />
+        </div>
       ))}
     </section>
   );
@@ -586,6 +556,8 @@ export function BudgetsScreen({
   onConfirmBill,
   onDismissBill,
   onEditBudget,
+  onRequestEditBudget,
+  onRequestDeleteBudget,
 }: {
   transactions: Transaction[];
   budgets: Budget[];
@@ -598,9 +570,20 @@ export function BudgetsScreen({
   onConfirmBill: (id: string) => void;
   onDismissBill: (id: string) => void;
   onEditBudget?: (budgetId: string, changes: DemoBudgetChanges) => void;
+  onRequestEditBudget?: (budgetId: string) => void;
+  onRequestDeleteBudget?: (budgetId: string) => void;
 }) {
   const summary = summarizeBudgets(transactions, budgets, month, today);
   const [editing, setEditing] = useState<Budget | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail = budgets.find((budget) => budget.id === detailId);
+  const detailUsage = detail ? budgetUsage(transactions, detail, month, today) : undefined;
+  const editDetail = () => {
+    if (!detail) return;
+    setDetailId(null);
+    if (onRequestEditBudget) onRequestEditBudget(detail.id);
+    else setEditing(detail);
+  };
   const calendarPeriods = budgets.every(
     (budget) => !budget.startsOn || budget.startsOn.endsWith("-01"),
   );
@@ -636,15 +619,14 @@ export function BudgetsScreen({
             calendarPeriods={calendarPeriods}
             transactions={transactions}
           />
-          {management ?? (
-            <CategoryBudgets
-              budgets={budgets}
-              month={month}
-              transactions={transactions}
-              today={today}
-              onEditBudget={onEditBudget ? setEditing : undefined}
-            />
-          )}
+          <CategoryBudgets
+            budgets={budgets}
+            month={month}
+            transactions={transactions}
+            today={today}
+            onEditBudget={(budget) => setDetailId(budget.id)}
+          />
+          {management}
         </div>
         {showBills && (
           <div className="min-w-0">
@@ -659,6 +641,30 @@ export function BudgetsScreen({
           </div>
         )}
       </div>
+      {detail && detailUsage && (
+        <BudgetDetails
+          record={{
+            name: detail.backend?.name ?? detail.category,
+            category: detail.category,
+            cadence: detail.cadence,
+            limit: BigInt(detail.limit),
+            warningPercent: detail.warningPercent,
+            startsOn: detail.startsOn,
+            status: detailUsage.periodStartsOn ? labelByState[detailUsage.state] : "Not started",
+            usage: detailUsage.periodStartsOn ? detailUsage : undefined,
+          }}
+          onClose={() => setDetailId(null)}
+          onEdit={editDetail}
+          onDelete={
+            onRequestDeleteBudget
+              ? () => {
+                  setDetailId(null);
+                  onRequestDeleteBudget(detail.id);
+                }
+              : undefined
+          }
+        />
+      )}
       {editing && onEditBudget && (
         <DemoBudgetEditor
           budget={editing}

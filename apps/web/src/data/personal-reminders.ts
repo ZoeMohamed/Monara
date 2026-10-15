@@ -3,7 +3,7 @@ import { calendarDateSchema } from "@monara/contracts";
 export type PersonalReminder = {
   id: string;
   title: string;
-  kind: "payment" | "birthday" | "other";
+  tag: string | null;
   dueOn: string;
   amount: number | null;
   completedAt: string | null;
@@ -19,12 +19,10 @@ export function personalReminderErrors(
   if (draft.title.trim().length === 0 || draft.title.trim().length > 100)
     errors.title = "Enter a reminder name, up to 100 characters.";
   if (!calendarDateSchema.safeParse(draft.dueOn).success) errors.dueOn = "Choose a valid due date.";
-  if (!["payment", "birthday", "other"].includes(draft.kind))
-    errors.kind = "Choose a reminder type.";
+  if (draft.tag !== null && (draft.tag.trim().length === 0 || draft.tag.trim().length > 32))
+    errors.tag = "Use a tag up to 32 characters, or leave it empty.";
   if (draft.amount !== null && (!Number.isSafeInteger(draft.amount) || draft.amount <= 0))
     errors.amount = "Enter a positive whole amount of rupiah, or leave it empty.";
-  if (draft.kind !== "payment" && draft.amount !== null)
-    errors.amount = "Amounts belong to payment reminders.";
   return errors;
 }
 

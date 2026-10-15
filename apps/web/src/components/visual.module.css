@@ -21,9 +21,3 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-
-.wash {
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--tone) 2%, var(--surface));
-}

@@ -2,6 +2,7 @@ import { demoMonth, earliestReportMonth, isCalendarDate } from "./demo-ledger";
 
 export type AppScreen = "home" | "transactions" | "reports" | "budgets" | "chat" | "account";
 export type LedgerKind = "all" | "expense" | "income" | "transfer";
+export type ReportPeriod = "monthly" | "yearly";
 
 // The public demo mounts the same screens below /demo with sample data only.
 type AppBasePath = "" | "/demo";
@@ -10,6 +11,8 @@ export type AppView = {
   basePath: AppBasePath;
   screen: AppScreen;
   month: string;
+  reportPeriod: ReportPeriod;
+  reportYear: string;
   reviewOpen: boolean;
   kindFilter: LedgerKind;
   transactionId: string | null;
@@ -41,6 +44,10 @@ function validKind(value: string | null): LedgerKind {
   return value === "expense" || value === "income" || value === "transfer" ? value : "all";
 }
 
+function validYear(value: string | null, fallback: string): string {
+  return value && /^\d{4}$/.test(value) && isCalendarDate(`${value}-01-01`) ? value : fallback;
+}
+
 function validId(value: string | null): string | null {
   return value &&
     /^[\da-f]{8}-[\da-f]{4}-[1-8][\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i.test(value)
@@ -67,6 +74,9 @@ export function parseAppView(
   defaultMonth = demoMonth,
 ): AppView {
   const screen = screenForPath(pathname);
+  const month = validMonth(params.get("month"), validMonth(defaultMonth));
+  const reportPeriod =
+    screen === "reports" && params.get("period") === "yearly" ? "yearly" : "monthly";
   const remindersOpen = params.get("reminders") === "1";
   const rejectId = remindersOpen ? null : validId(params.get("reject"));
   const adding = !remindersOpen && !rejectId && params.get("add") === "1";
@@ -74,7 +84,12 @@ export function parseAppView(
   return {
     basePath: basePathFor(pathname),
     screen,
-    month: validMonth(params.get("month"), validMonth(defaultMonth)),
+    month,
+    reportPeriod,
+    reportYear:
+      reportPeriod === "yearly"
+        ? validYear(params.get("year"), month.slice(0, 4))
+        : month.slice(0, 4),
     reviewOpen: screen === "transactions" && params.get("view") === "review",
     kindFilter: screen === "transactions" ? validKind(params.get("type")) : "all",
     transactionId:
@@ -90,6 +105,10 @@ export function parseAppView(
 export function buildAppHref(view: AppView): string {
   const screen = Object.hasOwn(screenPaths, view.screen) ? view.screen : "home";
   const params = new URLSearchParams({ month: validMonth(view.month) });
+  if (screen === "reports" && view.reportPeriod === "yearly") {
+    params.set("period", "yearly");
+    params.set("year", validYear(view.reportYear, validMonth(view.month).slice(0, 4)));
+  }
   if (screen === "transactions") {
     if (view.reviewOpen === true) params.set("view", "review");
     const kind = validKind(view.kindFilter);
@@ -114,6 +133,8 @@ export function clearedView(view: AppView, screen: AppScreen = view.screen): App
     basePath: view.basePath,
     screen,
     month: view.month,
+    reportPeriod: changingScreen ? "monthly" : view.reportPeriod,
+    reportYear: changingScreen ? view.month.slice(0, 4) : view.reportYear,
     reviewOpen: changingScreen ? false : view.reviewOpen,
     kindFilter: changingScreen ? "all" : view.kindFilter,
     transactionId: null,

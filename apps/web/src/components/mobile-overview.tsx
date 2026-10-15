@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@monara/ui";
+import { Button, Input, Label, TextField } from "@monara/ui";
 import Image from "next/image";
 import { type CSSProperties, type ReactNode, useId, useState, useSyncExternalStore } from "react";
 
@@ -48,6 +48,43 @@ const prompts: { text: string; icon: IconName; prompt: string }[] = [
   { text: "Where did it go?", icon: "pie", prompt: "Where did my money go this month?" },
   { text: "Can I afford it?", icon: "sparkle", prompt: "Can I afford a 300k dinner?" },
 ];
+
+function OverviewComposer({ openChat }: { openChat: (prompt?: string) => void }) {
+  const [draft, setDraft] = useState("");
+  return (
+    <form
+      aria-label="Ask Monara from your overview"
+      className={styles.ask}
+      onSubmit={(event) => {
+        event.preventDefault();
+        openChat(draft.trim() || undefined);
+      }}
+    >
+      <span aria-hidden className={styles.askPaw}>
+        <Icon name="chat" />
+      </span>
+      <TextField className={styles.askField} onChange={setDraft} value={draft}>
+        <Label className="sr-only">Ask Monara anything</Label>
+        <Input
+          autoComplete="off"
+          className={styles.askInput}
+          enterKeyHint="send"
+          maxLength={4_000}
+          placeholder="Ask Monara anything"
+        />
+      </TextField>
+      <Button
+        aria-label={draft.trim() ? "Send to Monara chat" : "Open Monara chat"}
+        className={styles.askArrow}
+        isIconOnly
+        type="submit"
+        variant="ghost"
+      >
+        <Icon name="send" strokeWidth={2.4} />
+      </Button>
+    </form>
+  );
+}
 
 function subscribeToClock(callback: () => void) {
   const timer = window.setInterval(callback, 60_000);
@@ -212,21 +249,7 @@ function SceneHero({
 
         <div className={styles.askWrap} data-tour="ask">
           <MonaraMascot className={styles.mascot} />
-          <Button
-            variant="ghost"
-            aria-label="Ask Monara anything"
-            className={styles.ask}
-            onClick={() => openChat()}
-            type="button"
-          >
-            <span aria-hidden className={styles.askPaw}>
-              <Icon name="chat" />
-            </span>
-            <span className={styles.askLabel}>Ask Monara anything</span>
-            <span aria-hidden className={styles.askArrow}>
-              <Icon name="send" strokeWidth={2.4} />
-            </span>
-          </Button>
+          <OverviewComposer openChat={openChat} />
         </div>
         <nav aria-label="Ask Monara" className={styles.prompts}>
           {prompts.map((item) => (

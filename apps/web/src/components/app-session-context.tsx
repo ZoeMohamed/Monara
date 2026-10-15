@@ -5,6 +5,7 @@ import type { DemoBudgetChanges } from "@/components/demo-budget-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
 import type { MutationOptions } from "@/components/use-finance-sync";
 import type { Budget, RecurringBill, Reminder, Transaction } from "@/data/demo-ledger";
+import type { FinancialAttention } from "@/data/financial-attention";
 import type { PersonalReminder, PersonalReminderDraft } from "@/data/personal-reminders";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
 import type { FinanceSnapshot } from "@/lib/finance/presentation";
@@ -27,6 +28,10 @@ export type AppSession = {
   ) => Promise<Result>;
   bills: RecurringBill[];
   reminders: Reminder[];
+  attentionNotifications: FinancialAttention[];
+  updatesCount: number;
+  setAttentionNotificationStatus: (id: string, status: "read" | "dismissed") => void;
+  rememberNotificationRecords: (reminders: Reminder[]) => void;
   reminderCount: number;
   personalReminders: PersonalReminder[];
   updateDemoBudget: (budgetId: string, changes: DemoBudgetChanges) => void;

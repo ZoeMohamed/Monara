@@ -7,6 +7,7 @@ import {
 import { Button } from "@monara/ui";
 import { type FormEvent, useId, useRef, useState } from "react";
 
+import { AccountBadge } from "@/components/account-badge";
 import { type FinanceManagerProps, FinanceRecovery } from "@/components/budget-manager";
 import styles from "@/components/budget-manager.module.css";
 import { Icon } from "@/components/icon";
@@ -263,6 +264,7 @@ export function FinancialAccountSetup({
         <ul className="mt-2 divide-y divide-separator">
           {accounts.map((account) => (
             <li className="flex min-h-16 items-center gap-3 py-2.5" key={account.id}>
+              <AccountBadge account={account} name={account.name} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold [overflow-wrap:anywhere]">{account.name}</p>
                 <p className="mt-1 text-xs text-muted [overflow-wrap:anywhere]">

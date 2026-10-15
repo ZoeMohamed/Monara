@@ -4,7 +4,7 @@ import type { AgentChatTurn } from "@monara/contracts";
 import { useRef, useState } from "react";
 
 import { useAppSession } from "@/components/app-session-context";
-import { BudgetManager } from "@/components/budget-manager";
+import { BudgetManager, type BudgetManagerPanel } from "@/components/budget-manager";
 import { BudgetsScreen } from "@/components/budgets-screen";
 import { CategoryManager } from "@/components/category-manager";
 import type { ChatReply } from "@/components/chat-action-result";
@@ -89,6 +89,10 @@ export function ReportsRoute() {
     <ReportsScreen
       month={navigation.view.month}
       setMonth={navigation.setMonth}
+      reportPeriod={navigation.view.reportPeriod}
+      reportYear={navigation.view.reportYear}
+      setReportPeriod={(reportPeriod) => navigation.navigate({ reportPeriod })}
+      setReportYear={(reportYear) => navigation.navigate({ reportYear })}
       transactions={session.transactions}
       today={session.today}
       openTransaction={(transaction) => navigation.openTransaction(transaction.id)}
@@ -101,13 +105,24 @@ export function ReportsRoute() {
 
 export function BudgetsRoute() {
   const session = useAppSession();
+  const [budgetPanel, setBudgetPanel] = useState<BudgetManagerPanel>(null);
   return (
     <BudgetsScreen
       demo={session.dataMode === "demo"}
       onEditBudget={session.dataMode === "demo" ? session.updateDemoBudget : undefined}
+      onRequestEditBudget={
+        session.financeSnapshot ? (id) => setBudgetPanel({ kind: "edit", id }) : undefined
+      }
+      onRequestDeleteBudget={
+        session.financeSnapshot ? (id) => setBudgetPanel({ kind: "delete", id }) : undefined
+      }
       management={
         session.financeSnapshot ? (
           <BudgetManager
+            collapseList
+            hiddenBudgetIds={session.budgets.map((budget) => budget.id)}
+            panel={budgetPanel}
+            onPanelChange={setBudgetPanel}
             snapshot={session.financeSnapshot}
             runMutation={session.runMutation}
             refreshRequired={session.refreshRequired}

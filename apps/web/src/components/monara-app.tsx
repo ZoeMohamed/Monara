@@ -70,10 +70,22 @@ function DesktopSidebar({
           </Link>
         ))}
       </nav>
-      <button className={`${styles.sideLink} mt-3`} onClick={onOpenReminders} type="button">
-        <Icon name="bell" /> Reminders & updates
-        {reminderCount > 0 ? <span className={styles.sideBadge}>{reminderCount}</span> : null}
-      </button>
+      <Button
+        aria-label={
+          reminderCount > 0 ? `Notifications, ${reminderCount} need attention` : "Notifications"
+        }
+        className={`${styles.sideLink} mt-3 h-auto`}
+        onPress={onOpenReminders}
+        type="button"
+        variant="ghost"
+      >
+        <Icon name="bell" /> Notifications
+        {reminderCount > 0 ? (
+          <span aria-hidden className={styles.sideBadge}>
+            {reminderCount}
+          </span>
+        ) : null}
+      </Button>
       <div className={styles.sideStatus}>
         {live ? (
           <>
@@ -142,7 +154,9 @@ function MobileHeader({
           <strong aria-hidden>{Number(today.slice(8, 10))}</strong>
         </button>
         <button
-          aria-label={reminderCount > 0 ? `Reminders, ${reminderCount} active` : "Reminders"}
+          aria-label={
+            reminderCount > 0 ? `Notifications, ${reminderCount} need attention` : "Notifications"
+          }
           className={styles.reminderButton}
           onClick={onOpenReminders}
           type="button"

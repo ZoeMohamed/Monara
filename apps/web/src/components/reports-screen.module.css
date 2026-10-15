@@ -1,20 +1,30 @@
-.mobileStats {
-  display: none;
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
-.summaryLabel {
-  margin-bottom: 12px;
-  color: var(--muted);
-  font-size: 15px;
+.periodTabs {
+  display: flex;
+  min-width: 0;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  background: var(--surface);
 }
 
-.amount > span {
-  margin-right: 5px;
-  color: var(--muted);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: normal;
-  vertical-align: 8px;
+.placeRow {
+  --button-bg-hover: var(--surface-secondary);
+}
+
+@media (hover: hover) {
+  .placeRow:hover,
+  .placeRow[data-hovered="true"] {
+    background: var(--surface-secondary);
+  }
 }
 
 @media (max-width: 767px) {
@@ -24,55 +34,33 @@
   }
 
   .header h1 {
-    flex-basis: 100%;
     font-size: 32px;
     line-height: 1.15;
   }
 
-  .header > fieldset {
+  .controls {
+    display: contents;
+  }
+
+  .periodTabs {
+    width: 154px;
+    margin-left: auto;
+  }
+
+  .periodTabs button {
+    padding-inline: 10px;
+    font-size: 12px;
+  }
+
+  .controls > fieldset:not(:where(.periodTabs)) {
     margin-left: auto;
     border-color: transparent;
     background: transparent;
   }
 
-  .header > fieldset > span {
+  .controls > fieldset:not(:where(.periodTabs)) > span {
     padding-inline: 12px;
     font-size: 15px;
-  }
-
-  .summary {
-    margin-top: 20px;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .amount {
-    font-size: clamp(32px, 10vw, 52px);
-    font-weight: 750;
-    line-height: 1.1;
-    letter-spacing: -0.055em;
-  }
-
-  .summaryMonth,
-  .desktopStats {
-    display: none;
-  }
-
-  .mobileStats {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0 4px;
-    margin-top: 12px;
-    color: var(--muted);
-    font-size: 14px;
-    line-height: 1.6;
-  }
-
-  .mobileStats > span > strong {
-    color: var(--foreground);
   }
 
   .charts {
