@@ -61,6 +61,14 @@ function readString(value: Record<string, unknown>, key: string): string | null 
   return typeof field === "string" && field.length > 0 ? field : null;
 }
 
+/** Matches Composio's documented JSON error envelope for a missing resource. */
+function isComposioNotFound(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.error)) return false;
+  const error = value.error;
+  const slug = readString(error, "slug");
+  return error.status === 404 && slug !== null && /^not[_-]?found(?:[_-]?error)?$/i.test(slug);
+}
+
 /** Composio may wrap tool output in one or two `data` levels. */
 function unwrapData(value: unknown): Record<string, unknown> | null {
   let current = value;
@@ -206,7 +214,11 @@ export function createComposioGmailReader(config: ComposioGmailReaderConfig) {
       } catch {
         throw new GmailReadError("Composio connected account could not be reached.");
       }
-      if (response.status === 404) return false;
+      if (response.status === 404) {
+        const payload: unknown = await response.json().catch(() => null);
+        if (isComposioNotFound(payload)) return false;
+        throw new GmailReadError("Composio connected account check failed.", response.status);
+      }
       if (!response.ok) {
         throw new GmailReadError("Composio connected account check failed.", response.status);
       }

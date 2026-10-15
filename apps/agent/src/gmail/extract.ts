@@ -221,16 +221,20 @@ function toExtractedTransaction(
   });
 }
 
+function neutralizeEmailDelimiter(value: string): string {
+  return value.replace(/<\s*\/\s*email\s*>/gi, "&lt;/email&gt;");
+}
+
 function formatEmail(email: EmailForExtraction, categoryNames: readonly string[]): string {
   const categories = categoryNames.length > 0 ? categoryNames.join("; ") : "(none)";
   return [
     `The User's categories: ${categories}`,
     `Received: ${email.receivedAt}`,
     "<email>",
-    `From: ${email.from ?? "(unknown)"}`,
-    `Subject: ${email.subject ?? "(none)"}`,
+    `From: ${email.from === null ? "(unknown)" : neutralizeEmailDelimiter(email.from)}`,
+    `Subject: ${email.subject === null ? "(none)" : neutralizeEmailDelimiter(email.subject)}`,
     "",
-    email.body.replaceAll("</email>", "</ email>"),
+    neutralizeEmailDelimiter(email.body),
     "</email>",
   ].join("\n");
 }

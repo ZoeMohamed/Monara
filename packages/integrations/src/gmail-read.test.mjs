@@ -83,11 +83,24 @@ describe("listMessages", () => {
 });
 
 describe("isConnectionUsable", () => {
-  it("is false only when Composio reports an unusable or missing account", async () => {
+  it("is false only when Composio reports an unusable or documented missing account", async () => {
     const { fetcher, calls } = fakeFetcher([
       { body: { status: "ACTIVE" } },
       { body: { status: "EXPIRED" } },
-      { status: 404, body: {} },
+      {
+        status: 404,
+        body: {
+          error: {
+            message: "Connected account not found",
+            code: 404,
+            slug: "NotFoundError",
+            status: 404,
+            request_id: "req_synthetic",
+            suggested_fix: "Reconnect the account",
+            errors: [],
+          },
+        },
+      },
     ]);
     const reader = createComposioGmailReader({ apiUrl, apiKey: "key", fetcher });
     assert.equal(await reader.isConnectionUsable("ca_test"), true);
@@ -97,9 +110,13 @@ describe("isConnectionUsable", () => {
   });
 
   it("throws rather than answering when the check itself fails", async () => {
-    const { fetcher } = fakeFetcher([{ status: 401, body: { error: "bad key" } }]);
+    const { fetcher } = fakeFetcher([
+      { status: 401, body: { error: "bad key" } },
+      { status: 404, body: { detail: "Not Found" } },
+    ]);
     const reader = createComposioGmailReader({ apiUrl, apiKey: "key", fetcher });
     await assert.rejects(reader.isConnectionUsable("ca_test"), { status: 401 });
+    await assert.rejects(reader.isConnectionUsable("ca_test"), { status: 404 });
   });
 });
 
