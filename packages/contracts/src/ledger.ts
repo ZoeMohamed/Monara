@@ -91,6 +91,18 @@ export const categorySchema = z
   })
   .strict();
 
+// Category IDs double as client request IDs for retry-safe creation without a new table.
+export const createCategoryInputSchema = z
+  .object({
+    name: categorySchema.shape.name,
+    icon: categorySchema.shape.icon,
+    color: categorySchema.shape.color,
+    clientRequestId: z.uuid(),
+  })
+  .strict();
+
+export const createCategoryResultSchema = z.object({ category: categorySchema }).strict();
+
 export const updateCategoryInputSchema = z
   .object({
     categoryId: categoryIdSchema,
@@ -144,6 +156,8 @@ export type ListFinancialAccountsInput = z.input<typeof listFinancialAccountsInp
 export type FinancialAccountPage = z.infer<typeof financialAccountPageSchema>;
 export type FinancialAccountMutationResult = z.infer<typeof financialAccountMutationResultSchema>;
 export type Category = z.infer<typeof categorySchema>;
+export type CreateCategoryInput = z.input<typeof createCategoryInputSchema>;
+export type CreateCategoryResult = z.infer<typeof createCategoryResultSchema>;
 export type UpdateCategoryInput = z.input<typeof updateCategoryInputSchema>;
 export type ListCategoriesInput = z.input<typeof listCategoriesInputSchema>;
 export type CategoryPage = z.infer<typeof categoryPageSchema>;

@@ -3,25 +3,24 @@
 import { Button } from "@monara/ui";
 
 import { Icon } from "@/components/icon";
+import styles from "@/components/period-selector.module.css";
 import { demoMonth, formatMonth, shiftMonth } from "@/data/demo-ledger";
-
-const oldestMonth = shiftMonth(demoMonth, -12);
 
 export function MonthSelector({
   month,
   onChange,
+  currentMonth = demoMonth,
 }: {
   month: string;
   onChange: (month: string) => void;
+  currentMonth?: string;
 }) {
+  const oldestMonth = shiftMonth(currentMonth, -12);
   return (
-    <fieldset
-      aria-label="Selected month"
-      className="flex items-center rounded-full border border-border bg-surface p-0.5"
-    >
+    <fieldset aria-label="Selected month" className={styles.selector}>
       <Button
         aria-label="Previous month"
-        className="shrink-0 rounded-full"
+        className={styles.arrow}
         isDisabled={month <= oldestMonth}
         isIconOnly
         onPress={() => onChange(shiftMonth(month, -1))}
@@ -29,16 +28,13 @@ export function MonthSelector({
       >
         <Icon name="chevron-left" />
       </Button>
-      <span
-        aria-live="polite"
-        className="min-w-0 px-1 text-center text-xs font-bold sm:px-3 sm:text-sm"
-      >
+      <span aria-live="polite" className={styles.label}>
         {formatMonth(month)}
       </span>
       <Button
         aria-label="Next month"
-        className="shrink-0 rounded-full"
-        isDisabled={month >= demoMonth}
+        className={styles.arrow}
+        isDisabled={month >= currentMonth}
         isIconOnly
         onPress={() => onChange(shiftMonth(month, 1))}
         variant="ghost"

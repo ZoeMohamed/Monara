@@ -80,3 +80,9 @@ button {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* "Hide amounts" keeps layout stable while making figures unreadable over a shoulder. */
+[data-amounts-hidden="true"] [data-amount] {
+  filter: blur(7px);
+  user-select: none;
+}

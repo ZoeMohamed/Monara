@@ -7,13 +7,17 @@ import {
   noStoreHeaders,
   unauthenticated,
 } from "@/lib/gmail/service";
+import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 /** Disconnects one of the signed-in User's Gmail Connections. */
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   context: RouteContext<"/api/gmail/connections/[connectionId]">,
 ) {
+  if (!isSameOriginRequest(request)) {
+    return errorResponse("FORBIDDEN", "This request must come from Monara.");
+  }
   const identity = await getAuthenticatedIdentity();
   if (!identity) return unauthenticated();
 

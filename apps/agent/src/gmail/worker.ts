@@ -1,8 +1,4 @@
-import {
-  type GmailJob,
-  gmailJobSchema,
-  resolveGmailConnectionInputSchema,
-} from "@monara/contracts";
+import { type GmailJob, gmailJobSchema, requestGmailSyncInputSchema } from "@monara/contracts";
 import { createComposioGmailReader } from "@monara/integrations";
 import type { Env } from "../env.ts";
 import { createGmailBackend } from "./backend.ts";
@@ -12,6 +8,7 @@ import { createGmailPipeline } from "./pipeline.ts";
 /** Matches max_retries for the Gmail queue consumer in wrangler.jsonc. */
 const GMAIL_QUEUE_MAX_RETRIES = 3;
 const QUEUE_SEND_BATCH_LIMIT = 100;
+const MANUAL_FALLBACK_MESSAGE_LIMIT = 5;
 
 /** Logs ids and outcomes only; never email content, financial values, or credentials. */
 function logEvent(level: "info" | "error", fields: Record<string, unknown>): void {
@@ -26,6 +23,10 @@ function retryDelaySeconds(attempts: number): number {
 function requireQueue(env: Env): Queue<GmailJob> {
   if (!env.GMAIL_JOBS) throw new Error("Missing required binding: GMAIL_JOBS.");
   return env.GMAIL_JOBS;
+}
+
+function isQueueDailyLimit(error: unknown): boolean {
+  return error instanceof Error && /daily write operations limit/i.test(error.message);
 }
 
 /** Throws when any required secret or binding is missing, so jobs fail closed. */
@@ -63,11 +64,21 @@ async function hasBackendCredential(request: Request, secret: string): Promise<b
     crypto.subtle.digest("SHA-256", encoder.encode(secret)),
     crypto.subtle.digest("SHA-256", encoder.encode(header.slice("Bearer ".length))),
   ]);
-  return crypto.subtle.timingSafeEqual(expected, received);
+  const expectedBytes = new Uint8Array(expected);
+  const receivedBytes = new Uint8Array(received);
+  let difference = 0;
+  for (let index = 0; index < expectedBytes.length; index += 1) {
+    difference |= expectedBytes[index] ^ receivedBytes[index];
+  }
+  return difference === 0;
 }
 
 /** Manual sync. Only the web backend may call this, after checking the User owns the connection. */
-export async function handleGmailSyncRequest(request: Request, env: Env): Promise<Response> {
+export async function handleGmailSyncRequest(
+  request: Request,
+  env: Env,
+  context?: Pick<ExecutionContext, "waitUntil">,
+): Promise<Response> {
   const secret = env.MONARA_AGENT_BACKEND_SECRET?.trim();
   if (!secret || !env.GMAIL_JOBS) {
     return Response.json({ error: "Gmail sync is not configured." }, { status: 503 });
@@ -75,17 +86,40 @@ export async function handleGmailSyncRequest(request: Request, env: Env): Promis
   if (!(await hasBackendCredential(request, secret))) {
     return Response.json({ error: "Unauthorized." }, { status: 401 });
   }
-  const input = resolveGmailConnectionInputSchema.safeParse(await request.json().catch(() => null));
+  const input = requestGmailSyncInputSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
-    return Response.json({ error: "connectionId must be a UUID." }, { status: 400 });
+    return Response.json({ error: "connectionId and since are invalid." }, { status: 400 });
   }
-  await env.GMAIL_JOBS.send({
+  const job = {
     kind: "gmail.sync",
     connectionId: input.data.connectionId,
-    since: null,
+    since: input.data.since,
     pageToken: null,
     startedAt: null,
-  });
+  } as const;
+  try {
+    await env.GMAIL_JOBS.send(job);
+  } catch (error) {
+    if (!context || !isQueueDailyLimit(error)) throw error;
+    context.waitUntil(
+      createPipeline(env)
+        .processRecent(job, MANUAL_FALLBACK_MESSAGE_LIMIT)
+        .then((outcome) => {
+          logEvent("info", {
+            event: "gmail.manual_fallback_done",
+            connectionId: job.connectionId,
+            outcome,
+          });
+        })
+        .catch((fallbackError: unknown) => {
+          logEvent("error", {
+            event: "gmail.manual_fallback_failed",
+            connectionId: job.connectionId,
+            reason: fallbackError instanceof Error ? fallbackError.name : "UnknownError",
+          });
+        }),
+    );
+  }
   return Response.json({ status: "queued" }, { status: 202 });
 }
 

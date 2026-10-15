@@ -1,0 +1,154 @@
+.summary {
+  display: block;
+  min-width: 0;
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface));
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.metric {
+  min-width: 0;
+}
+
+.metric[data-kind="spending"] {
+  grid-column: 1 / -1;
+}
+
+.metric dt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.metricIcon {
+  width: 16px;
+  height: 16px;
+  color: var(--metric-color, var(--accent));
+}
+
+.metric dd {
+  margin-top: 6px;
+  color: var(--foreground);
+  font-size: clamp(16px, 4.8vw, 24px);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.metric[data-kind="spending"] dd {
+  font-size: clamp(28px, 8vw, 42px);
+  letter-spacing: -0.055em;
+}
+
+.metric[data-kind="income"] {
+  --metric-color: var(--success);
+}
+
+.metric[data-kind="net"] {
+  --metric-color: var(--muted);
+}
+
+.track {
+  display: block;
+  height: 4px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--metric-color, var(--accent));
+}
+
+.comparison {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.comparisonIcon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--comparison-color, var(--foreground));
+}
+
+.comparison[data-direction="less"] {
+  --comparison-color: var(--success);
+}
+
+.comparison strong {
+  color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.period {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.periodIcon {
+  width: 13px;
+  height: 13px;
+}
+
+@media (min-width: 768px) {
+  .summary {
+    padding: 24px;
+  }
+
+  .metrics {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+  }
+
+  .metric[data-kind="spending"] {
+    grid-column: auto;
+  }
+
+  .metric dd {
+    min-height: 55px;
+    padding-top: 9px;
+    font-size: 24px;
+  }
+
+  .metric[data-kind="spending"] dd {
+    padding-top: 0;
+    font-size: 40px;
+  }
+
+  .comparison {
+    font-size: 13px;
+  }
+}

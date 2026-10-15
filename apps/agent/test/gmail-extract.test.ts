@@ -54,7 +54,7 @@ describe("parseRupiahAmount", () => {
     ["Rp25.000,00", "25000"],
     ["IDR 1,250,000.00", "1250000"],
     ["Rp 1.250.000", "1250000"],
-    ["150000", "150000"],
+    ["150000", null],
     ["Rp 25.000,50", null],
     ["USD 25.00", null],
     ["$12", null],
@@ -171,6 +171,16 @@ describe("extractTransactions", () => {
     assert.equal(result.money?.amountMinor, "25000");
   });
 
+  it("never assigns IDR when the email states only a bare number", async () => {
+    const llm = fakeLlm({
+      isTransactionEmail: true,
+      items: [item({ amountText: "25000", currency: null })],
+    });
+    const [result] = (await extractTransactions(llm, email("Total 25000"))).items;
+    assert.equal(result.money, null);
+    assert.equal(result.confidence, 0.5);
+  });
+
   it("returns no items for a non-transaction email", async () => {
     const llm = fakeLlm({ isTransactionEmail: false, items: [item()] });
     const result = await extractTransactions(llm, email("Promo Rp 25.000!"));
@@ -203,10 +213,16 @@ describe("extractTransactions", () => {
   });
 
   it("keeps the first 20 items of a very long receipt instead of failing it", async () => {
-    const items = Array.from({ length: 25 }, () => item());
+    const items = Array.from({ length: 25 }, (_, index) =>
+      item({ merchantName: `Kopi Contoh ${index}`, description: `Coffee purchase ${index}` }),
+    );
     const llm = fakeLlm({ isTransactionEmail: true, items });
     const result = await extractTransactions(llm, email("Total Rp 25.000"));
     assert.equal(result.items.length, 20);
+    assert.deepEqual(
+      result.items.map((entry) => entry.merchantName),
+      Array.from({ length: 20 }, (_, index) => `Kopi Contoh ${index}`),
+    );
   });
 
   it("throws on output that does not match the schema", async () => {

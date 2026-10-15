@@ -2,15 +2,15 @@
 
 import { Button, Card } from "@monara/ui";
 import { useState } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 
 import { Icon } from "@/components/icon";
 import { SectionTitle } from "@/components/visual";
+import { categoryIcon } from "@/data/category-style";
 import {
   daysInMonth,
-  demoMonth,
   demoToday,
   formatMonth,
-  formatRupiah,
   type RecurringBill,
   shiftMonth,
 } from "@/data/demo-ledger";
@@ -28,7 +28,16 @@ function initialDate(month: string, bills: RecurringBill[]): string {
   return bills.find((bill) => bill.nextDue.startsWith(`${month}-`))?.nextDue ?? `${month}-01`;
 }
 
-export function BillCalendar({ bills, month }: { bills: RecurringBill[]; month: string }) {
+export function BillCalendar({
+  bills,
+  month,
+  today = demoToday,
+}: {
+  bills: RecurringBill[];
+  month: string;
+  today?: string;
+}) {
+  const { formatRupiah } = useAmountDisplay();
   const [calendar, setCalendar] = useState(() => ({ month, date: initialDate(month, bills) }));
   const monthBills = bills.filter((bill) => bill.nextDue.startsWith(`${calendar.month}-`));
   const selectedBills = monthBills.filter((bill) => bill.nextDue === calendar.date);
@@ -43,7 +52,7 @@ export function BillCalendar({ bills, month }: { bills: RecurringBill[]; month: 
   return (
     <section aria-labelledby="bill-calendar-heading" className="min-w-0">
       <SectionTitle id="bill-calendar-heading" title="Bill calendar" />
-      <Card className="mt-2 block min-w-0 gap-0 rounded-2xl border border-border p-3 min-[400px]:p-4">
+      <Card className="mt-2 block min-w-0 gap-0 rounded-2xl border border-border p-4 min-[400px]:p-5">
         <div className="flex items-center justify-between gap-1">
           <Button
             aria-label={`Previous bill month, ${formatMonth(shiftMonth(calendar.month, -1))}`}
@@ -74,7 +83,7 @@ export function BillCalendar({ bills, month }: { bills: RecurringBill[]; month: 
           </p>
           <Button
             className="min-h-11 px-2 text-xs"
-            onPress={() => setCalendar({ month: demoMonth, date: demoToday })}
+            onPress={() => setCalendar({ month: today.slice(0, 7), date: today })}
             size="sm"
             variant="tertiary"
           >
@@ -100,19 +109,19 @@ export function BillCalendar({ bills, month }: { bills: RecurringBill[]; month: 
             const date = `${calendar.month}-${String(day).padStart(2, "0")}`;
             const dayBills = monthBills.filter((bill) => bill.nextDue === date);
             const selected = calendar.date === date;
-            const today = date === demoToday;
+            const isToday = date === today;
             const label = dateFormatter.format(new Date(`${date}T00:00:00Z`));
             return (
               <Button
-                aria-current={today ? "date" : undefined}
-                aria-label={`${label}${today ? ", today" : ""}, ${dayBills.length} ${dayBills.length === 1 ? "bill" : "bills"}`}
+                aria-current={isToday ? "date" : undefined}
+                aria-label={`${label}${isToday ? ", today" : ""}, ${dayBills.length} ${dayBills.length === 1 ? "bill" : "bills"}`}
                 aria-pressed={selected}
                 className={`relative h-11 min-h-11 w-full min-w-0 rounded-lg border p-0 text-xs tabular-nums ${
                   selected
                     ? "border-accent bg-accent text-accent-foreground"
                     : dayBills.length > 0
                       ? "border-accent/20 bg-accent-soft text-accent-soft-foreground"
-                      : today
+                      : isToday
                         ? "border-accent bg-surface text-foreground"
                         : "border-transparent bg-surface-secondary/60 text-muted"
                 }`}
@@ -152,10 +161,15 @@ export function BillCalendar({ bills, month }: { bills: RecurringBill[]; month: 
                   className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"
                   key={bill.id}
                 >
-                  <span className="min-w-0 text-sm font-bold [overflow-wrap:anywhere]">
-                    <span aria-hidden className="mr-1.5">
-                      {bill.emoji}
-                    </span>
+                  <span className="flex min-w-0 items-center gap-2 text-sm font-bold [overflow-wrap:anywhere]">
+                    <Icon
+                      className="h-4 w-4 shrink-0 text-accent"
+                      name={
+                        categoryIcon(bill.merchant) === "dot"
+                          ? "bills"
+                          : categoryIcon(bill.merchant)
+                      }
+                    />
                     {bill.merchant}
                   </span>
                   <span className="min-w-0 text-sm font-semibold tabular-nums [overflow-wrap:anywhere]">

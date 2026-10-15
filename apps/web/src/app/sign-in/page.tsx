@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { SignInScreen } from "@/components/sign-in-screen";
 import { safeAuthenticatedNextPath, safeNextPath, signInErrorMessage } from "@/lib/auth/redirect";
+import { availablePublicSupabaseConfig } from "@/lib/supabase/config";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -17,6 +18,7 @@ export default async function SignInPage({ searchParams }: PageProps<"/sign-in">
 
   return (
     <SignInScreen
+      available={availablePublicSupabaseConfig() !== null}
       error={signInErrorMessage(typeof params.error === "string" ? params.error : null)}
       next={next}
     />

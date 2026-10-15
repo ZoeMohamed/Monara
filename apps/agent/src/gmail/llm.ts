@@ -52,7 +52,6 @@ export function createLlmClient(config: LlmConfig) {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
             model,
-            temperature: 0,
             messages: [
               { role: "system", content: request.system },
               { role: "user", content: request.user },

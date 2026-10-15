@@ -104,6 +104,36 @@ function page<T>(rows: T[], offset: number, limit: number) {
   };
 }
 
+/** Aggregate reads must page through PostgREST's configured 1,000-row response limit. */
+async function readAllPages<T extends { id: string }>(
+  readPage: (offset: number, limit: number) => Promise<T[]>,
+) {
+  const limit = 1_000;
+  const rows: T[] = [];
+  const ids = new Set<string>();
+  for (let offset = 0; ; offset += limit) {
+    const current = await readPage(offset, limit);
+    for (const row of current) {
+      if (ids.has(row.id)) {
+        throw new FinanceOperationError(
+          "CONFLICT",
+          "Your records changed while loading. Refresh and try again.",
+        );
+      }
+      ids.add(row.id);
+    }
+    rows.push(...current);
+    if (current.length < limit) return rows;
+  }
+}
+
+function monthRange(month: string) {
+  const startsOn = `${month}-01`;
+  const end = new Date(`${startsOn}T00:00:00.000Z`);
+  end.setUTCMonth(end.getUTCMonth() + 1, 0);
+  return { startsOn, endsOn: end.toISOString().slice(0, 10) };
+}
+
 const databaseNumeric = (amountMinor: string) => amountMinor as unknown as number;
 
 function toTransaction(row: ExactTransactionRow): Transaction {
@@ -267,6 +297,23 @@ export function createSupabaseFinanceRepository(
     return result.data ? toBudget(result.data as unknown as ExactBudgetRow) : null;
   };
 
+  const listTransactionsForDateRange = async (userId: string, startsOn: string, endsOn: string) =>
+    readAllPages(async (offset, limit) => {
+      const result = await client
+        .from("transactions")
+        .select(TRANSACTION_COLUMNS)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .gte("occurred_on", startsOn)
+        .lte("occurred_on", endsOn)
+        .order("occurred_on", { ascending: false })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (result.error) fail(result.error);
+      return (result.data as unknown as ExactTransactionRow[]).map(toTransaction);
+    });
+
   return {
     async listTransactions(userId, input) {
       const offset = offsetFor(input.cursor);
@@ -283,10 +330,8 @@ export function createSupabaseFinanceRepository(
       if (input.reviewStatus) query = query.eq("review_status", input.reviewStatus);
       if (input.kind) query = query.eq("transaction_type", input.kind);
       if (input.month) {
-        const start = `${input.month}-01`;
-        const next = new Date(`${start}T00:00:00.000Z`);
-        next.setUTCMonth(next.getUTCMonth() + 1);
-        query = query.gte("occurred_on", start).lt("occurred_on", next.toISOString().slice(0, 10));
+        const { startsOn, endsOn } = monthRange(input.month);
+        query = query.gte("occurred_on", startsOn).lte("occurred_on", endsOn);
       }
       const result = await query;
       if (result.error) fail(result.error);
@@ -298,37 +343,11 @@ export function createSupabaseFinanceRepository(
     },
 
     async listTransactionsForMonth(userId, month) {
-      const start = `${month}-01`;
-      const next = new Date(`${start}T00:00:00.000Z`);
-      next.setUTCMonth(next.getUTCMonth() + 1);
-      const result = await client
-        .from("transactions")
-        .select(TRANSACTION_COLUMNS)
-        .eq("user_id", userId)
-        .is("deleted_at", null)
-        .gte("occurred_on", start)
-        .lt("occurred_on", next.toISOString().slice(0, 10))
-        .order("occurred_on", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(10_000);
-      if (result.error) fail(result.error);
-      return (result.data as unknown as ExactTransactionRow[]).map(toTransaction);
+      const { startsOn, endsOn } = monthRange(month);
+      return listTransactionsForDateRange(userId, startsOn, endsOn);
     },
 
-    async listTransactionsForDateRange(userId, startsOn, endsOn) {
-      const result = await client
-        .from("transactions")
-        .select(TRANSACTION_COLUMNS)
-        .eq("user_id", userId)
-        .is("deleted_at", null)
-        .gte("occurred_on", startsOn)
-        .lte("occurred_on", endsOn)
-        .order("occurred_on", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(10_000);
-      if (result.error) fail(result.error);
-      return (result.data as unknown as ExactTransactionRow[]).map(toTransaction);
-    },
+    listTransactionsForDateRange,
 
     async findTransaction(userId, transactionId) {
       return findTransaction(userId, transactionId);
@@ -514,14 +533,60 @@ export function createSupabaseFinanceRepository(
     },
 
     async listAllCategories(userId) {
-      const result = await client
+      return readAllPages(async (offset, limit) => {
+        const result = await client
+          .from("categories")
+          .select(CATEGORY_COLUMNS)
+          .eq("user_id", userId)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(offset, offset + limit - 1);
+        if (result.error) fail(result.error);
+        return result.data.map(toCategory);
+      });
+    },
+
+    async createCategory(userId, input) {
+      const id = input.clientRequestId.toLowerCase();
+      const slug = `custom-${id}`;
+      const inserted = await client
+        .from("categories")
+        .insert({
+          id,
+          user_id: userId,
+          name: input.name,
+          slug,
+          icon: input.icon,
+          color: input.color,
+          is_default: false,
+          is_archived: false,
+        })
+        .select(CATEGORY_COLUMNS)
+        .single();
+      if (!inserted.error) return toCategory(inserted.data);
+      if (inserted.error.code !== "23505") fail(inserted.error);
+
+      // The lookup stays owner-scoped even when a caller reuses another user's ID.
+      const existing = await client
         .from("categories")
         .select(CATEGORY_COLUMNS)
+        .eq("id", id)
         .eq("user_id", userId)
-        .order("created_at", { ascending: true })
-        .limit(100);
-      if (result.error) fail(result.error);
-      return result.data.map(toCategory);
+        .maybeSingle();
+      if (existing.error) fail(existing.error);
+      if (!existing.data) fail(inserted.error);
+      const category = toCategory(existing.data);
+      if (
+        category.name !== input.name ||
+        category.icon !== input.icon ||
+        category.color !== input.color ||
+        category.slug !== slug ||
+        category.isDefault ||
+        category.isArchived
+      ) {
+        throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
+      }
+      return category;
     },
 
     async updateCategory(userId, input) {
@@ -564,15 +629,18 @@ export function createSupabaseFinanceRepository(
     },
 
     async listAllBudgets(userId) {
-      const result = await client
-        .from("budgets")
-        .select(BUDGET_COLUMNS)
-        .eq("user_id", userId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true })
-        .limit(100);
-      if (result.error) fail(result.error);
-      return (result.data as unknown as ExactBudgetRow[]).map(toBudget);
+      return readAllPages(async (offset, limit) => {
+        const result = await client
+          .from("budgets")
+          .select(BUDGET_COLUMNS)
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(offset, offset + limit - 1);
+        if (result.error) fail(result.error);
+        return (result.data as unknown as ExactBudgetRow[]).map(toBudget);
+      });
     },
 
     async findBudget(userId, budgetId) {
@@ -678,6 +746,53 @@ export function createSupabaseFinanceRepository(
         .limit(limit);
       if (result.error) fail(result.error);
       return result.data.map(toReminder);
+    },
+
+    async listReminders(userId, input) {
+      const offset = offsetFor(input.cursor);
+      const limit = input.limit ?? 50;
+      let query = client
+        .from("reminders")
+        .select(REMINDER_COLUMNS)
+        .eq("user_id", userId)
+        .order("scheduled_for", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + limit);
+      if (input.status) query = query.eq("status", input.status);
+      if (input.kind) query = query.eq("kind", input.kind);
+      const result = await query;
+      if (result.error) fail(result.error);
+      return page(result.data.map(toReminder), offset, limit);
+    },
+
+    async findReminder(userId, reminderId) {
+      const result = await client
+        .from("reminders")
+        .select(REMINDER_COLUMNS)
+        .eq("user_id", userId)
+        .eq("id", reminderId)
+        .maybeSingle();
+      if (result.error) fail(result.error);
+      return result.data ? toReminder(result.data) : null;
+    },
+
+    async updateReminder(input) {
+      const result = await client
+        .from("reminders")
+        .update({ status: input.status, read_at: input.readAt })
+        .eq("user_id", input.userId)
+        .eq("id", input.reminderId)
+        .eq("status", input.expectedStatus)
+        .select(REMINDER_COLUMNS)
+        .maybeSingle();
+      if (result.error) fail(result.error);
+      if (!result.data) {
+        throw new FinanceOperationError(
+          "CONFLICT",
+          "This notification changed. Refresh it and try again.",
+        );
+      }
+      return toReminder(result.data);
     },
 
     async createBudgetThresholdReminder(input) {

@@ -177,6 +177,34 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
     syncConnection,
     processMessage,
 
+    /**
+     * Queue-free safety valve for a manual demo sync. It deliberately handles only
+     * the newest few messages and does not advance the durable sync cursor; the
+     * normal queue will replay and deduplicate them when it is available again.
+     */
+    async processRecent(job: GmailSyncJob, maxMessages: number): Promise<GmailJobOutcome> {
+      const connection = await backend.resolveConnection(job.connectionId);
+      const page = await read(connection, () =>
+        reader.listMessages(toMailbox(connection), {
+          query: syncQuery(job.since),
+          pageToken: null,
+          maxResults: maxMessages,
+        }),
+      );
+      for (const message of page.messages) {
+        await processMessage(
+          {
+            kind: "gmail.extract",
+            connectionId: job.connectionId,
+            gmailMessageId: message.id,
+            receivedAt: message.receivedAt,
+          },
+          { isFinalAttempt: true },
+        );
+      }
+      return "listed";
+    },
+
     /** Queues a sync for every active connection. Runs from the cron trigger. */
     async scheduleSyncs(): Promise<number> {
       const { connections } = await backend.listActiveConnections();
