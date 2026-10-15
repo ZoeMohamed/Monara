@@ -1,6 +1,7 @@
 import {
   disconnectGmailConnectionInputSchema,
   gmailConnectionListSchema,
+  gmailSyncResultSchema,
   operationErrorSchema,
   startGmailConnectionResultSchema,
 } from "@monara/contracts";
@@ -121,7 +122,7 @@ export async function loadGmailConnections(options: RequestOptions = {}): Promis
       email: connection.gmailAddress,
       status: connection.status === "active" ? "active" : "reconnect-required",
       lastSyncedAt: connection.lastSyncedAt,
-      // There is no manual-sync endpoint or job status in the connection response yet.
+      // The connection list has no durable job-status field; Sync Now updates this local state.
       sync: { state: "idle" },
     }));
 }
@@ -158,4 +159,21 @@ export async function disconnectGmailConnection(id: string, options: RequestOpti
   if (response.status !== 204) {
     throw new GmailClientError("error", "Gmail did not confirm that the mailbox was disconnected.");
   }
+}
+
+/** Queues an owned mailbox sync. Completion is asynchronous and is never fabricated here. */
+export async function requestGmailSync(id: string, options: RequestOptions = {}) {
+  const input = disconnectGmailConnectionInputSchema.safeParse({ connectionId: id });
+  if (!input.success) throw new GmailClientError("error", "Invalid Gmail connection id.");
+  const response = await request(
+    `${CONNECTIONS_URL}/${encodeURIComponent(input.data.connectionId)}/sync`,
+    "POST",
+    options,
+  );
+  const payload: unknown = await response.json().catch(() => null);
+  const result = gmailSyncResultSchema.safeParse(payload);
+  if (!result.success) {
+    throw new GmailClientError("error", "Gmail did not confirm that the sync was queued.");
+  }
+  return result.data;
 }

@@ -309,7 +309,24 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            [_ in never]: never
+            "claim_gmail_message":
+{ Args: { "p_connection_id": string,"p_gmail_message_id": string,"p_received_at": string }; Returns: {
+              "already_finished": boolean,"processed_message_id": string
+            }[]
+                           },
+"gmail_connection_sync_counts":
+{ Args: { "p_connection_id": string,"p_user_id": string }; Returns: {
+              "failed": number,"imported": number,"imported_transactions": number,"in_progress": number,"skipped": number
+            }[]
+                           },
+"mark_gmail_connection_synced":
+{ Args: { "p_connection_id": string,"p_synced_at": string }; Returns: undefined
+                           },
+"record_gmail_extraction":
+{ Args: { "p_items": Json,"p_outcome": string,"p_processed_message_id": string }; Returns: {
+              "already_finished": boolean,"transaction_ids": (string)[]
+            }[]
+                           }
           }
           Enums: {
             [_ in never]: never

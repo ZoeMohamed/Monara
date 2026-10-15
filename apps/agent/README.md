@@ -1,6 +1,6 @@
 # Cloudflare agent
 
-One TypeScript worker hosts the shared agent runtime. The Agent core lives in `src/conversation`, Kapso message handling in `src/whatsapp`, and automatic Gmail ingestion in `src/gmail`. `src/budgeting` retains its integration boundary.
+One TypeScript worker hosts the shared agent runtime. The Agent core lives in `src/conversation`, Kapso message handling in `src/whatsapp`, and automatic Gmail processing in `src/gmail`. `src/budgeting` retains its integration boundary.
 
 Run `pnpm dev:agent` from the root. `pnpm --filter @monara/agent build` creates a local dry-run bundle without deployment, and `pnpm --filter @monara/agent test` runs the Agent and Gmail tests with synthetic data.
 
@@ -8,10 +8,10 @@ Run `pnpm dev:agent` from the root. `pnpm --filter @monara/agent build` creates 
 
 | Route | State |
 | --- | --- |
-| `GET /health` | Returns `status: ok` while the Worker is running. |
+| `GET /health` | Returns a minimal live-service response. |
 | `POST /chat` | In-app chat. The web backend sends `{ userId, text, history }` (see `agentChatRequestSchema`) with `Authorization: Bearer <MONARA_AGENT_BACKEND_SECRET>` and gets `{ reply, actions, confirmation }`. |
 | `POST /webhooks/kapso` | Kapso `whatsapp.message.received` webhook. Verifies the signature, asks the backend who each sender is, and queues a linked User's text for the Agent. Everyone else gets a fixed reply and no data. |
-| `POST /gmail/sync` | Manual Gmail sync. The web backend sends `{ connectionId }` with the same Bearer secret, only after checking that the signed-in User owns the connection. Queues a sync job and returns 202. |
+| `POST /gmail/sync` | Manual Gmail sync. The web backend sends `{ connectionId, since }` with the same Bearer secret, only after checking that the signed-in User owns the connection. Queues a sync job and returns 202. |
 | Anything else | 404. |
 
 Each handler returns 503 when a secret or binding it needs is missing.
@@ -90,13 +90,13 @@ The extractor offers the model the User's own Category names and keeps a `catego
 
 When a Composio read fails with a client error other than 429, the worker asks Composio for the connected account's status. Only when Composio says the account is expired, failed, inactive, or gone does it call `report-connection-error`, which sets the connection to `error`. A bad Composio API key fails that check too, so it never marks Users' connections.
 
-The schemas are in `packages/contracts/src/gmail-extraction.ts`. A 404 with the JSON `NOT_FOUND` error means the connection is no longer active and ends the job without a retry. Any other failure, including a route that does not exist yet, retries up to three times, and the last attempt records the message as failed. None of these routes exist in `apps/web` yet, so ingestion fails clearly until they do.
+The schemas are in `packages/contracts/src/gmail-extraction.ts`. A 404 with the JSON `NOT_FOUND` error means the connection is no longer active and ends the job without a retry. Any other failure retries up to three times, and the last attempt records the message as failed. The authenticated operations live in `apps/web/src/app/api/agent/gmail/[operation]/route.ts`; the signed-in User's manual sync route lives under `apps/web/src/app/api/gmail/connections/[connectionId]/sync`.
 
 ## Still to do
 
-The Gmail queue and cron are declared in `wrangler.jsonc` and simulated by `wrangler dev`. Creating the queue in Cloudflare requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
-
 Implement sender-resolution/verified linking, missing Agent operations, durable Undo and client-turn status/idempotency. Accept owned reads/writes and destructive confirmation against a disposable local Supabase stack before configured-provider testing.
+
+The Gmail queue and cron are declared in `wrangler.jsonc` and simulated by `wrangler dev`. Creating the queue in Cloudflare requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
 
 The `CONVERSATIONS` Durable Object binding in `wrangler.jsonc` is created on the first deployment. It has only run locally.
 

@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { describe, it } from "node:test";
 
-const state = { user: { id: "00000000-0000-4000-8000-000000000001" }, starts: [], completions: [] };
+const connectionId = "00000000-0000-4000-8000-000000000010";
+const state = {
+  user: { id: "00000000-0000-4000-8000-000000000001" },
+  starts: [],
+  completions: [],
+  queued: [],
+};
 globalThis.monaraGmailRouteTest = state;
 const service = `
 export const noStoreHeaders = { "Cache-Control": "no-store" };
@@ -15,7 +21,15 @@ export function gmailConnectionService() { return {
     return {redirectUrl:"https://connect.composio.dev/link/synthetic"};
   },
   async complete(userId, sessionUri) { globalThis.monaraGmailRouteTest.completions.push({userId,sessionUri}); },
+  async list() { return [{id:"${connectionId}",status:"active",lastSyncedAt:"2026-10-14T04:00:00Z"}]; },
 }; }
+export function gmailIngestionRepository() { return {
+  async syncCounts() { return {imported:2,skipped:1,failed:0,inProgress:0,importedTransactions:2}; },
+}; }
+`;
+const agentSync = `
+export class AgentSyncError extends Error {}
+export async function requestAgentSync(input) { globalThis.monaraGmailRouteTest.queued.push(input); }
 `;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -26,6 +40,8 @@ const hooks = registerHooks({
         url: `data:text/javascript,${encodeURIComponent("export async function getAuthenticatedIdentity() { return globalThis.monaraGmailRouteTest.user; }")}`,
         shortCircuit: true,
       };
+    if (specifier === "@/lib/gmail/agent-sync")
+      return { url: `data:text/javascript,${encodeURIComponent(agentSync)}`, shortCircuit: true };
     if (specifier === "@/lib/http/origin")
       return nextResolve(new URL("../http/origin.ts", import.meta.url).href, context);
     if (specifier === "@/lib/gmail/callback")
@@ -35,6 +51,7 @@ const hooks = registerHooks({
 });
 const { POST } = await import("../../app/api/gmail/connections/route.ts");
 const { GET: callback } = await import("../../app/api/gmail/connections/callback/route.ts");
+const { POST: sync } = await import("../../app/api/gmail/connections/[connectionId]/sync/route.ts");
 hooks.deregister();
 
 function withTunnel(run) {
@@ -43,6 +60,7 @@ function withTunnel(run) {
   process.env.NGROK_DOMAIN = "example.ngrok-free.dev";
   state.starts = [];
   state.completions = [];
+  state.queued = [];
   state.user = { id: "00000000-0000-4000-8000-000000000001" };
   return Promise.resolve()
     .then(run)
@@ -141,5 +159,34 @@ describe("Gmail route callback origin and session boundary", () => {
         "https://example.ngrok-free.dev/connections/gmail?result=connected",
       );
       assert.equal(response.headers.get("cache-control"), "private, no-store");
+    }));
+});
+
+describe("Gmail Sync Now origin and cursor boundary", () => {
+  it("refuses cross-site requests before queueing work", () =>
+    withTunnel(async () => {
+      const response = await sync(
+        new Request(`https://monara.example/api/gmail/connections/${connectionId}/sync`, {
+          method: "POST",
+          headers: { origin: "https://attacker.example", "sec-fetch-site": "cross-site" },
+        }),
+        { params: Promise.resolve({ connectionId }) },
+      );
+      assert.equal(response.status, 403);
+      assert.deepEqual(state.queued, []);
+    }));
+
+  it("queues an owned active connection from its last successful cursor", () =>
+    withTunnel(async () => {
+      const response = await sync(
+        new Request(`https://monara.example/api/gmail/connections/${connectionId}/sync`, {
+          method: "POST",
+          headers: { origin: "https://monara.example", "sec-fetch-site": "same-origin" },
+        }),
+        { params: Promise.resolve({ connectionId }) },
+      );
+      assert.equal(response.status, 202);
+      assert.deepEqual(state.queued, [{ connectionId, since: "2026-10-14T04:00:00Z" }]);
+      assert.equal((await response.json()).status, "queued");
     }));
 });
