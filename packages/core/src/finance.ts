@@ -1125,8 +1125,11 @@ export function createFinanceService(
       const verified = caller(operationCaller);
       const values = budgetSuggestionInputSchema.parse(input);
       const currentMonth = now().slice(0, 7);
-      const basedOnStartsOn = `${shiftMonth(currentMonth, -3)}-01`;
-      const basedOnEndsOn = lastDayOfMonth(shiftMonth(currentMonth, -1));
+      const range = previousThreeMonthRange(currentMonth);
+      if (!range) {
+        throw new FinanceOperationError("CONFLICT", "No supported history range is available.");
+      }
+      const { startsOn: basedOnStartsOn, endsOn: basedOnEndsOn } = range;
       const [categories, transactions] = await Promise.all([
         repository.listAllCategories(verified.userId),
         repository.listTransactionsForDateRange(verified.userId, basedOnStartsOn, basedOnEndsOn),

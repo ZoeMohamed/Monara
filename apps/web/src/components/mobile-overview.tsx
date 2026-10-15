@@ -949,9 +949,16 @@ function BackendInsightsCard({
   openTransaction: (transaction: Transaction) => void;
 }) {
   const { formatRupiah } = useAmountDisplay();
+  const matchedUnusualTransactions =
+    insights?.unusualTransactions
+      .flatMap((flag) => {
+        const transaction = transactions.find((item) => item.id === flag.transactionId);
+        return transaction ? [{ flag, transaction }] : [];
+      })
+      .slice(0, 2) ?? [];
   if (
     !insights ||
-    (insights.overspendForecasts.length === 0 && insights.unusualTransactions.length === 0)
+    (insights.overspendForecasts.length === 0 && matchedUnusualTransactions.length === 0)
   ) {
     return null;
   }
@@ -970,24 +977,20 @@ function BackendInsightsCard({
             {` — ${formatRupiah(BigInt(forecast.spending.amountMinor))} spent in ${forecast.elapsedDays} of ${forecast.periodDays} days; projected ${formatRupiah(BigInt(forecast.projectedSpending.amountMinor))} vs ${formatRupiah(BigInt(forecast.limit.amountMinor))} limit`}
           </Fact>
         ))}
-        {insights.unusualTransactions.slice(0, 2).map((flag) => {
-          const transaction = transactions.find((item) => item.id === flag.transactionId);
-          if (!transaction) return null;
-          return (
-            <Fact
-              icon="sparkle"
-              key={flag.transactionId}
-              onOpen={() => openTransaction(transaction)}
-              tone="down"
-            >
-              <strong>{transaction.merchant ?? "Payment"}</strong> at{" "}
-              <strong data-amount>{formatRupiah(BigInt(flag.amount.amountMinor))}</strong> is{" "}
-              {flag.multipleOfMedian}× the {flag.categoryName} median of{" "}
-              <strong data-amount>{formatRupiah(BigInt(flag.historyMedian.amountMinor))}</strong>
-              {` across ${flag.historyTransactionCount} earlier payments`}
-            </Fact>
-          );
-        })}
+        {matchedUnusualTransactions.map(({ flag, transaction }) => (
+          <Fact
+            icon="sparkle"
+            key={flag.transactionId}
+            onOpen={() => openTransaction(transaction)}
+            tone="down"
+          >
+            <strong>{transaction.merchant ?? "Payment"}</strong> at{" "}
+            <strong data-amount>{formatRupiah(BigInt(flag.amount.amountMinor))}</strong> is{" "}
+            {flag.multipleOfMedian}× the {flag.categoryName} median of{" "}
+            <strong data-amount>{formatRupiah(BigInt(flag.historyMedian.amountMinor))}</strong>
+            {` across ${flag.historyTransactionCount} earlier payments`}
+          </Fact>
+        ))}
       </ul>
     </section>
   );

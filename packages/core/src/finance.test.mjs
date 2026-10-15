@@ -266,6 +266,23 @@ describe("financial insights", () => {
 });
 
 describe("Budget suggestions", () => {
+  it("rejects calendar ranges that cannot contain three complete prior months", async () => {
+    const unsupportedNow = new Date(0);
+    unsupportedNow.setUTCFullYear(0, 2, 1);
+    const service = createFinanceService({}, { now: () => unsupportedNow });
+
+    await assert.rejects(
+      service.suggestBudget(
+        {
+          userId: "60000000-0000-4000-8000-000000000006",
+          channel: "web",
+        },
+        { categoryId: category.id, cadence: "monthly" },
+      ),
+      (error) => error instanceof FinanceOperationError && error.code === "CONFLICT",
+    );
+  });
+
   it("uses the previous three complete months and never invents missing history", async () => {
     let requestedRange;
     const history = [
