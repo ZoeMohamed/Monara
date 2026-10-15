@@ -23,6 +23,27 @@ Open `http://localhost:3000`.
 
 Explore sample finances at `/demo` without signing in. Personal financial routes require Google sign-in and load the User's records. Without valid public Supabase configuration, Monara shows an unavailable sign-in state and denies financial requests; failed ledger loads show a recovery screen. See the [Supabase workflow](docs/supabase-workflow.md) for local database setup and [environment configuration](docs/repository-structure.md#environment-configuration) for the empty templates and required settings.
 
+## Test Gmail locally
+
+Composio must reach the Gmail callback, so local Gmail testing runs the web app behind an ngrok tunnel. `pnpm dev:tunnel` starts only the tunnel, not the app. Run each command in its own terminal, from the same checkout:
+
+```bash
+pnpm dev          # 1. web app; wait for "Ready"
+pnpm dev:tunnel   # 2. public HTTPS URL forwarded to the web app
+pnpm dev:agent    # 3. agent worker that reads and extracts Gmail
+```
+
+Set `NGROK_DOMAIN` in `apps/web/.env.local` first, then open the app on that public URL, not on `localhost`. Each worktree uses its own web port; the tunnel forwards to it automatically. Port `4040` is ngrok's request inspector, not the app.
+
+Monara uses two Composio projects:
+
+| Composio project | Use | Gmail callback |
+| --- | --- | --- |
+| `monara_finance_dev` | Local development | `https://<your NGROK_DOMAIN>/api/gmail/connections/callback` |
+| `monara_financ` | Production | `https://monara-finance.vercel.app/api/gmail/connections/callback` |
+
+Local `.env.local` and `.dev.vars` use the `monara_finance_dev` API key and Gmail auth config ID. Never use the production project's keys locally.
+
 ## Test on another phone or laptop
 
 Connect both devices to the same Wi-Fi. Find the computer's local IP, then open it on the other device:
