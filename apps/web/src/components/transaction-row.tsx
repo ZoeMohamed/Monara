@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@monara/ui";
+import { useAmountDisplay } from "@/components/app-session-context";
 
 import { BrandMark } from "@/components/brand-mark";
 import { Icon, type IconName } from "@/components/icon";
@@ -8,9 +9,13 @@ import styles from "@/components/transaction-row.module.css";
 import { useMerchantLogo } from "@/components/use-brand-logo";
 import { chosenCategoryIcon } from "@/data/category-icons";
 import { categoryColor } from "@/data/category-style";
-import { formatDay, formatRupiah, type Transaction } from "@/data/demo-ledger";
+import { formatDay, type Transaction } from "@/data/demo-ledger";
 
-function transactionRowModel(transaction: Transaction, showDate: boolean) {
+function transactionRowModel(
+  transaction: Transaction,
+  showDate: boolean,
+  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
+) {
   const date = showDate && transaction.date ? formatDay(transaction.date) : null;
   const metadata = [
     transaction.status === "pending" ? "Needs review" : null,
@@ -61,7 +66,8 @@ export function TransactionRow({
   onClick?: () => void;
   showDate?: boolean;
 }) {
-  const model = transactionRowModel(transaction, showDate);
+  const { formatRupiah } = useAmountDisplay();
+  const model = transactionRowModel(transaction, showDate, formatRupiah);
   const brand = useMerchantLogo(transaction.merchant);
   const content = (
     <>

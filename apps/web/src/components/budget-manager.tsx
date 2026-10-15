@@ -20,13 +20,14 @@ import {
   TextField,
 } from "@monara/ui";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 import { BudgetDetails, type BudgetDetailsRecord } from "@/components/budget-details";
 import styles from "@/components/budget-manager.module.css";
 import { CategoryCreator } from "@/components/category-creator";
 import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
-import { formatDay, formatRupiah } from "@/data/demo-ledger";
+import { formatDay } from "@/data/demo-ledger";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
 import {
   FinancePresentationError,
@@ -536,6 +537,7 @@ function BudgetDelete({
   onClose,
   ...props
 }: FinanceManagerProps & { budget: Budget; onClose: () => void }) {
+  const { formatRupiah } = useAmountDisplay();
   const original = useRef(budget);
   const inFlight = useRef(false);
   const [state, setState] = useState({ pending: false, error: null as string | null });
@@ -609,6 +611,7 @@ function BudgetDelete({
 }
 
 function BudgetProgress({ usage }: { usage: BudgetUsage }) {
+  const { formatRupiah } = useAmountDisplay();
   const used = BigInt(usage.used.amountMinor);
   const limit = BigInt(usage.budget.limit.amountMinor);
   const remaining = BigInt(usage.remaining.amountMinor);
@@ -782,6 +785,7 @@ function ManagedBudgetRow({
   onOpen: () => void;
   icon?: string;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   return (
     <li>
       <Button

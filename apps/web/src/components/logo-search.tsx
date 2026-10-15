@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, Input, Label, TextField } from "@monara/ui";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import {
   type BrandKind,
@@ -41,6 +41,13 @@ function useCatalogSearch(enabled: boolean) {
   const [result, setResult] = useState<CatalogResult | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const request = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+      request.current?.abort();
+    },
+    [],
+  );
   const search = (value: string) => {
     if (timer.current) clearTimeout(timer.current);
     request.current?.abort();
@@ -90,6 +97,7 @@ function searchStatus(
   found: number,
 ) {
   if (!typed || text.length === 0) return null;
+  if (text.length > 60) return "Use up to 60 characters to search logos.";
   if (catalog && !current && text.length >= 2) return "Searching logos…";
   if (current && "error" in current) return "Logo search is unavailable right now.";
   return found === 0 ? `No logo found for “${text}”.` : null;

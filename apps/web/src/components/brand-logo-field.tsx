@@ -81,6 +81,7 @@ export function BrandLogoField({
   const detected = scope === "merchant" ? merchantBrand(label) : institutionBrand(label);
   const logo = choice === "none" ? undefined : (brandLogoFromChoice(choice) ?? detected);
   const named = label.trim().length > 0;
+  const selectionDisabled = disabled || (!named && !onUseName);
   return (
     <div className="grid gap-2">
       <div className="flex min-h-11 items-center gap-3">
@@ -89,7 +90,7 @@ export function BrandLogoField({
         <Button
           aria-expanded={open}
           className="min-h-11 rounded-full px-3 text-xs"
-          isDisabled={disabled}
+          isDisabled={selectionDisabled}
           onPress={() => setOpen((value) => !value)}
           variant="ghost"
         >
@@ -99,7 +100,7 @@ export function BrandLogoField({
       {open ? (
         <div className="grid gap-2 rounded-2xl bg-surface-secondary p-3">
           <LogoSearch
-            disabled={disabled}
+            disabled={selectionDisabled}
             idleChoices={scope === "institution" ? brandsOfKind(kinds ?? ["bank", "wallet"]) : []}
             kinds={kinds}
             onPick={(picked, name) => {

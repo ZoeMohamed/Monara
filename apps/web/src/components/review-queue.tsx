@@ -1,11 +1,11 @@
 "use client";
 
 import { Button, Card, Chip } from "@monara/ui";
+import { useAmountDisplay } from "@/components/app-session-context";
 import { BrandMark } from "@/components/brand-mark";
 import { Icon } from "@/components/icon";
 import { useMerchantLogo } from "@/components/use-brand-logo";
 import { formatDay, reviewFlags, type Transaction, transactionErrors } from "@/data/demo-ledger";
-import { formatRupiah } from "@/data/sample-data";
 
 const kindLabels = { expense: "Expense", income: "Income", transfer: "Transfer" } as const;
 
@@ -20,6 +20,7 @@ function ReviewItem({
   onConfirm: (id: string) => void;
   onReject: (id: string) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const flags = reviewFlags(transaction);
   const canConfirm = Object.keys(transactionErrors(transaction)).length === 0;
   const logo = useMerchantLogo(transaction.merchant);

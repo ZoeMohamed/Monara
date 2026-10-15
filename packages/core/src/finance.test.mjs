@@ -750,6 +750,45 @@ describe("owned notification read and dismissal", () => {
 });
 
 describe("payday budget usage reads across month boundaries", () => {
+  it("uses the same future-month cycle and activation date as the dashboard", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-14T12:00:00Z"),
+    });
+    for (const [clientRequestId, startsOn] of [
+      ["synthetic-upcoming-cycle", "2026-09-25"],
+      ["synthetic-later-activation", "2026-11-25"],
+    ]) {
+      await service.createBudget(callerA, {
+        clientRequestId,
+        categoryId: category.id,
+        name: "Payday food",
+        cadence: "monthly",
+        startsOn,
+        limit: { amountMinor: "1000", currency: "IDR" },
+      });
+    }
+    for (const [occurredOn, amountMinor] of [
+      ["2026-10-26", "200"],
+      ["2026-11-05", "300"],
+      ["2026-11-26", "900"],
+    ]) {
+      memory.seedPending(ownerA, {
+        reviewStatus: "confirmed",
+        occurredOn,
+        money: { amountMinor, currency: "IDR" },
+      });
+    }
+
+    const usage = await service.listBudgetUsage(callerA, { month: "2026-11" });
+    const dashboard = await service.getDashboard(callerA, { month: "2026-11" });
+    assert.deepEqual(usage, dashboard.budgetUsage);
+    assert.equal(usage.length, 1);
+    assert.equal(usage[0].periodStartsOn, "2026-10-25");
+    assert.equal(usage[0].periodEndsOn, "2026-11-24");
+    assert.equal(usage[0].used.amountMinor, "500");
+  });
+
   it("loads the following month's confirmed payments inside the active cycle without changing monthly totals", async () => {
     const memory = createMemoryFinanceRepository();
     const service = createFinanceService(memory.repository, {

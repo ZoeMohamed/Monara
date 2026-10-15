@@ -3,6 +3,7 @@
 import type { Category } from "@monara/contracts";
 import { Button, Card, Chip, ProgressBar } from "@monara/ui";
 import { type ReactNode, useState } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 
 import { BillCalendar } from "@/components/bill-calendar";
 import { BrandMark } from "@/components/brand-mark";
@@ -26,7 +27,6 @@ import {
   demoToday,
   formatDay,
   formatMonth,
-  formatRupiah,
   type RecurringBill,
   safeToSpendToday,
   type Transaction,
@@ -119,6 +119,7 @@ function BudgetRow({
   today: string;
   editing: boolean;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const usage = budgetUsage(transactions, budget, month, today);
   const color = categoryColor(budget.category, index);
   if (usage.periodStartsOn === null)
@@ -206,6 +207,7 @@ function BudgetRow({
 }
 
 function BillRow({ bill, today }: { bill: RecurringBill; today: string }) {
+  const { formatRupiah } = useAmountDisplay();
   const daysUntil = daysBetween(today, bill.nextDue);
   const brand = useMerchantLogo(bill.merchant);
   return (
@@ -388,6 +390,7 @@ function BudgetSummaryProgress({
 }
 
 function DailyBudgetGuide({ safe }: { safe: ReturnType<typeof safeToSpendToday> }) {
+  const { formatRupiah } = useAmountDisplay();
   return (
     <div className="mt-5 border-t border-separator pt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -425,6 +428,7 @@ function BudgetSummaryCard({
   monthlyOnly: boolean;
   calendarPeriods: boolean;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const currentMonth = month === today.slice(0, 7);
   const safe = safeToSpendToday(transactions, budgets, today);
   const elapsedPercent = currentMonth && calendarPeriods ? summary.elapsedPercent : undefined;

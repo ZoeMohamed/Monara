@@ -9,6 +9,7 @@ import {
   useId,
   useState,
 } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 import donutStyles from "@/components/category-donut.module.css";
 import { CategoryAvatar } from "@/components/category-symbol";
 import chartStyles from "@/components/chart-navigation.module.css";
@@ -21,7 +22,6 @@ import {
   demoToday,
   formatDay,
   formatMonth,
-  formatRupiah,
   shiftMonth,
   type Transaction,
   transactionErrors,
@@ -31,7 +31,6 @@ import {
   categoryContainsTransaction,
   categoryKey,
   chartRatio,
-  compactAmount,
   financialMonth,
   financialYear,
 } from "@/data/finance-analytics";
@@ -80,6 +79,7 @@ function ChartTransactions({
   onOpenTransaction?: (transaction: Transaction) => void;
   showDate?: boolean;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   return (
     <ul className="mt-2 divide-y divide-border">
       {records.map((record) => (
@@ -169,6 +169,7 @@ function spendingChartModel(
   previous: FinanceMonth,
   mode: TrendMode,
   selectedDay: number,
+  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
 ) {
   const cumulative = mode === "cumulative";
   const periodLength = Math.max(current.days.length, previous.days.length);
@@ -259,6 +260,7 @@ function SpendingTrendPlot({
   onSelect: (day: number, keyboard: boolean) => void;
   keyboardSelection: boolean;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const titleId = useId();
   const gradientId = useId();
   function selectAt(event: PointerEvent<HTMLDivElement>) {
@@ -441,6 +443,7 @@ function defaultTrendDay(month: FinanceMonth, today: string) {
 }
 
 export function SpendingTrend({ transactions, month, today = demoToday }: FinanceProps) {
+  const { formatRupiah } = useAmountDisplay();
   const [mode, setMode] = useState<TrendMode>("cumulative");
   const [selection, setSelection] = useState<{
     month: string;
@@ -450,7 +453,7 @@ export function SpendingTrend({ transactions, month, today = demoToday }: Financ
   const current = financialMonth(transactions, month, today);
   const previous = financialMonth(transactions, shiftMonth(month, -1), today);
   const selectedDay = selection?.month === month ? selection.day : defaultTrendDay(current, today);
-  const model = spendingChartModel(current, previous, mode, selectedDay);
+  const model = spendingChartModel(current, previous, mode, selectedDay, formatRupiah);
   return (
     <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
       <ChartHeading
@@ -469,7 +472,11 @@ export function SpendingTrend({ transactions, month, today = demoToday }: Financ
 
 type CashFlowPeriod = ReturnType<typeof cashFlowMonths>[number];
 
-function cashFlowLabel(period: CashFlowPeriod, today: string) {
+function cashFlowLabel(
+  period: CashFlowPeriod,
+  today: string,
+  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
+) {
   const periodName = formatMonth(period.month);
   if (period.confirmedCount === 0) {
     return `${periodName}. ${period.month > today.slice(0, 7) ? "Upcoming, no transactions recorded" : "No confirmed transactions recorded"}.`;
@@ -478,6 +485,7 @@ function cashFlowLabel(period: CashFlowPeriod, today: string) {
 }
 
 function CashFlowDetails({ period, today }: { period: CashFlowPeriod; today: string }) {
+  const { compactAmount } = useAmountDisplay();
   return (
     <span className={chartStyles.tooltipCard}>
       <strong>{formatMonth(period.month)}</strong>
@@ -502,6 +510,7 @@ export function CashFlowChart({
   today = demoToday,
   year,
 }: PeriodFinanceProps) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const titleId = useId();
   const [selection, setSelection] = useState<{ month: string; keyboard: boolean } | null>(null);
   const periods =
@@ -544,7 +553,7 @@ export function CashFlowChart({
         aria-valuemax={periods.length}
         aria-valuemin={1}
         aria-valuenow={selectedIndex + 1}
-        aria-valuetext={cashFlowLabel(detail, today)}
+        aria-valuetext={cashFlowLabel(detail, today, formatRupiah)}
         className={`${chartStyles.cursorArea} relative mt-2`}
         data-keyboard={selection?.keyboard ?? false}
         onKeyDown={(event) => {
@@ -685,7 +694,10 @@ type SliceStyle = CSSProperties & {
   "--slice-delay": string;
 };
 
-function categoryLabel(segment: CategorySegment): string {
+function categoryLabel(
+  segment: CategorySegment,
+  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
+): string {
   return `${segment.name}, ${formatRupiah(segment.amount)}, ${(segment.proportion * 100).toFixed(1)}% of expenses. Show category details.`;
 }
 
@@ -702,6 +714,7 @@ function CategoryDonut({
   periodLabel: string;
   onSelect: (category: string, fromChart: boolean, keyboard: boolean) => void;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const titleId = useId();
   return (
     <fieldset className={donutStyles.chart}>
@@ -752,7 +765,7 @@ function CategoryDonut({
                 y="0"
               >
                 <button
-                  aria-label={categoryLabel(segment)}
+                  aria-label={categoryLabel(segment, formatRupiah)}
                   aria-pressed={highlighted === segment}
                   className={donutStyles.slice}
                   data-muted={Boolean(highlighted && highlighted !== segment)}
@@ -810,6 +823,7 @@ export function CategoryBreakdown({
   selectedCategory?: string | null;
   onOpenTransaction?: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const [localSelection, setLocalSelection] = useState<string | null>(null);
   const [keyboardSelection, setKeyboardSelection] = useState(false);
   const paymentsId = useId();
@@ -880,7 +894,7 @@ export function CategoryBreakdown({
               style={{ animationDelay: `${120 + index * 50}ms` }}
             >
               <button
-                aria-label={categoryLabel(segment)}
+                aria-label={categoryLabel(segment, formatRupiah)}
                 aria-pressed={selection === categoryKey(segment)}
                 className={donutStyles.rowButton}
                 onClick={(event) => selectCategory(categoryKey(segment), false, event.detail === 0)}
@@ -944,6 +958,7 @@ function CalendarPayments({
   today: string;
   onOpenTransaction?: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const headingId = useId();
   const count = day.transactions.length;
   return (
@@ -1002,6 +1017,7 @@ export function SpendingCalendar({
 }: FinanceProps & {
   onOpenTransaction?: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const [selection, setSelection] = useState<string | null>(null);
   const summary = financialMonth(transactions, month, today);
   const detail =

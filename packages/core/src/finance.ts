@@ -944,7 +944,9 @@ export function createFinanceService(
       const parsed = getDashboardInputSchema.parse(input);
       const budgets = await repository.listAllBudgets(verified.userId);
       const today = now().slice(0, 10);
-      const date = parsed.month === today.slice(0, 7) ? today : lastDayOfMonth(parsed.month);
+      const monthStart = `${parsed.month}-01`;
+      const monthEnd = lastDayOfMonth(parsed.month);
+      const date = today < monthStart ? monthStart : today > monthEnd ? monthEnd : today;
       const coverage = budgetReadRange(budgets, parsed.month, date);
       const transactions = await repository.listTransactionsForDateRange(
         verified.userId,

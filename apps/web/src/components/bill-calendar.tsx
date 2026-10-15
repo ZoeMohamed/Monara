@@ -2,6 +2,7 @@
 
 import { Button, Card } from "@monara/ui";
 import { useState } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 
 import { Icon } from "@/components/icon";
 import { SectionTitle } from "@/components/visual";
@@ -10,7 +11,6 @@ import {
   daysInMonth,
   demoToday,
   formatMonth,
-  formatRupiah,
   type RecurringBill,
   shiftMonth,
 } from "@/data/demo-ledger";
@@ -37,6 +37,7 @@ export function BillCalendar({
   month: string;
   today?: string;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const [calendar, setCalendar] = useState(() => ({ month, date: initialDate(month, bills) }));
   const monthBills = bills.filter((bill) => bill.nextDue.startsWith(`${calendar.month}-`));
   const selectedBills = monthBills.filter((bill) => bill.nextDue === calendar.date);

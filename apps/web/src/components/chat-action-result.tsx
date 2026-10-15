@@ -7,6 +7,7 @@ import type {
 } from "@monara/contracts";
 import { Button } from "@monara/ui";
 import { useEffect, useId, useState } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 
 export type ChatReply = AgentChatResponse & { refreshWarning?: string };
 
@@ -30,6 +31,7 @@ function ActionConfirmation({
   sending: boolean;
   onAnswer: (answer: "yes" | "no") => void;
 }) {
+  const { maskAmountText } = useAmountDisplay();
   const titleId = useId();
   const [expired, setExpired] = useState(() => Date.parse(confirmation.expiresAt) <= Date.now());
 
@@ -55,7 +57,7 @@ function ActionConfirmation({
       <h2 className="text-sm font-bold" id={titleId}>
         Confirm this change
       </h2>
-      <p className="mt-1 break-words text-sm leading-6">{confirmation.summary}</p>
+      <p className="mt-1 break-words text-sm leading-6">{maskAmountText(confirmation.summary)}</p>
       {active && !expired ? (
         <>
           <p className="mt-1 text-xs leading-5 text-muted">Only this action will be confirmed.</p>

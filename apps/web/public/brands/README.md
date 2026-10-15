@@ -112,6 +112,8 @@ Retrieved from each owner's own site (its published site icon or header logo) un
 | [xbox.ico](xbox.ico) | [www.xbox.com](https://www.xbox.com/id-ID/) | [Original download](https://www.xbox.com/favicon.ico) | Site icon or header logo published by the owner's site, unchanged. |
 | [xl.png](xl.png) | [www.xl.co.id](https://www.xl.co.id/) | [Original download](https://www.xl.co.id/icons/android-icon-192x192.png) | Site icon or header logo published by the owner's site, unchanged. |
 | [zalora.svg](zalora.svg) | [www.zalora.co.id](https://www.zalora.co.id/) | [Original download](https://static-id.zacdn.com/next-assets/static-assets/images/fav/favicon.svg) | Site icon or header logo published by the owner's site, unchanged. |
+| [canva.png](canva.png) | [www.canva.com](https://www.canva.com/) | [Original download](https://static.canva.com/static/images/apple-touch-180x180-1.png) | Site icon or header logo published by the owner's site, unchanged. |
+| [vidio.png](vidio.png) | [www.vidio.com](https://www.vidio.com/) | [Original download](https://www.vidio.com/apple-touch-icon.png) | Site icon or header logo published by the owner's site, unchanged. |
 
 ```text
 d224ec796eab7fed816027dc88cfcaa1ea367e0c3a6bccb38182b94b1931c3fb  ace-hardware.svg
@@ -174,6 +176,8 @@ a418fa09f591afaee288cf37e6c11a145ee54a87af13954147c8f89378c92298  watsons.png
 22823e24a35a71c3055b9a56d9d673388f69f1049b0015cfa0eecf3aee974cab  xbox.ico
 74ee257c921366ae462468da19ae9233d556d1f26ee47cd0bec6a1555fa17c8b  xl.png
 284ecd0d470af196197e68a474d38a4475c2a2b7a91519fbeda83c270f1e3f64  zalora.svg
+9424d7dafd5821f7dd2ea789179bcb65d8687457c350a6fbf2667601e6f8278f  canva.png
+41927f693bea04e721cf538b3cd9dbc75aafcca1fd224997893b00de7e45aeba  vidio.png
 ```
 
 Sushi Tei was left unresolved because its published image endpoint returned a server error during verification. Keep the generic fallback until an official asset can be fetched and checked.

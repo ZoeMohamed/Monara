@@ -4,6 +4,7 @@ import type { FinancialAccount, TransactionSource } from "@monara/contracts";
 import { Button, Chip } from "@monara/ui";
 import { type CSSProperties, type ReactNode, type RefObject, useRef, useState } from "react";
 import { AccountBadge } from "@/components/account-badge";
+import { useAmountDisplay } from "@/components/app-session-context";
 import { BrandMark } from "@/components/brand-mark";
 import { FinanceRecovery } from "@/components/budget-manager";
 import { CategoryAvatar } from "@/components/category-symbol";
@@ -12,12 +13,7 @@ import { ModalDialog } from "@/components/modal-dialog";
 import styles from "@/components/transaction-details.module.css";
 import { useMerchantLogo } from "@/components/use-brand-logo";
 import { categoryColor } from "@/data/category-style";
-import {
-  formatRupiah,
-  isCalendarDate,
-  type Transaction,
-  transactionErrors,
-} from "@/data/demo-ledger";
+import { isCalendarDate, type Transaction, transactionErrors } from "@/data/demo-ledger";
 import { FinanceClientError } from "@/lib/finance/client";
 
 const typeLabels = { expense: "Expense", income: "Income", transfer: "Transfer" } as const;
@@ -52,7 +48,10 @@ function sourceOf(transaction: Transaction) {
   return { ...sources[kind], kind };
 }
 
-function detailsOf(transaction: Transaction) {
+function detailsOf(
+  transaction: Transaction,
+  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
+) {
   const pending = transaction.status === "pending";
   const editable = pending || transaction.status === "confirmed";
   const valid = Object.keys(transactionErrors(transaction)).length === 0;
@@ -106,6 +105,7 @@ function DeleteConfirmation({
   refreshRequired?: boolean;
   onRefreshRecords?: () => Promise<void>;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const effect =
     transaction.kind === "expense"
       ? "This expense will leave your spending and budgets."
@@ -118,7 +118,7 @@ function DeleteConfirmation({
         Delete transaction?
       </h2>
       <p className="mt-4 break-words text-lg font-bold">
-        {transaction.merchant || "Transaction"} · {detailsOf(transaction).amount}
+        {transaction.merchant || "Transaction"} · {detailsOf(transaction, formatRupiah).amount}
       </p>
       <p className="mt-2 text-sm text-muted">
         {effect}{" "}
@@ -525,7 +525,8 @@ function TransactionActions({
 }
 
 export function TransactionDetails(props: TransactionDetailsProps) {
-  const details = detailsOf(props.transaction);
+  const { formatRupiah } = useAmountDisplay();
+  const details = detailsOf(props.transaction, formatRupiah);
   const deletion = useTransactionDeletion(props);
   return (
     <ModalDialog labelledBy="transaction-details-title" onClose={deletion.close}>

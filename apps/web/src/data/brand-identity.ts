@@ -315,6 +315,8 @@ export const brands = {
     aliases: ["anthropic", "claude pro"],
   },
   notion: { name: "Notion", kind: "merchant", simple: "notion" },
+  canva: { name: "Canva", kind: "merchant", asset: "canva.png", aliases: ["canva pro"] },
+  vidio: { name: "Vidio", kind: "merchant", asset: "vidio.png", aliases: ["vidio premier"] },
   figma: { name: "Figma", kind: "merchant", simple: "figma" },
   github: { name: "GitHub", kind: "merchant", simple: "github", aliases: ["github copilot"] },
   dropbox: { name: "Dropbox", kind: "merchant", simple: "dropbox" },

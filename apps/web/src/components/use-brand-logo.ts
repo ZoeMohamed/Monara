@@ -41,7 +41,7 @@ function readChoices(): Choices {
 function subscribe(listener: () => void) {
   listeners.add(listener);
   const external = (event: StorageEvent) => {
-    if (event.key !== storageKey) return;
+    if (event.key !== null && event.key !== storageKey) return;
     cache = null;
     listener();
   };

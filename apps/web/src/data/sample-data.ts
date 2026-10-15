@@ -1,7 +1,6 @@
 import type { Budget, RecurringBill, Transaction } from "./demo-ledger";
 
 export type { Transaction } from "./demo-ledger";
-export { formatRupiah } from "./demo-ledger";
 
 export const initialTransactions: Transaction[] = [
   {

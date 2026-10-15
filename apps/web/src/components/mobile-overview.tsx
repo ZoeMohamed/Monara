@@ -3,6 +3,7 @@
 import { Button, Input, Label, TextField } from "@monara/ui";
 import Image from "next/image";
 import { type CSSProperties, type ReactNode, useId, useState, useSyncExternalStore } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 import { CategoryAvatar } from "@/components/category-symbol";
 
 import { Icon, type IconName } from "@/components/icon";
@@ -13,7 +14,6 @@ import {
   daysInMonth,
   formatDay,
   formatMonth,
-  formatRupiah,
   shiftMonth,
   type Transaction,
 } from "@/data/demo-ledger";
@@ -22,7 +22,6 @@ import {
   categoryKey,
   categoryMatchesBudget,
   chartRatio,
-  compactAmount,
   financialMonth,
 } from "@/data/finance-analytics";
 import {
@@ -149,6 +148,7 @@ function ComparisonChip({
   comparison: OverviewModel["comparison"];
   onOpen: () => void;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   if (comparison.state !== "available") return null;
   const difference = comparison.current - comparison.previous;
   const size = difference < BigInt(0) ? -difference : difference;
@@ -187,6 +187,7 @@ function SceneHero({
   toggleAmounts: () => void;
   openChat: (prompt?: string) => void;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const time = useSyncExternalStore(
     subscribeToClock,
     () => sceneTime(new Date().getHours()),
@@ -281,6 +282,7 @@ function SceneChips({
   openBudgets: () => void;
   openReports: () => void;
 }) {
+  const { compactAmount } = useAmountDisplay();
   const quiet =
     model.pendingCount === 0 &&
     model.upcomingBillCount === 0 &&
@@ -332,6 +334,7 @@ function CategoryItem({
   onToggle: () => void;
   openTransaction: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const over = budgetLimit !== null && amount > budgetLimit;
   return (
     <li>
@@ -501,6 +504,7 @@ function SpendingBlock({
 }
 
 function TodayLine({ model }: { model: OverviewModel }) {
+  const { compactAmount } = useAmountDisplay();
   if (model.todayCount === 0) return <p>Nothing spent yet today.</p>;
   return (
     <p>
@@ -599,7 +603,8 @@ function Feature({
   );
 }
 
-function attentionLine(model: OverviewModel) {
+function AttentionLine({ model }: { model: OverviewModel }) {
+  const { compactAmount } = useAmountDisplay();
   const attention = model.attentionBudget;
   if (!attention) return "Every category is on track";
   const name = attention.budget.category;
@@ -639,6 +644,7 @@ function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
 
 // Explains the headline: the daily split this month, or the budget total for a past month.
 function SafeToSpendNote({ month, model }: { month: string; model: OverviewModel }) {
+  const { formatRupiah } = useAmountDisplay();
   const safe = model.safeToSpend;
   if (!safe) {
     return (
@@ -676,6 +682,7 @@ function SafeToSpendCard({
   model: OverviewModel;
   openBudgets: () => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   if (model.budgetTotal === BigInt(0)) return <SafeToSpendSetup openBudgets={openBudgets} />;
   const safe = model.safeToSpend;
   return (
@@ -708,7 +715,9 @@ function SafeToSpendCard({
             ? ` · ${model.elapsedPercent}% of month gone`
             : ""}
         </span>
-        <span data-state={model.attentionBudget?.state ?? "on-track"}>{attentionLine(model)}</span>
+        <span data-state={model.attentionBudget?.state ?? "on-track"}>
+          <AttentionLine model={model} />
+        </span>
       </span>
     </Button>
   );
@@ -719,7 +728,9 @@ type AttentionCopy = { tone: Tone; icon: IconName; title: string; detail: string
 
 function billCopy(
   item: Extract<AttentionItem, { kind: "bill-due" | "bill-overdue" }>,
+  display: ReturnType<typeof useAmountDisplay>,
 ): AttentionCopy {
+  const { formatRupiah } = display;
   const { bill, days } = item;
   const amount = formatRupiah(bill.expectedAmount);
   if (item.kind === "bill-overdue") {
@@ -741,7 +752,11 @@ function billCopy(
   };
 }
 
-function budgetCopy(item: Extract<AttentionItem, { kind: "budget" }>): AttentionCopy {
+function budgetCopy(
+  item: Extract<AttentionItem, { kind: "budget" }>,
+  display: ReturnType<typeof useAmountDisplay>,
+): AttentionCopy {
+  const { compactAmount } = display;
   const { budget, state, used, limit, remaining } = item.usage;
   if (state === "over") {
     return {
@@ -765,8 +780,11 @@ function budgetCopy(item: Extract<AttentionItem, { kind: "budget" }>): Attention
   };
 }
 
-function attentionCopy(item: AttentionItem): AttentionCopy {
-  if (item.kind === "budget") return budgetCopy(item);
+function attentionCopy(
+  item: AttentionItem,
+  display: ReturnType<typeof useAmountDisplay>,
+): AttentionCopy {
+  if (item.kind === "budget") return budgetCopy(item, display);
   if (item.kind === "review") {
     return {
       tone: "accent",
@@ -775,7 +793,7 @@ function attentionCopy(item: AttentionItem): AttentionCopy {
       detail: "They count once you confirm them",
     };
   }
-  return billCopy(item);
+  return billCopy(item, display);
 }
 
 function attentionKey(item: AttentionItem) {
@@ -794,6 +812,7 @@ function AttentionCard({
   openBudgets: () => void;
   openReview: () => void;
 }) {
+  const display = useAmountDisplay();
   return (
     <section aria-labelledby="attention-title" className={styles.attention}>
       <h2 className={styles.cardLabel} id="attention-title">
@@ -809,7 +828,7 @@ function AttentionCard({
       ) : (
         <ul className={styles.alerts}>
           {items.slice(0, 5).map((item) => {
-            const copy = attentionCopy(item);
+            const copy = attentionCopy(item, display);
             return (
               <li key={attentionKey(item)}>
                 <Button
@@ -872,6 +891,7 @@ function FactsCard({
   openReports: () => void;
   openTransaction: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   const { topCategory, dailyAverage, largest } = model.facts;
   if (!topCategory && !dailyAverage && !largest && model.savingsRate === null) {
     return null;
@@ -930,6 +950,7 @@ function FeatureGrid({
   openConnectGmail?: () => void;
   openAccounts?: () => void;
 }) {
+  const { compactAmount } = useAmountDisplay();
   const budgetCount = model.usage.length;
   return (
     <section aria-labelledby="features-title" className={styles.features}>

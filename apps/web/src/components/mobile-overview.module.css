@@ -1181,6 +1181,31 @@
 
 /* Motion ------------------------------------------------------------- */
 
+@media (prefers-reduced-motion: reduce) {
+  .track > span,
+  .activityItem,
+  .paceFill {
+    animation: none;
+  }
+
+  .prompts button,
+  .todayAction,
+  .chip,
+  .featureGrid > button,
+  .safe,
+  .alertArrow {
+    transition: none;
+  }
+
+  .prompts button:active,
+  .todayAction:active,
+  .category:hover .categoryIcon,
+  .alert:hover .alertArrow,
+  .fact:hover .alertArrow {
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .mascot {
     animation: peek 900ms cubic-bezier(0.16, 1, 0.3, 1) 250ms both;

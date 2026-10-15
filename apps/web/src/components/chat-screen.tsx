@@ -4,6 +4,7 @@ import type { ReversibleResourceType } from "@monara/contracts";
 import { Button, InputGroup, Label, Spinner, TextField } from "@monara/ui";
 import { type FormEvent, useEffect, useEffectEvent, useRef, useState } from "react";
 
+import { useAmountDisplay } from "@/components/app-session-context";
 import { ChatActionResult, type ChatReply } from "@/components/chat-action-result";
 import styles from "@/components/chat-screen.module.css";
 import { DemoIndicator } from "@/components/demo-indicator";
@@ -42,6 +43,7 @@ export function ChatScreen({
   onPromptUsed?: () => void;
   onOpenResource?: (type: ReversibleResourceType, id: string) => void;
 }) {
+  const { maskAmountText } = useAmountDisplay();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -139,6 +141,7 @@ export function ChatScreen({
               aria-label="New chat"
               className={styles.iconButton}
               isIconOnly
+              isDisabled={sending}
               onPress={onNewChat}
               variant="ghost"
             >
@@ -196,7 +199,9 @@ export function ChatScreen({
                       ? "Error: "
                       : "Monara: "}
                 </span>
-                <span className="break-words whitespace-pre-wrap">{message.text}</span>
+                <span className="break-words whitespace-pre-wrap">
+                  {maskAmountText(message.text)}
+                </span>
                 {message.result ? (
                   <ChatActionResult
                     activeConfirmationId={activeConfirmationId}

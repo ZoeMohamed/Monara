@@ -104,6 +104,36 @@ function page<T>(rows: T[], offset: number, limit: number) {
   };
 }
 
+/** Aggregate reads must page through PostgREST's configured 1,000-row response limit. */
+async function readAllPages<T extends { id: string }>(
+  readPage: (offset: number, limit: number) => Promise<T[]>,
+) {
+  const limit = 1_000;
+  const rows: T[] = [];
+  const ids = new Set<string>();
+  for (let offset = 0; ; offset += limit) {
+    const current = await readPage(offset, limit);
+    for (const row of current) {
+      if (ids.has(row.id)) {
+        throw new FinanceOperationError(
+          "CONFLICT",
+          "Your records changed while loading. Refresh and try again.",
+        );
+      }
+      ids.add(row.id);
+    }
+    rows.push(...current);
+    if (current.length < limit) return rows;
+  }
+}
+
+function monthRange(month: string) {
+  const startsOn = `${month}-01`;
+  const end = new Date(`${startsOn}T00:00:00.000Z`);
+  end.setUTCMonth(end.getUTCMonth() + 1, 0);
+  return { startsOn, endsOn: end.toISOString().slice(0, 10) };
+}
+
 const databaseNumeric = (amountMinor: string) => amountMinor as unknown as number;
 
 function toTransaction(row: ExactTransactionRow): Transaction {
@@ -267,6 +297,23 @@ export function createSupabaseFinanceRepository(
     return result.data ? toBudget(result.data as unknown as ExactBudgetRow) : null;
   };
 
+  const listTransactionsForDateRange = async (userId: string, startsOn: string, endsOn: string) =>
+    readAllPages(async (offset, limit) => {
+      const result = await client
+        .from("transactions")
+        .select(TRANSACTION_COLUMNS)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .gte("occurred_on", startsOn)
+        .lte("occurred_on", endsOn)
+        .order("occurred_on", { ascending: false })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (result.error) fail(result.error);
+      return (result.data as unknown as ExactTransactionRow[]).map(toTransaction);
+    });
+
   return {
     async listTransactions(userId, input) {
       const offset = offsetFor(input.cursor);
@@ -283,10 +330,8 @@ export function createSupabaseFinanceRepository(
       if (input.reviewStatus) query = query.eq("review_status", input.reviewStatus);
       if (input.kind) query = query.eq("transaction_type", input.kind);
       if (input.month) {
-        const start = `${input.month}-01`;
-        const next = new Date(`${start}T00:00:00.000Z`);
-        next.setUTCMonth(next.getUTCMonth() + 1);
-        query = query.gte("occurred_on", start).lt("occurred_on", next.toISOString().slice(0, 10));
+        const { startsOn, endsOn } = monthRange(input.month);
+        query = query.gte("occurred_on", startsOn).lte("occurred_on", endsOn);
       }
       const result = await query;
       if (result.error) fail(result.error);
@@ -298,37 +343,11 @@ export function createSupabaseFinanceRepository(
     },
 
     async listTransactionsForMonth(userId, month) {
-      const start = `${month}-01`;
-      const next = new Date(`${start}T00:00:00.000Z`);
-      next.setUTCMonth(next.getUTCMonth() + 1);
-      const result = await client
-        .from("transactions")
-        .select(TRANSACTION_COLUMNS)
-        .eq("user_id", userId)
-        .is("deleted_at", null)
-        .gte("occurred_on", start)
-        .lt("occurred_on", next.toISOString().slice(0, 10))
-        .order("occurred_on", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(10_000);
-      if (result.error) fail(result.error);
-      return (result.data as unknown as ExactTransactionRow[]).map(toTransaction);
+      const { startsOn, endsOn } = monthRange(month);
+      return listTransactionsForDateRange(userId, startsOn, endsOn);
     },
 
-    async listTransactionsForDateRange(userId, startsOn, endsOn) {
-      const result = await client
-        .from("transactions")
-        .select(TRANSACTION_COLUMNS)
-        .eq("user_id", userId)
-        .is("deleted_at", null)
-        .gte("occurred_on", startsOn)
-        .lte("occurred_on", endsOn)
-        .order("occurred_on", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(10_000);
-      if (result.error) fail(result.error);
-      return (result.data as unknown as ExactTransactionRow[]).map(toTransaction);
-    },
+    listTransactionsForDateRange,
 
     async findTransaction(userId, transactionId) {
       return findTransaction(userId, transactionId);
@@ -514,14 +533,17 @@ export function createSupabaseFinanceRepository(
     },
 
     async listAllCategories(userId) {
-      const result = await client
-        .from("categories")
-        .select(CATEGORY_COLUMNS)
-        .eq("user_id", userId)
-        .order("created_at", { ascending: true })
-        .limit(100);
-      if (result.error) fail(result.error);
-      return result.data.map(toCategory);
+      return readAllPages(async (offset, limit) => {
+        const result = await client
+          .from("categories")
+          .select(CATEGORY_COLUMNS)
+          .eq("user_id", userId)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(offset, offset + limit - 1);
+        if (result.error) fail(result.error);
+        return result.data.map(toCategory);
+      });
     },
 
     async createCategory(userId, input) {
@@ -607,15 +629,18 @@ export function createSupabaseFinanceRepository(
     },
 
     async listAllBudgets(userId) {
-      const result = await client
-        .from("budgets")
-        .select(BUDGET_COLUMNS)
-        .eq("user_id", userId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true })
-        .limit(100);
-      if (result.error) fail(result.error);
-      return (result.data as unknown as ExactBudgetRow[]).map(toBudget);
+      return readAllPages(async (offset, limit) => {
+        const result = await client
+          .from("budgets")
+          .select(BUDGET_COLUMNS)
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(offset, offset + limit - 1);
+        if (result.error) fail(result.error);
+        return (result.data as unknown as ExactBudgetRow[]).map(toBudget);
+      });
     },
 
     async findBudget(userId, budgetId) {

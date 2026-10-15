@@ -19,7 +19,7 @@ type BadgeAccount = Pick<FinancialAccount, "name" | "institution" | "accountType
 
 function useAccountVisual(name: string | null, account?: BadgeAccount) {
   const label = (account?.institution ?? name)?.trim();
-  const candidate = useInstitutionLogo(account?.institution ?? name);
+  const candidate = useInstitutionLogo(account ? account.institution : name);
   // A registered bank never decorates a wallet (or the reverse); picked catalog logos follow the user.
   const registered =
     candidate && !candidate.startsWith("si:")

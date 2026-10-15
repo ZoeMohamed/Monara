@@ -1,10 +1,11 @@
 "use client";
 
 import { Button, Chip } from "@monara/ui";
+import { useAmountDisplay } from "@/components/app-session-context";
 import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
-import { formatDay, formatRupiah } from "@/data/demo-ledger";
+import { formatDay } from "@/data/demo-ledger";
 
 export type BudgetDetailsRecord = {
   name: string;
@@ -24,6 +25,7 @@ export type BudgetDetailsRecord = {
 };
 
 function BudgetUsageDetails({ usage }: { usage: NonNullable<BudgetDetailsRecord["usage"]> }) {
+  const { formatRupiah } = useAmountDisplay();
   return (
     <div className="grid grid-cols-2 gap-4 rounded-2xl bg-surface-secondary p-4">
       <div className="min-w-0">
@@ -55,6 +57,7 @@ export function BudgetDetails({
   onEdit: () => void;
   onDelete?: () => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const period = record.usage;
   return (
     <ModalDialog labelledBy="budget-details-title" onClose={onClose}>

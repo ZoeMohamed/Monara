@@ -2,11 +2,12 @@
 
 import { Card } from "@monara/ui";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 
 import { TransactionRow } from "@/components/transaction-row";
 import { SectionTitle } from "@/components/visual";
 import { categoryColor } from "@/data/category-style";
-import { formatRupiah, type Transaction } from "@/data/demo-ledger";
+import type { Transaction } from "@/data/demo-ledger";
 import { categoryKey, chartRatio } from "@/data/finance-analytics";
 import { spendingFlow } from "@/data/spending-flow";
 
@@ -157,6 +158,7 @@ function FlowRibbons({
 }
 
 function NodeLabel({ name, amount, caption }: { name: string; amount: bigint; caption?: string }) {
+  const { formatRupiah } = useAmountDisplay();
   return (
     <>
       <span className="min-w-0 flex-1">
@@ -179,6 +181,7 @@ export function SpendingFlow({
   month: string;
   onOpenTransaction?: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const [categorySelection, setCategorySelection] = useState<string | null>(null);
   const [merchantName, setMerchantName] = useState<string | null>(null);
   const [layout, setLayout] = useState<FlowLayout | null>(null);

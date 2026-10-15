@@ -132,3 +132,36 @@
     transform: translateY(8px) scale(0.97);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Keep an animation end event so dismissal still completes without movement. */
+  .toast {
+    animation: toast-fade-in 0.01ms both;
+  }
+
+  .toast[data-leaving="true"] {
+    animation: toast-fade-out 0.01ms both;
+  }
+
+  .undo,
+  .close {
+    transition: none;
+  }
+
+  .undo:active,
+  .close:active {
+    transform: none;
+  }
+}
+
+@keyframes toast-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes toast-fade-out {
+  to {
+    opacity: 0;
+  }
+}

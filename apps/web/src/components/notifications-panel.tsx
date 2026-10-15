@@ -2,7 +2,7 @@
 
 import { Button, Chip } from "@monara/ui";
 import { useEffect, useRef, useState } from "react";
-import { useAppSession } from "@/components/app-session-context";
+import { useAmountDisplay, useAppSession } from "@/components/app-session-context";
 import { Icon } from "@/components/icon";
 import { RecurringBillSuggestion } from "@/components/recurring-bill-suggestion";
 import styles from "@/components/reminders-center.module.css";
@@ -156,6 +156,7 @@ function NotificationRow({
   pending: boolean;
   onChange: (status: "read" | "dismissed") => void;
 }) {
+  const { maskAmountText } = useAmountDisplay();
   const session = useAppSession();
   const unread = reminder.status === undefined || reminder.status === "unread";
   return (
@@ -177,7 +178,7 @@ function NotificationRow({
         {reminder.scheduledFor && (
           <p className={styles.meta}>{formatDay(reminder.scheduledFor.slice(0, 10))}</p>
         )}
-        <p className={styles.message}>{reminder.message}</p>
+        <p className={styles.message}>{maskAmountText(reminder.message)}</p>
         <StoredNotificationReceipt reminder={reminder} />
         <div className={styles.actions}>
           <Button
@@ -393,6 +394,7 @@ function SuggestedBills() {
 }
 
 function AttentionNotificationRow({ attention }: { attention: FinancialAttention }) {
+  const { maskAmountText } = useAmountDisplay();
   const session = useAppSession();
   const unread = attention.status === "unread";
   const open = () => {
@@ -420,7 +422,7 @@ function AttentionNotificationRow({ attention }: { attention: FinancialAttention
       </span>
       <div className={styles.content}>
         <h4 className={styles.title}>{attention.title}</h4>
-        <p className={styles.message}>{attention.message}</p>
+        <p className={styles.message}>{maskAmountText(attention.message)}</p>
         {attention.status === "read" && (
           <p className={styles.receipt}>
             <Icon className="h-3.5 w-3.5" name="check" />

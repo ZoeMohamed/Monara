@@ -2,12 +2,12 @@
 
 import { Button, Chip } from "@monara/ui";
 import { useState } from "react";
-import { useAppSession } from "@/components/app-session-context";
+import { useAmountDisplay, useAppSession } from "@/components/app-session-context";
 import { Icon } from "@/components/icon";
 import { PersonalReminderEditor } from "@/components/personal-reminder-editor";
 import styles from "@/components/reminders-center.module.css";
 import { categoryIcon } from "@/data/category-style";
-import { daysBetween, formatDay, formatRupiah } from "@/data/demo-ledger";
+import { daysBetween, formatDay } from "@/data/demo-ledger";
 import type { PersonalReminder } from "@/data/personal-reminders";
 
 function dueReminderLabel(days: number): string {
@@ -44,6 +44,7 @@ function PersonalReminderRow({
   onEdit: () => void;
   onSetDone: (done: boolean) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const done = reminder.completedAt !== null;
   const glyph = categoryIcon(reminder.tag ?? reminder.title);
   return (

@@ -2,6 +2,7 @@
 
 import { Button, Card, InputGroup, Label, TextField } from "@monara/ui";
 import { useState } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 
 import { FinancialSummary } from "@/components/financial-summary";
 import { Icon } from "@/components/icon";
@@ -10,13 +11,7 @@ import { ReviewQueue } from "@/components/review-queue";
 import { TransactionRow } from "@/components/transaction-row";
 import styles from "@/components/transactions-screen.module.css";
 import type { LedgerKind } from "@/data/app-navigation";
-import {
-  demoSummary,
-  demoToday,
-  formatMonth,
-  formatRupiah,
-  type Transaction,
-} from "@/data/demo-ledger";
+import { demoSummary, demoToday, formatMonth, type Transaction } from "@/data/demo-ledger";
 
 import { financialSummaryModel } from "@/data/finance-analytics";
 
@@ -193,6 +188,7 @@ function GroupedLedger({
   transactions: Transaction[];
   openTransaction: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   return (
     <div className="mt-3 space-y-4">
       {groupByDate(transactions).map(([date, group]) => (

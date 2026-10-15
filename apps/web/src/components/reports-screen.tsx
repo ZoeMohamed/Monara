@@ -2,6 +2,7 @@
 
 import { Button, Card } from "@monara/ui";
 import { useId, useState } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 import { BrandMark } from "@/components/brand-mark";
 import { EmptyLedgerState } from "@/components/empty-ledger-state";
 import { FinancialSummary } from "@/components/financial-summary";
@@ -21,7 +22,7 @@ import { useMerchantLogo } from "@/components/use-brand-logo";
 import { SectionTitle } from "@/components/visual";
 import type { ReportPeriod } from "@/data/app-navigation";
 import { categoryIcon } from "@/data/category-style";
-import { demoSummary, demoToday, formatRupiah, type Transaction } from "@/data/demo-ledger";
+import { demoSummary, demoToday, type Transaction } from "@/data/demo-ledger";
 import { financialSummaryModel, financialYear } from "@/data/finance-analytics";
 import { biggestExpenses, spendingPlaces } from "@/data/spending-flow";
 
@@ -48,6 +49,7 @@ function TopPlaces({
   period: string;
   openTransaction?: (transaction: Transaction) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const paymentsId = useId();
   const places = spendingPlaces(transactions, period).slice(0, 6);

@@ -1,11 +1,12 @@
 "use client";
 
 import { Button, Card } from "@monara/ui";
+import { useAmountDisplay } from "@/components/app-session-context";
 import { BrandMark } from "@/components/brand-mark";
 import { Icon } from "@/components/icon";
 import { useMerchantLogo } from "@/components/use-brand-logo";
 import { categoryIcon } from "@/data/category-style";
-import { formatRupiah, type RecurringBill } from "@/data/demo-ledger";
+import type { RecurringBill } from "@/data/demo-ledger";
 
 export function RecurringBillSuggestion({
   bill,
@@ -16,6 +17,7 @@ export function RecurringBillSuggestion({
   onConfirm: (id: string) => void;
   onDismiss: (id: string) => void;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   const glyph = categoryIcon(bill.merchant);
   const brand = useMerchantLogo(bill.merchant);
   return (

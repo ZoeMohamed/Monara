@@ -2,10 +2,11 @@
 
 import { Card } from "@monara/ui";
 import { useId } from "react";
+import { useAmountDisplay } from "@/components/app-session-context";
 
 import styles from "@/components/financial-summary.module.css";
 import { Icon, type IconName } from "@/components/icon";
-import { formatRupiah } from "@/data/demo-ledger";
+
 import { chartRatio, type FinancialSummaryModel } from "@/data/finance-analytics";
 
 function SummaryMetric({
@@ -21,6 +22,7 @@ function SummaryMetric({
   kind: "spending" | "income" | "net";
   scale: bigint;
 }) {
+  const { formatRupiah } = useAmountDisplay();
   return (
     <div className={styles.metric} data-kind={kind}>
       <dt>
@@ -38,6 +40,7 @@ function SummaryMetric({
 }
 
 function SummaryComparison({ comparison }: { comparison: FinancialSummaryModel["comparison"] }) {
+  const { formatRupiah } = useAmountDisplay();
   if (comparison.state !== "available") return null;
   const change = comparison.change;
   const absoluteChange = change < BigInt(0) ? -change : change;

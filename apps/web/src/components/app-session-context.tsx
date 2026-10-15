@@ -5,6 +5,7 @@ import { createContext, useContext } from "react";
 import type { DemoBudgetChanges } from "@/components/demo-budget-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
 import type { MutationOptions } from "@/components/use-finance-sync";
+import { amountDisplay } from "@/data/amount-display";
 import type { Budget, RecurringBill, Reminder, Transaction } from "@/data/demo-ledger";
 import type { FinancialAttention } from "@/data/financial-attention";
 import type { PersonalReminder, PersonalReminderDraft } from "@/data/personal-reminders";
@@ -73,6 +74,12 @@ export type AppSession = {
 };
 
 export const AppSessionContext = createContext<AppSession | null>(null);
+
+/** Standalone previews show amounts; app screens share the existing privacy preference. */
+export function useAmountDisplay() {
+  const session = useContext(AppSessionContext);
+  return amountDisplay(session?.amountsHidden ?? false);
+}
 
 export function useAppSession(): AppSession {
   const session = useContext(AppSessionContext);
