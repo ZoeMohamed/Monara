@@ -94,6 +94,18 @@
     text-align: center;
   }
 
+  @media (hover: hover) {
+    .dateBadge:hover {
+      background: var(--surface-secondary);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+    }
+  }
+
+  .dateBadge span,
+  .dateBadge strong {
+    width: 100%;
+  }
+
   .dateBadge span {
     padding: 4px 0 3px;
     background: var(--accent);

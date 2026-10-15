@@ -8,6 +8,7 @@ import {
   type Category,
   type CategoryPage,
   type CreateBudgetInput,
+  type CreateCategoryInput,
   type CreateFinancialAccountInput,
   type CreateTransactionInput,
   categoryMutationResultSchema,
@@ -15,6 +16,8 @@ import {
   confirmedTransactionValuesSchema,
   confirmTransactionInputSchema,
   createBudgetInputSchema,
+  createCategoryInputSchema,
+  createCategoryResultSchema,
   createFinancialAccountInputSchema,
   createTransactionInputSchema,
   type DashboardSummary,
@@ -146,6 +149,7 @@ export interface FinanceRepository {
 
   listCategories(userId: string, input: ListCategoriesInput): Promise<CategoryPage>;
   listAllCategories(userId: string): Promise<Category[]>;
+  createCategory(userId: string, input: CreateCategoryInput): Promise<Category>;
   updateCategory(userId: string, input: UpdateCategoryInput): Promise<Category>;
 
   listBudgets(userId: string, input: ListBudgetsInput): Promise<BudgetPage>;
@@ -842,6 +846,16 @@ export function createFinanceService(
     async listCategories(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
       return repository.listCategories(verified.userId, listCategoriesInputSchema.parse(input));
+    },
+
+    async createCategory(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const category = await repository.createCategory(
+        verified.userId,
+        createCategoryInputSchema.parse(input),
+      );
+      // Creation has no durable undo operation; do not issue a reversible receipt.
+      return createCategoryResultSchema.parse({ category });
     },
 
     async updateCategory(operationCaller: FinanceCaller, input: unknown) {

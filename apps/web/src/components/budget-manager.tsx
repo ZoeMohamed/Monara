@@ -22,6 +22,8 @@ import {
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { BudgetDetails, type BudgetDetailsRecord } from "@/components/budget-details";
 import styles from "@/components/budget-manager.module.css";
+import { CategoryCreator } from "@/components/category-creator";
+import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import { formatDay, formatRupiah } from "@/data/demo-ledger";
@@ -126,6 +128,7 @@ function BudgetFields({
   editing,
   latestIncomeDate,
   onChange,
+  finance,
 }: {
   draft: Draft;
   categories: FinanceSnapshot["categories"];
@@ -134,7 +137,9 @@ function BudgetFields({
   editing: boolean;
   latestIncomeDate?: string;
   onChange: (patch: Partial<Draft>) => void;
+  finance: FinanceManagerProps;
 }) {
+  const [creatingCategory, setCreatingCategory] = useState(false);
   const fields = [
     { name: "name", label: "Budget name", type: "text", maxLength: 100 },
     { name: "amount", label: "Limit in rupiah", type: "text", maxLength: 20, inputMode: "numeric" },
@@ -154,7 +159,10 @@ function BudgetFields({
         isDisabled={disabled}
         isInvalid={Boolean(errors.categoryId)}
         name="categoryId"
-        onChange={(key) => onChange({ categoryId: key === null ? "" : String(key) })}
+        onChange={(key) => {
+          if (key === "__create_category__") setCreatingCategory(true);
+          else onChange({ categoryId: key === null ? "" : String(key) });
+        }}
         placeholder="Choose a category"
         value={draft.categoryId || null}
       >
@@ -165,21 +173,34 @@ function BudgetFields({
         </Select.Trigger>
         <Select.Popover>
           <ListBox>
-            {categories.map((category) => (
-              <ListBox.Item
-                id={category.id}
-                isDisabled={category.isArchived}
-                key={category.id}
-                textValue={category.name}
-              >
-                {category.name}
-                <ListBox.ItemIndicator />
-              </ListBox.Item>
-            ))}
+            {categories
+              .filter((category) => !category.isArchived || category.id === draft.categoryId)
+              .map((category) => (
+                <ListBox.Item
+                  id={category.id}
+                  isDisabled={category.isArchived}
+                  key={category.id}
+                  textValue={category.name}
+                >
+                  {category.name}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            <ListBox.Item id="__create_category__" textValue="Create new category">
+              <Icon className="h-4 w-4" name="plus" />
+              Create new category…
+            </ListBox.Item>
           </ListBox>
         </Select.Popover>
         <FieldError>{errors.categoryId}</FieldError>
       </Select>
+      {creatingCategory && (
+        <CategoryCreator
+          {...finance}
+          onClose={() => setCreatingCategory(false)}
+          onCreated={(category) => onChange({ categoryId: category.id })}
+        />
+      )}
       <fieldset className={styles.field} disabled={disabled}>
         <legend className={styles.label}>Period</legend>
         <div className="mt-1 flex gap-2">
@@ -412,6 +433,7 @@ function BudgetEditorFields({
   return (
     <>
       <BudgetFields
+        finance={props}
         categories={props.snapshot.categories}
         disabled={locked}
         draft={draft}
@@ -710,10 +732,12 @@ function ownedBudgetDetails(
   category: string,
   usage: BudgetUsage | undefined,
   today: string,
+  icon?: string,
 ): BudgetDetailsRecord {
   const base = {
     name: budget.name,
     category,
+    icon,
     cadence: budget.cadence,
     limit: BigInt(budget.limit.amountMinor),
     warningPercent: budget.warningPercent,
@@ -749,23 +773,33 @@ function ManagedBudgetRow({
   progress,
   today,
   onOpen,
+  icon,
 }: {
   budget: Budget;
   category: string;
   progress?: BudgetUsage;
   today: string;
   onOpen: () => void;
+  icon?: string;
 }) {
   return (
     <li>
       <Button
         aria-label={`View ${budget.name} budget details`}
-        className={`${styles.item} block h-auto w-full text-left transition-colors hover:bg-surface-tertiary`}
+        className={styles.managedRow}
         onPress={onOpen}
         variant="ghost"
       >
         <div className={styles.row}>
-          <h3 className={styles.name}>{budget.name}</h3>
+          <h3 className={`${styles.name} flex items-center gap-3`}>
+            <CategoryAvatar
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-soft-foreground"
+              icon={icon}
+              iconClassName="h-5 w-5"
+              name={category}
+            />
+            {budget.name}
+          </h3>
           <strong className={styles.amount}>
             {formatRupiah(BigInt(budget.limit.amountMinor))}
           </strong>
@@ -833,20 +867,13 @@ export function BudgetManager(props: BudgetManagerProps) {
   const close = () => setPanel(null);
   return (
     <section aria-labelledby="manage-budgets-title" className={styles.manager}>
-      <div className={styles.header}>
-        <h2 className="text-base font-bold" id="manage-budgets-title">
-          Manage budgets
-        </h2>
-        <Button
-          className="min-h-11 rounded-full"
-          isDisabled={!props.snapshot.categories.some((category) => !category.isArchived)}
-          onPress={() => setPanel({ kind: "create" })}
-          variant="secondary"
-        >
-          <Icon name="plus" />
-          New budget
-        </Button>
-      </div>
+      {listedBudgets.length > 0 ? (
+        <div className={styles.header}>
+          <h2 className="text-base font-bold" id="manage-budgets-title">
+            Manage budgets
+          </h2>
+        </div>
+      ) : null}
       {usage.loading && (
         <p className={styles.meta} role="status">
           Loading budget progress…
@@ -877,6 +904,7 @@ export function BudgetManager(props: BudgetManagerProps) {
                 <ManagedBudgetRow
                   budget={budget}
                   category={category?.name ?? "Category unavailable"}
+                  icon={category?.icon}
                   key={budget.id}
                   progress={progress}
                   today={props.snapshot.today}
@@ -889,7 +917,13 @@ export function BudgetManager(props: BudgetManagerProps) {
       )}
       {detail && (
         <BudgetDetails
-          record={ownedBudgetDetails(detail, detailCategory, detailProgress, props.snapshot.today)}
+          record={ownedBudgetDetails(
+            detail,
+            detailCategory,
+            detailProgress,
+            props.snapshot.today,
+            props.snapshot.categories.find((category) => category.id === detail.categoryId)?.icon,
+          )}
           onClose={() => setDetailId(null)}
           onEdit={() => {
             setDetailId(null);

@@ -3,7 +3,7 @@
 import { Button, Card } from "@monara/ui";
 import { BrandMark } from "@/components/brand-mark";
 import { Icon } from "@/components/icon";
-import { merchantBrand } from "@/data/brand-identity";
+import { useMerchantLogo } from "@/components/use-brand-logo";
 import { categoryIcon } from "@/data/category-style";
 import { formatRupiah, type RecurringBill } from "@/data/demo-ledger";
 
@@ -17,7 +17,7 @@ export function RecurringBillSuggestion({
   onDismiss: (id: string) => void;
 }) {
   const glyph = categoryIcon(bill.merchant);
-  const brand = merchantBrand(bill.merchant);
+  const brand = useMerchantLogo(bill.merchant);
   return (
     <Card className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-4 rounded-[1.25rem] border border-accent/20 bg-accent-soft/30 p-5">
       {brand ? (

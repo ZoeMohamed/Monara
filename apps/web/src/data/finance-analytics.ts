@@ -23,6 +23,7 @@ type DailyFinance = {
 
 type CategoryFinance = {
   name: string;
+  icon?: string;
   categoryId?: string;
   amount: bigint;
   count: number;
@@ -77,6 +78,7 @@ export function financialMonth(transactions: Transaction[], month: string, today
       const key = transaction.categoryId ? `id:${transaction.categoryId}` : `name:${name}`;
       const category = groupedCategories.get(key) ?? {
         name,
+        ...(transaction.categoryIcon ? { icon: transaction.categoryIcon } : {}),
         ...(transaction.categoryId ? { categoryId: transaction.categoryId } : {}),
         amount: BigInt(0),
         count: 0,

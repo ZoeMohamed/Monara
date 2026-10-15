@@ -524,6 +524,49 @@ export function createSupabaseFinanceRepository(
       return result.data.map(toCategory);
     },
 
+    async createCategory(userId, input) {
+      const id = input.clientRequestId.toLowerCase();
+      const slug = `custom-${id}`;
+      const inserted = await client
+        .from("categories")
+        .insert({
+          id,
+          user_id: userId,
+          name: input.name,
+          slug,
+          icon: input.icon,
+          color: input.color,
+          is_default: false,
+          is_archived: false,
+        })
+        .select(CATEGORY_COLUMNS)
+        .single();
+      if (!inserted.error) return toCategory(inserted.data);
+      if (inserted.error.code !== "23505") fail(inserted.error);
+
+      // The lookup stays owner-scoped even when a caller reuses another user's ID.
+      const existing = await client
+        .from("categories")
+        .select(CATEGORY_COLUMNS)
+        .eq("id", id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (existing.error) fail(existing.error);
+      if (!existing.data) fail(inserted.error);
+      const category = toCategory(existing.data);
+      if (
+        category.name !== input.name ||
+        category.icon !== input.icon ||
+        category.color !== input.color ||
+        category.slug !== slug ||
+        category.isDefault ||
+        category.isArchived
+      ) {
+        throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
+      }
+      return category;
+    },
+
     async updateCategory(userId, input) {
       const result = await client
         .from("categories")

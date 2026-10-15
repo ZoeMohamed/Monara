@@ -417,7 +417,7 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
         <TransactionDetails
           key={selected.id}
           transaction={selected}
-          financialAccounts={session.financeSnapshot?.financialAccounts}
+          financialAccounts={session.financialAccounts}
           onClose={navigation.closePopup}
           onEdit={() => navigation.openEdit(selected.id)}
           onConfirm={() => confirm(selected.id)}

@@ -5,8 +5,9 @@ import { Button } from "@monara/ui";
 import { BrandMark } from "@/components/brand-mark";
 import { Icon, type IconName } from "@/components/icon";
 import styles from "@/components/transaction-row.module.css";
-import { merchantBrand } from "@/data/brand-identity";
-import { categoryColor, categoryIcon } from "@/data/category-style";
+import { useMerchantLogo } from "@/components/use-brand-logo";
+import { chosenCategoryIcon } from "@/data/category-icons";
+import { categoryColor } from "@/data/category-style";
 import { formatDay, formatRupiah, type Transaction } from "@/data/demo-ledger";
 
 function transactionRowModel(transaction: Transaction, showDate: boolean) {
@@ -31,7 +32,7 @@ function transactionRowModel(transaction: Transaction, showDate: boolean) {
       ? "income"
       : transaction.kind === "transfer"
         ? "transfer"
-        : categoryIcon(category);
+        : chosenCategoryIcon(category, transaction.categoryIcon);
 
   return {
     merchant: transaction.merchant ?? "Merchant or source missing",
@@ -61,7 +62,7 @@ export function TransactionRow({
   showDate?: boolean;
 }) {
   const model = transactionRowModel(transaction, showDate);
-  const brand = merchantBrand(transaction.merchant);
+  const brand = useMerchantLogo(transaction.merchant);
   const content = (
     <>
       {brand ? (

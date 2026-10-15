@@ -6,11 +6,14 @@ import { useRef, useState } from "react";
 import { useAppSession } from "@/components/app-session-context";
 import { BudgetManager, type BudgetManagerPanel } from "@/components/budget-manager";
 import { BudgetsScreen } from "@/components/budgets-screen";
-import { CategoryManager } from "@/components/category-manager";
+import { CategoryManager, DemoCategoryManager } from "@/components/category-manager";
 import type { ChatReply } from "@/components/chat-action-result";
 import { ChatScreen } from "@/components/chat-screen";
 import { DashboardScreen } from "@/components/dashboard-screen";
-import { FinancialAccountSetup } from "@/components/financial-account-setup";
+import {
+  DemoFinancialAccountSetup,
+  FinancialAccountSetup,
+} from "@/components/financial-account-setup";
 import { ProfileScreen } from "@/components/profile-screen";
 import { ReportsScreen } from "@/components/reports-screen";
 import { TransactionsScreen } from "@/components/transactions-screen";
@@ -49,6 +52,7 @@ export function OverviewRoute() {
       openChat={session.openChat}
       openAdd={navigation.openAdd}
       openConnectGmail={navigation.openGmail}
+      openAccounts={() => navigation.navigate({ screen: "account" })}
     />
   );
 }
@@ -110,6 +114,11 @@ export function BudgetsRoute() {
     <BudgetsScreen
       demo={session.dataMode === "demo"}
       onEditBudget={session.dataMode === "demo" ? session.updateDemoBudget : undefined}
+      demoCategories={session.dataMode === "demo" ? session.categories : undefined}
+      onCreateBudget={session.dataMode === "demo" ? session.createDemoBudget : undefined}
+      onRequestCreateBudget={
+        session.financeSnapshot ? () => setBudgetPanel({ kind: "create" }) : undefined
+      }
       onRequestEditBudget={
         session.financeSnapshot ? (id) => setBudgetPanel({ kind: "edit", id }) : undefined
       }
@@ -229,7 +238,14 @@ export function ProfileRoute() {
             refreshRequired={session.refreshRequired}
             onRefreshRecords={session.refreshFinance}
           />
-        ) : undefined
+        ) : (
+          <DemoCategoryManager
+            categories={session.categories}
+            onEdit={session.updateDemoCategory}
+            onDelete={session.archiveDemoCategory}
+            onCreate={session.createDemoCategory}
+          />
+        )
       }
       financialAccounts={
         session.financeSnapshot ? (
@@ -240,7 +256,12 @@ export function ProfileRoute() {
             refreshRequired={session.refreshRequired}
             onRefreshRecords={session.refreshFinance}
           />
-        ) : undefined
+        ) : (
+          <DemoFinancialAccountSetup
+            accounts={session.financialAccounts}
+            onCreate={session.createDemoAccount}
+          />
+        )
       }
       demo={session.dataMode === "demo"}
       online={session.online}

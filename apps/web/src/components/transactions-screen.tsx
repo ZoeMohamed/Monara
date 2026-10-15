@@ -72,6 +72,8 @@ function TransactionViewSelector({
   pendingCount: number;
   onChange: (review: boolean) => void;
 }) {
+  const tab = (active: boolean) =>
+    `min-h-11 w-full min-w-0 rounded-xl px-3 text-sm font-semibold ${active ? "bg-surface text-foreground shadow-sm" : "text-muted"}`;
   return (
     <fieldset
       aria-label="Transaction view"
@@ -79,19 +81,28 @@ function TransactionViewSelector({
     >
       <Button
         aria-pressed={!reviewOpen}
-        className={`min-h-11 min-w-0 rounded-xl px-2 text-xs sm:text-sm ${reviewOpen ? "text-muted" : "bg-surface text-foreground"}`}
+        className={tab(!reviewOpen)}
         onPress={() => onChange(false)}
         variant="ghost"
       >
         Confirmed
       </Button>
       <Button
+        aria-label={`To review, ${pendingCount} waiting`}
         aria-pressed={reviewOpen}
-        className={`min-h-11 min-w-0 rounded-xl px-2 text-xs sm:text-sm ${reviewOpen ? "bg-surface text-foreground" : "text-muted"}`}
+        className={tab(reviewOpen)}
         onPress={() => onChange(true)}
         variant="ghost"
       >
-        Review Queue · {pendingCount}
+        To review
+        {pendingCount > 0 ? (
+          <span
+            aria-hidden
+            className="grid h-5 min-w-5 place-items-center rounded-full bg-warning px-1.5 text-[11px] font-bold text-warning-foreground tabular-nums"
+          >
+            {pendingCount}
+          </span>
+        ) : null}
       </Button>
     </fieldset>
   );

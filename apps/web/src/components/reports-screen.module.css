@@ -6,24 +6,105 @@
   gap: 12px;
 }
 
+.reportBody {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
 .periodTabs {
   display: flex;
   min-width: 0;
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 50px;
+  border-radius: 16px;
   background: var(--surface);
 }
 
+.rankingCard {
+  display: block;
+  min-width: 0;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.rankingHeading {
+  padding: 20px 20px 12px;
+}
+
+.rankingList {
+  margin: 0;
+  padding: 0 8px 8px;
+  list-style: none;
+}
+
+.rankingList > li + li {
+  border-top: 1px solid var(--separator);
+}
+
+.rankingList > li > button,
+.rankingList > li > div,
 .placeRow {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 68px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px 12px;
+  border-radius: 16px;
+  text-align: left;
+  white-space: normal;
   --button-bg-hover: var(--surface-secondary);
+  --button-bg-pressed: var(--surface-tertiary);
+}
+
+.placeRow {
+  font-size: 14px;
+}
+
+.placeRow[aria-expanded="true"] {
+  background: var(--accent-soft);
+}
+
+.rankingList > li:has(> [aria-expanded="true"]),
+.rankingList > li:has(> [aria-expanded="true"]) + li {
+  border-top-color: transparent;
+}
+
+.placeRow:active,
+.placeRow[data-pressed="true"] {
+  transform: none;
+}
+
+.rankingList > li > button:focus-visible,
+.rankingList > li > button[data-focus-visible="true"] {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.selectedPlace {
+  border-top: 1px solid var(--separator);
+  background: var(--surface-secondary);
 }
 
 @media (hover: hover) {
   .placeRow:hover,
   .placeRow[data-hovered="true"] {
     background: var(--surface-secondary);
+  }
+
+  /* The hovered row reads as one rounded shape, so the rules touching it step aside. */
+  .rankingList > li:hover,
+  .rankingList > li:hover + li {
+    border-top-color: transparent;
   }
 }
 
@@ -54,8 +135,6 @@
 
   .controls > fieldset:not(:where(.periodTabs)) {
     margin-left: auto;
-    border-color: transparent;
-    background: transparent;
   }
 
   .controls > fieldset:not(:where(.periodTabs)) > span {
@@ -80,10 +159,6 @@
     margin-block: 0;
   }
 
-  .calendar {
-    order: -1;
-  }
-
   .chart > :first-child {
     padding: 0;
     border: 0;
@@ -99,38 +174,6 @@
     letter-spacing: -0.025em;
   }
 
-  .calendar :has(> h2) {
-    display: block;
-  }
-
-  .calendar h2 + span {
-    display: block;
-    margin-top: 3px;
-    font-size: 14px;
-    font-weight: 400;
-  }
-
-  .calendar fieldset {
-    column-gap: 5px;
-    row-gap: 8px;
-  }
-
-  .calendar fieldset > span {
-    font-size: 11px;
-    font-weight: 400;
-  }
-
-  .calendar fieldset > button {
-    min-height: 44px;
-    aspect-ratio: 1;
-    align-items: flex-start;
-    justify-content: flex-start;
-    padding: 7px;
-    border-radius: 11px;
-    font-size: 12px;
-    font-weight: 500;
-  }
-
   /* On a phone the category list already answers what the flow diagram shows. */
   .flow {
     display: none;
@@ -139,12 +182,5 @@
   .places {
     gap: 36px;
     margin-top: 36px;
-  }
-}
-
-@media (width < 360px) {
-  .calendar fieldset {
-    margin-inline: -20px;
-    column-gap: 2px;
   }
 }

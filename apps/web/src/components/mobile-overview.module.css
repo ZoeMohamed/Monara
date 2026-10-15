@@ -320,9 +320,6 @@
 }
 
 .prompts button:active,
-.category:active,
-.safe:active,
-.featureGrid > button:active,
 .todayAction:active {
   transform: scale(0.98);
 }
@@ -383,17 +380,22 @@
 }
 
 .categoryList {
-  margin-top: 8px;
+  /* Rows bleed past the column so their hover shape spans the whole block. */
+  margin: 8px -12px 0;
 }
 
 .category {
   display: flex;
   width: 100%;
+  min-width: 0;
+  min-height: 80px;
   align-items: center;
   gap: 14px;
-  padding: 10px 0;
+  padding: 14px 12px;
+  border-radius: 20px;
   text-align: left;
-  transition: transform 160ms ease-out;
+  --button-bg-hover: var(--surface-secondary);
+  --button-bg-pressed: var(--surface-tertiary);
 }
 
 .categoryIcon {
@@ -402,7 +404,7 @@
   height: 44px;
   flex-shrink: 0;
   place-items: center;
-  border-radius: 50%;
+  border-radius: 14px;
   background: color-mix(in srgb, var(--category-color) 12%, var(--surface));
   color: var(--category-color);
 }
@@ -477,7 +479,7 @@
 }
 
 .payments {
-  margin: 0 0 8px 58px;
+  margin: 0 12px 8px 70px;
   padding: 4px 12px;
   border-radius: 18px;
   background: var(--surface-secondary);
@@ -625,16 +627,19 @@
 .featureGrid > button {
   position: relative;
   display: flex;
+  width: 100%;
   min-width: 0;
-  min-height: 132px;
+  min-height: 156px;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  padding: 16px;
-  border-radius: 24px;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 20px;
+  border-radius: 20px;
   background: var(--surface-secondary);
   text-align: left;
-  transition: transform 160ms ease-out;
+  --button-bg-hover: var(--surface-tertiary);
+  --button-bg-pressed: var(--surface-tertiary);
 }
 
 .featureName {
@@ -649,17 +654,18 @@
 
 .featureIcon {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   place-items: center;
-  border-radius: 50%;
+  border-radius: 12px;
   background: var(--surface);
   color: var(--accent);
 }
 
 .featureIcon svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 
 .featureIcon[data-tone="green"] {
@@ -690,25 +696,29 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 /* Needs attention / in numbers ------------------------------------- */
 
 .attention {
   margin-top: 24px;
-  padding: 18px 18px 10px;
+  overflow: hidden;
+  padding: 0;
   border-radius: 24px;
   background: var(--surface-secondary);
 }
 
 .cardLabel {
+  margin: 18px 18px 0;
   color: var(--muted);
   font-size: 14px;
   font-weight: 650;
 }
 
 .alerts {
-  margin-top: 6px;
+  margin: 8px 0 0;
+  padding: 0 8px 8px;
 }
 
 .alerts li + li {
@@ -719,27 +729,45 @@
 .fact {
   display: flex;
   width: 100%;
-  min-height: 56px;
+  min-height: 76px;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
+  padding: 16px 10px;
+  border-radius: 18px;
   text-align: left;
-  transition: transform 160ms ease-out;
+  --button-bg-hover: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  --button-bg-pressed: var(--surface-tertiary);
 }
 
+.category:active,
+.category[data-pressed="true"],
 .alert:active,
-.fact:active {
-  transform: scale(0.985);
+.alert[data-pressed="true"],
+.fact:active,
+.fact[data-pressed="true"],
+.featureGrid > button:active,
+.featureGrid > button[data-pressed="true"],
+.safe:active,
+.safe[data-pressed="true"] {
+  transform: none;
+}
+
+/* A hovered row reads as one rounded shape, so the rules touching it step aside. */
+@media (hover: hover) and (pointer: fine) {
+  .alerts li:hover,
+  .alerts li:hover + li {
+    border-top-color: transparent;
+  }
 }
 
 .alertIcon,
 .factIcon {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   place-items: center;
-  border-radius: 50%;
+  border-radius: 12px;
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -823,7 +851,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
+  padding: 18px;
   color: var(--muted);
   font-size: 14px;
 }
@@ -954,7 +982,7 @@
 /* An odd card out spans the row instead of leaving a hole. */
 .featureGrid > button:last-child:nth-child(odd) {
   grid-column: 1 / -1;
-  min-height: 0;
+  min-height: 120px;
 }
 
 /* Desktop ------------------------------------------------------------
@@ -1053,6 +1081,40 @@
     border: 1px solid var(--border);
     border-radius: 28px;
     background: var(--surface);
+  }
+
+  .block {
+    overflow: hidden;
+  }
+
+  .block .categoryList {
+    margin-inline: -16px;
+    margin-bottom: -16px;
+  }
+
+  .block .category {
+    padding-inline: 16px;
+  }
+
+  .block .payments {
+    margin-inline: 16px;
+  }
+
+  .attention {
+    padding: 0;
+  }
+
+  .attention .cardLabel {
+    margin: 28px 28px 0;
+  }
+
+  .attention .alerts {
+    padding-inline: 12px;
+  }
+
+  .attention .alert,
+  .attention .fact {
+    padding-inline: 16px;
   }
 
   .lead,

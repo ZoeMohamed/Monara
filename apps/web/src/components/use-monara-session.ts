@@ -1,5 +1,6 @@
 "use client";
 
+import { calendarDateSchema, createFinancialAccountInputSchema } from "@monara/contracts";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppSession } from "@/components/app-session-context";
 import { useTransactionActions } from "@/components/transaction-actions";
@@ -10,6 +11,7 @@ import { replayTour, useTourPending } from "@/components/use-product-tour";
 import type { AppView } from "@/data/app-navigation";
 import type { Budget, Reminder } from "@/data/demo-ledger";
 import { demoReminders, demoToday, type RecurringBill } from "@/data/demo-ledger";
+import { demoEditorCategories, initialDemoAccounts } from "@/data/demo-resources";
 import {
   demoAttentionBudgets,
   financialAttention,
@@ -150,6 +152,8 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const { view } = navigation;
   const [demoTransactions, setTransactions] = useState(initialTransactions);
   const [demoBudgets, setBudgets] = useState(initialBudgets);
+  const [demoAccounts, setDemoAccounts] = useState(initialDemoAccounts);
+  const [demoCategories, setDemoCategories] = useState(() => demoEditorCategories(initialBudgets));
   const [personalReminders, setPersonalReminders] = useState<PersonalReminder[]>([]);
   const [notificationStatuses, setNotificationStatuses] = useState<
     Record<string, "read" | "dismissed">
@@ -178,8 +182,13 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     transactions,
     selectedBudgets,
     reminders: activeReminders,
-    resources,
+    resources: ownedResources,
   } = sessionRecords(financeSnapshot, demoTransactions, bills, demoBudgets);
+  const resources = ownedResources ?? {
+    financialAccounts: demoAccounts,
+    categories: demoCategories,
+    demo: true,
+  };
   const reminders = live
     ? activeReminders
     : activeReminders.map((reminder) => ({
@@ -280,6 +289,156 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     navigation,
     transactions,
     budgets: selectedBudgets,
+    financialAccounts: resources.financialAccounts,
+    categories: resources.categories,
+    createDemoCategory: (input) => {
+      if (live) return;
+      const name = input.name.trim();
+      if (
+        !name ||
+        name.length > 100 ||
+        demoCategories.some((category) => category.name.toLowerCase() === name.toLowerCase())
+      )
+        throw new Error("Choose a new category name, up to 100 characters.");
+      const id = crypto.randomUUID();
+      const timestamp = new Date().toISOString();
+      setDemoCategories((categories) => [
+        ...categories,
+        {
+          id,
+          name,
+          slug: `custom-${id}`,
+          icon: input.icon,
+          color: "#2865e5",
+          isDefault: false,
+          isArchived: false,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      ]);
+      setNotice({ message: "Category added for this demo visit." });
+    },
+    updateDemoCategory: (original, changes) => {
+      if (live) return;
+      const name = changes.name.trim();
+      if (
+        !name ||
+        name.length > 100 ||
+        demoCategories.some(
+          (category) =>
+            category.name !== original && category.name.toLowerCase() === name.toLowerCase(),
+        )
+      )
+        throw new Error("Choose a different category name, up to 100 characters.");
+      setDemoCategories((categories) =>
+        categories.map((category) =>
+          category.name === original ? { ...category, name, icon: changes.icon } : category,
+        ),
+      );
+      setBudgets((budgets) =>
+        budgets.map((budget) =>
+          budget.category === original ? { ...budget, category: name, icon: changes.icon } : budget,
+        ),
+      );
+      setTransactions((transactions) =>
+        transactions.map((transaction) =>
+          transaction.category === original
+            ? { ...transaction, category: name, categoryIcon: changes.icon }
+            : transaction,
+        ),
+      );
+      setNotice({ message: "Category updated for this demo visit." });
+    },
+    archiveDemoCategory: (name) => {
+      if (live) return;
+      setDemoCategories((categories) =>
+        categories.map((category) =>
+          category.name === name ? { ...category, isArchived: true } : category,
+        ),
+      );
+      setNotice({ message: "Category removed from new payments and budgets for this demo visit." });
+    },
+    createDemoAccount: (input) => {
+      if (live) return;
+      const parsed = createFinancialAccountInputSchema.safeParse({
+        ...input,
+        clientRequestId: crypto.randomUUID(),
+      });
+      if (!parsed.success) throw new Error("Check the account details.");
+      if (
+        demoAccounts.some(
+          (account) => account.name.toLowerCase() === parsed.data.name.toLowerCase(),
+        )
+      )
+        throw new Error("Choose a different account name.");
+      const { clientRequestId, ...values } = parsed.data;
+      const timestamp = new Date().toISOString();
+      setDemoAccounts((accounts) => [
+        ...accounts,
+        {
+          ...values,
+          id: clientRequestId,
+          isActive: true,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+      ]);
+      setNotice({ message: "Account added for this demo visit." });
+    },
+    createDemoBudget: (input) => {
+      if (live) return;
+      const category = input.category.trim();
+      if (
+        !category ||
+        category.length > 100 ||
+        !Number.isSafeInteger(input.limit) ||
+        input.limit <= 0 ||
+        !Number.isInteger(input.warningPercent) ||
+        input.warningPercent < 1 ||
+        input.warningPercent > 100 ||
+        !calendarDateSchema.safeParse(input.startsOn).success
+      )
+        throw new Error("Check the budget details.");
+      if (demoBudgets.some((budget) => budget.category.toLowerCase() === category.toLowerCase()))
+        throw new Error("This category already has a budget. Open it to edit its limit.");
+      const savedCategory = demoCategories.find(
+        (item) => item.name.toLowerCase() === category.toLowerCase(),
+      );
+      if (savedCategory?.isArchived)
+        throw new Error("This category was removed. Choose another category.");
+      if (!savedCategory) {
+        const id = crypto.randomUUID();
+        const timestamp = new Date().toISOString();
+        setDemoCategories((categories) => [
+          ...categories,
+          {
+            id,
+            name: category,
+            slug: `custom-${id}`,
+            icon: input.icon ?? "auto",
+            color: "#2865e5",
+            isDefault: false,
+            isArchived: false,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          },
+        ]);
+      }
+      setBudgets((budgets) => [
+        ...budgets,
+        {
+          id: crypto.randomUUID(),
+          category,
+          icon: input.icon ?? undefined,
+          emoji: "•",
+          cadence: "monthly",
+          limit: input.limit,
+          startsOn: input.startsOn,
+          warningPercent: input.warningPercent,
+        },
+      ]);
+      setNotice({ message: "Budget added for this demo visit." });
+    },
     today,
     currentMonth,
     dataMode: tourMode,
@@ -302,6 +461,23 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       setBudgets((items) =>
         items.map((budget) => (budget.id === budgetId ? { ...budget, ...changes } : budget)),
       );
+      const selected = demoBudgets.find((budget) => budget.id === budgetId);
+      if (selected && changes.icon)
+        setDemoCategories((categories) =>
+          categories.map((category) =>
+            category.name === selected.category
+              ? { ...category, icon: changes.icon ?? category.icon }
+              : category,
+          ),
+        );
+      if (selected && changes.icon)
+        setTransactions((transactions) =>
+          transactions.map((transaction) =>
+            transaction.category === selected.category
+              ? { ...transaction, categoryIcon: changes.icon ?? transaction.categoryIcon }
+              : transaction,
+          ),
+        );
       setNotice({ message: "Budget updated for this demo visit." });
     },
     saveDemoReminder: (draft, id) => {

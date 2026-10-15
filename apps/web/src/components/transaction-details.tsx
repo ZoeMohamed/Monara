@@ -6,11 +6,12 @@ import { type CSSProperties, type ReactNode, type RefObject, useRef, useState } 
 import { AccountBadge } from "@/components/account-badge";
 import { BrandMark } from "@/components/brand-mark";
 import { FinanceRecovery } from "@/components/budget-manager";
+import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon, type IconName } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import styles from "@/components/transaction-details.module.css";
-import { merchantBrand } from "@/data/brand-identity";
-import { categoryColor, categoryIcon } from "@/data/category-style";
+import { useMerchantLogo } from "@/components/use-brand-logo";
+import { categoryColor } from "@/data/category-style";
 import {
   formatRupiah,
   isCalendarDate,
@@ -248,20 +249,19 @@ function Stop({
   );
 }
 
-function CategoryMark({ name }: { name: string }) {
+function CategoryMark({ name, icon }: { name: string; icon?: string }) {
   return (
-    <span
-      aria-hidden
+    <CategoryAvatar
       className={styles.mark}
+      icon={icon}
+      name={name}
       style={{ "--mark-color": categoryColor(name) } as CSSProperties}
-    >
-      <Icon name={categoryIcon(name)} />
-    </span>
+    />
   );
 }
 
 function MerchantMark({ income, name }: { income: boolean; name: string }) {
-  const brand = merchantBrand(name);
+  const brand = useMerchantLogo(name);
   if (brand) return <BrandMark brand={brand} />;
   return (
     <span aria-hidden className={styles.mark} data-kind="merchant">
@@ -298,13 +298,17 @@ function AccountStop({
 }
 
 function transferAccounts({ transaction, financialAccounts }: MoneyFlowProps) {
-  if (transaction.backend) {
+  if (transaction.backend || transaction.fromFinancialAccountId) {
     // Owned transfers resolve UUIDs; display names may themselves contain arrows.
     const from = financialAccounts?.find(
-      (account) => account.id === transaction.backend?.fromFinancialAccountId,
+      (account) =>
+        account.id ===
+        (transaction.backend?.fromFinancialAccountId ?? transaction.fromFinancialAccountId),
     );
     const to = financialAccounts?.find(
-      (account) => account.id === transaction.backend?.toFinancialAccountId,
+      (account) =>
+        account.id ===
+        (transaction.backend?.toFinancialAccountId ?? transaction.toFinancialAccountId),
     );
     return { from, to, fromName: from?.name, toName: to?.name };
   }
@@ -341,9 +345,12 @@ function PaymentMoneyFlow({ transaction, financialAccounts }: MoneyFlowProps) {
   const merchant = transaction.merchant || "Not provided";
   const category = transaction.category || "Not assigned";
   const savedAccount = financialAccounts?.find(
-    (item) => item.id === transaction.backend?.financialAccountId,
+    (item) =>
+      item.id === (transaction.backend?.financialAccountId ?? transaction.financialAccountId),
   );
-  const accountName = transaction.backend ? savedAccount?.name : transaction.method;
+  const accountName = transaction.backend
+    ? savedAccount?.name
+    : (savedAccount?.name ?? transaction.method);
   const account = <AccountStop account={savedAccount} label={labels.account} name={accountName} />;
   const place = (
     <Stop label={labels.place} visual={<MerchantMark income={income} name={merchant} />}>
@@ -353,7 +360,10 @@ function PaymentMoneyFlow({ transaction, financialAccounts }: MoneyFlowProps) {
   return (
     <ol aria-label="Money flow" className={styles.flow}>
       {income ? place : account}
-      <Stop label="Category" visual={<CategoryMark name={category} />}>
+      <Stop
+        label="Category"
+        visual={<CategoryMark name={category} icon={transaction.categoryIcon} />}
+      >
         {category}
       </Stop>
       {income ? account : place}

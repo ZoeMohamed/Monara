@@ -13,6 +13,7 @@ export type Transaction = {
   id: string;
   merchant: string | null;
   category: string | null;
+  categoryIcon?: string;
   amount: number | null;
   currency: "IDR" | null;
   date: string | null;
@@ -33,6 +34,7 @@ export type TransactionValues = Pick<
   Transaction,
   | "merchant"
   | "category"
+  | "categoryIcon"
   | "amount"
   | "currency"
   | "date"
@@ -141,6 +143,16 @@ export function updateConfirmedTransaction(
     time,
     method,
     kind,
+    ...(values.categoryIcon === undefined ? {} : { categoryIcon: values.categoryIcon }),
+    ...(values.financialAccountId === undefined
+      ? {}
+      : { financialAccountId: values.financialAccountId }),
+    ...(values.fromFinancialAccountId === undefined
+      ? {}
+      : { fromFinancialAccountId: values.fromFinancialAccountId }),
+    ...(values.toFinancialAccountId === undefined
+      ? {}
+      : { toFinancialAccountId: values.toFinancialAccountId }),
   };
   return transactions.map((transaction) => (transaction === existing ? corrected : transaction));
 }
@@ -274,6 +286,7 @@ export type Budget = {
   cadence: "monthly";
   limit: number;
   warningPercent: number;
+  icon?: string;
   categoryId?: string;
   startsOn?: string;
   usage?: BackendBudgetUsage;

@@ -20,6 +20,7 @@ const FINANCE_OPERATIONS = [
   "create_financial_account",
   "update_financial_account",
   "list_categories",
+  "create_category",
   "update_category",
   "list_budgets",
   "create_budget",
@@ -35,6 +36,7 @@ const FINANCE_OPERATIONS = [
 export type FinanceOperation = (typeof FINANCE_OPERATIONS)[number];
 type AgentFinanceOperation = Exclude<
   FinanceOperation,
+  | "create_category"
   | "delete_transaction"
   | "delete_budget"
   | "list_reminders"
@@ -62,6 +64,7 @@ export function isFinanceOperation(value: string): value is FinanceOperation {
 
 function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinanceOperation {
   return (
+    value !== "create_category" &&
     value !== "delete_transaction" &&
     value !== "delete_budget" &&
     value !== "list_reminders" &&
@@ -106,6 +109,8 @@ export async function runFinanceOperation(
       return service.updateFinancialAccount(caller, input);
     case "list_categories":
       return service.listCategories(caller, input);
+    case "create_category":
+      return service.createCategory(caller, input);
     case "update_category":
       return service.updateCategory(caller, input);
     case "list_budgets":

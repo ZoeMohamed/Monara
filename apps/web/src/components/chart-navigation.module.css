@@ -116,8 +116,164 @@
   color: #8fe0b4;
 }
 
+.calendarCard {
+  container: financial-calendar / inline-size;
+}
+
+.calendarHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+
+.calendarHeading h2 {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.calendarAverage {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendarBody {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.calendarGrid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.calendarWeekday {
+  padding-bottom: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.calendarLegend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.calendarPayments {
+  min-width: 0;
+  padding: 12px 12px 4px;
+  border-radius: 16px;
+  background: var(--surface-secondary);
+}
+
+.calendarPaymentHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 12px;
+}
+
+.calendarPaymentHeading h3 {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendarPaymentHeading > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.calendarTotals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A day cell leads with what was spent; the date number stays secondary. */
 .calendarDay {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  min-height: 40px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  overflow: hidden;
+  padding: 0 2px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  line-height: 1.1;
+  --button-bg: var(--day-background);
+  --button-bg-hover: color-mix(in srgb, var(--day-background) 88%, var(--foreground));
+  --button-bg-pressed: color-mix(in srgb, var(--day-background) 80%, var(--foreground));
   animation: pop 240ms var(--ease-out) both;
+}
+
+.calendarDay[data-spent="true"] {
+  font-weight: 700;
+}
+
+.dayAmount {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: clip;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendarDay:active,
+.calendarDay[data-pressed="true"] {
+  transform: none;
+}
+
+.calendarDay[data-future="true"] {
+  border-color: var(--border);
+  border-style: dashed;
+}
+
+.calendarDay[aria-pressed="true"] {
+  border-color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--foreground);
+}
+
+.calendarDay:focus-visible,
+.calendarDay[data-focus-visible="true"] {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+
+@container financial-calendar (max-width: 300px) {
+  .dayAmount {
+    display: none;
+  }
 }
 
 @keyframes reveal {

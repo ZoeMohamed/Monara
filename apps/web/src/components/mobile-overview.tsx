@@ -3,11 +3,12 @@
 import { Button, Input, Label, TextField } from "@monara/ui";
 import Image from "next/image";
 import { type CSSProperties, type ReactNode, useId, useState, useSyncExternalStore } from "react";
+import { CategoryAvatar } from "@/components/category-symbol";
 
 import { Icon, type IconName } from "@/components/icon";
 import { MonaraMascot } from "@/components/monara-mascot";
 import { TransactionRow } from "@/components/transaction-row";
-import { categoryColor, categoryIcon } from "@/data/category-style";
+import { categoryColor } from "@/data/category-style";
 import {
   daysInMonth,
   formatDay,
@@ -308,6 +309,7 @@ function SceneChips({
 
 function CategoryItem({
   name,
+  icon,
   amount,
   index,
   budgetLimit,
@@ -319,6 +321,7 @@ function CategoryItem({
   openTransaction,
 }: {
   name: string;
+  icon?: string;
   amount: bigint;
   index: number;
   budgetLimit: bigint | null;
@@ -342,9 +345,7 @@ function CategoryItem({
         style={{ "--category-color": categoryColor(name, index) } as CSSProperties}
         type="button"
       >
-        <span aria-hidden className={styles.categoryIcon}>
-          <Icon name={categoryIcon(name)} />
-        </span>
+        <CategoryAvatar className={styles.categoryIcon} icon={icon} name={name} size={44} />
         <span className={styles.categoryBody}>
           <span className={styles.categoryLabel}>
             <strong>{name}</strong>
@@ -481,6 +482,7 @@ function SpendingBlock({
                 index={index}
                 key={key}
                 name={category.name}
+                icon={category.icon ?? budget?.budget.icon}
                 onToggle={() => setSelection(selected === key ? null : { month, category: key })}
                 open={selected === key}
                 openTransaction={openTransaction}
@@ -920,11 +922,13 @@ function FeatureGrid({
   openBudgets,
   openReports,
   openConnectGmail,
+  openAccounts,
 }: {
   model: OverviewModel;
   openBudgets: () => void;
   openReports: () => void;
   openConnectGmail?: () => void;
+  openAccounts?: () => void;
 }) {
   const budgetCount = model.usage.length;
   return (
@@ -954,6 +958,16 @@ function FeatureGrid({
               : `${budgetCount} ${budgetCount === 1 ? "budget" : "budgets"}`
           }
         />
+        {openAccounts ? (
+          <Feature
+            hint="Accounts for payments and transfers"
+            icon="wallet"
+            name="Banks & wallets"
+            onOpen={openAccounts}
+            tone="violet"
+            value="Your accounts"
+          />
+        ) : null}
         {openConnectGmail ? (
           <Feature
             hint="Up to 3 mailboxes"
@@ -986,6 +1000,7 @@ export function MobileOverview({
   openChat,
   openAdd,
   openConnectGmail,
+  openAccounts,
 }: {
   month: string;
   setMonth: (month: string) => void;
@@ -1002,6 +1017,7 @@ export function MobileOverview({
   openChat: (prompt?: string) => void;
   openAdd?: () => void;
   openConnectGmail?: () => void;
+  openAccounts?: () => void;
   setup?: ReactNode;
 }) {
   return (
@@ -1065,6 +1081,7 @@ export function MobileOverview({
               model={model}
               openBudgets={openBudgets}
               openConnectGmail={openConnectGmail}
+              openAccounts={openAccounts}
               openReports={openReports}
             />
           </div>

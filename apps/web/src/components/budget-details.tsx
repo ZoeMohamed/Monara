@@ -1,14 +1,15 @@
 "use client";
 
 import { Button, Chip } from "@monara/ui";
+import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
-import { categoryIcon } from "@/data/category-style";
 import { formatDay, formatRupiah } from "@/data/demo-ledger";
 
 export type BudgetDetailsRecord = {
   name: string;
   category: string;
+  icon?: string;
   cadence: "weekly" | "monthly";
   limit: bigint;
   warningPercent: number;
@@ -73,9 +74,13 @@ export function BudgetDetails({
           </Button>
         </div>
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-soft text-accent-soft-foreground">
-            <Icon className="h-6 w-6" name={categoryIcon(record.category)} />
-          </span>
+          <CategoryAvatar
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent-soft text-accent-soft-foreground"
+            icon={record.icon}
+            iconClassName="h-6 w-6"
+            name={record.category}
+            size={48}
+          />
           <div className="min-w-0">
             <h3 className="break-words text-base font-bold">{record.name}</h3>
             <Chip className="mt-1" size="sm" variant="soft">

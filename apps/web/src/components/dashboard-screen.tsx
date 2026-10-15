@@ -26,6 +26,7 @@ export function DashboardScreen({
   openChat,
   openAdd,
   openConnectGmail,
+  openAccounts,
 }: {
   setup?: ReactNode;
   month: string;
@@ -44,6 +45,7 @@ export function DashboardScreen({
   openChat: (prompt?: string) => void;
   openAdd?: () => void;
   openConnectGmail?: () => void;
+  openAccounts?: () => void;
 }) {
   const model = overviewModel(transactions, budgets, bills, month, today);
 
@@ -57,6 +59,7 @@ export function DashboardScreen({
       openBudgets={openBudgets}
       openChat={openChat}
       openConnectGmail={openConnectGmail}
+      openAccounts={openAccounts}
       openReports={openReports}
       openReview={openReview}
       openTransaction={openTransaction}

@@ -4,12 +4,19 @@ import { calendarDateSchema } from "@monara/contracts";
 import { Button, FieldError, Input, Label, TextField } from "@monara/ui";
 import { type FormEvent, useState } from "react";
 import styles from "@/components/budget-manager.module.css";
+import { CategoryIconPicker } from "@/components/category-icon-picker";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
+import { categoryIconChoice } from "@/data/category-icons";
 import { type Budget, formatDay, type Transaction } from "@/data/demo-ledger";
 import { parseDraftAmount } from "@/lib/finance/presentation";
 
-export type DemoBudgetChanges = { limit: number; startsOn: string; warningPercent: number };
+export type DemoBudgetChanges = {
+  limit: number;
+  startsOn: string;
+  warningPercent: number;
+  icon?: string;
+};
 
 export function DemoBudgetEditor({
   budget,
@@ -28,6 +35,7 @@ export function DemoBudgetEditor({
     limit: String(budget.limit),
     startsOn: budget.startsOn ?? `${today.slice(0, 7)}-01`,
     warningPercent: String(budget.warningPercent),
+    icon: budget.icon ?? (null as string | null),
   });
   const [errors, setErrors] = useState<Partial<Record<keyof typeof draft, string>>>({});
   const incomeDate = transactions
@@ -60,7 +68,12 @@ export function DemoBudgetEditor({
       setErrors(nextErrors);
       return;
     }
-    onSave(budget.id, { limit, startsOn: draft.startsOn, warningPercent });
+    onSave(budget.id, {
+      limit,
+      startsOn: draft.startsOn,
+      warningPercent,
+      icon: categoryIconChoice(budget.category, draft.icon),
+    });
     onClose();
   };
   return (
@@ -119,6 +132,11 @@ export function DemoBudgetEditor({
           <Input className="min-h-11 text-base" inputMode="numeric" maxLength={3} />
           <FieldError>{errors.warningPercent}</FieldError>
         </TextField>
+        <CategoryIconPicker
+          name={budget.category}
+          onChange={(icon) => setDraft((previous) => ({ ...previous, icon }))}
+          value={draft.icon}
+        />
         <p className={styles.meta}>Changes last for this demo visit.</p>
         <div className={styles.footer}>
           <Button className="min-h-11" onPress={onClose} variant="secondary">

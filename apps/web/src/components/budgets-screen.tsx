@@ -1,17 +1,21 @@
 "use client";
 
+import type { Category } from "@monara/contracts";
 import { Button, Card, Chip, ProgressBar } from "@monara/ui";
 import { type ReactNode, useState } from "react";
 
 import { BillCalendar } from "@/components/bill-calendar";
 import { BrandMark } from "@/components/brand-mark";
 import { BudgetDetails } from "@/components/budget-details";
+import budgetStyles from "@/components/budgets-screen.module.css";
+import { CategoryAvatar } from "@/components/category-symbol";
+import { type CreateDemoBudgetInput, DemoBudgetCreator } from "@/components/demo-budget-creator";
 import { type DemoBudgetChanges, DemoBudgetEditor } from "@/components/demo-budget-editor";
 import { Icon } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
 import { RecurringBillSuggestion } from "@/components/recurring-bill-suggestion";
+import { useMerchantLogo } from "@/components/use-brand-logo";
 import { SectionTitle } from "@/components/visual";
-import { merchantBrand } from "@/data/brand-identity";
 import { categoryColor, categoryIcon } from "@/data/category-style";
 import {
   type Budget,
@@ -87,6 +91,17 @@ function BudgetProgress({
   );
 }
 
+function RowAction({ editing }: { editing: boolean }) {
+  return editing ? (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent">
+      <Icon className="h-3.5 w-3.5" name="compose" />
+      Edit
+    </span>
+  ) : (
+    <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+  );
+}
+
 function BudgetRow({
   budget,
   transactions,
@@ -94,6 +109,7 @@ function BudgetRow({
   index,
   onEdit,
   today,
+  editing,
 }: {
   budget: Budget;
   transactions: Transaction[];
@@ -101,6 +117,7 @@ function BudgetRow({
   index: number;
   onEdit?: () => void;
   today: string;
+  editing: boolean;
 }) {
   const usage = budgetUsage(transactions, budget, month, today);
   const color = categoryColor(budget.category, index);
@@ -108,8 +125,8 @@ function BudgetRow({
     return (
       <li>
         <Button
-          aria-label={`View ${budget.category} budget details`}
-          className="block h-auto min-h-11 w-full rounded-xl px-3 py-5 text-left transition-colors hover:bg-surface-secondary"
+          aria-label={`${editing ? "Edit" : "View"} ${budget.category} budget${editing ? "" : " details"}`}
+          className={budgetStyles.budgetRow}
           onPress={onEdit}
           variant="ghost"
         >
@@ -123,7 +140,7 @@ function BudgetRow({
             <p className="text-xs text-muted">
               Starts {budget.startsOn ? formatDay(budget.startsOn) : "later"}
             </p>
-            <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+            <RowAction editing={editing} />
           </div>
         </Button>
       </li>
@@ -131,20 +148,22 @@ function BudgetRow({
   return (
     <li>
       <Button
-        aria-label={`View ${budget.category} budget details`}
-        className="block h-auto min-h-11 w-full rounded-xl px-3 py-5 text-left transition-colors hover:bg-surface-secondary"
+        aria-label={`${editing ? "Edit" : "View"} ${budget.category} budget${editing ? "" : " details"}`}
+        className={budgetStyles.budgetRow}
         onPress={onEdit}
         variant="ghost"
       >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold [overflow-wrap:anywhere]">
-              <span
+              <CategoryAvatar
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-secondary"
+                icon={budget.icon}
+                iconClassName="h-4 w-4"
+                name={budget.category}
+                size={36}
                 style={{ color }}
-              >
-                <Icon className="h-4 w-4" name={categoryIcon(budget.category)} />
-              </span>
+              />
               {budget.category}
             </h3>
             <span className={`text-xs font-medium ${textByState[usage.state]}`}>
@@ -178,7 +197,7 @@ function BudgetRow({
                 ? `${formatDay(usage.periodStartsOn)} – ${formatDay(usage.periodEndsOn)}`
                 : "Not started yet"}
             </p>
-            <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+            <RowAction editing={editing} />
           </div>
         </div>
       </Button>
@@ -188,7 +207,7 @@ function BudgetRow({
 
 function BillRow({ bill, today }: { bill: RecurringBill; today: string }) {
   const daysUntil = daysBetween(today, bill.nextDue);
-  const brand = merchantBrand(bill.merchant);
+  const brand = useMerchantLogo(bill.merchant);
   return (
     <li className="py-4">
       <div className="min-w-0">
@@ -458,45 +477,124 @@ function CategoryBudgets({
   transactions,
   budgets,
   month,
+  onOpenBudget,
   onEditBudget,
   today,
+  onCreate,
 }: {
   transactions: Transaction[];
   budgets: Budget[];
   month: string;
-  onEditBudget?: (budget: Budget) => void;
+  onOpenBudget: (budget: Budget) => void;
+  onEditBudget: (budget: Budget) => void;
   today: string;
+  onCreate: () => void;
 }) {
+  // Editing turns each row into a direct edit and reveals adding a budget in place.
+  const [editing, setEditing] = useState(false);
+  const empty = budgets.length === 0;
   return (
     <section aria-labelledby="category-budgets" className="mt-5">
-      <SectionTitle
-        id="category-budgets"
-        meta={`${budgets.length} categories`}
-        title="By category"
-      />
-      <Card className="mt-2 block min-w-0 gap-0 rounded-2xl border border-border px-5 py-1">
-        {budgets.length > 0 ? (
-          <ul className="divide-y divide-separator">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionTitle
+          id="category-budgets"
+          meta={`${budgets.length} ${budgets.length === 1 ? "category" : "categories"}`}
+          title="By category"
+        />
+        {empty ? null : (
+          <Button
+            aria-pressed={editing}
+            className="min-h-11 rounded-full px-4 text-sm"
+            onPress={() => setEditing((value) => !value)}
+            variant={editing ? "primary" : "secondary"}
+          >
+            {editing ? (
+              "Done"
+            ) : (
+              <>
+                <Icon className="h-4 w-4" name="compose" />
+                Edit budgets
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+      <Card className={`${budgetStyles.categoryCard} mt-2`}>
+        {empty ? (
+          <p className="px-5 pt-6 pb-3 text-center text-sm text-muted">No category budgets yet.</p>
+        ) : (
+          <ul className={budgetStyles.budgetList}>
             {budgets.map((budget, index) => (
               <BudgetRow
                 budget={budget}
+                editing={editing}
                 index={index}
                 key={budget.id}
                 month={month}
                 transactions={transactions}
                 today={today}
-                onEdit={onEditBudget ? () => onEditBudget(budget) : undefined}
+                onEdit={() => (editing ? onEditBudget(budget) : onOpenBudget(budget))}
               />
             ))}
           </ul>
-        ) : (
-          <p className="py-6 text-center text-sm text-muted">No category budgets yet.</p>
         )}
+        {editing || empty ? (
+          <Button className={budgetStyles.addRow} onPress={onCreate} variant="ghost">
+            <Icon className="h-4 w-4" name="plus" />
+            Add budget
+          </Button>
+        ) : null}
       </Card>
       <p className="mt-2 text-xs text-muted">
         Confirmed expenses only. Each budget follows its chosen start date.
       </p>
     </section>
+  );
+}
+
+function BudgetDetailsPanel({
+  budget,
+  transactions,
+  month,
+  today,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  budget?: Budget;
+  transactions: Transaction[];
+  month: string;
+  today: string;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete?: (id: string) => void;
+}) {
+  if (!budget) return null;
+  const usage = budgetUsage(transactions, budget, month, today);
+  return (
+    <BudgetDetails
+      record={{
+        name: budget.backend?.name ?? budget.category,
+        category: budget.category,
+        icon: budget.icon,
+        cadence: budget.cadence,
+        limit: BigInt(budget.limit),
+        warningPercent: budget.warningPercent,
+        startsOn: budget.startsOn,
+        status: usage.periodStartsOn ? labelByState[usage.state] : "Not started",
+        usage: usage.periodStartsOn ? usage : undefined,
+      }}
+      onClose={onClose}
+      onEdit={onEdit}
+      onDelete={
+        onDelete
+          ? () => {
+              onClose();
+              onDelete(budget.id);
+            }
+          : undefined
+      }
+    />
   );
 }
 
@@ -558,6 +656,9 @@ export function BudgetsScreen({
   onEditBudget,
   onRequestEditBudget,
   onRequestDeleteBudget,
+  onCreateBudget,
+  onRequestCreateBudget,
+  demoCategories,
 }: {
   transactions: Transaction[];
   budgets: Budget[];
@@ -572,12 +673,15 @@ export function BudgetsScreen({
   onEditBudget?: (budgetId: string, changes: DemoBudgetChanges) => void;
   onRequestEditBudget?: (budgetId: string) => void;
   onRequestDeleteBudget?: (budgetId: string) => void;
+  onCreateBudget?: (input: CreateDemoBudgetInput) => void;
+  onRequestCreateBudget?: () => void;
+  demoCategories?: Category[];
 }) {
   const summary = summarizeBudgets(transactions, budgets, month, today);
   const [editing, setEditing] = useState<Budget | null>(null);
+  const [creating, setCreating] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const detail = budgets.find((budget) => budget.id === detailId);
-  const detailUsage = detail ? budgetUsage(transactions, detail, month, today) : undefined;
   const editDetail = () => {
     if (!detail) return;
     setDetailId(null);
@@ -615,7 +719,7 @@ export function BudgetsScreen({
             month={month}
             summary={summary}
             today={today}
-            monthlyOnly={Boolean(management)}
+            monthlyOnly={demo || Boolean(management)}
             calendarPeriods={calendarPeriods}
             transactions={transactions}
           />
@@ -624,7 +728,12 @@ export function BudgetsScreen({
             month={month}
             transactions={transactions}
             today={today}
-            onEditBudget={(budget) => setDetailId(budget.id)}
+            onOpenBudget={(budget) => setDetailId(budget.id)}
+            onEditBudget={(budget) => {
+              if (onRequestEditBudget) onRequestEditBudget(budget.id);
+              else setEditing(budget);
+            }}
+            onCreate={onRequestCreateBudget ?? (() => setCreating(true))}
           />
           {management}
         </div>
@@ -641,30 +750,15 @@ export function BudgetsScreen({
           </div>
         )}
       </div>
-      {detail && detailUsage && (
-        <BudgetDetails
-          record={{
-            name: detail.backend?.name ?? detail.category,
-            category: detail.category,
-            cadence: detail.cadence,
-            limit: BigInt(detail.limit),
-            warningPercent: detail.warningPercent,
-            startsOn: detail.startsOn,
-            status: detailUsage.periodStartsOn ? labelByState[detailUsage.state] : "Not started",
-            usage: detailUsage.periodStartsOn ? detailUsage : undefined,
-          }}
-          onClose={() => setDetailId(null)}
-          onEdit={editDetail}
-          onDelete={
-            onRequestDeleteBudget
-              ? () => {
-                  setDetailId(null);
-                  onRequestDeleteBudget(detail.id);
-                }
-              : undefined
-          }
-        />
-      )}
+      <BudgetDetailsPanel
+        budget={detail}
+        transactions={transactions}
+        month={month}
+        today={today}
+        onClose={() => setDetailId(null)}
+        onEdit={editDetail}
+        onDelete={onRequestDeleteBudget}
+      />
       {editing && onEditBudget && (
         <DemoBudgetEditor
           budget={editing}
@@ -673,6 +767,16 @@ export function BudgetsScreen({
           onSave={onEditBudget}
           today={today}
           transactions={transactions}
+        />
+      )}
+      {creating && onCreateBudget && (
+        <DemoBudgetCreator
+          budgets={budgets}
+          transactions={transactions}
+          today={today}
+          onSave={onCreateBudget}
+          onClose={() => setCreating(false)}
+          demoCategories={demoCategories}
         />
       )}
     </div>

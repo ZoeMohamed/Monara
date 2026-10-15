@@ -20,9 +20,72 @@
 }
 
 .item {
-  padding: 1rem;
+  padding: 1.5rem;
   border-radius: 1.5rem;
   background: var(--surface-secondary);
+}
+
+.managedRow {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 9rem;
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  text-align: left;
+  transition: background-color 180ms ease;
+}
+
+.managedRow:hover,
+.managedRow:focus-visible,
+.managedRow[data-hovered="true"],
+.managedRow[data-focus-visible="true"] {
+  background: var(--surface-secondary);
+}
+
+.managedRow:active,
+.managedRow[data-pressed="true"] {
+  background: var(--surface-tertiary);
+  transform: none;
+}
+
+.managedRow:focus-visible,
+.managedRow[data-focus-visible="true"] {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.iconChoices {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.logoChoice {
+  min-width: 2.75rem;
+  height: auto;
+  min-height: 2.75rem;
+  padding: 0.25rem;
+  border-radius: 0.875rem;
+}
+
+@media (max-width: 360px) {
+  .iconChoices {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .managedRow {
+    padding: 1.25rem 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .managedRow {
+    transition: none;
+  }
 }
 
 .row {

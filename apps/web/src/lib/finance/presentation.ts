@@ -92,6 +92,7 @@ export function mapOwnedTransaction(
     id: transaction.id,
     merchant: transaction.merchantName ?? transaction.description,
     category: category?.name ?? null,
+    categoryIcon: category?.icon,
     amount:
       transaction.money === null ? null : safePresentationAmount(transaction.money.amountMinor),
     currency: transaction.money?.currency ?? null,
@@ -129,6 +130,7 @@ function mapOwnedBudget(usage: BudgetUsage, categories: Category[], month: strin
   return {
     id: budget.id,
     category: category.name,
+    icon: category.icon,
     emoji: "•",
     cadence: "monthly",
     limit: safePresentationAmount(budget.limit.amountMinor),

@@ -3,6 +3,7 @@
 import type { Category, FinancialAccount } from "@monara/contracts";
 import { Button, FieldError, Form, Input, Label, ListBox, Select, TextField } from "@monara/ui";
 import { type FormEvent, useReducer, useRef } from "react";
+import { BrandLogoField } from "@/components/brand-logo-field";
 import { FinanceRecovery } from "@/components/budget-manager";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
@@ -16,12 +17,14 @@ import {
   type TransactionValues,
   transactionErrors,
 } from "@/data/demo-ledger";
+import { demoTransactionSelection, demoTransferSelection } from "@/data/demo-resources";
 import { FinanceClientError } from "@/lib/finance/client";
 import { FinancePresentationError, parseDraftAmount } from "@/lib/finance/presentation";
 
 type TransactionEditorResources = {
   financialAccounts: FinancialAccount[];
   categories: Category[];
+  demo?: boolean;
 };
 
 export type TransactionDraft = {
@@ -95,6 +98,9 @@ function draftOf(
   resources?: TransactionEditorResources,
   today = demoToday,
 ): TransactionDraft {
+  const demoTransfer = resources?.demo
+    ? demoTransferSelection(resources.financialAccounts, transaction?.method ?? null)
+    : null;
   return {
     merchant: transaction?.backend
       ? (transaction.backend.merchantName ?? "")
@@ -105,15 +111,32 @@ function draftOf(
     kind: transaction?.kind ?? null,
     currency: transaction ? transaction.currency : "IDR",
     category: resources
-      ? (transaction?.backend?.categoryId ?? null)
+      ? (transaction?.backend?.categoryId ??
+        (resources.demo
+          ? resources.categories.find((category) => category.name === transaction?.category)?.id
+          : null) ??
+        null)
       : (transaction?.category ?? null),
     method: resources
-      ? (transaction?.backend?.financialAccountId ?? null)
+      ? (transaction?.backend?.financialAccountId ??
+        transaction?.financialAccountId ??
+        (resources.demo
+          ? resources.financialAccounts.find((account) => account.name === transaction?.method)?.id
+          : null) ??
+        null)
       : (transaction?.method ?? null),
     ...(resources
       ? {
-          fromAccount: transaction?.backend?.fromFinancialAccountId ?? null,
-          toAccount: transaction?.backend?.toFinancialAccountId ?? null,
+          fromAccount:
+            transaction?.backend?.fromFinancialAccountId ??
+            transaction?.fromFinancialAccountId ??
+            demoTransfer?.from ??
+            null,
+          toAccount:
+            transaction?.backend?.toFinancialAccountId ??
+            transaction?.toFinancialAccountId ??
+            demoTransfer?.to ??
+            null,
         }
       : {}),
   };
@@ -203,6 +226,7 @@ function TransactionFields({
         <Input autoFocus className="min-h-11 text-base" placeholder="e.g. Kopi Kenangan" />
         <FieldError>{errors.merchant}</FieldError>
       </TextField>
+      <BrandLogoField disabled={disabled} label={draft.merchant} scope="merchant" />
       <TextField
         name="amount"
         type="number"
@@ -242,16 +266,23 @@ function valuesOf(
     time: draft.time.trim() || null,
     kind: draft.kind,
     currency: draft.currency,
-    category: draft.category,
-    method: draft.method,
-    ...(resources
-      ? {
-          categoryId: draft.category,
-          financialAccountId: draft.kind === "transfer" ? null : draft.method,
-          fromFinancialAccountId: draft.kind === "transfer" ? (draft.fromAccount ?? null) : null,
-          toFinancialAccountId: draft.kind === "transfer" ? (draft.toAccount ?? null) : null,
-        }
-      : {}),
+    ...(resources?.demo
+      ? demoTransactionSelection(draft, resources)
+      : {
+          category: draft.category,
+          categoryIcon: resources?.categories.find((category) => category.id === draft.category)
+            ?.icon,
+          method: draft.method,
+          ...(resources
+            ? {
+                categoryId: draft.category,
+                financialAccountId: draft.kind === "transfer" ? null : draft.method,
+                fromFinancialAccountId:
+                  draft.kind === "transfer" ? (draft.fromAccount ?? null) : null,
+                toFinancialAccountId: draft.kind === "transfer" ? (draft.toAccount ?? null) : null,
+              }
+            : {}),
+        }),
   };
 }
 
@@ -580,7 +611,7 @@ export function TransactionEditor(props: TransactionEditorProps) {
               <h2 id="transaction-editor-title" className="text-xl font-bold">
                 {labels.title}
               </h2>
-              {props.resources ? (
+              {props.resources && !props.resources.demo ? (
                 <p className="mt-1 text-sm text-muted">Your private ledger</p>
               ) : null}
             </div>

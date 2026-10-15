@@ -333,6 +333,64 @@ describe("financial HTTP boundary", () => {
     assert.equal(archived.status, "dismissed");
     assert.equal(archived.readAt, timestamp);
   });
+  it("creates a category with its retry UUID and no unsupported Undo receipt", async () => {
+    const input = {
+      name: "  Hobbies  ",
+      icon: "palette",
+      color: "#4c2a86",
+      clientRequestId: categoryId,
+    };
+    const saved = {
+      ...categories[0],
+      id: categoryId,
+      name: "Hobbies",
+      icon: "palette",
+      color: "#4c2a86",
+      slug: `custom-${categoryId}`,
+      isDefault: false,
+    };
+    const result = await callFinanceOperation("create_category", input, async (path, options) => {
+      assert.equal(path, "/api/finance/operations/create_category");
+      assert.equal(options.credentials, "same-origin");
+      assert.equal(options.cache, "no-store");
+      assert.deepEqual(JSON.parse(options.body), { ...input, name: "Hobbies" });
+      return Response.json({ category: saved });
+    });
+    assert.deepEqual(result, { category: saved });
+  });
+
+  it("rejects invalid category creation before transport and preserves uncertain-write recovery", async () => {
+    const input = {
+      name: "Hobbies",
+      icon: "palette",
+      color: "#4c2a86",
+      clientRequestId: categoryId,
+    };
+    let calls = 0;
+    for (const invalid of [
+      { ...input, clientRequestId: "not-a-uuid" },
+      { ...input, userId: accountId },
+      { ...input, name: " " },
+      { ...input, icon: "" },
+      { ...input, color: "red" },
+    ]) {
+      await assert.rejects(
+        callFinanceOperation("create_category", invalid, async () => {
+          calls += 1;
+          return Response.json({});
+        }),
+        (error) => error.code === "VALIDATION_FAILED" && !error.actionMayHaveCompleted,
+      );
+    }
+    assert.equal(calls, 0);
+    await assert.rejects(
+      callFinanceOperation("create_category", input, async () => {
+        throw new TypeError("network");
+      }),
+      (error) => error.actionMayHaveCompleted,
+    );
+  });
+
   it("renames an owned category using its canonical id and reviewed version", async () => {
     const input = {
       categoryId,

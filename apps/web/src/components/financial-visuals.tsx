@@ -9,14 +9,14 @@ import {
   useId,
   useState,
 } from "react";
-
 import donutStyles from "@/components/category-donut.module.css";
+import { CategoryAvatar } from "@/components/category-symbol";
 import chartStyles from "@/components/chart-navigation.module.css";
 import { Icon } from "@/components/icon";
 import { TransactionRow } from "@/components/transaction-row";
 import { SectionTitle } from "@/components/visual";
 import { categoryDonutGeometry, donutOutline } from "@/data/category-donut";
-import { categoryColor, categoryIcon } from "@/data/category-style";
+import { categoryColor } from "@/data/category-style";
 import {
   demoToday,
   formatDay,
@@ -222,12 +222,12 @@ function TrendModeControls({
   return (
     <fieldset
       aria-label="Spending trend view"
-      className="flex min-w-0 rounded-full bg-surface-secondary p-1"
+      className="flex min-w-0 rounded-2xl bg-surface-secondary p-1"
     >
       {(["cumulative", "daily"] as const).map((view) => (
         <Button
           aria-pressed={mode === view}
-          className="min-h-11 rounded-full px-3 text-xs"
+          className="min-h-11 rounded-xl px-3 text-xs"
           key={view}
           onPress={() => onChange(view)}
           variant={mode === view ? "primary" : "ghost"}
@@ -887,9 +887,11 @@ export function CategoryBreakdown({
                 style={{ "--slice-color": segment.color } as CSSProperties}
                 type="button"
               >
-                <span aria-hidden className={donutStyles.rowIcon}>
-                  <Icon name={categoryIcon(segment.name)} />
-                </span>
+                <CategoryAvatar
+                  className={donutStyles.rowIcon}
+                  icon={segment.icon}
+                  name={segment.name}
+                />
                 <span className="min-w-0 flex-1 text-left">
                   <span className="block break-words text-sm font-semibold">{segment.name}</span>
                   <span className="mt-0.5 block text-xs text-muted">
@@ -933,6 +935,65 @@ export function CategoryBreakdown({
   );
 }
 
+function CalendarPayments({
+  day,
+  today,
+  onOpenTransaction,
+}: {
+  day: FinanceDay;
+  today: string;
+  onOpenTransaction?: (transaction: Transaction) => void;
+}) {
+  const headingId = useId();
+  const count = day.transactions.length;
+  return (
+    <section
+      aria-labelledby={headingId}
+      aria-live="polite"
+      className={chartStyles.calendarPayments}
+    >
+      <div className={chartStyles.calendarPaymentHeading}>
+        <h3 id={headingId}>
+          {count === 0
+            ? "No payments"
+            : day.spending > BigInt(0)
+              ? `${formatRupiah(day.spending)} spent`
+              : `${formatRupiah(day.income)} received`}
+        </h3>
+        <span>
+          {formatDay(day.date)}
+          {day.date === today ? " · Today" : ""}
+        </span>
+      </div>
+      {count > 0 ? (
+        <>
+          <p className={chartStyles.calendarTotals}>
+            <span>
+              {count} {count === 1 ? "payment" : "payments"}
+            </span>
+            {day.spending > BigInt(0) && day.income > BigInt(0) ? (
+              <span className="text-success">{formatRupiah(day.income)} received</span>
+            ) : null}
+          </p>
+          <ChartTransactions onOpenTransaction={onOpenTransaction} records={day.transactions} />
+        </>
+      ) : (
+        <p className="mt-1 pb-2 text-xs text-muted">
+          {day.future ? "Upcoming day. Nothing recorded yet." : "Nothing recorded for this day."}
+        </p>
+      )}
+    </section>
+  );
+}
+
+const heatBackgrounds = [
+  "transparent",
+  "var(--accent-soft)",
+  "color-mix(in srgb, var(--accent) 25%, var(--surface))",
+  "color-mix(in srgb, var(--accent) 80%, var(--surface))",
+  "var(--accent)",
+];
+
 export function SpendingCalendar({
   transactions,
   month,
@@ -942,7 +1003,6 @@ export function SpendingCalendar({
   onOpenTransaction?: (transaction: Transaction) => void;
 }) {
   const [selection, setSelection] = useState<string | null>(null);
-  const headingId = useId();
   const summary = financialMonth(transactions, month, today);
   const detail =
     summary.days.find((day) => day.date === selection) ??
@@ -951,108 +1011,97 @@ export function SpendingCalendar({
     summary.days[0];
   const emptyColumns = Array.from({ length: summary.calendarOffset }, (_, index) => index);
   const countedDays = month === today.slice(0, 7) ? Number(today.slice(8)) : summary.days.length;
+  const dailyAverage = summary.spending / BigInt(Math.max(countedDays, 1));
 
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5">
-      <ChartHeading
-        meta={`avg ${compactAmount(summary.spending / BigInt(Math.max(countedDays, 1)))}/day`}
-        title="Daily spending"
-      />
-      <fieldset
-        aria-label={`${formatMonth(month)} spending calendar`}
-        className="mt-4 grid min-w-0 grid-cols-7 gap-1"
-        key={month}
-      >
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((weekday) => (
-          <span className="pb-1 text-center text-[10px] font-semibold text-muted" key={weekday}>
-            {weekday}
+    <Card
+      className={`${chartStyles.calendarCard} block min-w-0 gap-0 rounded-2xl border border-border bg-surface p-5`}
+    >
+      <div className={chartStyles.calendarHeading}>
+        <h2>Daily spending</h2>
+        <p className={chartStyles.calendarAverage}>
+          <span className="sr-only">
+            Average confirmed spending {formatRupiah(dailyAverage)} per day.
           </span>
-        ))}
-        {emptyColumns.map((column) => (
-          <span aria-hidden key={`empty-${column}`} />
-        ))}
-        {summary.days.map((day, index) => {
-          const proportion = chartRatio(day.spending, summary.maxDailySpending);
-          const level = proportion === 0 ? 0 : Math.max(1, Math.ceil(proportion * 4));
-          const heat = [
-            "bg-surface-secondary text-muted",
-            "bg-accent-soft text-accent-soft-foreground",
-            "bg-accent/25 text-foreground",
-            "bg-accent/80 text-white",
-            "bg-accent text-white",
-          ][level];
-          const future = day.future && day.transactions.length === 0;
-          return (
-            <Button
-              aria-current={day.date === today ? "date" : undefined}
-              aria-label={`${formatDay(day.date)}${day.date === today ? ", today" : ""}: ${future ? "upcoming, no transactions recorded" : `${formatRupiah(day.spending)} spent, ${formatRupiah(day.income)} income`}. Show payments.`}
-              aria-pressed={day.date === detail.date}
-              className={`${chartStyles.calendarDay} min-h-11 w-full min-w-0 rounded-lg border px-0 text-xs font-semibold ${future ? "border-dashed border-border bg-surface text-muted" : `${heat} border-transparent`} ${day.date === detail.date ? "ring-2 ring-foreground ring-inset" : ""}`}
-              key={day.date}
-              onPress={() => setSelection(day.date)}
-              style={{ animationDelay: `${index * 12}ms` }}
-              variant="ghost"
-            >
-              {day.day}
-              {day.income > BigInt(0) ? (
-                <span
-                  aria-hidden
-                  className="absolute right-1 bottom-1 h-1.5 w-1.5 rounded-full bg-success"
-                />
-              ) : null}
-            </Button>
-          );
-        })}
-      </fieldset>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] text-muted">
-        <span className="flex items-center gap-1">
-          Less
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-surface-secondary" />
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent-soft" />
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent/25" />
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent/80" />
-          <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent" />
-          More
-        </span>
-        <span className="flex items-center gap-1">
-          <LegendDot color="var(--success)" />
-          Income recorded
-        </span>
+          <span aria-hidden>Average {compactAmount(dailyAverage)} per day</span>
+        </p>
       </div>
-      <section
-        aria-labelledby={headingId}
-        aria-live="polite"
-        className="mt-4 rounded-xl bg-surface-secondary p-3"
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-1">
-          <h3 className="text-xs font-bold" id={headingId}>
-            {formatDay(detail.date)}
-            {detail.date === today ? " · Today" : ""}
-          </h3>
-          <span className="text-[11px] text-muted">
-            {detail.transactions.length} {detail.transactions.length === 1 ? "payment" : "payments"}
-          </span>
-        </div>
-        {detail.future && detail.transactions.length === 0 ? null : (
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums">
-            <span>
-              Spent <strong>{formatRupiah(detail.spending)}</strong>
-            </span>
-            {detail.income > BigInt(0) ? (
-              <span className="text-success">
-                Income <strong>{formatRupiah(detail.income)}</strong>
+      <div className={chartStyles.calendarBody}>
+        <div>
+          <fieldset
+            aria-label={`${formatMonth(month)} spending calendar`}
+            className={chartStyles.calendarGrid}
+            key={month}
+          >
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((weekday) => (
+              <span aria-hidden className={chartStyles.calendarWeekday} key={weekday}>
+                {weekday.slice(0, 1)}
               </span>
-            ) : null}
+            ))}
+            {emptyColumns.map((column) => (
+              <span aria-hidden key={`empty-${column}`} />
+            ))}
+            {summary.days.map((day, index) => {
+              const proportion = chartRatio(day.spending, summary.maxDailySpending);
+              const level = proportion === 0 ? 0 : Math.max(1, Math.ceil(proportion * 4));
+              const future = day.future && day.transactions.length === 0;
+              const color =
+                future || level === 0
+                  ? "text-muted"
+                  : level >= 3
+                    ? "text-white"
+                    : "text-foreground";
+              return (
+                <Button
+                  aria-current={day.date === today ? "date" : undefined}
+                  aria-label={`${formatDay(day.date)}${day.date === today ? ", today" : ""}: ${future ? "upcoming, no transactions recorded" : `${formatRupiah(day.spending)} spent, ${formatRupiah(day.income)} income`}. Show payments.`}
+                  aria-pressed={day.date === detail.date}
+                  className={`${chartStyles.calendarDay} text-xs ${color}`}
+                  data-future={future}
+                  data-spent={level > 0}
+                  key={day.date}
+                  onPress={() => setSelection(day.date)}
+                  style={
+                    {
+                      "--day-background": future ? "transparent" : heatBackgrounds[level],
+                      animationDelay: `${index * 12}ms`,
+                    } as CSSProperties
+                  }
+                  variant="ghost"
+                >
+                  {day.day}
+                  {level > 0 ? (
+                    <span aria-hidden className={chartStyles.dayAmount}>
+                      {compactAmount(day.spending, false).slice(2)}
+                    </span>
+                  ) : null}
+                  {day.income > BigInt(0) ? (
+                    <span
+                      aria-hidden
+                      className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-success"
+                    />
+                  ) : null}
+                </Button>
+              );
+            })}
+          </fieldset>
+          <div className={chartStyles.calendarLegend}>
+            <span className="flex items-center gap-1">
+              Less
+              <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent-soft" />
+              <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent/25" />
+              <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent/80" />
+              <span aria-hidden className="h-2.5 w-2.5 rounded-sm bg-accent" />
+              More
+            </span>
+            <span className="flex items-center gap-1">
+              <LegendDot color="var(--success)" />
+              Income recorded
+            </span>
           </div>
-        )}
-        {detail.transactions.length > 0 ? (
-          <ChartTransactions onOpenTransaction={onOpenTransaction} records={detail.transactions} />
-        ) : (
-          <p className="mt-2 text-xs text-muted">
-            {detail.future ? "Upcoming day. No transactions." : "No transactions this day."}
-          </p>
-        )}
-      </section>
+        </div>
+        <CalendarPayments day={detail} today={today} onOpenTransaction={onOpenTransaction} />
+      </div>
     </Card>
   );
 }
