@@ -65,6 +65,8 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 
 - Each linked worktree has its own ports, env files, and Supabase stack, set up by `pnpm install`. Start servers with `pnpm dev` and `pnpm dev:agent`, and the database with `pnpm db:start`, so they use the worktree's ports.
 - Run `pnpm worktree:teardown` before removing a worktree; `pnpm worktree:prune` clears leftovers.
+- `pnpm dev:tunnel` starts only the ngrok tunnel to this worktree's web port; it never starts the app. For Gmail testing, run `pnpm dev`, `pnpm dev:tunnel`, and `pnpm dev:agent` in separate terminals. ngrok's `4040` is its inspector, not the app.
+- Composio has two projects: `monara_finance_dev` for local development, with its callback on the developer's ngrok domain, and `monara_finance` for production, with its callback on `https://monara-finance.vercel.app`. Local env files use only the dev project's credentials.
 
 ## Technical documentation
 
