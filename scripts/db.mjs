@@ -1,8 +1,9 @@
 // Local Supabase stack for this checkout. start optionally requires --runtime docker.
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { atomicWriteEnv } from "./lib/atomic-env.mjs";
 import { localDatabaseValues, verifyLocalDatabase } from "./lib/database-env.mjs";
 import { setEnvValues } from "./lib/worktree.mjs";
 
@@ -32,7 +33,7 @@ async function writeWebEnv() {
   const current = existsSync(target)
     ? readFileSync(target, "utf8")
     : readFileSync(template, "utf8");
-  writeFileSync(target, setEnvValues(current, values), { mode: 0o600 });
+  atomicWriteEnv(target, setEnvValues(current, values));
   console.log("Updated Supabase values in apps/web/.env.local.");
 }
 
@@ -51,9 +52,10 @@ if (command === "start") {
   try {
     await writeWebEnv();
     console.log("Local database is ready. Run pnpm dev (and pnpm dev:agent when needed).");
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "Unknown readiness error";
     fail(
-      "Local database readiness failed. Check the local stack and migrations, then rerun pnpm db:start --runtime docker.",
+      `Local database readiness failed: ${reason}. Check the local stack and migrations, then rerun pnpm db:start --runtime docker.`,
     );
   }
 } else if (command === "stop") {

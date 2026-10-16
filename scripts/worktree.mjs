@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { atomicWriteEnv } from "./lib/atomic-env.mjs";
 import {
   allocateSlot,
   parseEnv,
@@ -105,7 +106,7 @@ function seedEnvFile({ destination, mainSource, template, values, blankKeys = []
     blankKeys,
   });
   if (content === existing) return false;
-  writeFileSync(destination, content, { mode: 0o600 });
+  atomicWriteEnv(destination, content);
   return true;
 }
 
@@ -196,9 +197,7 @@ async function setup(context) {
   }
   const secret = secrets[0] ?? randomBytes(32).toString("hex");
   contents.forEach((content, index) => {
-    writeFileSync(envPaths[index], setEnvValues(content, { MONARA_AGENT_BACKEND_SECRET: secret }), {
-      mode: 0o600,
-    });
+    atomicWriteEnv(envPaths[index], setEnvValues(content, { MONARA_AGENT_BACKEND_SECRET: secret }));
   });
   log(
     `Worktree slot ${slot}: web ${ports.web}, agent ${ports.agent}, inspector ${ports.inspector}.`,
