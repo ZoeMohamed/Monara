@@ -39,12 +39,12 @@ begin
   end if;
 
   foreach referenced_account_id in array referenced_account_ids loop
-    if referenced_account_id is not null and not exists (
+    if referenced_account_id is not null and exists (
       select 1
       from public.financial_accounts
       where id = referenced_account_id
         and user_id = new.user_id
-        and is_active
+        and not is_active
     ) then
       raise check_violation using
         message = 'Confirmed transactions require active Financial Accounts.';
