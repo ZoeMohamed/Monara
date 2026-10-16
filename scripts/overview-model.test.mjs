@@ -57,9 +57,8 @@ test("overview figures and recent records only include valid confirmed transacti
     [
       record({ id: "expense", amount: 12 }),
       record({ id: "income", kind: "income", amount: 60 }),
-      record({ id: "transfer", kind: "transfer", method: "BCA → Jago", amount: 100 }),
       record({ id: "pending", status: "pending", amount: 100 }),
-      record({ id: "rejected", status: "rejected", amount: 100 }),
+      record({ id: "excluded", kind: "exclusion", amount: 100 }),
       record({ id: "invalid", amount: 0 }),
     ],
     [budget("Food & Drinks", 100)],
@@ -76,7 +75,7 @@ test("overview figures and recent records only include valid confirmed transacti
   assert.equal(model.pendingCount, 1);
   assert.deepEqual(
     model.recent.map(({ id }) => id),
-    ["expense", "income", "transfer"],
+    ["expense", "income"],
   );
 });
 
@@ -151,24 +150,24 @@ test("bill attention includes confirmed due dates this week in order and leaves 
   }
 });
 
-test("empty and transfer-only months have actionable empty state without invented spending", () => {
+test("empty and exclusion-only months have actionable empty state without invented spending", () => {
   const empty = overviewModel([], [], [], "2026-10");
   assert.equal(empty.emptyTitle, "Start tracking");
   assert.equal(empty.hasFinancialActivity, false);
   assert.equal(empty.percent, 0);
   assert.equal(empty.comparison.state, "no-baseline");
-  const transferOnly = overviewModel(
-    [record({ kind: "transfer", method: "BCA → Jago" }), record({ status: "pending" })],
+  const excludedOnly = overviewModel(
+    [record({ kind: "exclusion" }), record({ status: "pending" })],
     [],
     [],
     "2026-10",
   );
-  assert.equal(transferOnly.emptyTitle, "No income or expenses this month");
-  assert.equal(transferOnly.hasFinancialActivity, false);
-  assert.equal(transferOnly.summary.spending, 0n);
-  assert.equal(transferOnly.summary.income, 0n);
-  assert.equal(transferOnly.pendingCount, 1);
-  assert.equal(transferOnly.recent.length, 1);
+  assert.equal(excludedOnly.emptyTitle, "No income or expenses this month");
+  assert.equal(excludedOnly.hasFinancialActivity, false);
+  assert.equal(excludedOnly.summary.spending, 0n);
+  assert.equal(excludedOnly.summary.income, 0n);
+  assert.equal(excludedOnly.pendingCount, 1);
+  assert.equal(excludedOnly.recent.length, 0);
 });
 
 test("latest activity shows the five newest confirmed records, across months only for the current one", () => {

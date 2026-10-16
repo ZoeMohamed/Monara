@@ -131,12 +131,8 @@ function sessionRecords(
 }
 
 function selectionFor(transactions: Transaction[], view: AppView, removedId: string | null) {
-  const selected = transactions.find(
-    (item) => item.id === view.transactionId && item.status !== "rejected",
-  );
-  const editing = transactions.find(
-    (item) => item.id === view.editId && item.status !== "rejected",
-  );
+  const selected = transactions.find((item) => item.id === view.transactionId);
+  const editing = transactions.find((item) => item.id === view.editId);
   const rejecting = transactions.find(
     (item) => item.id === view.rejectId && item.status === "pending",
   );

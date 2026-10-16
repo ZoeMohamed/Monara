@@ -13,8 +13,8 @@ import {
   transactionIdSchema,
 } from "./common.ts";
 
-export const transactionKindSchema = z.enum(["expense", "income", "transfer"]);
-export const transactionReviewStatusSchema = z.enum(["pending", "confirmed", "rejected"]);
+export const transactionKindSchema = z.enum(["expense", "income", "exclusion"]);
+export const transactionReviewStatusSchema = z.enum(["pending", "confirmed"]);
 export const transactionSourceSchema = z.enum([
   "manual_form",
   "gmail_email",
@@ -35,8 +35,6 @@ const transactionValuesShape = {
   accountHint: z.string().trim().min(1).max(200).nullable(),
   categoryId: categoryIdSchema.nullable(),
   financialAccountId: financialAccountIdSchema.nullable(),
-  fromFinancialAccountId: financialAccountIdSchema.nullable(),
-  toFinancialAccountId: financialAccountIdSchema.nullable(),
 } as const;
 
 export const transactionValuesSchema = z.object(transactionValuesShape).strict();
@@ -54,63 +52,20 @@ function validateTransactionValues(
         message: "Confirmed transactions need a type.",
       });
     }
-    if (value.money === null) {
+    if (value.kind !== "exclusion" && value.money === null) {
       context.addIssue({
         code: "custom",
         path: ["money"],
         message: "Confirmed transactions need an amount.",
       });
     }
-    if (value.occurredOn === null) {
+    if (value.kind !== "exclusion" && value.occurredOn === null) {
       context.addIssue({
         code: "custom",
         path: ["occurredOn"],
         message: "Confirmed transactions need a date.",
       });
     }
-  }
-
-  if (value.kind === "transfer") {
-    if (value.reviewStatus === "confirmed" && value.fromFinancialAccountId === null) {
-      context.addIssue({
-        code: "custom",
-        path: ["fromFinancialAccountId"],
-        message: "Confirmed transfers need a source Financial Account.",
-      });
-    }
-    if (value.reviewStatus === "confirmed" && value.toFinancialAccountId === null) {
-      context.addIssue({
-        code: "custom",
-        path: ["toFinancialAccountId"],
-        message: "Confirmed transfers need a destination Financial Account.",
-      });
-    }
-    if (
-      value.fromFinancialAccountId !== null &&
-      value.fromFinancialAccountId === value.toFinancialAccountId
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["toFinancialAccountId"],
-        message: "Transfer accounts must be different.",
-      });
-    }
-    if (value.financialAccountId !== null) {
-      context.addIssue({
-        code: "custom",
-        path: ["financialAccountId"],
-        message: "Transfers use source and destination Financial Accounts.",
-      });
-    }
-    return;
-  }
-
-  if (value.fromFinancialAccountId !== null || value.toFinancialAccountId !== null) {
-    context.addIssue({
-      code: "custom",
-      path: ["fromFinancialAccountId"],
-      message: "Only transfers use source and destination Financial Accounts.",
-    });
   }
 }
 
@@ -138,6 +93,20 @@ export const createTransactionInputSchema = confirmedTransactionValuesSchema
   })
   .strict()
   .superRefine((value, context) => {
+    if (value.money === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["money"],
+        message: "Direct transaction creates need an amount.",
+      });
+    }
+    if (value.occurredOn === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["occurredOn"],
+        message: "Direct transaction creates need a date.",
+      });
+    }
     if (value.merchantName === null && value.description === null) {
       context.addIssue({
         code: "custom",
@@ -145,7 +114,7 @@ export const createTransactionInputSchema = confirmedTransactionValuesSchema
         message: "Direct transaction creates need a merchant, source, or description.",
       });
     }
-    if (value.kind !== "transfer" && value.financialAccountId === null) {
+    if (value.financialAccountId === null) {
       context.addIssue({
         code: "custom",
         path: ["financialAccountId"],
@@ -206,7 +175,7 @@ export const confirmTransactionInputSchema = z
   })
   .strict();
 
-export const rejectTransactionInputSchema = z
+export const excludeTransactionInputSchema = z
   .object({
     transactionId: transactionIdSchema,
     expectedUpdatedAt: isoDateTimeSchema,
@@ -251,7 +220,7 @@ export type CreateTransactionInput = z.input<typeof createTransactionInputSchema
 export type UpdatePendingTransactionInput = z.input<typeof updatePendingTransactionInputSchema>;
 export type UpdateTransactionInput = z.input<typeof updateTransactionInputSchema>;
 export type ConfirmTransactionInput = z.input<typeof confirmTransactionInputSchema>;
-export type RejectTransactionInput = z.input<typeof rejectTransactionInputSchema>;
+export type ExcludeTransactionInput = z.input<typeof excludeTransactionInputSchema>;
 export type DeleteTransactionInput = z.input<typeof deleteTransactionInputSchema>;
 export type ListTransactionsInput = z.input<typeof listTransactionsInputSchema>;
 export type TransactionPage = z.infer<typeof transactionPageSchema>;

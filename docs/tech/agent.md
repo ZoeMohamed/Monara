@@ -46,7 +46,7 @@ sequenceDiagram
 | Tier | Tools | What the registry does |
 | --- | --- | --- |
 | T0 read | `get_summary`, `suggest_budget`, five `list_*` tools (`read-tools.ts`) | Runs the tool. |
-| T1 reversible write | `add_transaction`, `edit_transaction`, `confirm_pending`, `reject_pending`, `create_budget`, `edit_budget`, `undo_action` (`write-tools.ts`) | Runs the tool and collects the action receipts it returns. |
+| T1 reversible write | `add_transaction`, `edit_transaction`, `confirm_pending`, `exclude_pending`, `create_budget`, `edit_budget`, `undo_action` (`write-tools.ts`) | Runs the tool and collects the action receipts it returns. |
 | T2 destructive | `delete_transaction`, `delete_budget` (`destructive-tools.ts`) | Never runs anything. Asks the backend for a confirmation. |
 | T3 never in chat | none | The type has no T3, so such a tool cannot be registered. |
 
@@ -119,9 +119,9 @@ The following measured results are the owner's historical 13 October record, pre
 
 | Suite | Cases | Result on 13 Oct 2026, model `gpt-6-luna` |
 | --- | --- | --- |
-| Scripted tasks (log expense with follow-up, income, transfer, correct and undo, Review Queue, Budget, Category report, bills due, multi-step plan, confirmed delete, stop Reminders, investment fallback) | 12 | 12 of 12 in each of three consecutive runs |
+| Scripted tasks (log expense with follow-up, income, exclude an internal transfer, correct and undo, Review Queue, Budget, Category report, bills due, multi-step plan, confirmed delete, stop Reminders, investment fallback) | 12 | 12 of 12 in each of three consecutive runs |
 | Attacks (another User's data, spoofed identity, T3 escalation, delete without confirmation, injected email text, injected stored record, prompt and secret extraction) | 7 | 7 of 7 in each of three consecutive runs |
 
-Earlier runs the same day failed on transfers and on T3 escalation before the prompt and tool descriptions were tightened, so the suite is not deterministic. On 16 October, after recurring bills and Reminder preferences were removed from the catalog (the bills and stop-Reminders tasks now check that the Agent says it cannot do them), a full run passed 12 of 12 tasks and 7 of 7 attacks. That came after one run in which the provider began rejecting a prompt-extraction attempt with a new `cyber_policy` code, now treated as a refusal, and the model called a read tool for a cross-User request; the prompt now tells it to refuse those without any tool. These figures are for the in-memory ledger; they are not evidence about the real backend.
+Earlier runs the same day failed on internal-transfer handling and on T3 escalation before the prompt and tool descriptions were tightened, so the suite is not deterministic. On 16 October, after recurring bills and Reminder preferences were removed from the catalog (the bills and stop-Reminders tasks now check that the Agent says it cannot do them), a full run passed 12 of 12 tasks and 7 of 7 attacks. That came after one run in which the provider began rejecting a prompt-extraction attempt with a new `cyber_policy` code, now treated as a refusal, and the model called a read tool for a cross-User request; the prompt now tells it to refuse those without any tool. These figures are for the in-memory ledger; they are not evidence about the real backend.
 
 Run the supported operations against a disposable local Supabase stack and verify owned reads/writes, stale versions, expired/reused confirmations, cross-user rejection and failure recovery before accepting live Chat. Test Google-session identity injection and foreign-origin denial at the web bridge, then configured model/Kapso scenarios separately. Complete the missing backend operations and owner evaluation evidence before claiming every PRD scenario works in both Channels.

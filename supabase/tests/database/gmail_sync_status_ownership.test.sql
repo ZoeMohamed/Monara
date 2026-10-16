@@ -152,7 +152,7 @@ select is(
   'below the threshold the account is kept but the item waits for review'
 );
 
--- Confident, but no account, and a transfer naming an account.
+-- Confident, but no account, and an exclusion naming an account.
 select public.record_gmail_extraction(
   (select id from public.processed_gmail_messages where gmail_message_id = 'sync-003'),
   'transactions',
@@ -161,7 +161,7 @@ select public.record_gmail_extraction(
       "occurredTime": null, "description": null, "location": null,
       "accountHint": null, "financialAccountName": "Other user account",
       "categoryName": null, "confidence": 0.99},
-     {"kind": "transfer", "merchantName": null,
+     {"kind": "exclusion", "merchantName": null,
       "money": {"amountMinor": "50000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": "Top up", "location": null,
       "accountHint": null, "financialAccountName": "Daily wallet",
@@ -177,7 +177,7 @@ select is(
     where source.gmail_message_id = 'sync-003'
   ),
   array[row('pending', null::uuid)::text, row('pending', null::uuid)::text],
-  'another User''s account never maps, and transfers are never mapped or confirmed'
+  'another User''s account never maps, and exclusions are never mapped or auto-confirmed'
 );
 
 select is(

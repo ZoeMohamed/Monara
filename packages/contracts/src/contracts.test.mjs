@@ -6,7 +6,6 @@ import {
   calendarDateSchema,
   claimGmailMessagesInputSchema,
   confirmDestructiveActionInputSchema,
-  confirmedTransactionValuesSchema,
   confirmRecurringBillInputSchema,
   confirmTransactionInputSchema,
   createBudgetInputSchema,
@@ -56,8 +55,6 @@ const nullableValues = {
   accountHint: null,
   categoryId: null,
   financialAccountId: null,
-  fromFinancialAccountId: null,
-  toFinancialAccountId: null,
 };
 
 describe("common value contracts", () => {
@@ -141,16 +138,25 @@ describe("transaction contracts", () => {
       clientRequestId: "client-request-missing-values",
     });
     assert.equal(result.success, false);
+    assert.equal(
+      createTransactionInputSchema.safeParse({
+        ...nullableValues,
+        kind: "exclusion",
+        merchantName: "Reimbursement",
+        financialAccountId: ids.accountA,
+        clientRequestId: "client-request-incomplete-exclusion",
+      }).success,
+      false,
+    );
   });
 
-  it("requires different owned accounts for confirmed transfers", () => {
+  it("keeps exclusion as a third type with the same confirmed lifecycle", () => {
     const values = {
       ...nullableValues,
-      kind: "transfer",
+      kind: "expense",
       money,
       occurredOn: "2026-10-12",
-      fromFinancialAccountId: ids.accountA,
-      toFinancialAccountId: ids.accountA,
+      financialAccountId: ids.accountA,
     };
     assert.equal(
       confirmTransactionInputSchema.safeParse({
@@ -158,15 +164,49 @@ describe("transaction contracts", () => {
         expectedUpdatedAt: timestamp,
         values,
       }).success,
-      false,
+      true,
     );
     assert.equal(
-      confirmTransactionInputSchema.safeParse({
-        transactionId: ids.transaction,
-        expectedUpdatedAt: timestamp,
-        values: { ...values, toFinancialAccountId: ids.accountB },
+      transactionSchema.safeParse({
+        id: ids.transaction,
+        ...values,
+        kind: "exclusion",
+        reviewStatus: "confirmed",
+        source: "gmail_email",
+        confidence: 0.9,
+        deletedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
       }).success,
       true,
+    );
+    assert.equal(
+      transactionSchema.safeParse({
+        id: ids.transaction,
+        ...nullableValues,
+        kind: "exclusion",
+        reviewStatus: "confirmed",
+        source: "gmail_email",
+        confidence: 0.9,
+        deletedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }).success,
+      true,
+    );
+    assert.equal(
+      transactionSchema.safeParse({
+        id: ids.transaction,
+        ...values,
+        kind: "transfer",
+        reviewStatus: "confirmed",
+        source: "gmail_email",
+        confidence: 0.9,
+        deletedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }).success,
+      false,
     );
   });
 
@@ -248,26 +288,13 @@ describe("transaction contracts", () => {
     }
   });
 
-  it("validates the merged confirmed transaction after applying a patch", () => {
-    const persisted = {
-      ...nullableValues,
-      kind: "expense",
-      money,
-      occurredOn: "2026-10-12",
-      financialAccountId: ids.accountA,
-    };
-    const patch = { kind: "transfer", financialAccountId: null };
-
+  it("rejects a removed transfer direction in confirmed patches", () => {
     assert.equal(
       updateTransactionInputSchema.safeParse({
         transactionId: ids.transaction,
         expectedUpdatedAt: timestamp,
-        changes: patch,
+        changes: { kind: "transfer" },
       }).success,
-      true,
-    );
-    assert.equal(
-      confirmedTransactionValuesSchema.safeParse({ ...persisted, ...patch }).success,
       false,
     );
   });

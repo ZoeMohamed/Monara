@@ -47,16 +47,15 @@ function record(overrides = {}) {
   };
 }
 
-test("analytics excludes pending, rejected, invalid, and transfer records from every visual", () => {
+test("analytics excludes pending, exclusion, and invalid records from every visual", () => {
   const records = [
     record({ id: "expense", amount: 12000 }),
     record({ id: "income", kind: "income", amount: 60000 }),
     record({ id: "pending", status: "pending", amount: 99999 }),
-    record({ id: "rejected", status: "rejected", amount: 99999 }),
+    record({ id: "excluded", kind: "exclusion", amount: 99999 }),
     record({ id: "invalid", amount: 0 }),
     record({ id: "date-invalid", date: "2026-10-32", amount: 99999 }),
     record({ id: "currency-invalid", currency: "USD", amount: 99999 }),
-    record({ id: "transfer", kind: "transfer", method: "BCA → Jago", amount: 99999 }),
     record({ id: "other-month", date: "2026-09-30", amount: 99999 }),
   ];
   const result = financialMonth(records, "2026-10");
@@ -74,7 +73,7 @@ test("analytics excludes pending, rejected, invalid, and transfer records from e
   assert.equal(result.days[10].income, 60000n);
 });
 
-test("yearly finance totals use actual confirmed dates and exclude transfers, incomplete and other-year records", () => {
+test("yearly finance totals use actual confirmed dates and exclude incomplete and other-year records", () => {
   const records = [
     record({ id: "leap-day", date: "2024-02-29", amount: 100 }),
     record({ id: "new-year", date: "2024-01-01", kind: "income", amount: 500 }),
@@ -83,15 +82,8 @@ test("yearly finance totals use actual confirmed dates and exclude transfers, in
     record({ id: "next", date: "2025-01-01", amount: 999 }),
     record({ id: "invalid-leap", date: "2023-02-29", amount: 999 }),
     record({ id: "pending", date: "2024-02-29", status: "pending", amount: 999 }),
-    record({ id: "rejected", date: "2024-02-29", status: "rejected", amount: 999 }),
+    record({ id: "excluded", date: "2024-02-29", kind: "exclusion", amount: 999 }),
     record({ id: "invalid", date: "2024-02-29", currency: null, amount: 999 }),
-    record({
-      id: "transfer",
-      date: "2024-02-29",
-      kind: "transfer",
-      method: "BCA → Jago",
-      amount: 999,
-    }),
   ];
   const year = financialYear(records, "2024", "2024-02-29");
   assert.equal(year.income, 500n);
@@ -104,7 +96,7 @@ test("yearly finance totals use actual confirmed dates and exclude transfers, in
   assert.equal(year.months[2].spending, 0n);
   assert.deepEqual(
     year.confirmed.map(({ id }) => id),
-    ["new-year", "leap-day", "transfer", "last-day"],
+    ["new-year", "leap-day", "last-day"],
   );
 });
 
@@ -388,9 +380,8 @@ test("month comparison uses confirmed expenses through the same day and excludes
       record({ date: "2026-09-11", amount: 40 }),
       record({ date: "2026-09-12", amount: 800 }),
       record({ date: "2026-09-11", amount: 999, status: "pending" }),
-      record({ date: "2026-09-11", amount: 999, status: "rejected" }),
+      record({ date: "2026-09-11", amount: 999, kind: "exclusion" }),
       record({ date: "2026-09-11", amount: 999, kind: "income" }),
-      record({ date: "2026-09-11", amount: 999, kind: "transfer", method: "BCA → Jago" }),
     ],
     "2026-10",
     "2026-10-11",

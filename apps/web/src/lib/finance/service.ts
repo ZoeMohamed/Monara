@@ -14,7 +14,7 @@ const FINANCE_OPERATIONS = [
   "edit_transaction",
   "edit_pending",
   "confirm_pending",
-  "reject_pending",
+  "exclude_pending",
   "delete_transaction",
   "list_financial_accounts",
   "create_financial_account",
@@ -102,8 +102,8 @@ export async function runFinanceOperation(
       return service.editPending(caller, input);
     case "confirm_pending":
       return service.confirmPending(caller, input);
-    case "reject_pending":
-      return service.rejectPending(caller, input);
+    case "exclude_pending":
+      return service.excludePending(caller, input);
     case "delete_transaction":
       return service.deleteTransaction(caller, input);
     case "list_financial_accounts":

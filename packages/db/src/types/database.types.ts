@@ -275,14 +275,14 @@ isOneToOne: false
                   ]
                 },"transactions": {
                   Row: {
-                    "account_hint": string | null,"ai_confidence": number | null,"amount": number | null,"category_id": string | null,"client_request_id": string | null,"created_at": string,"currency": string | null,"deleted_at": string | null,"description": string | null,"financial_account_id": string | null,"from_financial_account_id": string | null,"id": string,"location": string | null,"merchant_name": string | null,"occurred_on": string | null,"occurred_time": string | null,"processed_gmail_message_id": string | null,"recurring_bill_id": string | null,"review_status": string,"source_item_index": number | null,"source_type": string,"to_financial_account_id": string | null,"transaction_type": string | null,"updated_at": string,"user_id": string
+                    "account_hint": string | null,"ai_confidence": number | null,"amount": number | null,"category_id": string | null,"client_request_id": string | null,"created_at": string,"currency": string | null,"deleted_at": string | null,"description": string | null,"financial_account_id": string | null,"id": string,"location": string | null,"merchant_name": string | null,"occurred_on": string | null,"occurred_time": string | null,"processed_gmail_message_id": string | null,"recurring_bill_id": string | null,"review_status": string,"source_item_index": number | null,"source_type": string,"transaction_type": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"from_financial_account_id"?: string | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status": string,"source_item_index"?: number | null,"source_type": string,"to_financial_account_id"?: string | null,"transaction_type"?: string | null,"updated_at"?: string,"user_id": string
+                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status": string,"source_item_index"?: number | null,"source_type": string,"transaction_type"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"from_financial_account_id"?: string | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status"?: string,"source_item_index"?: number | null,"source_type"?: string,"to_financial_account_id"?: string | null,"transaction_type"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status"?: string,"source_item_index"?: number | null,"source_type"?: string,"transaction_type"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -298,12 +298,6 @@ isOneToOne: false
       referencedRelation: "financial_accounts"
       referencedColumns: ["id","user_id"]
     },{
-      foreignKeyName: "transactions_from_financial_account_id_user_id_fkey"
-      columns: ["from_financial_account_id","user_id"]
-isOneToOne: false
-      referencedRelation: "financial_accounts"
-      referencedColumns: ["id","user_id"]
-    },{
       foreignKeyName: "transactions_processed_gmail_message_id_user_id_fkey"
       columns: ["processed_gmail_message_id","user_id"]
 isOneToOne: false
@@ -314,12 +308,6 @@ isOneToOne: false
       columns: ["recurring_bill_id","user_id"]
 isOneToOne: false
       referencedRelation: "recurring_bills"
-      referencedColumns: ["id","user_id"]
-    },{
-      foreignKeyName: "transactions_to_financial_account_id_user_id_fkey"
-      columns: ["to_financial_account_id","user_id"]
-isOneToOne: false
-      referencedRelation: "financial_accounts"
       referencedColumns: ["id","user_id"]
     }
                   ]

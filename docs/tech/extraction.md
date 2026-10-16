@@ -6,7 +6,7 @@ Owner: Adlyn. Features: F2, F3, F8, F14. Status: Not started.
 TODO: what the pipeline turns emails (and later receipts and voice notes) into, and why it never guesses.
 
 ## How it works
-TODO: Composio retrieval, the 30-day import and sync, the extraction prompt and schema, type detection (expense, income, transfer), dedupe, recurring bill detection, and receipt and voice handling. Add a Mermaid flow diagram.
+TODO: Composio retrieval, the 30-day import and sync, the extraction prompt and schema, income/expense detection, excluded-record review, dedupe, recurring bill detection, and receipt and voice handling. Add a Mermaid flow diagram.
 
 ## Key decisions
 TODO: prompt and schema choices, confidence handling, why missing fields stay empty, dedupe design. Give the alternative for each.

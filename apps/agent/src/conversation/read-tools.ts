@@ -62,8 +62,7 @@ async function summariseMonth(month: string, context: ToolContext) {
       }),
     );
     for (const transaction of result.items) {
-      // Transfers move money between the User's own accounts, so they are not counted.
-      if (!transaction.money || transaction.deletedAt || transaction.kind === "transfer") continue;
+      if (!transaction.money || transaction.deletedAt) continue;
       const amount = BigInt(transaction.money.amountMinor);
       transactionCount += 1;
       if (transaction.kind === "income") {
@@ -89,7 +88,7 @@ const getSummaryInputSchema = z
 const getSummary: AgentTool<typeof getSummaryInputSchema> = {
   name: "get_summary",
   description:
-    "Adds up the User's confirmed income and spending for each given month (YYYY-MM): totals, the difference, the savings rate, and spending by Category, plus the totals and average monthly spending across all the months given. Transfers are not counted. Use this for every total or average.",
+    "Adds up the User's confirmed income and spending for each given month (YYYY-MM): totals, the difference, the savings rate, and spending by Category, plus the totals and average monthly spending across all the months given. Excluded records are not counted. Use this for every total or average.",
   tier: "T0",
   input: getSummaryInputSchema,
   async run(input, context) {
@@ -137,7 +136,7 @@ export const readTools = [
   }),
   readTool({
     name: "list_transactions",
-    description: `Lists the User's transactions, newest first. Filter by month (YYYY-MM), kind (expense, income, transfer), or reviewStatus. Pending ones are still waiting in the Review Queue and do not count towards totals. ${PAGING}`,
+    description: `Lists the User's transactions, newest first. Filter by month (YYYY-MM), kind (expense, income, or exclusion), or reviewStatus (pending or confirmed). Pending and exclusion records do not count towards totals. ${PAGING}`,
     input: listTransactionsInputSchema,
     output: transactionPageSchema,
   }),

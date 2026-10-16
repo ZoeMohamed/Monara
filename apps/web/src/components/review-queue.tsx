@@ -7,7 +7,7 @@ import { Icon } from "@/components/icon";
 import { useMerchantLogo } from "@/components/use-brand-logo";
 import { formatDay, reviewFlags, type Transaction, transactionErrors } from "@/data/demo-ledger";
 
-const kindLabels = { expense: "Expense", income: "Income", transfer: "Transfer" } as const;
+const kindLabels = { expense: "Expense", income: "Income", exclusion: "Exclusion" } as const;
 
 function ReviewItem({
   transaction,
@@ -92,12 +92,12 @@ function ReviewItem({
           Edit
         </Button>
         <Button
-          aria-label={`Reject ${name}`}
+          aria-label={`Exclude ${name}`}
           className="min-h-11 rounded-full px-4 text-danger"
           onPress={() => onReject(transaction.id)}
           variant="ghost"
         >
-          Reject
+          Exclude
         </Button>
       </div>
     </Card>

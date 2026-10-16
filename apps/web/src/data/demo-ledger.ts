@@ -7,8 +7,8 @@ import {
 } from "@monara/contracts";
 
 // Presentation models support both explicit demo data and validated owned backend records.
-type TransactionKind = "expense" | "income" | "transfer";
-type ReviewStatus = "pending" | "confirmed" | "rejected";
+type TransactionKind = "expense" | "income" | "exclusion";
+type ReviewStatus = "pending" | "confirmed";
 export type Transaction = {
   id: string;
   merchant: string | null;
@@ -26,8 +26,6 @@ export type Transaction = {
   backend?: BackendTransaction;
   categoryId?: string | null;
   financialAccountId?: string | null;
-  fromFinancialAccountId?: string | null;
-  toFinancialAccountId?: string | null;
 };
 
 export type TransactionValues = Pick<
@@ -43,14 +41,11 @@ export type TransactionValues = Pick<
   | "kind"
   | "categoryId"
   | "financialAccountId"
-  | "fromFinancialAccountId"
-  | "toFinancialAccountId"
 >;
 export type TransactionErrors = Partial<Record<keyof TransactionValues, string>>;
 
 export const demoToday = "2026-10-11";
 export const demoMethods = ["BCA", "GoPay", "Jago", "Mandiri", "Cash"];
-export const demoTransferMethods = ["BCA → Jago", "Jago → BCA"];
 export const demoCategoryNames = ["Food & Drinks", "Transport", "Shopping", "Digital", "Other"];
 
 export function isCalendarDate(value: string | null): boolean {
@@ -61,25 +56,20 @@ export function isCalendarDate(value: string | null): boolean {
 
 export function transactionErrors(values: TransactionValues): TransactionErrors {
   const errors: TransactionErrors = {};
-  if (!values.kind || !["expense", "income", "transfer"].includes(values.kind)) {
+  if (!values.kind || !["expense", "income", "exclusion"].includes(values.kind)) {
     errors.kind = "Choose the transaction type.";
   }
-  if (values.amount === null || !Number.isSafeInteger(values.amount) || values.amount <= 0) {
+  if (
+    values.kind !== "exclusion" &&
+    (values.amount === null || !Number.isSafeInteger(values.amount) || values.amount <= 0)
+  ) {
     errors.amount = "Enter a positive whole amount of rupiah within the supported range.";
   }
-  if (values.currency !== "IDR") errors.currency = "Choose IDR. Monara supports rupiah only.";
-  if (!isCalendarDate(values.date)) errors.date = "Enter a valid transaction date.";
-  const owned =
-    values.financialAccountId !== undefined || values.fromFinancialAccountId !== undefined;
-  if (
-    values.kind === "transfer" &&
-    (owned
-      ? !values.fromFinancialAccountId ||
-        !values.toFinancialAccountId ||
-        values.fromFinancialAccountId === values.toFinancialAccountId
-      : !demoTransferMethods.includes(values.method ?? ""))
-  ) {
-    errors.method = "Choose the source and destination Financial Accounts.";
+  if (values.kind !== "exclusion" && values.currency !== "IDR") {
+    errors.currency = "Choose IDR. Monara supports rupiah only.";
+  }
+  if (values.kind !== "exclusion" && !isCalendarDate(values.date)) {
+    errors.date = "Enter a valid transaction date.";
   }
   return errors;
 }
@@ -92,13 +82,12 @@ export function reviewFlags(transaction: Transaction): string[] {
         amount: "Amount missing or invalid",
         currency: "Currency missing",
         date: "Date missing or invalid",
-        method: "Transfer accounts missing or invalid",
+        method: "Financial account missing",
       })[key as "kind" | "amount" | "currency" | "date" | "method"],
   );
-  if (!transaction.method && transaction.kind !== "transfer") {
+  if (transaction.kind !== "exclusion" && !transaction.method) {
     flags.push("Financial account not assigned");
   }
-  if (!transaction.category) flags.push("Category not assigned");
   if (transaction.confidence === null) flags.push("Confidence unavailable");
   else if (transaction.confidence < 95) flags.push("Low confidence");
   return flags;
@@ -147,12 +136,6 @@ export function updateConfirmedTransaction(
     ...(values.financialAccountId === undefined
       ? {}
       : { financialAccountId: values.financialAccountId }),
-    ...(values.fromFinancialAccountId === undefined
-      ? {}
-      : { fromFinancialAccountId: values.fromFinancialAccountId }),
-    ...(values.toFinancialAccountId === undefined
-      ? {}
-      : { toFinancialAccountId: values.toFinancialAccountId }),
   };
   return transactions.map((transaction) => (transaction === existing ? corrected : transaction));
 }
@@ -205,10 +188,10 @@ export function undoTransactionDeletion(
   return [...transactions.slice(0, insertionIndex), deleted, ...transactions.slice(insertionIndex)];
 }
 
-export function rejectPendingTransaction(transactions: Transaction[], id: string): Transaction[] {
+export function excludePendingTransaction(transactions: Transaction[], id: string): Transaction[] {
   return transactions.map((transaction) =>
     transaction.id === id && transaction.status === "pending"
-      ? { ...transaction, status: "rejected" }
+      ? { ...transaction, kind: "exclusion", status: "confirmed" }
       : transaction,
   );
 }
@@ -270,6 +253,7 @@ export function demoSummary(transactions: Transaction[], month = demoMonth) {
   const confirmed = transactions.filter(
     (transaction) =>
       transaction.status === "confirmed" &&
+      (transaction.kind === "expense" || transaction.kind === "income") &&
       Object.keys(transactionErrors(transaction)).length === 0 &&
       transaction.date?.startsWith(`${month}-`),
   );

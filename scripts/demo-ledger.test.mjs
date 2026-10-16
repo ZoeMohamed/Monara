@@ -6,10 +6,10 @@ import {
   deleteConfirmedTransaction,
   demoReminders,
   demoSummary,
+  excludePendingTransaction,
   formatMonth,
   isCalendarDate,
   newestFirst,
-  rejectPendingTransaction,
   reviewFlags,
   safeToSpendToday,
   shiftMonth,
@@ -146,47 +146,37 @@ test("invalid type, unsupported currency, and impossible date each prevent confi
   }
 });
 
-test("a transfer cannot confirm with missing, single, same, or unknown Financial Accounts", () => {
-  for (const method of [null, "", "BCA", "Jago", "BCA → BCA", "BCA → Unknown", "Unknown → BCA"]) {
-    const pending = syntheticTransaction({ kind: "transfer", method });
-    const original = [pending];
-    assert.ok(transactionErrors(valuesOf(pending)).method, String(method));
-    assert.ok(reviewFlags(pending).includes("Transfer accounts missing or invalid"));
-    assert.equal(
-      updatePendingTransaction(original, pending.id, valuesOf(pending), "confirm"),
-      original,
-    );
-    assert.equal(pending.status, "pending");
-    assert.equal(pending.method, method);
-  }
+test("an imported transaction can be reviewed before an Account is assigned", () => {
   for (const kind of ["expense", "income"]) {
-    assert.deepEqual(transactionErrors(valuesOf(syntheticTransaction({ kind, method: null }))), {});
+    const pending = syntheticTransaction({ kind, method: null });
+    assert.deepEqual(transactionErrors(valuesOf(pending)), {});
+    assert.ok(reviewFlags(pending).includes("Financial account not assigned"));
   }
 });
 
-test("changing expense to transfer requires deliberately selecting a valid source and destination", () => {
-  for (const method of ["BCA → Jago", "Jago → BCA"]) {
-    const expense = syntheticTransaction();
-    const transferValues = { ...valuesOf(expense), kind: "transfer" };
-    const edited = updatePendingTransaction([expense], expense.id, transferValues, "edit");
-    assert.equal(edited[0].kind, "transfer");
-    assert.equal(edited[0].method, "BCA");
-    assert.equal(edited[0].status, "pending");
-    assert.ok(transactionErrors(valuesOf(edited[0])).method);
-    assert.equal(
-      updatePendingTransaction(edited, expense.id, valuesOf(edited[0]), "confirm"),
-      edited,
-    );
-    const selected = { ...valuesOf(edited[0]), method };
-    assert.deepEqual(transactionErrors(selected), {});
-    const confirmed = updatePendingTransaction(edited, expense.id, selected, "confirm");
-    assert.equal(confirmed[0].status, "confirmed");
-    assert.equal(confirmed[0].method, method);
-    const summary = demoSummary(confirmed);
-    assert.equal(summary.spending, 0n);
-    assert.equal(summary.income, 0n);
-    assert.equal(summary.confirmed.length, 1);
-  }
+test("an exclusion can close an incomplete import without inventing financial facts", () => {
+  const incomplete = syntheticTransaction({
+    amount: null,
+    currency: null,
+    date: null,
+    method: null,
+  });
+  const [excluded] = excludePendingTransaction([incomplete], incomplete.id);
+  assert.equal(excluded.kind, "exclusion");
+  assert.equal(excluded.status, "confirmed");
+  assert.deepEqual(transactionErrors(excluded), {});
+  assert.equal(demoSummary([excluded]).spending, 0n);
+});
+
+test("the removed transfer direction cannot be edited or confirmed", () => {
+  const expense = syntheticTransaction();
+  const transferValues = { ...valuesOf(expense), kind: "transfer" };
+  assert.equal(transactionErrors(transferValues).kind, "Choose the transaction type.");
+  const edited = updatePendingTransaction([expense], expense.id, transferValues, "edit");
+  assert.equal(edited[0].kind, "transfer");
+  assert.equal(edited[0].status, "pending");
+  assert.equal(updatePendingTransaction(edited, expense.id, transferValues, "confirm"), edited);
+  assert.equal(demoSummary(edited).confirmed.length, 0);
 });
 
 test("editing changes only the selected pending item and preserves its review state", () => {
@@ -240,20 +230,20 @@ test("confirmation updates exact totals once and repeated actions cannot change 
       confirmed,
     );
   }
-  assert.deepEqual(rejectPendingTransaction(confirmed, pending.id), confirmed);
+  assert.deepEqual(excludePendingTransaction(confirmed, pending.id), confirmed);
   assert.equal(original[1].status, "pending");
 });
 
-test("rejection retains the record but excludes it and cannot be reversed by edit or confirmation", () => {
+test("exclusion retains the record as confirmed and cannot be reviewed twice", () => {
   const pending = Object.freeze(syntheticTransaction());
   const original = Object.freeze([pending]);
-  const rejected = rejectPendingTransaction(original, pending.id);
+  const rejected = excludePendingTransaction(original, pending.id);
   assert.equal(rejected.length, 1);
-  assert.deepEqual(rejected[0], { ...pending, status: "rejected" });
+  assert.deepEqual(rejected[0], { ...pending, kind: "exclusion", status: "confirmed" });
   assert.equal(pending.status, "pending");
   assert.equal(demoSummary(rejected).confirmed.length, 0);
   assert.equal(demoSummary(rejected).spending, 0n);
-  assert.deepEqual(rejectPendingTransaction(rejected, pending.id), rejected);
+  assert.deepEqual(excludePendingTransaction(rejected, pending.id), rejected);
   for (const action of ["edit", "confirm"]) {
     assert.deepEqual(
       updatePendingTransaction(rejected, pending.id, valuesOf(pending), action),
@@ -310,7 +300,7 @@ test("correcting month and category moves the expense between the affected summa
   assert.equal(budgetUsage(corrected, food, "2026-09").used, 0n);
 });
 
-test("correcting an expense to income or transfer recomputes totals without treating transfers as money out", () => {
+test("correcting an expense to income recomputes totals", () => {
   const confirmed = syntheticTransaction({ status: "confirmed" });
   const original = [confirmed];
   const income = updateConfirmedTransaction(original, confirmed.id, {
@@ -319,14 +309,7 @@ test("correcting an expense to income or transfer recomputes totals without trea
   });
   assert.equal(demoSummary(income).spending, 0n);
   assert.equal(demoSummary(income).income, 28000n);
-  const transfer = updateConfirmedTransaction(income, confirmed.id, {
-    ...valuesOf(income[0]),
-    kind: "transfer",
-    method: "BCA → Jago",
-  });
-  assert.equal(demoSummary(transfer).spending, 0n);
-  assert.equal(demoSummary(transfer).income, 0n);
-  assert.equal(demoSummary(transfer).confirmed.length, 1);
+  assert.equal(demoSummary(income).confirmed.length, 1);
 });
 
 test("invalid corrections, unconfirmed records, and unknown identifiers leave the ledger unchanged", () => {
@@ -340,7 +323,6 @@ test("invalid corrections, unconfirmed records, and unknown identifiers leave th
     { date: "2026-02-30" },
     { kind: null },
     { currency: "USD" },
-    { kind: "transfer", method: "BCA" },
   ]) {
     assert.equal(
       updateConfirmedTransaction(original, confirmed.id, { ...valuesOf(confirmed), ...overrides }),
@@ -348,15 +330,22 @@ test("invalid corrections, unconfirmed records, and unknown identifiers leave th
     );
   }
   assert.equal(updateConfirmedTransaction(original, "missing", valuesOf(confirmed)), original);
-  for (const overrides of [
-    { status: "pending" },
-    { status: "rejected" },
-    { status: "confirmed", amount: null },
-  ]) {
+  for (const overrides of [{ status: "pending" }, { status: "confirmed", amount: null }]) {
     const record = syntheticTransaction(overrides);
     const records = [record];
     assert.equal(updateConfirmedTransaction(records, record.id, valuesOf(confirmed)), records);
   }
+});
+
+test("correcting a confirmed exclusion to an expense adds it to totals", () => {
+  const excluded = syntheticTransaction({ kind: "exclusion", status: "confirmed", amount: null });
+  const corrected = updateConfirmedTransaction(
+    [excluded],
+    excluded.id,
+    valuesOf(syntheticTransaction({ kind: "expense", status: "confirmed", amount: 28000 })),
+  );
+  assert.equal(corrected[0].kind, "expense");
+  assert.equal(demoSummary(corrected).spending, 28000n);
 });
 
 test("correction inputs cannot overwrite record identity, review status, or extraction metadata", () => {
@@ -424,7 +413,7 @@ test("unknown identifiers leave every record unchanged", () => {
     syntheticTransaction(),
     syntheticTransaction({ id: "synthetic-existing", status: "confirmed" }),
   ];
-  assert.deepEqual(rejectPendingTransaction(records, "synthetic-missing"), records);
+  assert.deepEqual(excludePendingTransaction(records, "synthetic-missing"), records);
   for (const action of ["edit", "confirm"]) {
     assert.deepEqual(
       updatePendingTransaction(records, "synthetic-missing", valuesOf(records[0]), action),
@@ -433,24 +422,28 @@ test("unknown identifiers leave every record unchanged", () => {
   }
 });
 
-test("totals include only valid confirmed expenses and income, excluding transfers and unresolved imports", () => {
+test("totals include only valid confirmed expenses and income, excluding pending and exclusion types", () => {
   const records = [
     syntheticTransaction({ id: "expense", status: "confirmed", amount: 67000 }),
     syntheticTransaction({ id: "income", status: "confirmed", kind: "income", amount: 200000 }),
     syntheticTransaction({
-      id: "transfer",
+      id: "reimbursement",
+      kind: "exclusion",
       status: "confirmed",
-      kind: "transfer",
-      method: "BCA → Jago",
       amount: 900000,
     }),
     syntheticTransaction({ id: "pending-expense", amount: 880000 }),
     syntheticTransaction({ id: "pending-income", kind: "income", amount: 990000 }),
-    syntheticTransaction({ id: "rejected-expense", status: "rejected", amount: 770000 }),
     syntheticTransaction({
-      id: "rejected-income",
-      status: "rejected",
-      kind: "income",
+      id: "excluded-expense",
+      kind: "exclusion",
+      status: "confirmed",
+      amount: 770000,
+    }),
+    syntheticTransaction({
+      id: "excluded-income",
+      status: "confirmed",
+      kind: "exclusion",
       amount: 660000,
     }),
     syntheticTransaction({
@@ -466,7 +459,7 @@ test("totals include only valid confirmed expenses and income, excluding transfe
   assert.equal(summary.difference, 133000n);
   assert.deepEqual(
     summary.confirmed.map(({ id }) => id),
-    ["expense", "income", "transfer"],
+    ["expense", "income"],
   );
 });
 
@@ -559,11 +552,10 @@ test("budget usage counts only confirmed expenses of that category in that month
     syntheticTransaction({ id: "other", status: "confirmed", category: "Transport", amount: 9 }),
     syntheticTransaction({ id: "income", status: "confirmed", kind: "income", amount: 9 }),
     syntheticTransaction({
-      id: "moved",
+      id: "reimbursement",
+      kind: "exclusion",
       status: "confirmed",
-      kind: "transfer",
       amount: 9,
-      method: "BCA → Jago",
     }),
     syntheticTransaction({ id: "last-month", status: "confirmed", date: "2026-09-30", amount: 9 }),
   ];
@@ -630,7 +622,7 @@ test("confirmed deletion updates exact spending and budgets without touching oth
   assert.deepEqual(records, [deleted, remaining, income]);
 });
 
-test("deletion handles income and transfer without changing unrelated totals", () => {
+test("deletion handles income without changing unrelated totals", () => {
   const expense = syntheticTransaction({ id: "expense", status: "confirmed", amount: 100 });
   const income = syntheticTransaction({
     id: "income",
@@ -638,27 +630,15 @@ test("deletion handles income and transfer without changing unrelated totals", (
     kind: "income",
     amount: 200,
   });
-  const transfer = syntheticTransaction({
-    id: "transfer",
-    status: "confirmed",
-    kind: "transfer",
-    method: "BCA → Jago",
-    amount: 300,
-  });
-  const records = [expense, income, transfer];
+  const records = [expense, income];
   const withoutIncome = demoSummary(deleteConfirmedTransaction(records, income));
   assert.equal(withoutIncome.spending, 100n);
   assert.equal(withoutIncome.income, 0n);
-  const withoutTransfer = demoSummary(deleteConfirmedTransaction(records, transfer));
-  assert.equal(withoutTransfer.spending, 100n);
-  assert.equal(withoutTransfer.income, 200n);
-  assert.equal(withoutTransfer.difference, 100n);
 });
 
-test("deletion refuses pending, rejected, invalid, missing, ambiguous and stale records", () => {
+test("deletion refuses pending, invalid, missing, ambiguous and stale records", () => {
   for (const overrides of [
     { status: "pending" },
-    { status: "rejected" },
     { status: "confirmed", amount: 0 },
     { status: "confirmed", date: null },
   ]) {
@@ -784,18 +764,12 @@ test("safe-to-spend counts the final calendar day and makes all remaining budget
   assert.equal(leapDay.perDay, 100000n);
 });
 
-test("safe-to-spend excludes pending, rejected, income, transfers and expenses outside this month", () => {
+test("safe-to-spend excludes pending, exclusion, income and expenses outside this month", () => {
   const records = [
     syntheticTransaction({ status: "confirmed", amount: 1200 }),
     syntheticTransaction({ amount: 99000 }),
-    syntheticTransaction({ status: "rejected", amount: 99000 }),
+    syntheticTransaction({ status: "confirmed", kind: "exclusion", amount: 99000 }),
     syntheticTransaction({ status: "confirmed", kind: "income", amount: 99000 }),
-    syntheticTransaction({
-      status: "confirmed",
-      kind: "transfer",
-      method: "BCA → Jago",
-      amount: 99000,
-    }),
     syntheticTransaction({ status: "confirmed", date: "2026-09-30", amount: 99000 }),
   ];
   const result = safeToSpendToday(records, [syntheticBudget], "2026-10-11");
@@ -899,10 +873,10 @@ test("payday usage respects its as-of date, excludes the previous cycle, and sup
   assert.equal(safeToSpendToday(entries, [future], "2026-10-11").dailyGuideAvailable, false);
 });
 
-test("a transfer missing its accounts gets one flag, not two", () => {
-  const flags = reviewFlags(syntheticTransaction({ kind: "transfer", method: null }));
-  assert.ok(flags.includes("Transfer accounts missing or invalid"));
-  assert.ok(!flags.includes("Financial account not assigned"));
+test("an unassigned income gets one Account flag", () => {
+  const flags = reviewFlags(syntheticTransaction({ kind: "income", method: null }));
+  assert.ok(flags.includes("Financial account not assigned"));
+  assert.equal(flags.filter((flag) => flag === "Financial account not assigned").length, 1);
   assert.ok(
     reviewFlags(syntheticTransaction({ method: null })).includes("Financial account not assigned"),
   );
