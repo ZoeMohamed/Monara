@@ -694,6 +694,9 @@ type SliceStyle = CSSProperties & {
   "--slice-delay": string;
 };
 
+const donutViewBox = "-14 -14 248 248";
+const donutViewBoxSize = 248;
+
 function categoryLabel(
   segment: CategorySegment,
   formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
@@ -716,13 +719,28 @@ function CategoryDonut({
 }) {
   const { formatRupiah, compactAmount } = useAmountDisplay();
   const titleId = useId();
+  const clipId = useId();
   return (
     <fieldset className={donutStyles.chart}>
       <legend className="sr-only">Spending categories</legend>
-      <svg aria-labelledby={titleId} key={periodLabel} viewBox="-14 -14 248 248">
+      <svg aria-labelledby={titleId} key={periodLabel} viewBox={donutViewBox}>
         <title
           id={titleId}
         >{`Spending categories for ${periodLabel}. Select a slice to see payments.`}</title>
+        <defs>
+          {segments.map((segment, index) => (
+            <clipPath
+              clipPathUnits="objectBoundingBox"
+              id={`${clipId}-${index}`}
+              key={categoryKey(segment)}
+            >
+              <path
+                d={segment.path}
+                transform={`scale(${1 / donutViewBoxSize}) translate(14 14)`}
+              />
+            </clipPath>
+          ))}
+        </defs>
         {segments.length > 0 ? (
           <circle aria-hidden className={donutStyles.guide} cx="110" cy="110" fill="none" r="118" />
         ) : (
@@ -745,45 +763,37 @@ function CategoryDonut({
             stroke={highlighted.color}
           />
         ) : null}
-        {segments
-          .filter((segment) => segment.path)
-          .map((segment, index) => {
-            const style: SliceStyle = {
-              clipPath: `path("${segment.path}")`,
-              "--slice-x": `${segment.offsetX.toFixed(3)}px`,
-              "--slice-y": `${segment.offsetY.toFixed(3)}px`,
-              "--slice-color": segment.color,
-              "--slice-delay": `${index * 70}ms`,
-            };
-            return (
-              <foreignObject
-                className={donutStyles.sliceHost}
-                height="220"
-                key={categoryKey(segment)}
-                width="220"
-                x="0"
-                y="0"
-              >
-                <button
-                  aria-label={categoryLabel(segment, formatRupiah)}
-                  aria-pressed={highlighted === segment}
-                  className={donutStyles.slice}
-                  data-muted={Boolean(highlighted && highlighted !== segment)}
-                  onClick={(event) => onSelect(categoryKey(segment), true, event.detail === 0)}
-                  style={style}
-                  title={`${segment.name} · ${formatRupiah(segment.amount)} · ${(segment.proportion * 100).toFixed(1)}%`}
-                  type="button"
-                >
-                  <svg aria-hidden="true" focusable="false" viewBox="0 0 220 220">
-                    <path d={segment.path} fill={segment.color} />
-                    <path className={donutStyles.focusRing} d={segment.path} fill="none" />
-                    <path className={donutStyles.focusEdge} d={segment.path} fill="none" />
-                  </svg>
-                </button>
-              </foreignObject>
-            );
-          })}
       </svg>
+      {/* Keep HTML outside SVG: WebKit can misplace transformed foreignObject content. */}
+      {segments.map((segment, index) => {
+        if (!segment.path) return null;
+        const style: SliceStyle = {
+          clipPath: `url(#${clipId}-${index})`,
+          "--slice-x": `${(segment.offsetX / donutViewBoxSize) * 100}%`,
+          "--slice-y": `${(segment.offsetY / donutViewBoxSize) * 100}%`,
+          "--slice-color": segment.color,
+          "--slice-delay": `${index * 70}ms`,
+        };
+        return (
+          <button
+            aria-label={categoryLabel(segment, formatRupiah)}
+            aria-pressed={highlighted === segment}
+            className={donutStyles.slice}
+            data-muted={Boolean(highlighted && highlighted !== segment)}
+            key={`${periodLabel}-${categoryKey(segment)}`}
+            onClick={(event) => onSelect(categoryKey(segment), true, event.detail === 0)}
+            style={style}
+            title={`${segment.name} · ${formatRupiah(segment.amount)} · ${(segment.proportion * 100).toFixed(1)}%`}
+            type="button"
+          >
+            <svg aria-hidden="true" focusable="false" viewBox={donutViewBox}>
+              <path d={segment.path} fill={segment.color} />
+              <path className={donutStyles.focusRing} d={segment.path} fill="none" />
+              <path className={donutStyles.focusEdge} d={segment.path} fill="none" />
+            </svg>
+          </button>
+        );
+      })}
       <div
         aria-live="polite"
         className={donutStyles.center}
