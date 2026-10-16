@@ -85,16 +85,11 @@ function DesktopSidebar({
           </span>
         ) : null}
       </button>
-      <div className={styles.sideStatus}>
-        {live ? (
-          <>
-            <strong>Private ledger</strong>
-            Saved to your account
-          </>
-        ) : (
+      {!live ? (
+        <div className={styles.sideStatus}>
           <DemoIndicator className="block text-sm font-bold" />
-        )}
-      </div>
+        </div>
+      ) : null}
       <button className={styles.sideAdd} data-tour="add" onClick={onAdd} type="button">
         <Icon name="plus" strokeWidth={2.4} />
         Add transaction
