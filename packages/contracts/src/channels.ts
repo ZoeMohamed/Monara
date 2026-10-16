@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   destructiveActionConfirmationSchema,
   destructiveActionSchema,
+  isoDateTimeSchema,
   reversibleActionReceiptSchema,
   userIdSchema,
 } from "./common.ts";
@@ -41,6 +42,45 @@ export const resolveWhatsAppSenderResultSchema = z.discriminatedUnion("status", 
   z.object({ status: z.literal("unlinked") }).strict(),
 ]);
 
+// What the signed-in User sees and does in Settings. The full number is never
+// sent back: only its last four digits.
+const phoneLastFourSchema = z.string().regex(/^\d{4}$/);
+
+export const startWhatsAppLinkInputSchema = z
+  .object({ phone: z.string().trim().min(1).max(40) })
+  .strict();
+
+export const startWhatsAppLinkResultSchema = z
+  .object({
+    // Shown once. The User sends it from the number being linked.
+    code: whatsAppVerificationCodeSchema,
+    expiresAt: isoDateTimeSchema,
+    phoneLastFour: phoneLastFourSchema,
+    // Monara's WhatsApp number, when configured.
+    sendTo: phoneE164Schema.nullable(),
+  })
+  .strict();
+
+export const whatsAppLinkStatusSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("none") }).strict(),
+  z
+    .object({
+      status: z.literal("pending"),
+      phoneLastFour: phoneLastFourSchema,
+      expiresAt: isoDateTimeSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal("verified"),
+      phoneLastFour: phoneLastFourSchema,
+      verifiedAt: isoDateTimeSchema,
+    })
+    .strict(),
+]);
+
+export type StartWhatsAppLinkResult = z.infer<typeof startWhatsAppLinkResultSchema>;
+export type WhatsAppLinkStatus = z.infer<typeof whatsAppLinkStatusSchema>;
 export type ResolveWhatsAppSenderInput = z.input<typeof resolveWhatsAppSenderInputSchema>;
 export type WhatsAppCodeRejection = z.infer<typeof whatsAppCodeRejectionSchema>;
 export type ResolveWhatsAppSenderResult = z.infer<typeof resolveWhatsAppSenderResultSchema>;

@@ -22,9 +22,9 @@ Each handler returns 503 when a secret or binding it needs is missing.
 
 | Tier | Tools | Behaviour |
 | --- | --- | --- |
-| T0 | `get_summary`, `suggest_budget`, `list_transactions`, `list_financial_accounts`, `list_categories`, `list_budgets`, `list_recurring_bills`, `list_reminders` | Run freely. |
-| T1 | `add_transaction`, `edit_transaction`, `confirm_pending`, `reject_pending`, `create_budget`, `edit_budget`, `set_reminder_preferences`, `undo_action` | Run supported operations and return receipts; durable live Undo is unavailable. |
-| T2 | `delete_transaction`, `delete_budget`, `delete_bill` | Never run. Calling one asks the backend for a confirmation. |
+| T0 | `get_summary`, `suggest_budget`, `list_transactions`, `list_financial_accounts`, `list_categories`, `list_budgets`, `list_reminders` | Run freely. |
+| T1 | `add_transaction`, `edit_transaction`, `confirm_pending`, `reject_pending`, `create_budget`, `edit_budget`, `undo_action` | Run and return receipts. `undo_action` reverses a transaction or Budget change within ten minutes. |
+| T2 | `delete_transaction`, `delete_budget` | Never run. Calling one asks the backend for a confirmation. |
 | T3 | none | Connections, WhatsApp linking, export, and credentials are not Agent Tools. |
 
 Three rules are enforced in code, not by the prompt:
@@ -41,7 +41,7 @@ The Agent keeps no conversation for in-app chat. The caller sends the earlier tu
 
 ## WhatsApp
 
-A sender's number is only a claim. For each inbound message the webhook calls `POST {MONARA_BACKEND_URL}/api/agent/whatsapp/resolve-sender` with the number and, when the whole message is a six-digit code, that code (`resolveWhatsAppSenderInputSchema`). The expected contract answers `linked`, `verified`, `code_rejected`, or `unlinked`. That backend route and verified-link initiation are not implemented yet; current handler code does not establish an operational WhatsApp channel. The rules for codes live in `packages/core/src/whatsapp-link.ts`.
+A sender's number is only a claim. For each inbound message the webhook calls `POST {MONARA_BACKEND_URL}/api/agent/whatsapp/resolve-sender` with the number and, when the whole message is a six-digit code, that code (`resolveWhatsAppSenderInputSchema`). It answers `linked`, `verified`, `code_rejected`, or `unlinked`. A User starts linking in Settings, which shows the code to send. The route is in `apps/web/src/app/api/agent/whatsapp/resolve-sender`, the service in `packages/core/src/whatsapp-links.ts`, and the rules for codes in `packages/core/src/whatsapp-link.ts`.
 
 A linked User's text goes to their `WhatsAppConversation` Durable Object (`src/whatsapp/conversation.ts`, logic in `session.ts`), and the webhook answers Kapso straight away. The object answers messages one at a time, keeps recent turns so follow-up questions work, and deletes them after 30 minutes of silence. Within the Durable Object, a processed message does not replay the Agent turn; only sending the reply is retried. Live transport/idempotency acceptance remains outstanding.
 
@@ -57,9 +57,9 @@ The Agent reads and changes records only through the Next.js backend (`src/conve
 | `request_destructive_action` | `{ action, input }` (`requestDestructiveActionInputSchema`) | `destructiveActionConfirmationSchema`. Nothing is deleted. |
 | `confirm_destructive_action` | `confirmDestructiveActionInputSchema` | Ignored. The backend checks the confirmation is this User's, unused, and not expired. |
 
-`apps/web/src/app/api/agent/operations/[operation]/route.ts` implements the authenticated operation boundary, and `apps/web/src/app/api/chat/route.ts` implements the web-session bridge. `apps/web/src/lib/finance/service.ts` is the authoritative allowlist. Transaction/account/category/budget reads, read-only three-month Budget suggestions and supported transaction/review/budget writes exist; `get_summary` computes totals from transaction reads. Transaction/budget deletion requires a bound, expiring confirmation. Stored action receipts do not execute reversal.
+`apps/web/src/app/api/agent/operations/[operation]/route.ts` implements the authenticated operation boundary, and `apps/web/src/app/api/chat/route.ts` implements the web-session bridge. `apps/web/src/lib/finance/service.ts` is the authoritative allowlist. Transaction/account/category/budget reads, read-only three-month Budget suggestions and supported transaction/review/budget writes exist; `get_summary` computes totals from transaction reads. Transaction/budget deletion requires a bound, expiring confirmation. `undo_action` reverses a transaction or Budget change from its receipt within ten minutes.
 
-The worker still advertises `list_recurring_bills`, `list_reminders`, `set_reminder_preferences`, `undo_action` and `delete_bill`, which the Agent backend does not support. New list/read/dismiss notification operations are web-only. Unsupported operations fail explicitly. Reconcile this catalog before claiming every scenario works against the live backend.
+Recurring bills and Reminder preferences have no backend operations yet, so the worker does not offer them. Mark-read and dismiss for notifications stay web-only.
 
 ## Gmail ingestion
 
@@ -94,7 +94,7 @@ The schemas are in `packages/contracts/src/gmail-extraction.ts`. A 404 with the 
 
 ## Still to do
 
-Implement sender-resolution/verified linking, missing Agent operations, durable Undo and client-turn status/idempotency. Accept owned reads/writes and destructive confirmation against a disposable local Supabase stack before configured-provider testing.
+Add the missing Agent operations (recurring bills, Reminder preferences) and client-turn status/idempotency. Accept owned reads/writes and destructive confirmation against a disposable local Supabase stack before configured-provider testing.
 
 The Gmail queue and cron are declared in `wrangler.jsonc` and simulated by `wrangler dev`. Creating the queue in Cloudflare requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
 

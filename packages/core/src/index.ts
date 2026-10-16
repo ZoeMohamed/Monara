@@ -20,4 +20,11 @@ export {
 } from "./gmail-ingestion.ts";
 export { createSupabaseFinanceRepository } from "./supabase-finance-repository.ts";
 export { createSupabaseGmailIngestionRepository } from "./supabase-gmail-ingestion-repository.ts";
+export { createSupabaseWhatsAppLinkRepository } from "./supabase-whatsapp-link-repository.ts";
 export * from "./whatsapp-link.ts";
+export {
+  createWhatsAppLinkService,
+  type StoredWhatsAppLink,
+  type WhatsAppLinkRepository,
+  type WhatsAppLinkService,
+} from "./whatsapp-links.ts";

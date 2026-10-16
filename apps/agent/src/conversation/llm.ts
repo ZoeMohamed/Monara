@@ -29,7 +29,7 @@ const MAX_ATTEMPTS = 2;
 const FILTERED_REPLY =
   "I can't help with that request. I can help you track spending, income, budgets, and bills.";
 
-const FILTER_CODES = new Set(["content_filter", "ResponsibleAIPolicyViolation"]);
+const FILTER_CODES = new Set(["content_filter", "ResponsibleAIPolicyViolation", "cyber_policy"]);
 
 /** Reads the provider's error codes from a failed response. Codes carry no conversation text. */
 async function errorCodes(response: Response): Promise<string[]> {

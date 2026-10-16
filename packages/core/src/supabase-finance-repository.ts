@@ -897,6 +897,48 @@ export function createSupabaseFinanceRepository(
       return true;
     },
 
+    async findUndoAction(userId, actionId) {
+      const state = await client
+        .from("agent_action_states")
+        .select("operation_state, expires_at, consumed_at")
+        .eq("action_id", actionId)
+        .eq("user_id", userId)
+        .eq("purpose", "undo")
+        .maybeSingle();
+      if (state.error) fail(state.error);
+      if (!state.data) return null;
+      const log = await client
+        .from("agent_action_logs")
+        .select("resource_type, resource_id")
+        .eq("id", actionId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (log.error) fail(log.error);
+      if (!log.data?.resource_type || !log.data.resource_id) return null;
+      return {
+        state: state.data.operation_state,
+        resourceType: log.data.resource_type,
+        resourceId: log.data.resource_id,
+        expiresAt: state.data.expires_at,
+        consumedAt: state.data.consumed_at,
+      };
+    },
+
+    async consumeUndoAction(input) {
+      const state = await client
+        .from("agent_action_states")
+        .update({ consumed_at: input.consumedAt })
+        .eq("action_id", input.actionId)
+        .eq("user_id", input.userId)
+        .eq("purpose", "undo")
+        .is("consumed_at", null)
+        .gt("expires_at", input.consumedAt)
+        .select("action_id")
+        .maybeSingle();
+      if (state.error) fail(state.error);
+      return Boolean(state.data);
+    },
+
     async recordUndoAction(input) {
       const log = await client
         .from("agent_action_logs")

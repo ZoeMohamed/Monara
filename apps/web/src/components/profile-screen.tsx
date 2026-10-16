@@ -8,6 +8,7 @@ import { Icon } from "@/components/icon";
 import { InstallAppButton } from "@/components/install-app-button";
 import { MonaraMascot } from "@/components/monara-mascot";
 import { SectionTitle } from "@/components/visual";
+import { WhatsAppLinkRow } from "@/components/whatsapp-link-row";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
 
 function Row({ title, detail, end }: { title: string; detail?: string; end?: ReactNode }) {
@@ -113,11 +114,11 @@ function ProfileConnections({ demo }: { demo: boolean }) {
         href={demo ? "/sign-in?next=/connections/gmail" : "/connections/gmail"}
         title="Gmail"
       />
-      <Row
-        detail="Number verification is not available in the app yet."
-        end="Unavailable"
-        title="WhatsApp"
-      />
+      {demo ? (
+        <Row detail="Sign in first to link your number." end="Not linked" title="WhatsApp" />
+      ) : (
+        <WhatsAppLinkRow />
+      )}
     </Group>
   );
 }

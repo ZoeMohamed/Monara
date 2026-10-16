@@ -40,13 +40,13 @@ type AgentFinanceOperation = Exclude<
   | "create_category"
   | "delete_transaction"
   | "delete_budget"
-  | "list_reminders"
   | "mark_reminder_read"
   | "dismiss_reminder"
 >;
 const AGENT_CONFIRMATION_OPERATIONS = [
   "request_destructive_action",
   "confirm_destructive_action",
+  "undo_action",
 ] as const;
 type AgentConfirmationOperation = (typeof AGENT_CONFIRMATION_OPERATIONS)[number];
 export type AgentOperation = AgentFinanceOperation | AgentConfirmationOperation;
@@ -68,7 +68,6 @@ function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinance
     value !== "create_category" &&
     value !== "delete_transaction" &&
     value !== "delete_budget" &&
-    value !== "list_reminders" &&
     value !== "mark_reminder_read" &&
     value !== "dismiss_reminder"
   );
@@ -147,6 +146,9 @@ export async function runAgentOperation(
   }
   if (operation === "confirm_destructive_action") {
     return financeService().confirmDestructiveAction(caller, input);
+  }
+  if (operation === "undo_action") {
+    return financeService().undoAction(caller, input);
   }
   return runFinanceOperation(operation, caller, input);
 }

@@ -5,6 +5,7 @@ import {
   type BudgetUsage,
   budgetMutationResultSchema,
   budgetPeriodForDate,
+  budgetSchema,
   budgetSuggestionInputSchema,
   budgetSuggestionSchema,
   budgetUsageSchema,
@@ -65,11 +66,13 @@ import {
   type TransactionSource,
   type TransactionValues,
   transactionMutationResultSchema,
+  transactionValuesSchema,
   type UpdateBudgetInput,
   type UpdateCategoryInput,
   type UpdateFinancialAccountInput,
   type UpdatePendingTransactionInput,
   type UpdateTransactionInput,
+  undoActionInputSchema,
   updateBudgetInputSchema,
   updateCategoryInputSchema,
   updateFinancialAccountInputSchema,
@@ -107,6 +110,14 @@ export type DestructiveConfirmationState =
 
 export interface StoredDestructiveConfirmation {
   state: unknown;
+  expiresAt: string;
+  consumedAt: string | null;
+}
+
+export interface StoredUndoAction {
+  state: unknown;
+  resourceType: string;
+  resourceId: string;
   expiresAt: string;
   consumedAt: string | null;
 }
@@ -220,6 +231,13 @@ export interface FinanceRepository {
   consumeDestructiveConfirmation(input: {
     userId: string;
     confirmationId: string;
+    consumedAt: string;
+  }): Promise<boolean>;
+  findUndoAction(userId: string, actionId: string): Promise<StoredUndoAction | null>;
+  /** Marks the receipt used. False when it was already used or has expired. */
+  consumeUndoAction(input: {
+    userId: string;
+    actionId: string;
     consumedAt: string;
   }): Promise<boolean>;
 }
@@ -666,6 +684,15 @@ function parseConfirmationState(value: unknown): DestructiveConfirmationState {
   throw new FinanceOperationError("INTERNAL", "The confirmation state is invalid.");
 }
 
+const undoStateError = () =>
+  new FinanceOperationError("INTERNAL", "The saved change could not be read.");
+
+function undoString(state: Record<string, unknown>, key: string): string {
+  const value = state[key];
+  if (typeof value !== "string") throw undoStateError();
+  return value;
+}
+
 export function createFinanceService(
   repository: FinanceRepository,
   options: { now?: () => Date } = {},
@@ -1023,6 +1050,99 @@ export function createFinanceService(
       if (!consumed) {
         throw new FinanceOperationError("CONFLICT", "That confirmation is no longer available.");
       }
+      return { ok: true as const };
+    },
+
+    /**
+     * Reverses one change from its receipt. The reversal carries the version the
+     * change produced, so it fails with CONFLICT if the record changed since,
+     * and a second undo of the same receipt cannot run.
+     */
+    async undoAction(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const { actionId } = undoActionInputSchema.parse(input);
+      const stored = await repository.findUndoAction(verified.userId, actionId);
+      if (!stored) throw new FinanceOperationError("NOT_FOUND", "That change was not found.");
+      if (stored.consumedAt) {
+        throw new FinanceOperationError("CONFLICT", "That change was already undone.");
+      }
+      const undoneAt = now();
+      if (Date.parse(stored.expiresAt) <= Date.parse(undoneAt)) {
+        throw new FinanceOperationError("CONFLICT", "That change can no longer be undone.");
+      }
+      if (typeof stored.state !== "object" || stored.state === null) throw undoStateError();
+      const state = stored.state as Record<string, unknown>;
+      const expectedUpdatedAt = undoString(state, "expectedUpdatedAt");
+
+      switch (state.operation) {
+        case "delete_created_transaction":
+          await repository.softDeleteTransaction({
+            userId: verified.userId,
+            transactionId: stored.resourceId,
+            expectedUpdatedAt,
+            deletedAt: undoneAt,
+          });
+          break;
+        case "restore_transaction": {
+          const reviewStatus = undoString(state, "reviewStatus");
+          if (
+            reviewStatus !== "pending" &&
+            reviewStatus !== "confirmed" &&
+            reviewStatus !== "rejected"
+          ) {
+            throw undoStateError();
+          }
+          const restored = await repository.replaceTransaction({
+            userId: verified.userId,
+            transactionId: stored.resourceId,
+            expectedUpdatedAt,
+            values: transactionValuesSchema.parse(state.values),
+            reviewStatus,
+          });
+          await evaluateBudgetThresholds(verified.userId, restored);
+          break;
+        }
+        case "delete_created_budget":
+          await repository.softDeleteBudget({
+            userId: verified.userId,
+            budgetId: stored.resourceId,
+            expectedUpdatedAt,
+            deletedAt: undoneAt,
+          });
+          break;
+        case "restore_budget": {
+          const previous = budgetSchema.parse(JSON.parse(undoString(state, "values")));
+          await repository.updateBudget(verified.userId, {
+            budgetId: stored.resourceId,
+            expectedUpdatedAt,
+            changes: {
+              categoryId: previous.categoryId,
+              name: previous.name,
+              cadence: previous.cadence,
+              limit: previous.limit,
+              warningPercent: previous.warningPercent,
+              startsOn: previous.startsOn,
+              isActive: previous.isActive,
+            },
+          });
+          await evaluateBudgetThresholdsFor(
+            verified.userId,
+            previous.categoryId,
+            undoneAt.slice(0, 10),
+          );
+          break;
+        }
+        default:
+          // Account and Category changes are made in the app, which has no undo for them yet.
+          throw new FinanceOperationError("CONFLICT", "That change can't be undone here.");
+      }
+
+      const consumed = await repository.consumeUndoAction({
+        userId: verified.userId,
+        actionId,
+        consumedAt: undoneAt,
+      });
+      if (!consumed) throw new FinanceOperationError("CONFLICT", "That change was already undone.");
       return { ok: true as const };
     },
 
