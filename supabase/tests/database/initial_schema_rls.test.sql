@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(54);
+select plan(55);
 
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'financial_accounts', 'financial_accounts exists');
@@ -454,6 +454,13 @@ select throws_ok(
   '23514'::char(5),
   'Confirmed transactions require active Financial Accounts.',
   'a pending import cannot confirm against an inactive account'::text
+);
+
+select lives_ok(
+  $$update public.transactions
+    set transaction_type = 'exclusion', review_status = 'confirmed'
+    where id = 'a4000000-0000-4000-8000-000000000004'$$::text,
+  'a pending item can be excluded after its Financial Account is deactivated'::text
 );
 
 select throws_ok(

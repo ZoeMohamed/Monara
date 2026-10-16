@@ -179,7 +179,10 @@ test("get_summary adds every confirmed page up exactly", async () => {
       items: [row("income", "9000000000000000", null), row("expense", "25000", food)],
       nextCursor: "next",
     },
-    "2026-10|next": { items: [row("expense", "48500", null)], nextCursor: null },
+    "2026-10|next": {
+      items: [row("expense", "48500", null), row("exclusion", "500000", null)],
+      nextCursor: null,
+    },
   };
   const inputs: unknown[] = [];
   const done: AssistantMessage = { role: "assistant", content: "Done." };

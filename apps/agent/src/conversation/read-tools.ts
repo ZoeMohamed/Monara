@@ -62,7 +62,7 @@ async function summariseMonth(month: string, context: ToolContext) {
       }),
     );
     for (const transaction of result.items) {
-      if (!transaction.money || transaction.deletedAt) continue;
+      if (!transaction.money || transaction.deletedAt || transaction.kind === "exclusion") continue;
       const amount = BigInt(transaction.money.amountMinor);
       transactionCount += 1;
       if (transaction.kind === "income") {

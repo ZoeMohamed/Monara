@@ -88,7 +88,9 @@ security definer
 set search_path = ''
 as $$
 begin
-  if new.review_status <> 'confirmed' or new.financial_account_id is null then
+  if new.review_status <> 'confirmed'
+    or new.financial_account_id is null
+    or new.transaction_type is not distinct from 'exclusion' then
     return new;
   end if;
 
@@ -109,6 +111,98 @@ begin
 
   return new;
 end;
+$$;
+
+-- Exclusions remain visible in imported history but are not confirmed financial
+-- transactions and therefore do not belong in the sync's confirmed total.
+create or replace function public.gmail_sync_statuses(p_user_id uuid)
+returns table (
+  connection_id uuid,
+  state text,
+  error text,
+  requested_at timestamptz,
+  imported bigint,
+  skipped bigint,
+  failed bigint,
+  in_progress bigint,
+  imported_transactions bigint,
+  confirmed_transactions bigint
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  with run as (
+    select
+      connection.id,
+      connection.sync_state,
+      connection.sync_error,
+      connection.sync_requested_at,
+      greatest(
+        connection.sync_updated_at,
+        (
+          select max(coalesce(message.processed_at, message.created_at))
+            from public.processed_gmail_messages as message
+            where message.gmail_connection_id = connection.id
+              and message.created_at >= connection.sync_requested_at
+        )
+      ) as last_progress_at,
+      count(message.id) filter (where message.processing_status = 'processed') as imported,
+      count(message.id) filter (where message.processing_status = 'skipped') as skipped,
+      count(message.id) filter (where message.processing_status = 'failed') as failed,
+      count(message.id) filter (where message.processing_status = 'processing') as in_progress
+    from public.gmail_connections as connection
+    left join public.processed_gmail_messages as message
+      on message.gmail_connection_id = connection.id
+      and message.created_at >= connection.sync_requested_at
+    where connection.user_id = p_user_id
+    group by connection.id
+  )
+  select
+    run.id,
+    case
+      when run.sync_state = 'idle' then 'idle'
+      when run.sync_state = 'failed' then 'failed'
+      when run.sync_state = 'listed' and run.in_progress = 0 then 'completed'
+      when run.last_progress_at < statement_timestamp() - public.gmail_sync_stall_interval()
+        then 'failed'
+      when run.sync_state = 'queued' then 'queued'
+      else 'running'
+    end,
+    case
+      when run.sync_state = 'failed' then run.sync_error
+      when run.sync_state in ('queued', 'listing', 'listed')
+        and not (run.sync_state = 'listed' and run.in_progress = 0)
+        and run.last_progress_at < statement_timestamp() - public.gmail_sync_stall_interval()
+        then 'stalled'
+    end,
+    run.sync_requested_at,
+    run.imported,
+    run.skipped,
+    run.failed,
+    run.in_progress,
+    (
+      select count(*)
+        from public.transactions as item
+        join public.processed_gmail_messages as source
+          on source.id = item.processed_gmail_message_id
+        where source.gmail_connection_id = run.id
+          and source.created_at >= run.sync_requested_at
+          and item.user_id = p_user_id
+    ),
+    (
+      select count(*)
+        from public.transactions as item
+        join public.processed_gmail_messages as source
+          on source.id = item.processed_gmail_message_id
+        where source.gmail_connection_id = run.id
+          and source.created_at >= run.sync_requested_at
+          and item.user_id = p_user_id
+          and item.review_status = 'confirmed'
+          and item.transaction_type in ('expense', 'income')
+    )
+  from run;
 $$;
 
 revoke all on function private.require_active_transaction_accounts()

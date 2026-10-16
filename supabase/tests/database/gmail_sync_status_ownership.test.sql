@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(24);
+select plan(25);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001 and the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234). User 2 owns neither.
@@ -178,6 +178,16 @@ select is(
   ),
   array[row('pending', null::uuid)::text, row('pending', null::uuid)::text],
   'another User''s account never maps, and exclusions are never mapped or auto-confirmed'
+);
+
+select lives_ok(
+  $$update public.transactions as item
+    set review_status = 'confirmed'
+    from public.processed_gmail_messages as source
+    where source.id = item.processed_gmail_message_id
+      and source.gmail_message_id = 'sync-003'
+      and item.transaction_type = 'exclusion'$$::text,
+  'a reviewed Gmail exclusion can be confirmed without becoming a financial transaction'
 );
 
 select is(
