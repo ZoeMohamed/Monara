@@ -459,11 +459,6 @@
     font-size: 12px;
   }
 
-  .sideStatus strong {
-    display: block;
-    font-size: 14px;
-  }
-
   .sideAdd {
     display: flex;
     min-height: 52px;
@@ -477,6 +472,10 @@
     font-size: 15px;
     font-weight: 750;
     transition: transform 160ms ease-out;
+  }
+
+  .sideLink + .sideAdd {
+    margin-top: auto;
   }
 
   .sideAdd > svg {

@@ -70,14 +70,13 @@ function DesktopSidebar({
           </Link>
         ))}
       </nav>
-      <Button
+      <button
         aria-label={
           reminderCount > 0 ? `Notifications, ${reminderCount} need attention` : "Notifications"
         }
         className={`${styles.sideLink} mt-3 h-auto`}
-        onPress={onOpenReminders}
+        onClick={onOpenReminders}
         type="button"
-        variant="ghost"
       >
         <Icon name="bell" /> Notifications
         {reminderCount > 0 ? (
@@ -85,17 +84,12 @@ function DesktopSidebar({
             {reminderCount}
           </span>
         ) : null}
-      </Button>
-      <div className={styles.sideStatus}>
-        {live ? (
-          <>
-            <strong>Private ledger</strong>
-            Saved to your account
-          </>
-        ) : (
+      </button>
+      {!live ? (
+        <div className={styles.sideStatus}>
           <DemoIndicator className="block text-sm font-bold" />
-        )}
-      </div>
+        </div>
+      ) : null}
       <button className={styles.sideAdd} data-tour="add" onClick={onAdd} type="button">
         <Icon name="plus" strokeWidth={2.4} />
         Add transaction
