@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(25);
+select plan(27);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001, the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234), and default Categories.
@@ -183,7 +183,7 @@ select public.record_gmail_extraction(
       "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
       "accountHint": null, "accountLastFour": null, "confidence": 0.5},
-     {"kind": "transfer", "merchantName": null,
+     {"kind": "exclusion", "merchantName": null,
       "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": "Top up", "location": null,
       "accountHint": "****5555", "accountLastFour": "5555", "confidence": 0.99}]$$::jsonb,
@@ -197,7 +197,32 @@ select is(
     left join public.financial_accounts as account on account.id = item.financial_account_id
     where source.gmail_message_id = 'inst-004'),
   array['Second card', null, null],
-  'several accounts map by ending only; no ending and transfers stay unmapped'
+  'several accounts map by ending only; no ending and exclusions stay unmapped'
+);
+select is(
+  (select cardinality(uncategorized_transaction_ids)
+    from public.record_gmail_extraction(
+      (select id from public.processed_gmail_messages where gmail_message_id = 'inst-004'),
+      'skipped',
+      '[]'::jsonb,
+      p_sender_verified => false
+    )),
+  2,
+  'exclusions never enter the merchant categorization queue'
+);
+select is(
+  (select applied
+    from public.set_imported_category(
+      (select item.id
+        from public.transactions as item
+        join public.processed_gmail_messages as source
+          on source.id = item.processed_gmail_message_id
+        where source.gmail_message_id = 'inst-004'
+          and item.transaction_type = 'exclusion'),
+      'Food & Drinks'
+    )),
+  false,
+  'a categorization result cannot mutate an exclusion'
 );
 
 select public.record_gmail_extraction(

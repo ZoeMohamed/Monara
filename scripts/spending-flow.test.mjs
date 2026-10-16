@@ -38,9 +38,8 @@ test("flow includes only valid confirmed expenses in the selected month", () => 
     [
       record({ id: "included", amount: 12000 }),
       record({ status: "pending" }),
-      record({ status: "rejected" }),
+      record({ kind: "exclusion" }),
       record({ kind: "income" }),
-      record({ kind: "transfer", method: "BCA → Jago" }),
       record({ amount: null }),
       record({ amount: 0 }),
       record({ amount: -100 }),
@@ -240,16 +239,15 @@ test("yearly rankings aggregate a place across months while individual payments 
   assert.throws(() => spendingPlaces([], "10000"), /valid calendar month or year/);
 });
 
-test("single-payment ranking excludes unconfirmed, incomplete, income, transfer and other months", () => {
+test("single-payment ranking excludes unconfirmed, incomplete, income and other months", () => {
   const valid = record({ id: "valid", amount: Number.MAX_SAFE_INTEGER });
   const records = [
     record({ status: "pending" }),
-    record({ status: "rejected" }),
+    record({ kind: "exclusion" }),
     record({ amount: null }),
     record({ currency: null }),
     record({ date: "2026-10-32" }),
     record({ kind: "income" }),
-    record({ kind: "transfer", method: "BCA → Jago" }),
     record({ date: "2026-09-30" }),
     record({ id: "smaller", amount: Number.MAX_SAFE_INTEGER - 1 }),
     valid,

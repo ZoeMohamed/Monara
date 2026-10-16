@@ -87,7 +87,7 @@ test("current payday cycle uses exact confirmed expense totals and recognizes th
     transaction({ id: "next-cycle", date: "2026-10-25", amount: 5000 }),
     transaction({ id: "income", kind: "income", amount: 5000 }),
     transaction({ id: "invalid", amount: null }),
-    transaction({ id: "rejected", status: "rejected", amount: 5000 }),
+    transaction({ id: "excluded", kind: "exclusion", amount: 5000 }),
   ];
   assert.deepEqual(
     model({ budgets: [budget], transactions: [transaction({ amount: 799 }), ...unrelated] }),

@@ -43,8 +43,6 @@ function rows(count = 1_001) {
     id: uuid(index + 4_000),
     user_id: owner,
     financial_account_id: uuid(6_000),
-    from_financial_account_id: null,
-    to_financial_account_id: null,
     category_id: categoryId,
     source_type: "manual_form",
     transaction_type: "expense",

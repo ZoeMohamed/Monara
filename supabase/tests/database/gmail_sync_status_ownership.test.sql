@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(24);
+select plan(25);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001 and the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234). User 2 owns neither.
@@ -152,7 +152,7 @@ select is(
   'below the threshold the account is kept but the item waits for review'
 );
 
--- Confident, but no account, and a transfer naming an account.
+-- Confident, but no account, and an exclusion naming an account.
 select public.record_gmail_extraction(
   (select id from public.processed_gmail_messages where gmail_message_id = 'sync-003'),
   'transactions',
@@ -161,7 +161,7 @@ select public.record_gmail_extraction(
       "occurredTime": null, "description": null, "location": null,
       "accountHint": null, "financialAccountName": "Other user account",
       "categoryName": null, "confidence": 0.99},
-     {"kind": "transfer", "merchantName": null,
+     {"kind": "exclusion", "merchantName": null,
       "money": {"amountMinor": "50000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": "Top up", "location": null,
       "accountHint": null, "financialAccountName": "Daily wallet",
@@ -177,7 +177,17 @@ select is(
     where source.gmail_message_id = 'sync-003'
   ),
   array[row('pending', null::uuid)::text, row('pending', null::uuid)::text],
-  'another User''s account never maps, and transfers are never mapped or confirmed'
+  'another User''s account never maps, and exclusions are never mapped or auto-confirmed'
+);
+
+select lives_ok(
+  $$update public.transactions as item
+    set review_status = 'confirmed'
+    from public.processed_gmail_messages as source
+    where source.id = item.processed_gmail_message_id
+      and source.gmail_message_id = 'sync-003'
+      and item.transaction_type = 'exclusion'$$::text,
+  'a reviewed Gmail exclusion can be confirmed without becoming a financial transaction'
 );
 
 select is(

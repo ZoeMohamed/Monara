@@ -24,7 +24,7 @@ Each handler returns 503 when a secret or binding it needs is missing.
 | Tier | Tools | Behaviour |
 | --- | --- | --- |
 | T0 | `get_summary`, `suggest_budget`, `list_transactions`, `list_financial_accounts`, `list_categories`, `list_budgets`, `list_reminders` | Run freely. |
-| T1 | `add_transaction`, `edit_transaction`, `confirm_pending`, `reject_pending`, `create_budget`, `edit_budget`, `undo_action` | Run and return receipts. `undo_action` reverses a transaction or Budget change within ten minutes. |
+| T1 | `add_transaction`, `edit_transaction`, `confirm_pending`, `exclude_pending`, `create_budget`, `edit_budget`, `undo_action` | Run and return receipts. `undo_action` reverses a transaction or Budget change within ten minutes. |
 | T2 | `delete_transaction`, `delete_budget` | Never run. Calling one asks the backend for a confirmation. |
 | T3 | none | Connections, WhatsApp linking, export, and credentials are not Agent Tools. |
 

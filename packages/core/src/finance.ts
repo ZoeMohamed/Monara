@@ -34,6 +34,7 @@ import {
   deleteTransactionInputSchema,
   destructiveActionConfirmationSchema,
   dismissReminderInputSchema,
+  excludeTransactionInputSchema,
   type FinancialAccount,
   type FinancialAccountPage,
   type FinancialInsights,
@@ -57,7 +58,6 @@ import {
   type OperationErrorCode,
   type Reminder,
   type ReversibleActionReceipt,
-  rejectTransactionInputSchema,
   requestDestructiveActionInputSchema,
   type SignedMoney,
   type Transaction,
@@ -549,7 +549,7 @@ export function calculateDashboard(input: {
   let spending = 0n;
   const categoryTotals = new Map<string | null, bigint>();
   for (const transaction of confirmed) {
-    if (!transaction.money || transaction.kind === "transfer") continue;
+    if (!transaction.money) continue;
     const amount = amountOf(transaction.money);
     if (transaction.kind === "income") income += amount;
     if (transaction.kind === "expense") {
@@ -581,7 +581,7 @@ export function calculateDashboard(input: {
   let insightIncome = 0n;
   let insightSpending = 0n;
   for (const transaction of confirmedAsOf) {
-    if (!transaction.money || transaction.kind === "transfer") continue;
+    if (!transaction.money) continue;
     if (transaction.kind === "income") insightIncome += amountOf(transaction.money);
     if (transaction.kind === "expense") insightSpending += amountOf(transaction.money);
   }
@@ -653,8 +653,6 @@ const transactionValues = (transaction: Transaction): TransactionValues => ({
   accountHint: transaction.accountHint,
   categoryId: transaction.categoryId,
   financialAccountId: transaction.financialAccountId,
-  fromFinancialAccountId: transaction.fromFinancialAccountId,
-  toFinancialAccountId: transaction.toFinancialAccountId,
 });
 
 const plusMinutes = (iso: string, minutes: number) =>
@@ -913,9 +911,9 @@ export function createFinanceService(
       return mutateTransaction(verified, "confirm_pending", previous, transaction);
     },
 
-    async rejectPending(operationCaller: FinanceCaller, input: unknown) {
+    async excludePending(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
-      const values = rejectTransactionInputSchema.parse(input);
+      const values = excludeTransactionInputSchema.parse(input);
       const previous = await repository.findTransaction(verified.userId, values.transactionId);
       if (!previous || previous.deletedAt) {
         throw new FinanceOperationError("NOT_FOUND", "That pending transaction was not found.");
@@ -927,10 +925,13 @@ export function createFinanceService(
         userId: verified.userId,
         transactionId: values.transactionId,
         expectedUpdatedAt: values.expectedUpdatedAt,
-        values: transactionValues(previous),
-        reviewStatus: "rejected",
+        values: confirmedTransactionValuesSchema.parse({
+          ...transactionValues(previous),
+          kind: "exclusion",
+        }),
+        reviewStatus: "confirmed",
       });
-      return mutateTransaction(verified, "reject_pending", previous, transaction);
+      return mutateTransaction(verified, "exclude_pending", previous, transaction);
     },
 
     async deleteTransaction(operationCaller: FinanceCaller, input: unknown) {
@@ -1098,11 +1099,7 @@ export function createFinanceService(
           break;
         case "restore_transaction": {
           const reviewStatus = undoString(state, "reviewStatus");
-          if (
-            reviewStatus !== "pending" &&
-            reviewStatus !== "confirmed" &&
-            reviewStatus !== "rejected"
-          ) {
+          if (reviewStatus !== "pending" && reviewStatus !== "confirmed") {
             throw undoStateError();
           }
           const restored = await repository.replaceTransaction({

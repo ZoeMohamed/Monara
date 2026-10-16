@@ -59,7 +59,7 @@ type ReminderRow = Pick<
 >;
 
 const TRANSACTION_COLUMNS =
-  "id, financial_account_id, from_financial_account_id, to_financial_account_id, category_id, source_type, transaction_type, merchant_name, amount::text, currency, occurred_on, occurred_time, description, location, account_hint, ai_confidence, review_status, deleted_at, created_at, updated_at";
+  "id, financial_account_id, category_id, source_type, transaction_type, merchant_name, amount::text, currency, occurred_on, occurred_time, description, location, account_hint, ai_confidence, review_status, deleted_at, created_at, updated_at";
 const ACCOUNT_COLUMNS =
   "id, name, institution, account_type, currency, last_four, institution_key, is_active, created_at, updated_at";
 const CATEGORY_COLUMNS =
@@ -153,8 +153,6 @@ function toTransaction(row: ExactTransactionRow): Transaction {
     accountHint: row.account_hint,
     categoryId: row.category_id,
     financialAccountId: row.financial_account_id,
-    fromFinancialAccountId: row.from_financial_account_id,
-    toFinancialAccountId: row.to_financial_account_id,
     reviewStatus: row.review_status,
     source: row.source_type,
     confidence: row.ai_confidence,
@@ -252,8 +250,6 @@ const transactionUpdate = (
   account_hint: values.accountHint,
   category_id: values.categoryId,
   financial_account_id: values.financialAccountId,
-  from_financial_account_id: values.fromFinancialAccountId,
-  to_financial_account_id: values.toFinancialAccountId,
 });
 
 async function missingOrConflict(
@@ -392,8 +388,6 @@ export function createSupabaseFinanceRepository(
           accountHint: transaction.accountHint,
           categoryId: transaction.categoryId,
           financialAccountId: transaction.financialAccountId,
-          fromFinancialAccountId: transaction.fromFinancialAccountId,
-          toFinancialAccountId: transaction.toFinancialAccountId,
         }),
       );
       if (actual !== expected) {

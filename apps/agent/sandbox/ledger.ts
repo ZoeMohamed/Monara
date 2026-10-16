@@ -124,8 +124,6 @@ export function createSandboxLedger(now: Date) {
       accountHint: null,
       categoryId: null,
       financialAccountId: ACCOUNT.gopay,
-      fromFinancialAccountId: null,
-      toFinancialAccountId: null,
       reviewStatus: "confirmed",
       source: "manual_form",
       confidence: null,
@@ -403,11 +401,15 @@ export function createSandboxLedger(now: Date) {
           action: receipt("transaction", transaction.id, () => Object.assign(transaction, before)),
         };
       }
-      case "reject_pending": {
+      case "exclude_pending": {
         const transaction = find(transactions, input.transactionId);
         if (transaction.reviewStatus !== "pending") throw new Error("CONFLICT");
         const before = { ...transaction };
-        Object.assign(transaction, { reviewStatus: "rejected", updatedAt: touch() });
+        Object.assign(transaction, {
+          kind: "exclusion",
+          reviewStatus: "confirmed",
+          updatedAt: touch(),
+        });
         return {
           transaction,
           action: receipt("transaction", transaction.id, () => Object.assign(transaction, before)),

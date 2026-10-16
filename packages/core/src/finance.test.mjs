@@ -49,8 +49,6 @@ function transaction(overrides = {}) {
     accountHint: null,
     categoryId: category.id,
     financialAccountId: "40000000-0000-4000-8000-000000000004",
-    fromFinancialAccountId: null,
-    toFinancialAccountId: null,
     reviewStatus: "confirmed",
     source: "manual_form",
     confidence: null,
@@ -183,7 +181,7 @@ describe("budget periods and usage", () => {
 });
 
 describe("dashboard aggregates", () => {
-  it("excludes pending rows and transfers from exact monthly totals", () => {
+  it("excludes pending and exclusion rows from exact monthly totals", () => {
     const summary = calculateDashboard({
       month: "2026-10",
       today: "2026-10-15",
@@ -200,10 +198,8 @@ describe("dashboard aggregates", () => {
         }),
         transaction({
           id: crypto.randomUUID(),
-          kind: "transfer",
-          financialAccountId: null,
-          fromFinancialAccountId: "40000000-0000-4000-8000-000000000004",
-          toFinancialAccountId: "50000000-0000-4000-8000-000000000005",
+          kind: "exclusion",
+          reviewStatus: "confirmed",
           categoryId: null,
           money: { amountMinor: "500", currency: "IDR" },
         }),
@@ -408,8 +404,6 @@ describe("Budget threshold events", () => {
       accountHint: null,
       categoryId: category.id,
       financialAccountId: "40000000-0000-4000-8000-000000000004",
-      fromFinancialAccountId: null,
-      toFinancialAccountId: null,
     };
     await service.addTransaction(caller, input);
     await service.addTransaction(caller, { ...input, clientRequestId: "threshold-retry" });
@@ -544,8 +538,6 @@ function createMemoryFinanceRepository() {
         accountHint: values.accountHint,
         categoryId: values.categoryId,
         financialAccountId: values.financialAccountId,
-        fromFinancialAccountId: values.fromFinancialAccountId,
-        toFinancialAccountId: values.toFinancialAccountId,
         reviewStatus: "confirmed",
         source,
         confidence: null,
@@ -1122,8 +1114,6 @@ describe("ZO6 Review Queue service simulation", () => {
             accountHint: null,
             categoryId: category.id,
             financialAccountId: account.financialAccount.id,
-            fromFinancialAccountId: null,
-            toFinancialAccountId: null,
           },
         },
       ),
@@ -1144,18 +1134,17 @@ describe("ZO6 Review Queue service simulation", () => {
         accountHint: null,
         categoryId: category.id,
         financialAccountId: account.financialAccount.id,
-        fromFinancialAccountId: null,
-        toFinancialAccountId: null,
       },
     });
     assert.equal(confirmed.transaction.reviewStatus, "confirmed");
 
     const rejectedPending = memory.seedPending(ownerA, { merchantName: "Wrong Import" });
-    const rejected = await service.rejectPending(callerA, {
+    const rejected = await service.excludePending(callerA, {
       transactionId: rejectedPending.id,
       expectedUpdatedAt: rejectedPending.updatedAt,
     });
-    assert.equal(rejected.transaction.reviewStatus, "rejected");
+    assert.equal(rejected.transaction.kind, "exclusion");
+    assert.equal(rejected.transaction.reviewStatus, "confirmed");
     const queue = await service.listTransactions(callerA, { reviewStatus: "pending" });
     assert.equal(queue.items.length, 0);
   });
@@ -1179,8 +1168,6 @@ describe("Agent T2 confirmation simulation", () => {
       accountHint: null,
       categoryId: category.id,
       financialAccountId: "40000000-0000-4000-8000-000000000004",
-      fromFinancialAccountId: null,
-      toFinancialAccountId: null,
     });
     const confirmation = await service.requestDestructiveAction(caller, {
       action: "delete_transaction",
@@ -1229,8 +1216,6 @@ describe("Agent T2 confirmation simulation", () => {
       accountHint: null,
       categoryId: category.id,
       financialAccountId: "40000000-0000-4000-8000-000000000004",
-      fromFinancialAccountId: null,
-      toFinancialAccountId: null,
     });
     const expiredConfirmation = await service.requestDestructiveAction(caller, {
       action: "delete_transaction",
@@ -1264,8 +1249,6 @@ describe("undo_action", () => {
     accountHint: null,
     categoryId: category.id,
     financialAccountId: "40000000-0000-4000-8000-000000000004",
-    fromFinancialAccountId: null,
-    toFinancialAccountId: null,
   });
   const failsWith = (code) => (error) =>
     error instanceof FinanceOperationError && error.code === code;
@@ -1365,7 +1348,7 @@ describe("undo_action", () => {
 });
 
 describe("ZO6-ZO8 backend journey simulation", () => {
-  it("runs accounts, three transaction types, dashboard, budgets, thresholds, and soft deletes", async () => {
+  it("runs accounts, two money directions, exclusion, dashboard, budgets, thresholds, and soft deletes", async () => {
     const memory = createMemoryFinanceRepository();
     const service = createFinanceService(memory.repository, {
       now: () => new Date("2026-10-15T05:00:00.000Z"),
@@ -1404,8 +1387,6 @@ describe("ZO6-ZO8 backend journey simulation", () => {
       money: { amountMinor: "800", currency: "IDR" },
       categoryId: category.id,
       financialAccountId: firstAccount.financialAccount.id,
-      fromFinancialAccountId: null,
-      toFinancialAccountId: null,
     });
     await service.addTransaction(callerA, {
       ...base,
@@ -1415,20 +1396,20 @@ describe("ZO6-ZO8 backend journey simulation", () => {
       money: { amountMinor: "2000", currency: "IDR" },
       categoryId: null,
       financialAccountId: firstAccount.financialAccount.id,
-      fromFinancialAccountId: null,
-      toFinancialAccountId: null,
     });
-    await service.addTransaction(callerA, {
-      ...base,
-      clientRequestId: "transfer-1",
-      kind: "transfer",
-      merchantName: "Savings transfer",
+    const pendingExcluded = memory.seedPending(ownerA, {
+      kind: "income",
+      merchantName: "Reimbursement",
       money: { amountMinor: "500", currency: "IDR" },
       categoryId: null,
-      financialAccountId: null,
-      fromFinancialAccountId: firstAccount.financialAccount.id,
-      toFinancialAccountId: secondAccount.financialAccount.id,
+      financialAccountId: secondAccount.financialAccount.id,
     });
+    const excluded = await service.excludePending(callerA, {
+      transactionId: pendingExcluded.id,
+      expectedUpdatedAt: pendingExcluded.updatedAt,
+    });
+    assert.equal(excluded.transaction.kind, "exclusion");
+    assert.equal(excluded.transaction.reviewStatus, "confirmed");
 
     const editedExpense = await service.editTransaction(callerA, {
       transactionId: expense.transaction.id,
@@ -1460,8 +1441,6 @@ describe("ZO6-ZO8 backend journey simulation", () => {
       money: { amountMinor: "100", currency: "IDR" },
       categoryId: category.id,
       financialAccountId: firstAccount.financialAccount.id,
-      fromFinancialAccountId: null,
-      toFinancialAccountId: null,
     });
     assert.equal(memory.state.reminderKeys.size, 2);
     const usage = await service.listBudgetUsage(callerA, { month: "2026-10" });

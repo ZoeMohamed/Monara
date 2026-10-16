@@ -41,6 +41,7 @@ function latestConfirmed(
       ? transactions.filter(
           (item) =>
             item.status === "confirmed" &&
+            (item.kind === "expense" || item.kind === "income") &&
             item.date !== null &&
             item.date <= today &&
             Object.keys(transactionErrors(item)).length === 0,
@@ -196,7 +197,7 @@ export function overviewModel(
     isCurrentMonth: month === currentMonth,
     currentDay,
     daysLeft: month === currentMonth ? daysInMonth(month) - currentDay + 1 : 0,
-    hasFinancialActivity: summary.confirmed.some((item) => item.kind !== "transfer"),
+    hasFinancialActivity: summary.confirmed.length > 0,
     budgetTotal,
     budgetUsed,
     remaining,

@@ -33,7 +33,7 @@ The browser authenticates with Google through Supabase, but Gmail authorization 
 
 The authenticated Next.js route resolves the User from the server session and passes that identity to the financial service. The service validates inputs with `packages/contracts`, then `packages/core/src/supabase-finance-repository.ts` adds the same `user_id` to every service-role query and mutation. The browser never chooses a User ID or transaction source. Direct browser access is read-only for the small set of user-facing tables; connection metadata, delivery state, and agent state are backend-only.
 
-Expenses and income use one positive, integer IDR `amount` plus `transaction_type`. Transfers use two different owned accounts and are excluded from income and spending. Account balances are not stored or inferred. Unknown Gmail fields remain nullable while pending, but a confirmed transaction must have its type, amount, currency, and date.
+Transactions use one type (`expense`, `income`, or `exclusion`), a `pending` or `confirmed` review status, and at most one Financial Account/payment method. Internal transfers, reimbursements, duplicates, and non-personal records use the confirmed `exclusion` type. They stay available for audit and deduplication but do not affect income or spending. Account balances are not stored or inferred. Unknown Gmail fields remain nullable while pending. Confirmed expenses and income require a positive integer IDR amount and date; a confirmed exclusion may preserve unknown fields so the User can clear an unusable import without inventing data.
 
 F9 calculations live in `packages/core/src/finance.ts` and return basis numbers through `packages/contracts/src/insights.ts`:
 
@@ -49,7 +49,7 @@ F9 calculations live in `packages/core/src/finance.ts` and return basis numbers 
 ## Key decisions
 
 - Use UUIDs plus composite ownership keys instead of global IDs alone. This makes cross-User references fail inside Postgres, even if application code is wrong.
-- Keep one transaction table with explicit types instead of separate income and expense tables. Shared review, source, deduplication, and ownership rules stay consistent; transfer-specific constraints still require two distinct owned accounts.
+- Keep one transaction table with expense/income/exclusion type instead of separate tables or transfer-specific account pairs. Shared review, source, deduplication, and ownership rules stay consistent; `exclusion` captures records that should not enter financial totals.
 - Allow nullable extracted fields only while review is pending instead of inventing uncertain values. Confirmation is blocked until the required financial facts exist.
 - Store processed Gmail identifiers instead of raw messages. This supports idempotency and investigation without retaining unnecessary inbox content.
 - Store exact integer IDR in Postgres `numeric` and transport it as decimal strings instead of JavaScript floating-point values. Amounts are never rounded silently.
@@ -63,7 +63,7 @@ All 14 public product tables enable and force RLS. `anon` has no financial acces
 
 The service-role key is server-only and is not authorization by itself. Browser finance routes derive identity from the verified Supabase session. Repository reads, updates, optimistic-lock checks, idempotency lookups, and deletes all include `user_id`. Agent backend calls use a server-held bearer secret; the Agent must resolve the signed-in or verified-WhatsApp User before sending the User ID. A leaked Agent backend secret would widen that trust boundary, so it must remain server-only and be rotated through deployment secrets if exposed.
 
-Database constraints reject fractional IDR, invalid transfer account combinations, cross-owner references, duplicate client requests, duplicate Gmail items, a fourth active Gmail connection, and illegal Review Queue transitions. The application does not log raw emails, financial records, auth headers, or tokens.
+Database constraints reject fractional IDR, unsupported transaction directions, cross-owner references, duplicate client requests, duplicate Gmail items, a fourth active Gmail connection, and illegal Review Queue transitions. The application does not log raw emails, financial records, auth headers, or tokens.
 
 Open acceptance risks are external rather than schema permissions: production OAuth/provider settings, Agent-to-backend secret handling, provider retry behavior, hosted migration status, and real-message delivery require environment-specific evidence. Historical insight quality depends on enough correctly categorized confirmed data. User-timezone boundaries currently use the server-provided calendar date; acceptance across non-Jakarta time zones remains Planned. No hosted database was changed as part of this review.
 

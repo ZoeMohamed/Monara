@@ -11,7 +11,7 @@ import { ReviewQueue } from "@/components/review-queue";
 import { TransactionRow } from "@/components/transaction-row";
 import styles from "@/components/transactions-screen.module.css";
 import type { LedgerKind } from "@/data/app-navigation";
-import { demoSummary, demoToday, formatMonth, type Transaction } from "@/data/demo-ledger";
+import { demoToday, formatMonth, type Transaction } from "@/data/demo-ledger";
 
 import { financialSummaryModel } from "@/data/finance-analytics";
 
@@ -21,7 +21,7 @@ const kindFilters: { id: KindFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "expense", label: "Expenses" },
   { id: "income", label: "Income" },
-  { id: "transfer", label: "Transfers" },
+  { id: "exclusion", label: "Exclusions" },
 ];
 
 const ledgerDayFormatter = new Intl.DateTimeFormat("en-US", {
@@ -37,7 +37,9 @@ function groupByDate(transactions: Transaction[]) {
     if (!transaction.date) continue;
     const group = groups.get(transaction.date) ?? { transactions: [], spending: BigInt(0) };
     group.transactions.push(transaction);
-    if (transaction.kind === "expense") group.spending += BigInt(transaction.amount ?? 0);
+    if (transaction.status === "confirmed" && transaction.kind === "expense") {
+      group.spending += BigInt(transaction.amount ?? 0);
+    }
     groups.set(transaction.date, group);
   }
   return [...groups].sort(([first], [second]) => second.localeCompare(first));
@@ -48,6 +50,7 @@ function filteredTransactions(transactions: Transaction[], query: string, kind: 
   return transactions
     .filter(
       (transaction) =>
+        transaction.status === "confirmed" &&
         (kind === "all" || transaction.kind === kind) &&
         `${transaction.merchant ?? ""} ${transaction.category ?? ""} ${transaction.method ?? ""}`
           .toLowerCase()
@@ -80,7 +83,7 @@ function TransactionViewSelector({
         onPress={() => onChange(false)}
         variant="ghost"
       >
-        Confirmed
+        History
       </Button>
       <Button
         aria-label={`To review, ${pendingCount} waiting`}
@@ -301,8 +304,11 @@ function ConfirmedLedger({
   onReview?: () => void;
   onConnectGmail?: () => void;
 }) {
-  const summary = demoSummary(transactions, month);
-  const visible = filteredTransactions(summary.confirmed, query, kindFilter);
+  const ledger = transactions.filter(
+    (transaction) =>
+      transaction.date?.startsWith(`${month}-`) && transaction.status === "confirmed",
+  );
+  const visible = filteredTransactions(ledger, query, kindFilter);
   const filtersActive = query.trim().length > 0 || kindFilter !== "all";
 
   return (
@@ -316,7 +322,7 @@ function ConfirmedLedger({
       />
       <LedgerResultCount
         visibleCount={visible.length}
-        totalCount={summary.confirmed.length}
+        totalCount={ledger.length}
         filtersActive={filtersActive}
         onClear={onClearFilters}
       />
@@ -325,7 +331,7 @@ function ConfirmedLedger({
       ) : (
         <EmptyLedger
           month={month}
-          noConfirmed={summary.confirmed.length === 0}
+          noConfirmed={ledger.length === 0}
           onClear={onClearFilters}
           onAdd={onAdd}
           onReview={onReview}

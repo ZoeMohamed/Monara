@@ -284,8 +284,9 @@ export function GmailConnectionsScreen({
       </div>
       <p className="mt-5 text-sm leading-6 text-muted">
         Monara confirms an imported expense or income automatically only when it is confident and
-        the email states the amount, date, and one of your accounts. Everything else waits for you
-        to review, edit, confirm, or reject. You can still edit or delete any confirmed transaction.
+        the email states the amount, date, and one of your accounts. Everything else, including an
+        exclusion, waits for you to review, edit, confirm, or exclude. You can still edit or delete
+        any confirmed transaction.
       </p>
       {selected && actions && (
         <ModalDialog labelledBy="disconnect-title" onClose={() => setDisconnectId(null)}>

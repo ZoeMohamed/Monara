@@ -73,13 +73,7 @@ export function mapOwnedTransaction(
 ): OwnedTransaction {
   const category = categories.find((item) => item.id === transaction.categoryId);
   const account = financialAccounts.find((item) => item.id === transaction.financialAccountId);
-  const from = financialAccounts.find((item) => item.id === transaction.fromFinancialAccountId);
-  const to = financialAccounts.find((item) => item.id === transaction.toFinancialAccountId);
-  const referenceIds = [
-    transaction.financialAccountId,
-    transaction.fromFinancialAccountId,
-    transaction.toFinancialAccountId,
-  ].filter((id) => id !== null);
+  const referenceIds = [transaction.financialAccountId].filter((id) => id !== null);
   if (
     referenceIds.some((id) => !financialAccounts.some((item) => item.id === id)) ||
     (transaction.categoryId !== null && !category)
@@ -98,20 +92,13 @@ export function mapOwnedTransaction(
     currency: transaction.money?.currency ?? null,
     date: transaction.occurredOn,
     time: transaction.occurredTime,
-    method:
-      transaction.kind === "transfer"
-        ? from && to
-          ? `${from.name} → ${to.name}`
-          : null
-        : (account?.name ?? null),
+    method: account?.name ?? null,
     kind: transaction.kind,
-    emoji: transaction.kind === "income" ? "↗" : transaction.kind === "transfer" ? "↔" : "•",
+    emoji: transaction.kind === "exclusion" ? "⊘" : transaction.kind === "income" ? "↗" : "•",
     confidence: transaction.confidence === null ? null : transaction.confidence * 100,
     status: transaction.reviewStatus,
     categoryId: transaction.categoryId,
     financialAccountId: transaction.financialAccountId,
-    fromFinancialAccountId: transaction.fromFinancialAccountId,
-    toFinancialAccountId: transaction.toFinancialAccountId,
     backend: transaction,
   };
 }
@@ -215,7 +202,7 @@ export async function loadFinanceSnapshot(
   }
   return {
     transactions: records
-      .filter((record) => record.deletedAt === null && record.reviewStatus !== "rejected")
+      .filter((record) => record.deletedAt === null)
       .map((record) => mapOwnedTransaction(record, financialAccounts, categories)),
     budgets: dashboard.budgetUsage
       .filter((usage) => usage.budget.cadence === "monthly")

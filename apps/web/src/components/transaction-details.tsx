@@ -16,9 +16,9 @@ import { categoryColor } from "@/data/category-style";
 import { isCalendarDate, type Transaction, transactionErrors } from "@/data/demo-ledger";
 import { FinanceClientError } from "@/lib/finance/client";
 
-const typeLabels = { expense: "Expense", income: "Income", transfer: "Transfer" } as const;
-const statusLabels = { pending: "Needs review", confirmed: "Confirmed", rejected: "Rejected" };
-const statusColors = { pending: "warning", confirmed: "success", rejected: "default" } as const;
+const typeLabels = { expense: "Expense", income: "Income", exclusion: "Exclusion" } as const;
+const statusLabels = { pending: "Needs review", confirmed: "Confirmed" };
+const statusColors = { pending: "warning", confirmed: "success" } as const;
 const sources: Record<TransactionSource, { icon: IconName; label: string }> = {
   manual_form: { icon: "compose", label: "Added by you" },
   gmail_email: { icon: "mail", label: "Imported from Gmail" },
@@ -111,7 +111,7 @@ function DeleteConfirmation({
       ? "This expense will leave your spending and budgets."
       : transaction.kind === "income"
         ? "This income will leave your income totals."
-        : "This transfer will leave your ledger. Income and spending stay the same.";
+        : "This exclusion will leave your transaction history.";
   return (
     <div className="p-5 sm:p-6">
       <h2 id="transaction-details-title" className="text-xl font-bold">
@@ -297,45 +297,10 @@ function AccountStop({
   );
 }
 
-function transferAccounts({ transaction, financialAccounts }: MoneyFlowProps) {
-  if (transaction.backend || transaction.fromFinancialAccountId) {
-    // Owned transfers resolve UUIDs; display names may themselves contain arrows.
-    const from = financialAccounts?.find(
-      (account) =>
-        account.id ===
-        (transaction.backend?.fromFinancialAccountId ?? transaction.fromFinancialAccountId),
-    );
-    const to = financialAccounts?.find(
-      (account) =>
-        account.id ===
-        (transaction.backend?.toFinancialAccountId ?? transaction.toFinancialAccountId),
-    );
-    return { from, to, fromName: from?.name, toName: to?.name };
-  }
-  const names = (transaction.method ?? "").split("→").map((part) => part.trim());
-  const [fromName, toName] = names.length === 2 ? names : [];
-  return { from: undefined, to: undefined, fromName, toName };
-}
-
-function TransferMoneyFlow(props: MoneyFlowProps) {
-  const accounts = transferAccounts(props);
-  return (
-    <ol aria-label="Money flow" className={styles.flow}>
-      <AccountStop
-        account={accounts.from}
-        fallback="Not set"
-        label="From"
-        name={accounts.fromName}
-      />
-      <AccountStop account={accounts.to} fallback="Not set" label="To" name={accounts.toName} />
-    </ol>
-  );
-}
-
 const paymentFlowLabels = {
   income: { account: "Into", place: "From" },
   expense: { account: "From", place: "Where it went" },
-  transfer: { account: "Account", place: "Merchant or source" },
+  exclusion: { account: "Account", place: "Excluded party" },
   unknown: { account: "Account", place: "Merchant or source" },
 } as const;
 
@@ -373,11 +338,7 @@ function PaymentMoneyFlow({ transaction, financialAccounts }: MoneyFlowProps) {
 
 // Money moves from an account, through a category, to a place; income runs the other way.
 function MoneyFlow(props: MoneyFlowProps) {
-  return props.transaction.kind === "transfer" ? (
-    <TransferMoneyFlow {...props} />
-  ) : (
-    <PaymentMoneyFlow {...props} />
-  );
+  return <PaymentMoneyFlow {...props} />;
 }
 
 function TransactionInformation({
@@ -397,11 +358,14 @@ function TransactionInformation({
   return (
     <>
       <div className={styles.top}>
-        {transaction.status === "confirmed" ? (
+        {transaction.status === "confirmed" && transaction.kind !== "exclusion" ? (
           <span />
         ) : (
-          <Chip color={statusColors[transaction.status]} variant="soft">
-            {statusLabels[transaction.status]}
+          <Chip
+            color={transaction.kind === "exclusion" ? "default" : statusColors[transaction.status]}
+            variant="soft"
+          >
+            {transaction.kind === "exclusion" ? "Excluded" : statusLabels[transaction.status]}
           </Chip>
         )}
         <Button

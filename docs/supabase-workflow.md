@@ -78,7 +78,7 @@ Test the backend service boundary as its implementation arrives: resolve identit
 | Stored data | Required values, foreign keys, uniqueness, and agreed value constraints | SQL migrations in `supabase/migrations` |
 | Database access | Which roles may perform which operations on whose rows | Grants and RLS policies, with local database tests |
 
-The shared schemas now define UUID resources; pending/confirmed/rejected transactions; exact decimal-string IDR money; budget/dashboard operations; and Gmail/channel inputs. Use these accepted shapes with the generated database types instead of restoring starter-only contracts. A parsed caller-supplied User ID does not prove identity, and a service-role key does not replace server authorization. UI in `packages/ui` stays presentation-only; financial writes go through the backend.
+The shared schemas now define UUID resources; pending/confirmed review states; expense/income/exclusion transaction types; exact decimal-string IDR money; budget/dashboard operations; and Gmail/channel inputs. Use these accepted shapes with the generated database types instead of restoring starter-only contracts. A parsed caller-supplied User ID does not prove identity, and a service-role key does not replace server authorization. UI in `packages/ui` stays presentation-only; financial writes go through the backend.
 
 ## Database validation command and CI
 

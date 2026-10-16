@@ -3,7 +3,7 @@ import {
   confirmTransactionInputSchema,
   createBudgetInputSchema,
   createTransactionInputSchema,
-  rejectTransactionInputSchema,
+  excludeTransactionInputSchema,
   transactionMutationResultSchema,
   transactionValuesSchema,
   undoActionInputSchema,
@@ -48,7 +48,7 @@ const addTransactionInputSchema = transactionValuesSchema.partial().strict();
 const addTransaction: AgentTool<typeof addTransactionInputSchema> = {
   name: "add_transaction",
   description:
-    "Records a confirmed transaction. Needs kind, money, occurredOn, a merchantName or description, and a Financial Account: financialAccountId for an expense or income, fromFinancialAccountId and toFinancialAccountId for a transfer. A transfer needs a description too: use the words the User used. Leave out anything the User did not give.",
+    "Records a confirmed expense, income, or exclusion. Exclusions track reimbursements, internal transfers, duplicates, and non-personal activity without affecting totals. Needs kind, money, occurredOn, a merchantName or description, and one Financial Account/payment method in financialAccountId. Leave out anything the User did not give.",
   tier: "T1",
   input: addTransactionInputSchema,
   async run(input, context) {
@@ -111,9 +111,9 @@ export const writeTools = [
     output: transactionMutationResultSchema,
   }),
   writeTool({
-    name: "reject_pending",
-    description: `Rejects a pending transaction from the Review Queue so it never counts. ${STALE}`,
-    input: rejectTransactionInputSchema,
+    name: "exclude_pending",
+    description: `Excludes a pending transaction from the Review Queue so it stays in the import audit trail but never counts. Use this for reimbursements, internal transfers, duplicates, or non-personal activity. ${STALE}`,
+    input: excludeTransactionInputSchema,
     output: transactionMutationResultSchema,
   }),
   createBudget,

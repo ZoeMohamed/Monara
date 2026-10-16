@@ -8,6 +8,7 @@ import { writeTools } from "../src/conversation/write-tools.ts";
 
 const userId = "7b0c0f0e-4f0f-4a4e-9f43-2f8e6f1c9a11";
 const accountId = "5e5f6a6b-7c7d-4e8f-9a9b-0c0d1e1f2a2b";
+const categoryId = "7a7b8c8d-9e9f-4a0b-8c1d-2e2f3a3b4c4d";
 const transactionId = "0d0f6f0a-1a1b-4c1d-8e1f-2a2b3c4d5e6f";
 
 const receipt: ReversibleActionReceipt = {
@@ -30,8 +31,6 @@ const lunch = {
   accountHint: null,
   categoryId: null,
   financialAccountId: accountId,
-  fromFinancialAccountId: null,
-  toFinancialAccountId: null,
   reviewStatus: "confirmed",
   source: "in_app_chat",
   confidence: null,
@@ -102,7 +101,7 @@ test("every write tool is T1 and has a schema the model can be given", () => {
       "add_transaction",
       "edit_transaction",
       "confirm_pending",
-      "reject_pending",
+      "exclude_pending",
       "create_budget",
       "edit_budget",
       "undo_action",
@@ -146,8 +145,6 @@ test("add_transaction fills what the User left out with null and returns the rec
     accountHint: null,
     categoryId: null,
     financialAccountId: accountId,
-    fromFinancialAccountId: null,
-    toFinancialAccountId: null,
   });
   assert.deepEqual(outcome.actions, [receipt]);
   assert.equal(outcome.reply, "Done.");
@@ -170,6 +167,25 @@ test("add_transaction without a Financial Account is not sent to the backend", a
   assert.match(outcome.result.error, /Not recorded/);
   assert.match(outcome.result.error, /Financial Account/);
   assert.deepEqual(outcome.actions, []);
+});
+
+test("add_transaction rejects the removed transfer direction", async () => {
+  const outcome = await run({
+    turns: [
+      callTool("add_transaction", {
+        kind: "transfer",
+        description: "Move to savings",
+        money: { amountMinor: "500000", currency: "IDR" },
+        occurredOn: "2026-10-16",
+        categoryId,
+        financialAccountId: accountId,
+      }),
+      done,
+    ],
+  });
+
+  assert.equal(outcome.operations.length, 0);
+  assert.match(outcome.result.error, /Invalid arguments/);
 });
 
 test("the model cannot supply its own request id or a negative amount", async () => {

@@ -11,13 +11,12 @@ import {
   demoCategoryNames,
   demoMethods,
   demoToday,
-  demoTransferMethods,
   type Transaction,
   type TransactionErrors,
   type TransactionValues,
   transactionErrors,
 } from "@/data/demo-ledger";
-import { demoTransactionSelection, demoTransferSelection } from "@/data/demo-resources";
+import { demoTransactionSelection } from "@/data/demo-resources";
 import { FinanceClientError } from "@/lib/finance/client";
 import { FinancePresentationError, parseDraftAmount } from "@/lib/finance/presentation";
 
@@ -36,8 +35,6 @@ export type TransactionDraft = {
   currency: Transaction["currency"];
   category: string | null;
   method: string | null;
-  fromAccount?: string | null;
-  toAccount?: string | null;
 };
 
 type EditorAction = "edit" | "confirm" | "correct";
@@ -72,8 +69,7 @@ function editorReducer(state: EditorState, action: StateAction): EditorState {
       const errors = { ...state.errors };
       for (const key of Object.keys(action.draft) as (keyof TransactionDraft)[]) {
         if (action.draft[key] !== state.draft[key]) {
-          const field = key === "fromAccount" || key === "toAccount" ? "method" : key;
-          delete errors[field];
+          delete errors[key];
         }
       }
       return { ...state, draft: action.draft, errors };
@@ -98,9 +94,6 @@ function draftOf(
   resources?: TransactionEditorResources,
   today = demoToday,
 ): TransactionDraft {
-  const demoTransfer = resources?.demo
-    ? demoTransferSelection(resources.financialAccounts, transaction?.method ?? null)
-    : null;
   return {
     merchant: transaction?.backend
       ? (transaction.backend.merchantName ?? "")
@@ -125,25 +118,11 @@ function draftOf(
           : null) ??
         null)
       : (transaction?.method ?? null),
-    ...(resources
-      ? {
-          fromAccount:
-            transaction?.backend?.fromFinancialAccountId ??
-            transaction?.fromFinancialAccountId ??
-            demoTransfer?.from ??
-            null,
-          toAccount:
-            transaction?.backend?.toFinancialAccountId ??
-            transaction?.toFinancialAccountId ??
-            demoTransfer?.to ??
-            null,
-        }
-      : {}),
   };
 }
 
-const typeLabels = { expense: "Expense", income: "Income", transfer: "Transfer" } as const;
-const kinds = ["Expense", "Income", "Transfer"];
+const typeLabels = { expense: "Expense", income: "Income", exclusion: "Exclusion" } as const;
+const kinds = ["Expense", "Income", "Exclusion"];
 
 function ChoiceField({
   name,
@@ -213,6 +192,10 @@ function TransactionFields({
   disabled: boolean;
   onChange: (patch: Partial<TransactionDraft>) => void;
 }) {
+  const party =
+    draft.kind === "income"
+      ? { label: "Income source", placeholder: "e.g. Monthly salary" }
+      : { label: "Merchant", placeholder: "e.g. Kopi Kenangan" };
   return (
     <>
       <TextField
@@ -222,8 +205,8 @@ function TransactionFields({
         isInvalid={!!errors.merchant}
         isDisabled={disabled}
       >
-        <Label>Merchant or income source</Label>
-        <Input autoFocus className="min-h-11 text-base" placeholder="e.g. Kopi Kenangan" />
+        <Label>{party.label}</Label>
+        <Input autoFocus className="min-h-11 text-base" placeholder={party.placeholder} />
         <FieldError>{errors.merchant}</FieldError>
       </TextField>
       <BrandLogoField disabled={disabled} label={draft.merchant} scope="merchant" />
@@ -276,10 +259,7 @@ function valuesOf(
           ...(resources
             ? {
                 categoryId: draft.category,
-                financialAccountId: draft.kind === "transfer" ? null : draft.method,
-                fromFinancialAccountId:
-                  draft.kind === "transfer" ? (draft.fromAccount ?? null) : null,
-                toFinancialAccountId: draft.kind === "transfer" ? (draft.toAccount ?? null) : null,
+                financialAccountId: draft.method,
               }
             : {}),
         }),
@@ -307,18 +287,13 @@ function validateDraft(
     if (resources && values.amount !== null && values.currency !== "IDR") {
       validation.currency = "Choose IDR for this amount.";
     }
-    if (
-      resources &&
-      values.kind === "transfer" &&
-      values.fromFinancialAccountId &&
-      values.fromFinancialAccountId === values.toFinancialAccountId
-    ) {
-      validation.method = "Choose different source and destination accounts.";
-    }
   }
   if (!transaction) {
-    if (!values.merchant) validation.merchant = "Enter a merchant or income source.";
-    if (!values.method && values.kind !== "transfer") validation.method = "Choose an account.";
+    if (!values.merchant) {
+      validation.merchant =
+        values.kind === "income" ? "Enter an income source." : "Enter a merchant.";
+    }
+    if (!values.method) validation.method = "Choose an account / payment method.";
   }
   return validation;
 }
@@ -358,15 +333,18 @@ function kindChange(
       ? "expense"
       : label === "Income"
         ? "income"
-        : label === "Transfer"
-          ? "transfer"
+        : label === "Exclusion"
+          ? "exclusion"
           : null;
-  const allowed = kind === "transfer" ? demoTransferMethods : demoMethods;
   return {
     kind,
-    ...(resources ? { method: null, fromAccount: null, toAccount: null } : {}),
+    ...(resources
+      ? {
+          method: null,
+        }
+      : {}),
     ...(!resources
-      ? { method: draft.method && !allowed.includes(draft.method) ? null : draft.method }
+      ? { method: draft.method && !demoMethods.includes(draft.method) ? null : draft.method }
       : {}),
   };
 }
@@ -387,25 +365,71 @@ function editorLabels(transaction: Transaction | undefined, isSaving: boolean) {
   };
 }
 
+type TransactionChoiceProps = {
+  draft: TransactionDraft;
+  errors: TransactionErrors;
+  disabled: boolean;
+  onChange: (patch: Partial<TransactionDraft>) => void;
+  resources?: TransactionEditorResources;
+};
+
+function TransactionAccountChoices({
+  draft,
+  errors,
+  disabled,
+  onChange,
+  resources,
+}: TransactionChoiceProps) {
+  const accounts = resources?.financialAccounts.map((account) => ({
+    id: account.id,
+    label: `${account.name}${account.lastFour ? ` · ${account.lastFour}` : ""}`,
+    disabled: !account.isActive,
+  }));
+  return (
+    <ChoiceField
+      name="method"
+      label="Account / payment method"
+      options={accounts ?? demoMethods}
+      value={draft.method}
+      error={errors.method}
+      disabled={disabled}
+      onChange={(method) => onChange({ method })}
+    />
+  );
+}
+
+function TransactionCategoryChoice({
+  draft,
+  disabled,
+  onChange,
+  resources,
+}: Omit<TransactionChoiceProps, "errors">) {
+  const options = resources
+    ? resources.categories.map((category) => ({
+        id: category.id,
+        label: category.name,
+        disabled: category.isArchived,
+      }))
+    : demoCategoryNames;
+  return (
+    <ChoiceField
+      name="category"
+      label="Category (optional)"
+      options={options}
+      value={draft.category}
+      disabled={disabled}
+      onChange={(category) => onChange({ category })}
+    />
+  );
+}
+
 function TransactionChoices({
   draft,
   errors,
   disabled,
   onChange,
   resources,
-}: {
-  draft: TransactionDraft;
-  errors: TransactionErrors;
-  disabled: boolean;
-  onChange: (patch: Partial<TransactionDraft>) => void;
-  resources?: TransactionEditorResources;
-}) {
-  const transfer = draft.kind === "transfer";
-  const accounts = resources?.financialAccounts.map((account) => ({
-    id: account.id,
-    label: `${account.name}${account.lastFour ? ` · ${account.lastFour}` : ""}`,
-    disabled: !account.isActive,
-  }));
+}: TransactionChoiceProps) {
   return (
     <>
       <ChoiceField
@@ -426,55 +450,18 @@ function TransactionChoices({
         disabled={disabled}
         onChange={(currency) => onChange({ currency: currency === "IDR" ? "IDR" : null })}
       />
-      {transfer && resources ? (
-        <>
-          <ChoiceField
-            name="method"
-            label="From account"
-            options={accounts ?? []}
-            value={draft.fromAccount ?? null}
-            error={errors.method}
-            disabled={disabled}
-            onChange={(fromAccount) => onChange({ fromAccount })}
-          />
-          <ChoiceField
-            name="toAccount"
-            label="To account"
-            options={(accounts ?? []).map((account) => ({
-              ...account,
-              disabled: account.disabled || account.id === draft.fromAccount,
-            }))}
-            value={draft.toAccount ?? null}
-            disabled={disabled}
-            onChange={(toAccount) => onChange({ toAccount })}
-          />
-        </>
-      ) : (
-        <ChoiceField
-          name="method"
-          label={transfer ? "From → To" : "Account"}
-          options={accounts ?? (transfer ? demoTransferMethods : demoMethods)}
-          value={draft.method}
-          error={errors.method}
-          disabled={disabled}
-          onChange={(method) => onChange({ method })}
-        />
-      )}
-      <ChoiceField
-        name="category"
-        label="Category"
-        options={
-          resources
-            ? resources.categories.map((category) => ({
-                id: category.id,
-                label: category.name,
-                disabled: category.isArchived,
-              }))
-            : demoCategoryNames
-        }
-        value={draft.category}
+      <TransactionAccountChoices
+        draft={draft}
+        errors={errors}
         disabled={disabled}
-        onChange={(category) => onChange({ category })}
+        onChange={onChange}
+        resources={resources}
+      />
+      <TransactionCategoryChoice
+        draft={draft}
+        disabled={disabled}
+        onChange={onChange}
+        resources={resources}
       />
     </>
   );
@@ -555,8 +542,6 @@ function useTransactionEditorState({
         kind: "kind",
         categoryId: "category",
         financialAccountId: "method",
-        fromFinancialAccountId: "method",
-        toFinancialAccountId: "method",
       };
       const errors: TransactionErrors = {};
       if (error instanceof FinanceClientError && error.fieldErrors) {
