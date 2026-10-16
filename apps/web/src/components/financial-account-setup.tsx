@@ -4,6 +4,8 @@ import {
   type CreateFinancialAccountInput,
   createFinancialAccountInputSchema,
   type FinancialAccount,
+  type Institution,
+  institutions,
 } from "@monara/contracts";
 import { Button } from "@monara/ui";
 import { type FormEvent, useId, useRef, useState } from "react";
@@ -18,8 +20,46 @@ import { ModalDialog } from "@/components/modal-dialog";
 import { type BrandIdentity, brands } from "@/data/brand-identity";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
 
-type AccountDraft = { name: string; accountType: "bank" | "wallet" | "cash"; institution: string };
+type AccountDraft = {
+  name: string;
+  accountType: "bank" | "wallet" | "cash";
+  institution: string;
+  /** Registry entry whose Gmail notifications belong to this account; "" for none. */
+  institutionKey: string;
+  lastFour: string;
+};
 type AccountErrors = Partial<Record<keyof AccountDraft, string>>;
+
+const emptyDraft: AccountDraft = {
+  name: "",
+  accountType: "bank",
+  institution: "",
+  institutionKey: "",
+  lastFour: "",
+};
+
+/** Registry entries that fit an account type: banks and cards, or wallets. */
+function notificationChoices(accountType: AccountDraft["accountType"]): Institution[] {
+  if (accountType === "cash") return [];
+  return institutions
+    .filter((entry) =>
+      accountType === "wallet" ? entry.platform === "E_WALLET" : entry.platform !== "E_WALLET",
+    )
+    .toSorted((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name));
+}
+
+/** The values a draft submits, with the Gmail fields cleared for cash. */
+function accountValues(draft: AccountDraft) {
+  const cash = draft.accountType === "cash";
+  return {
+    name: draft.name.trim(),
+    accountType: draft.accountType,
+    institution: cash ? null : draft.institution.trim() || null,
+    currency: "IDR" as const,
+    lastFour: cash ? null : draft.lastFour.trim() || null,
+    institutionKey: cash ? null : draft.institutionKey || null,
+  };
+}
 
 // The most common Indonesian choices first; the logo search finds every other one.
 const institutionChoices = {
@@ -137,6 +177,62 @@ function AccountFields({
           )}
         </div>
       )}
+      {draft.accountType !== "cash" && (
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor={`${prefix}-notifications`}>
+            Gmail notifications from <span className="font-normal text-muted">(optional)</span>
+          </label>
+          <select
+            className={styles.input}
+            disabled={disabled}
+            id={`${prefix}-notifications`}
+            name="institutionKey"
+            onChange={(event) => onChange({ institutionKey: event.target.value })}
+            value={draft.institutionKey}
+            aria-describedby={`${prefix}-notifications-hint`}
+          >
+            <option value="">None</option>
+            {notificationChoices(draft.accountType).map((entry) => (
+              <option key={entry.key} value={entry.key}>
+                {entry.name === entry.provider ? entry.name : `${entry.provider} · ${entry.name}`}
+                {entry.senderEmails.length === 0 ? " (no email alerts yet)" : ""}
+              </option>
+            ))}
+          </select>
+          <p className={styles.meta} id={`${prefix}-notifications-hint`}>
+            Transactions from these emails are added to this account.
+          </p>
+        </div>
+      )}
+      {draft.accountType !== "cash" && (
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor={`${prefix}-last-four`}>
+            Last 4 digits <span className="font-normal text-muted">(optional)</span>
+          </label>
+          <input
+            aria-describedby={
+              errors.lastFour ? `${prefix}-last-four-error` : `${prefix}-last-four-hint`
+            }
+            aria-invalid={Boolean(errors.lastFour)}
+            className={styles.input}
+            disabled={disabled}
+            id={`${prefix}-last-four`}
+            inputMode="numeric"
+            maxLength={4}
+            name="lastFour"
+            onChange={(event) => onChange({ lastFour: event.target.value.replace(/\D/g, "") })}
+            value={draft.lastFour}
+          />
+          <p className={styles.meta} id={`${prefix}-last-four-hint`}>
+            Tells apart two cards or accounts from the same bank.
+          </p>
+          {errors.lastFour && (
+            <p className={styles.error} id={`${prefix}-last-four-error`}>
+              {errors.lastFour}
+            </p>
+          )}
+        </div>
+      )}
       <p className={styles.meta}>Use this account for payments and transfers · IDR.</p>
     </>
   );
@@ -144,7 +240,7 @@ function AccountFields({
 
 function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () => void }) {
   const [state, setState] = useState({
-    draft: { name: "", accountType: "bank", institution: "" } as AccountDraft,
+    draft: emptyDraft,
     errors: {} as AccountErrors,
     pending: false,
     uncertain: false,
@@ -170,20 +266,20 @@ function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () 
     if (inFlight.current || props.refreshRequired) return;
     if (!request.current) {
       const parsed = createFinancialAccountInputSchema.safeParse({
-        name: state.draft.name.trim(),
-        accountType: state.draft.accountType,
-        institution:
-          state.draft.accountType === "cash" ? null : state.draft.institution.trim() || null,
-        currency: "IDR",
-        lastFour: null,
+        ...accountValues(state.draft),
         clientRequestId: "preflight",
       });
       if (!parsed.success) {
         const errors: AccountErrors = {};
         for (const issue of parsed.error.issues) {
           const field = issue.path[0];
-          if (field === "name" || field === "institution" || field === "accountType")
-            errors[field] ??= issue.message;
+          if (
+            field === "name" ||
+            field === "institution" ||
+            field === "accountType" ||
+            field === "lastFour"
+          )
+            errors[field] ??= field === "lastFour" ? "Enter exactly 4 digits." : issue.message;
         }
         setState((previous) => ({ ...previous, errors, error: "Check the marked fields." }));
         return;
@@ -349,23 +445,14 @@ export function DemoFinancialAccountSetup({
   onCreate: (input: Omit<CreateFinancialAccountInput, "clientRequestId">) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<AccountDraft>({
-    name: "",
-    accountType: "bank",
-    institution: "",
-  });
+  const [draft, setDraft] = useState<AccountDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      onCreate({
-        ...draft,
-        institution: draft.accountType === "cash" ? null : draft.institution.trim() || null,
-        currency: "IDR",
-        lastFour: null,
-      });
+      onCreate(accountValues(draft));
       setOpen(false);
-      setDraft({ name: "", accountType: "bank", institution: "" });
+      setDraft(emptyDraft);
       setError(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Check the account details.");

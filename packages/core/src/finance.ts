@@ -801,6 +801,19 @@ export function createFinanceService(
   }
 
   return {
+    /**
+     * Budget checks for Transactions that Gmail ingestion confirmed without review.
+     * A system follow-up with no signed-in caller: only call it with the owner and ids
+     * the ingestion backend read from its own records.
+     */
+    async evaluateConfirmedImports(userId: string, transactionIds: readonly string[]) {
+      const owner = userIdSchema.parse(userId);
+      for (const transactionId of transactionIds) {
+        const transaction = await repository.findTransaction(owner, transactionId);
+        if (transaction) await evaluateBudgetThresholds(owner, transaction);
+      }
+    },
+
     async listTransactions(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
       return repository.listTransactions(verified.userId, listTransactionsInputSchema.parse(input));

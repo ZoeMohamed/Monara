@@ -12,6 +12,7 @@ export function initialDemoAccounts(): FinancialAccount[] {
     accountType: name === "Cash" ? "cash" : name === "GoPay" ? "wallet" : "bank",
     currency: "IDR",
     lastFour: null,
+    institutionKey: null,
     isActive: true,
     createdAt: timestamp,
     updatedAt: timestamp,

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createComposioGmailReader, decodeBase64Url, GmailReadError } from "./gmail-read.ts";
+import {
+  createComposioGmailReader,
+  decodeBase64Url,
+  GmailReadError,
+  parseSenderAddress,
+} from "./gmail-read.ts";
 
 const apiUrl = "https://composio.example/api/v3.1/";
 const mailbox = { userId: "00000000-0000-4000-8000-000000000001", connectedAccountId: "ca_test" };
@@ -51,7 +56,12 @@ describe("listMessages", () => {
           data: {
             data: {
               messages: [
-                { messageId: "m1", internalDate: "1760000000000" },
+                {
+                  messageId: "m1",
+                  internalDate: "1760000000000",
+                  sender: "BCA <BCA@bca.co.id>",
+                  subject: "Transaksi kartu ****1234",
+                },
                 { id: "m2" },
                 { nothing: true },
               ],
@@ -66,8 +76,13 @@ describe("listMessages", () => {
 
     assert.deepEqual(page, {
       messages: [
-        { id: "m1", receivedAt: new Date(1760000000000).toISOString() },
-        { id: "m2", receivedAt: null },
+        {
+          id: "m1",
+          receivedAt: new Date(1760000000000).toISOString(),
+          senderAddress: "bca@bca.co.id",
+          subject: "Transaksi kartu ****1234",
+        },
+        { id: "m2", receivedAt: null, senderAddress: null, subject: null },
       ],
       nextPageToken: "next",
     });
@@ -132,8 +147,13 @@ describe("getMessage", () => {
             payload: {
               mimeType: "multipart/mixed",
               headers: [
-                { name: "From", value: "Toko <noreply@toko.example>" },
+                {
+                  name: "Authentication-Results",
+                  value: "mx.google.com; dkim=pass header.i=@toko.example",
+                },
+                { name: "From", value: "Toko <NoReply@toko.example>" },
                 { name: "Subject", value: "Struk pembayaran" },
+                { name: "Authentication-Results", value: "forged.example; dkim=pass" },
               ],
               parts: [
                 {
@@ -152,7 +172,13 @@ describe("getMessage", () => {
     const reader = createComposioGmailReader({ apiUrl, apiKey: "key", fetcher });
     const message = await reader.getMessage(mailbox, "m1");
 
-    assert.equal(message.from, "Toko <noreply@toko.example>");
+    assert.equal(message.from, "Toko <NoReply@toko.example>");
+    assert.equal(message.fromAddress, "noreply@toko.example");
+    // Every Authentication-Results value, in order, for the agent to judge.
+    assert.deepEqual(message.authenticationResults, [
+      "mx.google.com; dkim=pass header.i=@toko.example",
+      "forged.example; dkim=pass",
+    ]);
     assert.equal(message.subject, "Struk pembayaran");
     assert.equal(message.text, "Total Rp 25.000");
     assert.equal(message.html, "<b>Total</b> Rp 25.000");
@@ -174,5 +200,31 @@ describe("getMessage", () => {
     const { fetcher } = fakeFetcher([{ status: 401, body: { error: "token details" } }]);
     const reader = createComposioGmailReader({ apiUrl, apiKey: "key", fetcher });
     await assert.rejects(reader.getMessage(mailbox, "m1"), { name: "GmailReadError", status: 401 });
+  });
+});
+
+describe("parseSenderAddress", () => {
+  it("reads the bare address from a From value", () => {
+    assert.equal(parseSenderAddress("BCA <BCA@bca.co.id>"), "bca@bca.co.id");
+    assert.equal(parseSenderAddress("noreply@jago.com"), "noreply@jago.com");
+    assert.equal(parseSenderAddress("Not an address"), null);
+    assert.equal(parseSenderAddress(null), null);
+  });
+});
+
+describe("Gmail refusals inside a successful Composio response", () => {
+  it("reports Gmail's status without the message", async () => {
+    const fetcher = async () =>
+      Response.json({
+        successful: false,
+        error: "HTTP 401: Request had invalid authentication credentials.",
+      });
+    const reader = createComposioGmailReader({ apiUrl, apiKey: "key", fetcher });
+    await assert.rejects(reader.listMessages(mailbox, { query: "q", maxResults: 1 }), (error) => {
+      assert.ok(error instanceof GmailReadError);
+      assert.equal(error.status, 401);
+      assert.doesNotMatch(error.message, /credentials/);
+      return true;
+    });
   });
 });

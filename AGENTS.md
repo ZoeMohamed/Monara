@@ -26,7 +26,7 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 - Verify identity and resource ownership on the server. Never trust a user ID, phone number, or connection ID supplied by a caller as proof of authorization.
 - Supabase Auth uses Google sign-in. Composio Gmail authorization is a separate connection.
 - A WhatsApp number must be explicitly linked and verified by the signed-in User.
-- Extracted transactions start pending review; confirmed transactions affect totals. Duplicate email processing must not create duplicate transactions.
+- Extracted transactions start pending review; confirmed transactions affect totals. The only exception is a Gmail expense or income from a sender Gmail authenticated (DKIM or SPF) that the extractor is confident about (`public.gmail_auto_confirm_confidence()`), with an amount, a date, and a Financial Account mapped from the sender's institution; it is confirmed on import. Gmail sync reads only the senders listed for the User's own accounts in `packages/contracts/src/institutions/institution-senders.json`. Duplicate email processing must not create duplicate transactions.
 - Keep database access behind repositories, with ownership checks and RLS. Never treat a service-role key as a replacement for authorization.
 - Real data operations require connectivity initially. Do not cache financial data or auth responses in the service worker.
 - Never invent financial amounts, dates, currencies, or account mappings when extraction is uncertain.

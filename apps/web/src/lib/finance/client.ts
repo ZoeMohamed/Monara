@@ -36,6 +36,7 @@ import {
   transactionSchema,
   updateBudgetInputSchema,
   updateCategoryInputSchema,
+  updateFinancialAccountInputSchema,
   updatePendingTransactionInputSchema,
   updateTransactionInputSchema,
 } from "@monara/contracts";
@@ -48,6 +49,10 @@ const operations = {
   },
   create_financial_account: {
     input: createFinancialAccountInputSchema,
+    output: financialAccountMutationResultSchema,
+  },
+  update_financial_account: {
+    input: updateFinancialAccountInputSchema,
     output: financialAccountMutationResultSchema,
   },
   list_categories: { input: listCategoriesInputSchema, output: categoryPageSchema },

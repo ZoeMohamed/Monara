@@ -8,6 +8,7 @@ import {
 import {
   ExtractionOutputError,
   extractTransactions,
+  lastFourFromHint,
   parseRupiahAmount,
 } from "../src/gmail/extract.ts";
 import type { JsonCompletionRequest, LlmClient } from "../src/gmail/llm.ts";
@@ -30,7 +31,6 @@ function item(overrides: Record<string, unknown> = {}) {
     description: "Coffee purchase",
     location: null,
     accountHint: "BCA ****1234",
-    categoryName: null,
     confidence: 0.9,
     ...overrides,
   };
@@ -77,7 +77,14 @@ describe("email text", () => {
   });
 
   it("prefers the HTML body and skips empty messages", () => {
-    const base = { id: "m1", receivedAt, from: null, subject: null };
+    const base = {
+      id: "m1",
+      receivedAt,
+      from: null,
+      fromAddress: null,
+      subject: null,
+      authenticationResults: [],
+    };
     assert.equal(
       toEmailForExtraction({ ...base, text: "plain", html: "<p>Total Rp 25.000</p>" })?.body,
       "Total Rp 25.000",
@@ -103,24 +110,26 @@ describe("extractTransactions", () => {
         description: "Coffee purchase",
         location: null,
         accountHint: "BCA ****1234",
-        categoryName: null,
+        accountLastFour: "1234",
         confidence: 0.9,
       },
     ]);
   });
 
-  it("keeps only a category from the User's list, in the User's spelling", async () => {
-    const categories = ["Food & Drink", "Transport"];
-    const llm = fakeLlm({
-      isTransactionEmail: true,
-      items: [item({ categoryName: "FOOD & DRINK" }), item({ categoryName: "Coffee" })],
-    });
-    const result = await extractTransactions(llm, email("Total Rp 25.000"), categories);
-    assert.deepEqual(
-      result.items.map((entry) => entry.categoryName),
-      ["Food & Drink", null],
-    );
-    assert.match(llm.requests[0]?.user ?? "", /Food & Drink; Transport/);
+  it("reads the card ending from the account hint, never from elsewhere", () => {
+    assert.equal(lastFourFromHint("BCA ****1234"), "1234");
+    assert.equal(lastFourFromHint("Kartu kredit x9876 (Visa)"), "9876");
+    assert.equal(lastFourFromHint("GoPay"), null);
+    assert.equal(lastFourFromHint("12345"), null);
+    assert.equal(lastFourFromHint(null), null);
+  });
+
+  it("never asks the model for an account or a category", async () => {
+    const llm = fakeLlm({ isTransactionEmail: false, items: [] });
+    await extractTransactions(llm, email("Total Rp 25.000"));
+    const [request] = llm.requests;
+    assert.doesNotMatch(JSON.stringify(request?.schema), /financialAccountName|categoryName/);
+    assert.doesNotMatch(request?.user ?? "", /categories|financial accounts/i);
   });
 
   it("keeps a location only when the email states it", async () => {

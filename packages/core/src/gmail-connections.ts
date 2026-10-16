@@ -35,6 +35,11 @@ export interface GmailConnectionProvider {
   getGmailAddress(input: { userId: string; connectedAccountId: string }): Promise<string>;
   /** Revokes the grant at the provider and deletes the Composio account. */
   deleteConnection(connectedAccountId: string): Promise<void>;
+  /**
+   * Deletes the Composio account but keeps the Google grant, which another account
+   * for the same mailbox still uses.
+   */
+  removeConnection(connectedAccountId: string): Promise<void>;
 }
 
 export interface StoredGmailConnection extends GmailConnection {
@@ -74,10 +79,17 @@ export function createGmailConnectionService(deps: {
   const activeCount = (connections: StoredGmailConnection[]) =>
     connections.filter((connection) => connection.status === "active").length;
 
-  /** Removes a Composio account we will not keep. Failure only leaves an unused grant. */
-  async function discard(connectedAccountId: string) {
+  /**
+   * Removes a Composio account we will not keep. When another account for the same
+   * mailbox stays connected, the shared Google grant must survive, so only the
+   * Composio account is deleted; otherwise the grant is revoked too. Failure only
+   * leaves an unused account or grant.
+   */
+  async function discard(connectedAccountId: string, options: { keepGrant: boolean }) {
     try {
-      await provider.deleteConnection(connectedAccountId);
+      await (options.keepGrant
+        ? provider.removeConnection(connectedAccountId)
+        : provider.deleteConnection(connectedAccountId));
     } catch {
       // The caller already reports the original failure.
     }
@@ -121,13 +133,15 @@ export function createGmailConnectionService(deps: {
       }
 
       const { connectedAccountId } = result;
+      // True once this mailbox is known to have another active connection.
+      let reconnecting = false;
       try {
         if (result.toolkit !== "gmail") {
           throw new GmailConnectionError("VALIDATION_FAILED", "That connection is not Gmail.");
         }
         const gmailAddress = await provider.getGmailAddress({ userId, connectedAccountId });
         const existing = await repository.listForUser(userId);
-        const reconnecting = existing.some(
+        reconnecting = existing.some(
           (connection) =>
             connection.gmailAddress === gmailAddress && connection.status === "active",
         );
@@ -140,10 +154,14 @@ export function createGmailConnectionService(deps: {
           gmailAddress,
           composioConnectedAccountId: connectedAccountId,
         });
-        if (saved.replacedComposioAccountId) await discard(saved.replacedComposioAccountId);
+        // The new account now uses the grant; revoking it with the old account would
+        // disconnect the mailbox the User just reconnected.
+        if (saved.replacedComposioAccountId) {
+          await discard(saved.replacedComposioAccountId, { keepGrant: true });
+        }
         return toPublic(saved.connection);
       } catch (error) {
-        await discard(connectedAccountId);
+        await discard(connectedAccountId, { keepGrant: reconnecting });
         throw error;
       }
     },

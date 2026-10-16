@@ -592,6 +592,7 @@ function createMemoryFinanceRepository() {
         accountType: input.accountType,
         currency: input.currency,
         lastFour: input.lastFour,
+        institutionKey: input.institutionKey,
         isActive: true,
         createdAt,
         updatedAt: createdAt,

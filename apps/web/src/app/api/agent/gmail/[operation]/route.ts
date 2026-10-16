@@ -1,6 +1,7 @@
 import { isGmailIngestionOperation, runGmailIngestionOperation } from "@monara/core";
 import type { NextRequest } from "next/server";
 import { hasAgentCredential } from "@/lib/agent/credential";
+import { evaluateConfirmedGmailImports } from "@/lib/finance/service";
 import {
   errorResponse,
   gmailErrorResponse,
@@ -37,7 +38,9 @@ export async function POST(
   }
 
   try {
-    const result = await runGmailIngestionOperation(gmailIngestionRepository(), operation, input);
+    const result = await runGmailIngestionOperation(gmailIngestionRepository(), operation, input, {
+      onTransactionsConfirmed: evaluateConfirmedGmailImports,
+    });
     return Response.json(result, { headers: noStoreHeaders });
   } catch (error) {
     return gmailErrorResponse(error);

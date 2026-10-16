@@ -52,8 +52,10 @@ function fakeRepository(rows) {
 
 function fakeProvider(overrides = {}) {
   const deleted = [];
+  const removed = [];
   return {
     deleted,
+    removed,
     async createConnectLink() {
       return { redirectUrl: "https://connect.composio.dev/link/abc" };
     },
@@ -65,6 +67,9 @@ function fakeProvider(overrides = {}) {
     },
     async deleteConnection(id) {
       deleted.push(id);
+    },
+    async removeConnection(id) {
+      removed.push(id);
     },
     ...overrides,
   };
@@ -172,13 +177,30 @@ describe("completing a Gmail connection", () => {
     assert.deepEqual(provider.deleted, ["ca_other"]);
   });
 
-  it("reconnects an active mailbox at the limit and removes the replaced grant", async () => {
+  it("reconnects an active mailbox at the limit, deleting the replaced account but keeping the grant", async () => {
     const rows = ["a", "b", "new"].map((n) => connection(userA, `${n}@gmail.com`));
     const provider = fakeProvider();
     const service = createGmailConnectionService({ repository: fakeRepository(rows), provider });
     await service.complete(userA, "session");
-    assert.deepEqual(provider.deleted, ["ca_new@gmail.com"]);
+    // Revoking would revoke the Google grant the new account was just given.
+    assert.deepEqual(provider.removed, ["ca_new@gmail.com"]);
+    assert.deepEqual(provider.deleted, []);
     assert.equal(rows.length, 3);
+  });
+
+  it("keeps the grant when a reconnect fails after the mailbox is known", async () => {
+    const row = connection(userA, "new@gmail.com");
+    const repository = {
+      ...fakeRepository([row]),
+      async activate() {
+        throw new GmailConnectionError("INTERNAL", "Gmail connections could not be saved.");
+      },
+    };
+    const provider = fakeProvider();
+    const service = createGmailConnectionService({ repository, provider });
+    await rejectsWith(service.complete(userA, "session"), "INTERNAL");
+    assert.deepEqual(provider.removed, ["ca_new"]);
+    assert.deepEqual(provider.deleted, []);
   });
 });
 

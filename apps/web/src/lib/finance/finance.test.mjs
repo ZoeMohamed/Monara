@@ -24,6 +24,7 @@ const accounts = [accountId, secondAccountId].map((id, index) => ({
   accountType: "bank",
   currency: "IDR",
   lastFour: null,
+  institutionKey: null,
   isActive: true,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -578,7 +579,8 @@ describe("financial HTTP boundary", () => {
       input,
       async (path, options) => {
         assert.equal(path, "/api/finance/operations/create_financial_account");
-        assert.deepEqual(JSON.parse(options.body), input);
+        // The client fills the optional Gmail institution with its default, none.
+        assert.deepEqual(JSON.parse(options.body), { ...input, institutionKey: null });
         return Response.json({
           financialAccount: saved,
           action: action("financial_account", accountId),

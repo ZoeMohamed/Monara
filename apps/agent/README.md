@@ -12,6 +12,7 @@ Run `pnpm dev:agent` from the root. `pnpm --filter @monara/agent build` creates 
 | `POST /chat` | In-app chat. The web backend sends `{ userId, text, history }` (see `agentChatRequestSchema`) with `Authorization: Bearer <MONARA_AGENT_BACKEND_SECRET>` and gets `{ reply, actions, confirmation }`. |
 | `POST /webhooks/kapso` | Kapso `whatsapp.message.received` webhook. Verifies the signature, asks the backend who each sender is, and queues a linked User's text for the Agent. Everyone else gets a fixed reply and no data. |
 | `POST /gmail/sync` | Manual Gmail sync. The web backend sends `{ connectionId, since }` with the same Bearer secret, only after checking that the signed-in User owns the connection. Queues a sync job and returns 202. |
+| `POST /gmail/discover` | Account discovery after a Gmail connection. The web backend sends `{ connectionId }` with the same Bearer secret after checking ownership. Queues a discovery job and returns 202. |
 | Anything else | 404. |
 
 Each handler returns 503 when a secret or binding it needs is missing.
@@ -63,40 +64,37 @@ Recurring bills and Reminder preferences have no backend operations yet, so the 
 
 ## Gmail ingestion
 
-A cron trigger runs every 15 minutes and queues a sync job for each active Gmail Connection on the `monara-gmail-jobs` queue. A sync job lists one page of mail and queues one extraction job per message. If there are more pages, it queues a follow-up sync job. The first sync covers the last 30 days; later syncs start from the previous sync time.
+Gmail sync reads only mail from the banks, cards, and wallets the User has as Financial Accounts. The sender list is `packages/contracts/src/institutions/institution-senders.json`; an account names its entry in `institutionKey`.
+
+After a User connects Gmail, the web backend calls `POST /gmail/discover`. A discovery job lists 90 days of metadata (sender, subject, date) from every registry sender, without reading bodies or calling the model, and records which entries emailed the mailbox and which card endings their subjects show. The Gmail page suggests adding or linking accounts from these findings.
+
+A cron trigger runs every 15 minutes and queues a sync job for each active Gmail Connection on the `monara-gmail-jobs` queue. A sync job lists one page of mail from the exact senders of the User's accounts (`from:(…)`) and queues one extraction job per message. If there are more pages, it queues a follow-up sync job. The first sync covers the last 30 days; later syncs start from the previous sync time. A User with no such accounts has nothing to sync.
 
 An extraction job (`src/gmail/pipeline.ts`):
 
 1. Resolves the connection through the backend.
 2. Claims the message so it is processed only once.
-3. Reads the message through Composio.
-4. Extracts transactions with one LLM call (`src/gmail/extract.ts`).
-5. Records Pending Transactions through the backend.
+3. Reads the message through Composio and skips it unless its From address is a sender of one of the User's accounts.
+4. Checks Gmail's own `Authentication-Results` header for DKIM or SPF passing for the sender's domain (`src/gmail/sender.ts`).
+5. Extracts transactions with one LLM call (`src/gmail/extract.ts`).
+6. Records them through the backend with the sender's institution and verification. The backend maps the account from the institution (by card ending when the User has several), takes the Category from the User's history for that merchant, and auto-confirms only verified, confident, complete items.
+7. Queues a categorization job for each transaction still without a Category.
 
-The extractor treats email content as untrusted. Amounts must appear in the email exactly as written, non-Rupiah amounts are never converted, and anything the email does not state stays empty.
+Categorization (`src/merchant/pipeline.ts`) runs on its own `monara-merchant-jobs` queue, throttled for web search. It checks the shared `merchant_profiles` cache, searches Brave (`BRAVE_SEARCH_API_KEY`) with the merchant name only when the cache has nothing, and lets the model choose one of the User's Categories from the result. The backend writes it only while the transaction has no Category and the User has not edited it, and checks budgets for confirmed transactions.
 
-The worker never writes to Supabase. It calls `POST {MONARA_BACKEND_URL}/api/agent/gmail/{name}` with the Bearer secret, kept apart from the per-User `/api/agent/operations/` above because these run with no User or Channel:
+The extractor treats email content, and categorization treats search results, as untrusted. Amounts must appear in the email exactly as written, non-Rupiah amounts are never converted, and anything the email does not state stays empty.
 
-| Operation | Input | Result |
-| --- | --- | --- |
-| `list-active-connections` | `{}` | `{ connections: [{ connectionId, lastSyncedAt }] }` |
-| `resolve-connection` | `{ connectionId }` | `{ connectionId, userId, composioConnectedAccountId, categoryNames }` |
-| `claim-message` | `{ connectionId, gmailMessageId, receivedAt }` | `{ processedMessageId, alreadyFinished }` |
-| `record-extraction` | `{ processedMessageId, outcome, items }` | `{ transactionIds, alreadyFinished }` |
-| `mark-synced` | `{ connectionId, syncedAt }` | `{}` |
-| `report-connection-error` | `{ connectionId, reason: "authorization_lost" }` | `{}` |
-
-The extractor offers the model the User's own Category names and keeps a `categoryName` only when it matches one of them; the backend maps it to that User's Category. Locations, like amounts, must appear in the email.
+The worker never writes to Supabase. It calls `POST {MONARA_BACKEND_URL}/api/agent/gmail/{name}` with the Bearer secret, kept apart from the per-User `/api/agent/operations/` above because these run with no User or Channel. The operations and their schemas are in `packages/core/src/gmail-ingestion.ts` and `packages/contracts/src/gmail-extraction.ts`.
 
 When a Composio read fails with a client error other than 429, the worker asks Composio for the connected account's status. Only when Composio says the account is expired, failed, inactive, or gone does it call `report-connection-error`, which sets the connection to `error`. A bad Composio API key fails that check too, so it never marks Users' connections.
 
-The schemas are in `packages/contracts/src/gmail-extraction.ts`. A 404 with the JSON `NOT_FOUND` error means the connection is no longer active and ends the job without a retry. Any other failure retries up to three times, and the last attempt records the message as failed. The authenticated operations live in `apps/web/src/app/api/agent/gmail/[operation]/route.ts`; the signed-in User's manual sync route lives under `apps/web/src/app/api/gmail/connections/[connectionId]/sync`.
+A 404 with the JSON `NOT_FOUND` error means the connection is no longer active and ends the job without a retry. Any other failure retries up to three times, and the last attempt records the message as failed. The authenticated operations live in `apps/web/src/app/api/agent/gmail/[operation]/route.ts`; the signed-in User's sync and discovery routes live under `apps/web/src/app/api/gmail/connections/[connectionId]/`.
 
 ## Still to do
 
 Add the missing Agent operations (recurring bills, Reminder preferences) and client-turn status/idempotency. Accept owned reads/writes and destructive confirmation against a disposable local Supabase stack before configured-provider testing.
 
-The Gmail queue and cron are declared in `wrangler.jsonc` and simulated by `wrangler dev`. Creating the queue in Cloudflare requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
+The Gmail and merchant queues and the cron are declared in `wrangler.jsonc` and simulated by `wrangler dev`. Creating the queue in Cloudflare requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
 
 The `CONVERSATIONS` Durable Object binding in `wrangler.jsonc` is created on the first deployment. It has only run locally.
 

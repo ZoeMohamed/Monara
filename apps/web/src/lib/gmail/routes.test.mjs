@@ -8,6 +8,10 @@ const state = {
   starts: [],
   completions: [],
   queued: [],
+  requested: [],
+  failures: [],
+  discoveries: [],
+  agentFails: false,
 };
 globalThis.monaraGmailRouteTest = state;
 const service = `
@@ -20,16 +24,31 @@ export function gmailConnectionService() { return {
     globalThis.monaraGmailRouteTest.starts.push({userId,callbackUrl});
     return {redirectUrl:"https://connect.composio.dev/link/synthetic"};
   },
-  async complete(userId, sessionUri) { globalThis.monaraGmailRouteTest.completions.push({userId,sessionUri}); },
+  async complete(userId, sessionUri) {
+    globalThis.monaraGmailRouteTest.completions.push({userId,sessionUri});
+    return {id:"${connectionId}",status:"active"};
+  },
   async list() { return [{id:"${connectionId}",status:"active",lastSyncedAt:"2026-10-14T04:00:00Z"}]; },
 }; }
 export function gmailIngestionRepository() { return {
   async syncCounts() { return {imported:2,skipped:1,failed:0,inProgress:0,importedTransactions:2}; },
+  async requestSync(userId, connectionId) {
+    globalThis.monaraGmailRouteTest.requested.push({userId,connectionId});
+    return "2026-10-16T07:30:00.000Z";
+  },
+  async failSync(input) { globalThis.monaraGmailRouteTest.failures.push(input); },
 }; }
 `;
 const agentSync = `
 export class AgentSyncError extends Error {}
-export async function requestAgentSync(input) { globalThis.monaraGmailRouteTest.queued.push(input); }
+export async function requestAgentSync(input) {
+  if (globalThis.monaraGmailRouteTest.agentFails) throw new AgentSyncError();
+  globalThis.monaraGmailRouteTest.queued.push(input);
+}
+export async function requestAgentDiscovery(connectionId) {
+  if (globalThis.monaraGmailRouteTest.agentFails) throw new AgentSyncError();
+  globalThis.monaraGmailRouteTest.discoveries.push(connectionId);
+}
 `;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -159,6 +178,24 @@ describe("Gmail route callback origin and session boundary", () => {
         "https://example.ngrok-free.dev/connections/gmail?result=connected",
       );
       assert.equal(response.headers.get("cache-control"), "private, no-store");
+      // Account discovery starts for the connection the server just confirmed.
+      assert.deepEqual(state.discoveries, [connectionId]);
+    }));
+
+  it("still connects when the agent cannot start account discovery", () =>
+    withTunnel(async () => {
+      state.agentFails = true;
+      try {
+        const request = new Request(
+          "http://localhost:3005/api/gmail/connections/callback?session_uri=synthetic-twice",
+          { headers: { host: "example.ngrok-free.dev" } },
+        );
+        request.nextUrl = new URL(request.url);
+        const response = await callback(request);
+        assert.match(response.headers.get("location"), /result=connected$/);
+      } finally {
+        state.agentFails = false;
+      }
     }));
 });
 
@@ -187,6 +224,33 @@ describe("Gmail Sync Now origin and cursor boundary", () => {
       );
       assert.equal(response.status, 202);
       assert.deepEqual(state.queued, [{ connectionId, since: "2026-10-14T04:00:00Z" }]);
+      // The queued state is stored for the signed-in User before the agent is asked.
+      assert.deepEqual(state.requested, [{ userId: state.user.id, connectionId }]);
       assert.equal((await response.json()).status, "queued");
+    }));
+
+  it("stores the failure when the agent cannot queue the sync", () =>
+    withTunnel(async () => {
+      state.agentFails = true;
+      state.failures.length = 0;
+      try {
+        const response = await sync(
+          new Request(`https://monara.example/api/gmail/connections/${connectionId}/sync`, {
+            method: "POST",
+            headers: { origin: "https://monara.example", "sec-fetch-site": "same-origin" },
+          }),
+          { params: Promise.resolve({ connectionId }) },
+        );
+        assert.equal((await response.json()).code, "DEPENDENCY_UNAVAILABLE");
+        assert.deepEqual(state.failures, [
+          {
+            connectionId,
+            error: "agent_unavailable",
+            requestedAt: "2026-10-16T07:30:00.000Z",
+          },
+        ]);
+      } finally {
+        state.agentFails = false;
+      }
     }));
 });
