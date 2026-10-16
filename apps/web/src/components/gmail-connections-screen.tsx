@@ -12,6 +12,7 @@ export type GmailConnectionsProps = {
     connect: () => void;
     reconnect: (id: string) => void;
     sync?: (id: string) => void;
+    checkProgress?: (id: string) => void;
     disconnect: (id: string) => void;
   };
   pendingAction?: { id: string; kind: "disconnect" | "reconnect" | "sync" } | { kind: "connect" };
@@ -33,24 +34,58 @@ function lastSyncLabel(value: string | null) {
     : `${syncDateFormatter.format(date)} WIB`;
 }
 
+function syncStatusLabel(sync: GmailMailbox["sync"]) {
+  if (sync.request === "unconfirmed") return "Request unconfirmed · Check progress before retrying";
+  if (sync.state === "watching") {
+    return sync.request === "queued" ? "Sync queued · Updating counts…" : "Updating counts…";
+  }
+  if (sync.state === "paused") return "Updates paused · Imports may continue";
+  return sync.request === "queued" ? "Sync queued" : null;
+}
+
 function SyncStatus({ sync }: { sync: GmailMailbox["sync"] }) {
-  if (sync.state === "idle") return null;
-  if (sync.state === "failed")
-    return (
-      <p role="alert" className="mt-4 text-sm text-danger">
-        {sync.message}
-      </p>
-    );
-  if (sync.state === "completed")
-    return (
-      <p role="status" className="mt-4 rounded-xl bg-accent-soft p-3 text-sm text-foreground">
-        Last sync: {sync.imported} imported · {sync.skipped} skipped · {sync.failed} failed
-      </p>
-    );
+  const status = syncStatusLabel(sync);
   return (
-    <p role="status" className="mt-4 text-sm text-muted">
-      {sync.state === "queued" ? "Sync queued…" : "Importing transactions…"}
-    </p>
+    <div className="mt-4 space-y-3 text-sm">
+      {sync.counts && (
+        <div className="rounded-xl bg-accent-soft p-3">
+          <p className="font-semibold">Import history</p>
+          <dl className="mt-3 grid grid-cols-3 gap-2">
+            {[
+              ["Imported", sync.counts.imported],
+              ["Skipped", sync.counts.skipped],
+              ["Failed", sync.counts.failed],
+            ].map(([label, count]) => (
+              <div key={label}>
+                <dt className="text-xs text-muted">{label}</dt>
+                <dd className="mt-1 font-bold tabular-nums">{count.toLocaleString("en-GB")}</dd>
+              </div>
+            ))}
+          </dl>
+          <details className="mt-1 text-xs leading-5 text-muted">
+            <summary className="min-h-11 cursor-pointer py-3 font-semibold focus-visible:outline-2 focus-visible:outline-focus">
+              Details
+            </summary>
+            <p>
+              {sync.counts.importedTransactions.toLocaleString("en-GB")} transactions created ·{" "}
+              {sync.counts.inProgress.toLocaleString("en-GB")} emails processing
+            </p>
+            Email totals across all imports. Queued emails may appear later; these counts do not
+            confirm a sync is finished.
+          </details>
+        </div>
+      )}
+      {sync.state === "error" && (
+        <p role="alert" className="text-danger">
+          {sync.message}
+        </p>
+      )}
+      {sync.state !== "error" && status && (
+        <p role="status" className="text-muted">
+          {status}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -109,10 +144,9 @@ function ConnectionIntro({
   const canConnect = state.status === "ready" && count < 3 && !!actions && !pendingAction;
   return (
     <Card className="block gap-0 mt-4 rounded-2xl border border-border bg-surface p-5 sm:p-6">
-      <h2 className="text-lg font-bold">Connect Gmail separately</h2>
+      <h2 className="text-lg font-bold">Connect Gmail</h2>
       <p className="mt-2 text-sm leading-6 text-muted">
-        Google sign-in opens your Monara account. Connecting Gmail gives permission to import
-        transaction emails from the last 30 days.
+        Gmail access is separate from sign-in. Import transaction emails from the last 30 days.
       </p>
       <Button className="mt-4 min-h-11" isDisabled={!canConnect} onPress={actions?.connect}>
         {state.status === "ready" && pendingAction?.kind === "connect"
@@ -141,45 +175,68 @@ type MailboxCardProps = {
   onDisconnect: (id: string) => void;
 };
 
+function MailboxImportAction({
+  mailbox,
+  actions,
+  pendingAction,
+}: Omit<MailboxCardProps, "onDisconnect">) {
+  const busy = pendingAction !== undefined;
+  if (mailbox.status !== "active") {
+    return (
+      <Button
+        className="min-h-11"
+        aria-label={`Reconnect ${mailbox.email}`}
+        isDisabled={!actions || busy}
+        onPress={() => actions?.reconnect(mailbox.id)}
+      >
+        {pendingAction?.kind === "reconnect" && pendingAction.id === mailbox.id
+          ? "Reconnecting…"
+          : "Reconnect"}
+      </Button>
+    );
+  }
+  return (
+    <Button
+      className="min-h-11"
+      aria-label={`Sync ${mailbox.email} now`}
+      isDisabled={!actions?.sync || busy || mailbox.sync.state === "watching"}
+      onPress={() => actions?.sync?.(mailbox.id)}
+    >
+      {pendingAction?.kind === "sync" && pendingAction.id === mailbox.id
+        ? "Queueing sync…"
+        : mailbox.sync.request === "none"
+          ? "Sync now"
+          : "Sync again"}
+    </Button>
+  );
+}
+
 function MailboxActions({ mailbox, actions, pendingAction, onDisconnect }: MailboxCardProps) {
   const busy = pendingAction !== undefined;
-  const syncing =
-    mailbox.sync.state === "queued" ||
-    mailbox.sync.state === "running" ||
-    (pendingAction?.kind === "sync" && pendingAction.id === mailbox.id);
   return (
     <div className="mt-5 flex flex-wrap gap-3">
-      {mailbox.status === "active" ? (
+      <MailboxImportAction mailbox={mailbox} actions={actions} pendingAction={pendingAction} />
+      {actions?.checkProgress && (
         <Button
+          variant="secondary"
           className="min-h-11"
-          aria-label={`Sync ${mailbox.email} now`}
-          isDisabled={!actions?.sync || busy || syncing}
-          onPress={() => actions?.sync?.(mailbox.id)}
+          aria-label={`Check import progress for ${mailbox.email}`}
+          isDisabled={busy || mailbox.sync.state === "watching"}
+          onPress={() => actions.checkProgress?.(mailbox.id)}
         >
-          {mailbox.sync.state === "queued"
-            ? "Sync queued"
-            : syncing
-              ? "Sync in progress…"
-              : "Sync now"}
-        </Button>
-      ) : (
-        <Button
-          className="min-h-11"
-          aria-label={`Reconnect ${mailbox.email}`}
-          isDisabled={!actions || busy}
-          onPress={() => actions?.reconnect(mailbox.id)}
-        >
-          Reconnect
+          {mailbox.sync.state === "watching" ? "Checking progress…" : "Check progress"}
         </Button>
       )}
       <Button
-        variant="secondary"
+        variant="ghost"
         className="min-h-11"
         aria-label={`Disconnect ${mailbox.email}`}
         isDisabled={!actions || busy}
         onPress={() => onDisconnect(mailbox.id)}
       >
-        Disconnect
+        {pendingAction?.kind === "disconnect" && pendingAction.id === mailbox.id
+          ? "Disconnecting…"
+          : "Disconnect"}
       </Button>
     </div>
   );
@@ -195,7 +252,7 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
         </Chip>
       </div>
       <p className="mt-3 text-sm text-muted">
-        Last successful sync: {lastSyncLabel(mailbox.lastSyncedAt)}
+        Last mailbox scan: {lastSyncLabel(mailbox.lastSyncedAt)}
       </p>
       <SyncStatus sync={mailbox.sync} />
       <MailboxActions
@@ -206,15 +263,6 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
       />
       {mailbox.status === "active" && !actions?.sync && (
         <p className="mt-3 text-sm text-muted">Manual sync is not available yet.</p>
-      )}
-      {pendingAction && "id" in pendingAction && pendingAction.id === mailbox.id && (
-        <p role="status" className="mt-3 text-sm text-muted">
-          {pendingAction.kind === "disconnect"
-            ? "Disconnecting…"
-            : pendingAction.kind === "reconnect"
-              ? "Reconnecting…"
-              : "Queueing sync…"}
-        </p>
       )}
     </Card>
   );
@@ -242,16 +290,12 @@ export function GmailConnectionsScreen({
       </Link>
       <div className="mt-5 flex flex-wrap items-start justify-between gap-5">
         <div>
-          <p className="text-sm font-semibold text-accent">Connections</p>
-          <h1 className="mt-2 text-[32px] font-extrabold tracking-[-0.04em]">
-            Your Gmail mailboxes
-          </h1>
+          <h1 className="mt-2 text-[32px] font-extrabold tracking-[-0.04em]">Gmail</h1>
         </div>
         {state.status === "ready" && <Chip variant="soft">{mailboxes.length} of 3 connected</Chip>}
       </div>
       <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
-        Connect up to three mailboxes. Imported transactions wait for your review before they count
-        toward your totals.
+        Up to 3 mailboxes. Imports wait for your review.
       </p>
       <ConnectionIntro
         state={state}
@@ -276,10 +320,6 @@ export function GmailConnectionsScreen({
           />
         ))}
       </div>
-      <p className="mt-5 text-sm leading-6 text-muted">
-        You decide what enters your ledger. Review, edit, confirm, or reject imported transactions.
-        Connecting a mailbox does not confirm them automatically.
-      </p>
       {selected && actions && (
         <ModalDialog labelledBy="disconnect-title" onClose={() => setDisconnectId(null)}>
           <div className="p-7">

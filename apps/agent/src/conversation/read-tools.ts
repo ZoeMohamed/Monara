@@ -4,7 +4,9 @@ import {
   budgetSuggestionSchema,
   calendarMonthSchema,
   categoryPageSchema,
+  dashboardSummarySchema,
   financialAccountPageSchema,
+  getDashboardInputSchema,
   listBudgetsInputSchema,
   listCategoriesInputSchema,
   listFinancialAccountsInputSchema,
@@ -17,7 +19,7 @@ import { z } from "zod";
 import type { AgentTool, ToolContext } from "./tools.ts";
 
 /**
- * A T0 tool that forwards to one backend list operation. The result is parsed
+ * A T0 tool that forwards to one backend read operation. The result is parsed
  * with the shared contract, so the model never sees a field the contract does
  * not expose.
  */
@@ -128,6 +130,13 @@ const getSummary: AgentTool<typeof getSummaryInputSchema> = {
 
 export const readTools = [
   getSummary,
+  readTool({
+    name: "get_dashboard",
+    description:
+      "Reads the backend-calculated dashboard for a month (YYYY-MM). Use it for affordability questions such as 'Can I afford this?', overall and per-Category safe-to-spend, overspend forecasts, unusual-transaction flags, and the savings rate. Explain the returned figures using their asOf date, Budget periods, amounts and remaining days. Use only the returned figures and calculation bases; never invent missing values or calculate new recommendations. If an insight is null or absent, say it is unavailable. Creates and changes nothing.",
+    input: getDashboardInputSchema,
+    output: dashboardSummarySchema,
+  }),
   readTool({
     name: "suggest_budget",
     description:

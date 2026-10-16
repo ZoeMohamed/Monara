@@ -7,8 +7,10 @@ import {
   gmailCallbackError,
   gmailConnectionsErrorState,
   loadGmailConnections,
+  loadGmailSyncCounts,
   requestGmailSync,
   startGmailConnection,
+  watchGmailSyncCounts,
 } from "./client.ts";
 
 const connectionId = "6548c640-4dd8-4df7-8f41-a086f6c5f947";
@@ -52,14 +54,14 @@ describe("Gmail connection response boundary", () => {
         email: "mailbox@example.com",
         status: "active",
         lastSyncedAt: null,
-        sync: { state: "idle" },
+        sync: { state: "idle", counts: null, request: "none" },
       },
       {
         id: "ce9e8c47-9249-4121-9f4f-dce7b6f26bfd",
         email: "reconnect@example.com",
         status: "reconnect-required",
         lastSyncedAt: "2026-10-12T06:00:00Z",
-        sync: { state: "idle" },
+        sync: { state: "idle", counts: null, request: "none" },
       },
     ]);
   });
@@ -262,5 +264,135 @@ describe("Gmail manual sync boundary", () => {
       }),
       { message: "Gmail did not confirm that the sync was queued." },
     );
+  });
+
+  it("validates cumulative counts without exposing provider fields or inventing completion", async () => {
+    const counts = { imported: 2, skipped: 3, failed: 1, inProgress: 0, importedTransactions: 4 };
+    assert.deepEqual(
+      await loadGmailSyncCounts(connectionId, {
+        fetcher: async (path, init) => {
+          assert.equal(path, `/api/gmail/connections/${connectionId}/sync`);
+          assert.equal(init.method, "GET");
+          assert.equal(init.cache, "no-store");
+          assert.equal(init.credentials, "same-origin");
+          assert.equal(init.redirect, "error");
+          return Response.json(counts);
+        },
+      }),
+      counts,
+    );
+    for (const payload of [
+      { ...counts, imported: -1 },
+      { ...counts, failed: 1.5 },
+      { ...counts, inProgress: "0" },
+      { ...counts, importedTransactions: undefined },
+      { ...counts, providerAccountId: "private" },
+      { status: "completed", counts },
+    ]) {
+      await assert.rejects(
+        loadGmailSyncCounts(connectionId, { fetcher: async () => Response.json(payload) }),
+        { message: "Gmail returned invalid import counts. Check progress again." },
+      );
+    }
+  });
+
+  it("bounds GET refreshes and never treats zero processing or unchanged counts as completion", async () => {
+    const controller = new AbortController();
+    const seen = [];
+    let reads = 0;
+    await watchGmailSyncCounts(connectionId, {
+      signal: controller.signal,
+      maxReads: 3,
+      intervalMs: 0,
+      fetcher: async (_path, init) => {
+        assert.equal(init.method, "GET");
+        reads += 1;
+        return Response.json({
+          imported: reads === 3 ? 3 : 2,
+          skipped: 1,
+          failed: 0,
+          inProgress: 0,
+          importedTransactions: reads === 3 ? 4 : 2,
+        });
+      },
+      onCounts: (counts) => seen.push(counts.importedTransactions),
+    });
+    assert.equal(reads, 3);
+    assert.deepEqual(seen, [2, 2, 4]);
+  });
+
+  it("ignores an obsolete in-flight count response after disconnect or a replacement read", async () => {
+    const controller = new AbortController();
+    let resolveResponse;
+    const delayed = new Promise((resolve) => {
+      resolveResponse = resolve;
+    });
+    const seen = [];
+    let reads = 0;
+    const watching = watchGmailSyncCounts(connectionId, {
+      signal: controller.signal,
+      intervalMs: 0,
+      fetcher: async () => {
+        reads += 1;
+        return delayed;
+      },
+      onCounts: (counts) => seen.push(counts),
+    });
+    controller.abort();
+    resolveResponse(
+      Response.json({ imported: 2, skipped: 1, failed: 0, inProgress: 0, importedTransactions: 2 }),
+    );
+    await assert.rejects(watching, { name: "AbortError" });
+    assert.deepEqual(seen, []);
+    assert.equal(reads, 1);
+  });
+
+  it("cancels between reads and stops after a failed GET without retrying a sync request", async () => {
+    const controller = new AbortController();
+    let reads = 0;
+    await assert.rejects(
+      watchGmailSyncCounts(connectionId, {
+        signal: controller.signal,
+        fetcher: async () => {
+          reads += 1;
+          return Response.json({
+            imported: 2,
+            skipped: 1,
+            failed: 0,
+            inProgress: 1,
+            importedTransactions: 2,
+          });
+        },
+        onCounts: () => controller.abort(),
+      }),
+      { name: "AbortError" },
+    );
+    assert.equal(reads, 1);
+
+    const available = new AbortController();
+    const seen = [];
+    reads = 0;
+    await assert.rejects(
+      watchGmailSyncCounts(connectionId, {
+        signal: available.signal,
+        intervalMs: 0,
+        fetcher: async (_path, init) => {
+          assert.equal(init.method, "GET");
+          reads += 1;
+          if (reads === 2) return new Response(null, { status: 503 });
+          return Response.json({
+            imported: 2,
+            skipped: 1,
+            failed: 0,
+            inProgress: 1,
+            importedTransactions: 2,
+          });
+        },
+        onCounts: (counts) => seen.push(counts.imported),
+      }),
+      (error) => error instanceof GmailClientError && error.status === "unavailable",
+    );
+    assert.equal(reads, 2);
+    assert.deepEqual(seen, [2]);
   });
 });

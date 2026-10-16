@@ -1,7 +1,7 @@
 "use client";
 
 import type { FinancialInsights } from "@monara/contracts";
-import { Button, Input, Label, TextField } from "@monara/ui";
+import { Button, Input, Label, ListBox, Select, TextField } from "@monara/ui";
 import Image from "next/image";
 import { type CSSProperties, type ReactNode, useId, useState, useSyncExternalStore } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
@@ -131,7 +131,7 @@ function Chip({
       variant="ghost"
       aria-label={label}
       className={styles.chip}
-      onClick={onClick}
+      onPress={onClick}
       type="button"
     >
       <span aria-hidden className={styles.chipIcon} data-tone={tone}>
@@ -239,7 +239,7 @@ function SceneHero({
             aria-label={amountsHidden ? "Show amounts" : "Hide amounts"}
             aria-pressed={amountsHidden}
             className={styles.eye}
-            onClick={toggleAmounts}
+            onPress={toggleAmounts}
             type="button"
           >
             <Icon name={amountsHidden ? "eye-off" : "eye"} />
@@ -345,7 +345,7 @@ function CategoryItem({
         aria-expanded={open}
         aria-label={`${name}, ${formatRupiah(amount)}${budgetLimit !== null ? ` of ${formatRupiah(budgetLimit)} budget${over ? ", over budget" : ""}` : ""}. Show payments.`}
         className={styles.category}
-        onClick={onToggle}
+        onPress={onToggle}
         style={{ "--category-color": categoryColor(name, index) } as CSSProperties}
         type="button"
       >
@@ -419,17 +419,34 @@ function SpendingBlock({
         <h2 className={styles.quiet} id="spending-title">
           Where it went
         </h2>
-        <label className={styles.monthPicker} htmlFor={monthId}>
-          <span className="sr-only">Month</span>
-          <select id={monthId} onChange={(event) => setMonth(event.target.value)} value={month}>
-            {months.map((value) => (
-              <option key={value} value={value}>
-                {value === currentMonth ? "This month" : formatMonth(value)}
-              </option>
-            ))}
-          </select>
-          <Icon name="chevron-down" strokeWidth={2.2} />
-        </label>
+        <Select
+          className={styles.monthPicker}
+          onChange={(value) => {
+            if (value !== null) setMonth(String(value));
+          }}
+          value={month}
+        >
+          <Label className="sr-only" htmlFor={monthId}>
+            Month
+          </Label>
+          <Select.Trigger className={styles.monthTrigger} id={monthId}>
+            <Select.Value className={styles.monthValue} />
+            <Select.Indicator className={styles.monthIndicator} />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              {months.map((value) => {
+                const label = value === currentMonth ? "This month" : formatMonth(value);
+                return (
+                  <ListBox.Item className="min-h-11" id={value} key={value} textValue={label}>
+                    {label}
+                    <ListBox.ItemIndicator />
+                  </ListBox.Item>
+                );
+              })}
+            </ListBox>
+          </Select.Popover>
+        </Select>
       </div>
 
       {categories.length === 0 ? (
@@ -441,7 +458,7 @@ function SpendingBlock({
           </p>
           <div>
             {openAdd ? (
-              <Button variant="ghost" className={styles.primary} onClick={openAdd} type="button">
+              <Button variant="ghost" className={styles.primary} onPress={openAdd} type="button">
                 <Icon name="plus" strokeWidth={2.2} />
                 Add payment
               </Button>
@@ -450,7 +467,7 @@ function SpendingBlock({
               <Button
                 variant="ghost"
                 className={styles.secondary}
-                onClick={openReview}
+                onPress={openReview}
                 type="button"
               >
                 Review {model.pendingCount}
@@ -459,7 +476,7 @@ function SpendingBlock({
               <Button
                 variant="ghost"
                 className={styles.secondary}
-                onClick={openConnectGmail}
+                onPress={openConnectGmail}
                 type="button"
               >
                 Connect Gmail
@@ -540,7 +557,7 @@ function ActivityCard({
           <Button
             variant="ghost"
             className={styles.seeAll}
-            onClick={openTransactions}
+            onPress={openTransactions}
             type="button"
           >
             See all
@@ -564,7 +581,7 @@ function ActivityCard({
         <p>Paid in cash? Log it in seconds.</p>
       )}
       {openAdd && model.isCurrentMonth ? (
-        <Button variant="ghost" className={styles.todayAction} onClick={openAdd} type="button">
+        <Button variant="ghost" className={styles.todayAction} onPress={openAdd} type="button">
           <Icon name="plus" strokeWidth={2.2} />
           Log a payment
         </Button>
@@ -591,7 +608,7 @@ function Feature({
   amount?: boolean;
 }) {
   return (
-    <Button variant="ghost" onClick={onOpen} type="button">
+    <Button variant="ghost" onPress={onOpen} type="button">
       <span className={styles.featureName}>
         <span aria-hidden className={styles.featureIcon} data-tone={tone}>
           <Icon name={icon} />
@@ -630,7 +647,7 @@ function paceOf(model: OverviewModel) {
 
 function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
   return (
-    <Button variant="ghost" className={styles.safe} onClick={openBudgets} type="button">
+    <Button variant="ghost" className={styles.safe} onPress={openBudgets} type="button">
       <span className={styles.featureName}>
         <span aria-hidden className={styles.featureIcon} data-tone="green">
           <Icon name="budgets" />
@@ -687,7 +704,7 @@ function SafeToSpendCard({
   if (model.budgetTotal === BigInt(0)) return <SafeToSpendSetup openBudgets={openBudgets} />;
   const safe = model.safeToSpend;
   return (
-    <Button variant="ghost" className={styles.safe} onClick={openBudgets} type="button">
+    <Button variant="ghost" className={styles.safe} onPress={openBudgets} type="button">
       <span className={styles.featureName}>
         <span aria-hidden className={styles.featureIcon} data-tone="green">
           <Icon name="budgets" />
@@ -835,7 +852,7 @@ function AttentionCard({
                 <Button
                   variant="ghost"
                   className={styles.alert}
-                  onClick={item.kind === "review" ? openReview : openBudgets}
+                  onPress={item.kind === "review" ? openReview : openBudgets}
                   type="button"
                 >
                   <span aria-hidden className={styles.alertIcon} data-tone={copy.tone}>
@@ -869,7 +886,7 @@ function Fact({
 }) {
   return (
     <li>
-      <Button variant="ghost" className={styles.fact} onClick={onOpen} type="button">
+      <Button variant="ghost" className={styles.fact} onPress={onOpen} type="button">
         <span aria-hidden className={styles.factIcon} data-tone={tone}>
           <Icon name={icon} />
         </span>

@@ -19,10 +19,11 @@ import {
   Switch,
   TextField,
 } from "@monara/ui";
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
 import { BudgetDetails, type BudgetDetailsRecord } from "@/components/budget-details";
 import styles from "@/components/budget-manager.module.css";
+import { BudgetSuggestionPanel } from "@/components/budget-suggestion";
 import { CategoryCreator } from "@/components/category-creator";
 import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon } from "@/components/icon";
@@ -220,44 +221,54 @@ function BudgetFields({
         </div>
       </fieldset>
       {fields.map((field) => (
-        <TextField
-          className={styles.field}
-          isDisabled={disabled}
-          isInvalid={Boolean(errors[field.name])}
-          key={field.name}
-          name={field.name}
-          onChange={(value) => onChange({ [field.name]: value })}
-          type={field.type}
-          value={draft[field.name]}
-        >
-          <Label>{field.label}</Label>
-          <Input
-            className="min-h-11 text-base"
-            inputMode={"inputMode" in field ? field.inputMode : undefined}
-            maxLength={"maxLength" in field ? field.maxLength : undefined}
-          />
-          <FieldError>{errors[field.name]}</FieldError>
-          {field.name === "startsOn" && (
-            <>
-              <p className={styles.meta}>
-                {draft.cadence === "monthly"
-                  ? "Resets on this day each month. Shorter months use their last day. Choose your payday or any date that works for you."
-                  : "Resets every seven days from this date."}
-              </p>
-              {latestIncomeDate && (
-                <Button
-                  className="min-h-11 justify-start rounded-full text-xs"
-                  isDisabled={disabled}
-                  onPress={() => onChange({ startsOn: latestIncomeDate })}
-                  variant="ghost"
-                >
-                  <Icon className="h-4 w-4" name="income" />
-                  Use last income · {formatDay(latestIncomeDate)}
-                </Button>
-              )}
-            </>
+        <Fragment key={field.name}>
+          <TextField
+            className={styles.field}
+            isDisabled={disabled}
+            isInvalid={Boolean(errors[field.name])}
+            name={field.name}
+            onChange={(value) => onChange({ [field.name]: value })}
+            type={field.type}
+            value={draft[field.name]}
+          >
+            <Label>{field.label}</Label>
+            <Input
+              className="min-h-11 text-base"
+              inputMode={"inputMode" in field ? field.inputMode : undefined}
+              maxLength={"maxLength" in field ? field.maxLength : undefined}
+            />
+            <FieldError>{errors[field.name]}</FieldError>
+            {field.name === "startsOn" && (
+              <>
+                <p className={styles.meta}>
+                  {draft.cadence === "monthly"
+                    ? "Resets on this day each month, or the last day of a shorter month."
+                    : "Resets every seven days from this date."}
+                </p>
+                {latestIncomeDate && (
+                  <Button
+                    className="min-h-11 justify-start rounded-full text-xs"
+                    isDisabled={disabled}
+                    onPress={() => onChange({ startsOn: latestIncomeDate })}
+                    variant="ghost"
+                  >
+                    <Icon className="h-4 w-4" name="income" />
+                    Use last income · {formatDay(latestIncomeDate)}
+                  </Button>
+                )}
+              </>
+            )}
+          </TextField>
+          {field.name === "amount" && draft.categoryId && (
+            <BudgetSuggestionPanel
+              cadence={draft.cadence}
+              categoryId={draft.categoryId}
+              disabled={disabled}
+              key={`${draft.categoryId}:${draft.cadence}`}
+              onAccept={(amount) => onChange({ amount })}
+            />
           )}
-        </TextField>
+        </Fragment>
       ))}
       {draft.cadence === "weekly" && (
         <p className={styles.meta}>Each week runs for seven days from your start date.</p>

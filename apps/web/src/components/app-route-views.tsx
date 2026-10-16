@@ -118,6 +118,11 @@ export function BudgetsRoute() {
   return (
     <BudgetsScreen
       demo={session.dataMode === "demo"}
+      insights={
+        session.financeSnapshot?.month === session.navigation.view.month
+          ? session.financeSnapshot.dashboard.insights
+          : undefined
+      }
       onEditBudget={session.dataMode === "demo" ? session.updateDemoBudget : undefined}
       demoCategories={session.dataMode === "demo" ? session.categories : undefined}
       onCreateBudget={session.dataMode === "demo" ? session.createDemoBudget : undefined}
@@ -195,8 +200,8 @@ export function ChatRoute() {
           }
         },
         {
-          shouldRefresh: (response) =>
-            response.actions.length > 0 || text.trim().toLowerCase() === "yes",
+          // Undo changes existing records without issuing another action receipt.
+          // Reconcile every verified turn rather than inferring writes from reply text.
           refreshFailureMessage:
             "Your records could not be refreshed. Refresh before making another change.",
           onRefreshFailure: (response, refreshWarning) => ({ ...response, refreshWarning }),
@@ -271,6 +276,7 @@ export function ProfileRoute() {
       }
       demo={session.dataMode === "demo"}
       online={session.online}
+      onOpenReminders={session.openReminders}
       onReplayTour={session.replayTour}
       profile={session.profile}
     />

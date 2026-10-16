@@ -1,6 +1,8 @@
 import {
   disconnectGmailConnectionInputSchema,
+  type GmailSyncCounts,
   gmailConnectionListSchema,
+  gmailSyncCountsSchema,
   gmailSyncResultSchema,
   operationErrorSchema,
   startGmailConnectionResultSchema,
@@ -11,10 +13,12 @@ export type GmailMailbox = {
   email: string;
   status: "active" | "reconnect-required";
   lastSyncedAt: string | null;
-  sync:
-    | { state: "idle" | "queued" | "running" }
-    | { state: "completed"; imported: number; skipped: number; failed: number }
-    | { state: "failed"; message: string };
+  sync: {
+    state: "idle" | "watching" | "paused" | "error";
+    counts: GmailSyncCounts | null;
+    request: "none" | "queued" | "unconfirmed";
+    message?: string;
+  };
 };
 
 export type GmailConnectionsState =
@@ -122,8 +126,8 @@ export async function loadGmailConnections(options: RequestOptions = {}): Promis
       email: connection.gmailAddress,
       status: connection.status === "active" ? "active" : "reconnect-required",
       lastSyncedAt: connection.lastSyncedAt,
-      // The connection list has no durable job-status field; Sync Now updates this local state.
-      sync: { state: "idle" },
+      // Counts and queue acknowledgement do not establish completion of a sync run.
+      sync: { state: "idle", counts: null, request: "none" },
     }));
 }
 
@@ -176,4 +180,63 @@ export async function requestGmailSync(id: string, options: RequestOptions = {})
     throw new GmailClientError("error", "Gmail did not confirm that the sync was queued.");
   }
   return result.data;
+}
+
+/** Cumulative mailbox counts, not the result of an individual sync request. */
+export async function loadGmailSyncCounts(
+  id: string,
+  options: RequestOptions = {},
+): Promise<GmailSyncCounts> {
+  const input = disconnectGmailConnectionInputSchema.safeParse({ connectionId: id });
+  if (!input.success) throw new GmailClientError("error", "Invalid Gmail connection id.");
+  const response = await request(
+    `${CONNECTIONS_URL}/${encodeURIComponent(input.data.connectionId)}/sync`,
+    "GET",
+    options,
+  );
+  const payload: unknown = await response.json().catch(() => null);
+  const result = gmailSyncCountsSchema.safeParse(payload);
+  if (!result.success) {
+    throw new GmailClientError(
+      "error",
+      "Gmail returned invalid import counts. Check progress again.",
+    );
+  }
+  return result.data;
+}
+
+function waitForProgress(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+/** Read progress for a bounded interval. No count or cursor can prove run completion. */
+export async function watchGmailSyncCounts(
+  id: string,
+  options: RequestOptions & {
+    signal: AbortSignal;
+    onCounts: (counts: GmailSyncCounts) => void;
+    maxReads?: number;
+    intervalMs?: number;
+  },
+): Promise<void> {
+  const maxReads = options.maxReads ?? 12;
+  for (let attempt = 0; attempt < maxReads; attempt += 1) {
+    options.signal.throwIfAborted();
+    const counts = await loadGmailSyncCounts(id, options);
+    // Also guard fetch implementations that ignore cancellation.
+    options.signal.throwIfAborted();
+    options.onCounts(counts);
+    if (attempt + 1 < maxReads) await waitForProgress(options.intervalMs ?? 5_000, options.signal);
+  }
 }

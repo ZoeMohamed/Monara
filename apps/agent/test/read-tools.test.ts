@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { DashboardSummary } from "@monara/contracts";
 import { runAgent } from "../src/conversation/agent.ts";
 import { createCallOperation } from "../src/conversation/backend.ts";
 import type { AssistantMessage, ChatMessage, Complete } from "../src/conversation/llm.ts";
@@ -40,7 +41,12 @@ const callTool = (name: string, args: unknown): AssistantMessage => ({
 });
 
 /** Asks for one tool call, then replies, and returns what the tool gave the model. */
-async function runTool(name: string, args: unknown, backendResult: unknown) {
+async function runTool(
+  name: string,
+  args: unknown,
+  backendResult: unknown,
+  backendFailure?: Error,
+) {
   const operations: { operation: string; userId: string; input: unknown }[] = [];
   const seen: ChatMessage[][] = [];
   const turns = [callTool(name, args), { role: "assistant", content: "Done." } as const];
@@ -50,7 +56,7 @@ async function runTool(name: string, args: unknown, backendResult: unknown) {
     if (!next) throw new Error("The script ran out of turns.");
     return next;
   };
-  await runAgent({
+  const response = await runAgent({
     complete,
     tools: readTools,
     caller: { userId, channel: "web" },
@@ -59,11 +65,14 @@ async function runTool(name: string, args: unknown, backendResult: unknown) {
     now,
     callOperation: async (operation, caller, input) => {
       operations.push({ operation, userId: caller.userId, input });
+      if (backendFailure) throw backendFailure;
       return backendResult;
     },
   });
   const result = seen[1]?.filter((message) => message.role === "tool").at(-1);
   return {
+    actions: response.actions,
+    confirmation: response.confirmation,
     operations,
     system: String(seen[0]?.[0]?.content),
     result: result?.role === "tool" ? JSON.parse(result.content) : undefined,
@@ -77,6 +86,7 @@ test("every read tool is T0 and has a schema the model can be given", () => {
     definitions.map((definition) => definition.function.name),
     [
       "get_summary",
+      "get_dashboard",
       "suggest_budget",
       "list_transactions",
       "list_financial_accounts",
@@ -88,6 +98,181 @@ test("every read tool is T0 and has a schema the model can be given", () => {
   for (const definition of definitions) {
     assert.equal((definition.function.parameters as { type?: string }).type, "object");
   }
+});
+
+const money = (amountMinor: string) => ({ amountMinor, currency: "IDR" as const });
+const foodCategoryId = "c0c0c0c0-0000-4000-8000-000000000001";
+const foodBudgetId = "c0c0c0c0-0000-4000-8000-000000000002";
+const dashboard = {
+  month: "2026-10",
+  income: money("10000000"),
+  spending: money("4000000"),
+  difference: money("6000000"),
+  remainingBudget: money("2000000"),
+  pace: {
+    asOf: "2026-10-14",
+    elapsedDays: 14,
+    daysInMonth: 31,
+    averageDailySpending: money("285714"),
+    projectedSpending: money("8857134"),
+  },
+  categoryBreakdown: [
+    {
+      categoryId: foodCategoryId,
+      categoryName: "Food",
+      total: money("4000000"),
+      sharePercent: 100,
+    },
+  ],
+  budgetUsage: [],
+  insights: {
+    asOf: "2026-10-14",
+    savingsRate: {
+      income: money("10000000"),
+      spending: money("4000000"),
+      difference: money("6000000"),
+      ratePercent: 60,
+    },
+    safeToSpend: {
+      overall: {
+        limit: money("6000000"),
+        spending: money("4000000"),
+        remaining: money("2000000"),
+        shortfall: money("0"),
+        remainingDays: 18,
+        dailyAmount: money("111111"),
+      },
+      byCategory: [
+        {
+          budgetId: foodBudgetId,
+          categoryId: foodCategoryId,
+          categoryName: "Food",
+          periodStartsOn: "2026-10-01",
+          periodEndsOn: "2026-10-31",
+          limit: money("6000000"),
+          spending: money("4000000"),
+          remaining: money("2000000"),
+          shortfall: money("0"),
+          remainingDays: 18,
+          dailyAmount: money("111111"),
+        },
+      ],
+    },
+    overspendForecasts: [
+      {
+        budgetId: foodBudgetId,
+        categoryId: foodCategoryId,
+        categoryName: "Food",
+        periodStartsOn: "2026-10-01",
+        periodEndsOn: "2026-10-31",
+        elapsedDays: 14,
+        periodDays: 31,
+        limit: money("6000000"),
+        spending: money("4000000"),
+        projectedSpending: money("8857143"),
+        projectedOverspend: money("2857143"),
+      },
+    ],
+    unusualTransactions: [
+      {
+        transactionId: coffee.id,
+        categoryId: foodCategoryId,
+        categoryName: "Food",
+        amount: money("25000"),
+        historyMedian: money("10000"),
+        historyTransactionCount: 5,
+        multipleOfMedian: 2.5,
+      },
+    ],
+  },
+  recentTransactions: [],
+  activeReminders: [],
+} satisfies DashboardSummary;
+
+test("get_dashboard returns exact backend insight figures and bases without changing records", async () => {
+  const run = await runTool("get_dashboard", { month: "2026-10" }, dashboard);
+
+  assert.deepEqual(run.operations, [
+    { operation: "get_dashboard", userId, input: { month: "2026-10" } },
+  ]);
+  assert.deepEqual(run.result, dashboard);
+  assert.deepEqual(run.actions, []);
+  assert.equal(run.confirmation, null);
+});
+
+test("get_dashboard preserves unavailable insights instead of fabricating recommendations", async () => {
+  const empty = {
+    ...dashboard,
+    insights: {
+      ...dashboard.insights,
+      savingsRate: { ...dashboard.insights.savingsRate, ratePercent: null },
+      safeToSpend: { overall: null, byCategory: [] },
+      overspendForecasts: [],
+      unusualTransactions: [],
+    },
+  };
+  const run = await runTool("get_dashboard", { month: "2026-10" }, empty);
+
+  assert.deepEqual(run.result, empty);
+  assert.deepEqual(run.actions, []);
+});
+
+test("get_dashboard rejects invalid months and caller identity in model input before reading", async () => {
+  for (const input of [
+    { month: "2026-13" },
+    { month: "2026-10", userId: "11111111-1111-4111-8111-111111111111" },
+  ]) {
+    const run = await runTool("get_dashboard", input, dashboard);
+    assert.deepEqual(run.operations, []);
+    assert.match(run.result.error, /Invalid arguments/);
+    assert.deepEqual(run.actions, []);
+  }
+});
+
+test("get_dashboard withholds malformed insight values and private backend fields", async () => {
+  for (const result of [
+    {
+      ...dashboard,
+      insights: {
+        ...dashboard.insights,
+        safeToSpend: {
+          ...dashboard.insights.safeToSpend,
+          overall: { ...dashboard.insights.safeToSpend.overall, dailyAmount: money("-1") },
+        },
+      },
+    },
+    {
+      ...dashboard,
+      insights: {
+        ...dashboard.insights,
+        unusualTransactions: [
+          { ...dashboard.insights.unusualTransactions[0], rawEmail: "Private email content" },
+        ],
+      },
+    },
+    { ...dashboard, insights: undefined },
+  ]) {
+    const run = await runTool("get_dashboard", { month: "2026-10" }, result);
+    assert.deepEqual(run.result, { error: "get_dashboard failed." });
+    assert.deepEqual(run.actions, []);
+    assert.equal(run.confirmation, null);
+  }
+});
+
+test("get_dashboard hides backend failure details and never substitutes invented figures", async () => {
+  const run = await runTool(
+    "get_dashboard",
+    { month: "2026-10" },
+    dashboard,
+    new Error("Private financial record from the backend"),
+  );
+
+  assert.deepEqual(run.operations, [
+    { operation: "get_dashboard", userId, input: { month: "2026-10" } },
+  ]);
+  assert.deepEqual(run.result, { error: "get_dashboard failed." });
+  assert.deepEqual(run.actions, []);
+  assert.equal(run.confirmation, null);
 });
 
 test("a read tool calls its operation for the verified User and returns the page", async () => {
