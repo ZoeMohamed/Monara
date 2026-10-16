@@ -1,5 +1,6 @@
 import { GmailConnectionError } from "@monara/core";
 import type { NextRequest } from "next/server";
+import { requestAgentDiscovery } from "@/lib/gmail/agent-sync";
 import { gmailConnectionService } from "@/lib/gmail/service";
 import { browserOrigin } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
@@ -30,7 +31,9 @@ export async function GET(request: NextRequest) {
   if (!sessionUri) return finish("VALIDATION_FAILED");
 
   try {
-    await gmailConnectionService().complete(identity.id, sessionUri);
+    const connection = await gmailConnectionService().complete(identity.id, sessionUri);
+    // Best effort: the Gmail page can start discovery again if the agent is unavailable.
+    await requestAgentDiscovery(connection.id).catch(() => undefined);
     return finish("connected");
   } catch (error) {
     return finish(error instanceof GmailConnectionError ? error.code : "DEPENDENCY_UNAVAILABLE");

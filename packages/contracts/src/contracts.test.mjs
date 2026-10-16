@@ -4,6 +4,7 @@ import {
   billDueReminderSchema,
   budgetThresholdReminderSchema,
   calendarDateSchema,
+  claimGmailMessagesInputSchema,
   confirmDestructiveActionInputSchema,
   confirmedTransactionValuesSchema,
   confirmRecurringBillInputSchema,
@@ -12,13 +13,18 @@ import {
   createFinancialAccountInputSchema,
   createTransactionInputSchema,
   destructiveActionConfirmationSchema,
+  emailInstitutions,
   extractedTransactionSchema,
+  findInstitution,
+  findInstitutionBySender,
   gmailJobSchema,
+  institutions,
   listTransactionsInputSchema,
   positiveMoneySchema,
   recordGmailExtractionInputSchema,
   reminderPreferencesSchema,
   reportGmailConnectionErrorInputSchema,
+  reportGmailSyncFailureInputSchema,
   requestGmailSyncInputSchema,
   setReminderPreferencesInputSchema,
   transactionSchema,
@@ -460,8 +466,8 @@ describe("Gmail extraction contracts", () => {
     occurredTime: null,
     description: null,
     location: null,
-    accountHint: null,
-    categoryName: "Food",
+    accountHint: "BCA ****1234",
+    accountLastFour: "1234",
     confidence: 0.8,
   };
 
@@ -478,11 +484,63 @@ describe("Gmail extraction contracts", () => {
       extractedTransactionSchema.safeParse({ ...extracted, categoryId: ids.category }).success,
       false,
     );
+    assert.equal(
+      extractedTransactionSchema.safeParse({ ...extracted, financialAccountId: ids.accountA })
+        .success,
+      false,
+    );
+  });
+
+  it("claims at most one listed page, each message with a timestamp", () => {
+    const claim = (messages) =>
+      claimGmailMessagesInputSchema.safeParse({ connectionId, messages }).success;
+    assert.equal(claim([{ gmailMessageId: "m1", receivedAt: timestamp }]), true);
+    assert.equal(claim([{ gmailMessageId: "m1", receivedAt: null }]), false);
+    assert.equal(
+      claim(
+        Array.from({ length: 101 }, (_, i) => ({ gmailMessageId: `m${i}`, receivedAt: timestamp })),
+      ),
+      false,
+    );
+  });
+
+  it("records only registry institutions and a sender verification flag", () => {
+    const base = { processedMessageId, outcome: "skipped", items: [], senderVerified: false };
+    assert.equal(
+      recordGmailExtractionInputSchema.safeParse({ ...base, institutionKey: null }).success,
+      true,
+    );
+    assert.equal(
+      recordGmailExtractionInputSchema.safeParse({ ...base, institutionKey: "NOT_A_BANK" }).success,
+      false,
+    );
+    assert.equal(
+      recordGmailExtractionInputSchema.safeParse({
+        ...base,
+        institutionKey: null,
+        senderVerified: undefined,
+      }).success,
+      false,
+    );
+  });
+
+  it("reports a sync failure only with a known reason", () => {
+    const report = (reason) =>
+      reportGmailSyncFailureInputSchema.safeParse({ connectionId, reason }).success;
+    assert.equal(report("gmail_unavailable"), true);
+    assert.equal(report("sync_failed"), true);
+    assert.equal(report("agent_unavailable"), false);
   });
 
   it("keeps items only on a transactions outcome", () => {
     const record = (outcome, items) =>
-      recordGmailExtractionInputSchema.safeParse({ processedMessageId, outcome, items }).success;
+      recordGmailExtractionInputSchema.safeParse({
+        processedMessageId,
+        outcome,
+        items,
+        institutionKey: "BCA_CC",
+        senderVerified: true,
+      }).success;
     assert.equal(record("transactions", [extracted]), true);
     assert.equal(record("transactions", []), false);
     assert.equal(record("skipped", []), true);
@@ -525,6 +583,45 @@ describe("Gmail extraction contracts", () => {
         since: timestamp,
         userId: ids.accountA,
       }).success,
+      false,
+    );
+  });
+});
+
+describe("institution registry", () => {
+  it("loads every entry, with senders only on detectable ones", () => {
+    assert.ok(emailInstitutions.length > 0);
+    assert.ok(institutions.length > emailInstitutions.length);
+    assert.ok(emailInstitutions.every((entry) => entry.senderEmails.length > 0));
+    assert.equal(findInstitution("GoPay_Wallet")?.senderEmails.length, 0);
+  });
+
+  it("finds an entry by its exact sender, ignoring case only", () => {
+    assert.equal(findInstitutionBySender("KARTUKREDITBCA@klikbca.com")?.key, "BCA_CC");
+    assert.equal(findInstitutionBySender("someone@klikbca.com"), null);
+    assert.equal(findInstitutionBySender("bca@bca.co.id.evil.example"), null);
+  });
+
+  it("accepts only registry keys on Financial Accounts", () => {
+    const account = {
+      name: "BCA card",
+      institution: "BCA",
+      accountType: "bank",
+      currency: "IDR",
+      lastFour: "1234",
+      clientRequestId: "request-1",
+    };
+    assert.equal(
+      createFinancialAccountInputSchema.parse(account).institutionKey,
+      null,
+      "institutionKey defaults to none",
+    );
+    assert.equal(
+      createFinancialAccountInputSchema.safeParse({ ...account, institutionKey: "BCA_CC" }).success,
+      true,
+    );
+    assert.equal(
+      createFinancialAccountInputSchema.safeParse({ ...account, institutionKey: "BCA" }).success,
       false,
     );
   });

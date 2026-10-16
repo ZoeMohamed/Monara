@@ -3,6 +3,7 @@
 import { Button, Card, Chip } from "@monara/ui";
 import Link from "next/link";
 import { useState } from "react";
+import { GmailAccountSuggestions } from "@/components/gmail-account-suggestions";
 import { ModalDialog } from "@/components/modal-dialog";
 import type { GmailConnectionsState, GmailMailbox } from "@/lib/gmail/client";
 
@@ -44,7 +45,9 @@ function SyncStatus({ sync }: { sync: GmailMailbox["sync"] }) {
   if (sync.state === "completed")
     return (
       <p role="status" className="mt-4 rounded-xl bg-accent-soft p-3 text-sm text-foreground">
-        Last sync: {sync.imported} imported · {sync.skipped} skipped · {sync.failed} failed
+        Last sync: {sync.transactions} {sync.transactions === 1 ? "transaction" : "transactions"}
+        {sync.confirmed > 0 ? ` (${sync.confirmed} confirmed automatically)` : ""} · {sync.skipped}{" "}
+        skipped · {sync.failed} failed
       </p>
     );
   return (
@@ -207,6 +210,9 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
       {mailbox.status === "active" && !actions?.sync && (
         <p className="mt-3 text-sm text-muted">Manual sync is not available yet.</p>
       )}
+      {mailbox.status === "active" && actions && (
+        <GmailAccountSuggestions connectionId={mailbox.id} />
+      )}
       {pendingAction && "id" in pendingAction && pendingAction.id === mailbox.id && (
         <p role="status" className="mt-3 text-sm text-muted">
           {pendingAction.kind === "disconnect"
@@ -251,7 +257,7 @@ export function GmailConnectionsScreen({
       </div>
       <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
         Connect up to three mailboxes. Imported transactions wait for your review before they count
-        toward your totals.
+        toward your totals, unless Monara is confident about every detail.
       </p>
       <ConnectionIntro
         state={state}
@@ -277,8 +283,9 @@ export function GmailConnectionsScreen({
         ))}
       </div>
       <p className="mt-5 text-sm leading-6 text-muted">
-        You decide what enters your ledger. Review, edit, confirm, or reject imported transactions.
-        Connecting a mailbox does not confirm them automatically.
+        Monara confirms an imported expense or income automatically only when it is confident and
+        the email states the amount, date, and one of your accounts. Everything else waits for you
+        to review, edit, confirm, or reject. You can still edit or delete any confirmed transaction.
       </p>
       {selected && actions && (
         <ModalDialog labelledBy="disconnect-title" onClose={() => setDisconnectId(null)}>

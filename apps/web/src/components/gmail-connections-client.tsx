@@ -12,10 +12,14 @@ import {
   type GmailConnectionsState,
   type GmailMailbox,
   gmailConnectionsErrorState,
+  isSyncInProgress,
   loadGmailConnections,
   requestGmailSync,
   startGmailConnection,
 } from "@/lib/gmail/client";
+
+/** How often the page checks on a queued or running sync. */
+const SYNC_POLL_MS = 3_000;
 
 type ClientState = {
   view: GmailConnectionsState;
@@ -110,6 +114,25 @@ export function GmailConnectionsClient({ callbackError }: { callbackError?: stri
       window.removeEventListener("pageshow", restore);
     };
   }, []);
+
+  const syncing = state.view.status === "ready" && state.view.mailboxes.some(isSyncInProgress);
+
+  // The sync runs in the background on the server; keep checking until it ends.
+  useEffect(() => {
+    if (!syncing) return;
+    const signal = controllerRef.current?.signal;
+    const timer = window.setInterval(() => {
+      if (!signal || signal.aborted || actionPendingRef.current) return;
+      loadGmailConnections({ signal }).then(
+        (mailboxes) => {
+          if (!signal.aborted) dispatch({ type: "loaded", mailboxes });
+        },
+        // A failed check keeps the last known state; the next one tries again.
+        () => undefined,
+      );
+    }, SYNC_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [syncing]);
 
   const refresh = async () => {
     const signal = controllerRef.current?.signal;

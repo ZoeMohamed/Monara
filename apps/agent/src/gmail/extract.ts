@@ -31,7 +31,6 @@ Rules:
 - occurredOn (YYYY-MM-DD) and occurredTime (HH:mm) only when the email states them. Null otherwise.
 - merchantName: the merchant, payer, or recipient. description: a short neutral summary. accountHint: the card, bank, or wallet named, keeping any masking such as "BCA ****1234".
 - location: the store branch, address, or city copied exactly as written in the email. Null if not stated.
-- categoryName: exactly one name from the User's categories listed before the email, when one clearly fits. Null if none fits or there is no list. Never invent a category.
 - confidence: 0 to 1, how sure you are about the item overall.
 - Use null for anything not stated. Never guess.`;
 
@@ -58,7 +57,6 @@ const RESPONSE_SCHEMA = {
           "description",
           "location",
           "accountHint",
-          "categoryName",
           "confidence",
         ],
         properties: {
@@ -71,7 +69,6 @@ const RESPONSE_SCHEMA = {
           description: nullableString,
           location: nullableString,
           accountHint: nullableString,
-          categoryName: nullableString,
           confidence: { type: ["number", "null"] },
         },
       },
@@ -93,7 +90,6 @@ const modelOutputSchema = z.object({
       description: z.string().nullable(),
       location: z.string().nullable(),
       accountHint: z.string().nullable(),
-      categoryName: z.string().nullable(),
       confidence: z.number().nullable(),
     }),
   ),
@@ -165,18 +161,12 @@ function guardDate(value: string | null, receivedAt: string): string | null {
   return value;
 }
 
-/** Returns the User's own spelling of a listed Category, or null for anything not on the list. */
-function matchCategory(value: string | null, categoryNames: readonly string[]): string | null {
-  if (value === null) return null;
-  const wanted = normalizeSpaces(value).toLowerCase();
-  return categoryNames.find((name) => normalizeSpaces(name).toLowerCase() === wanted) ?? null;
+/** The card or account ending in a hint such as "BCA ****1234", when it shows one. */
+export function lastFourFromHint(hint: string | null): string | null {
+  return hint?.match(/(?:^|\D)(\d{4})\D*$/)?.[1] ?? null;
 }
 
-function toExtractedTransaction(
-  item: ModelItem,
-  email: EmailForExtraction,
-  categoryNames: readonly string[],
-): ExtractedTransaction {
+function toExtractedTransaction(item: ModelItem, email: EmailForExtraction): ExtractedTransaction {
   let guarded = false;
 
   let amountMinor: string | null = null;
@@ -216,7 +206,7 @@ function toExtractedTransaction(
     description: cleanText(item.description, 1_000),
     location,
     accountHint: cleanText(item.accountHint, 200),
-    categoryName: matchCategory(item.categoryName, categoryNames),
+    accountLastFour: lastFourFromHint(item.accountHint),
     confidence,
   });
 }
@@ -225,10 +215,8 @@ function neutralizeEmailDelimiter(value: string): string {
   return value.replace(/<\s*\/\s*email\s*>/gi, "&lt;/email&gt;");
 }
 
-function formatEmail(email: EmailForExtraction, categoryNames: readonly string[]): string {
-  const categories = categoryNames.length > 0 ? categoryNames.join("; ") : "(none)";
+function formatEmail(email: EmailForExtraction): string {
   return [
-    `The User's categories: ${categories}`,
     `Received: ${email.receivedAt}`,
     "<email>",
     `From: ${email.from === null ? "(unknown)" : neutralizeEmailDelimiter(email.from)}`,
@@ -243,11 +231,10 @@ function formatEmail(email: EmailForExtraction, categoryNames: readonly string[]
 export async function extractTransactions(
   llm: LlmClient,
   email: EmailForExtraction,
-  categoryNames: readonly string[] = [],
 ): Promise<ExtractionResult> {
   const raw = await llm.completeJson({
     system: SYSTEM_PROMPT,
-    user: formatEmail(email, categoryNames),
+    user: formatEmail(email),
     schemaName: "gmail_transactions",
     schema: RESPONSE_SCHEMA,
   });
@@ -256,8 +243,6 @@ export async function extractTransactions(
   if (!parsed.data.isTransactionEmail) return { isTransactionEmail: false, items: [] };
   return {
     isTransactionEmail: true,
-    items: parsed.data.items
-      .slice(0, MAX_ITEMS)
-      .map((item) => toExtractedTransaction(item, email, categoryNames)),
+    items: parsed.data.items.slice(0, MAX_ITEMS).map((item) => toExtractedTransaction(item, email)),
   };
 }

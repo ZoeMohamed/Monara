@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { GmailJob } from "@monara/contracts";
+import type { GmailJob, MerchantCategorizeJob } from "@monara/contracts";
 import type { Env } from "../src/env.ts";
-import { handleGmailSyncRequest } from "../src/gmail/worker.ts";
+import { handleGmailDiscoveryRequest, handleGmailSyncRequest } from "../src/gmail/worker.ts";
 
 const connectionId = "00000000-0000-4000-8000-000000000010";
 const secret = "synthetic-test-secret";
@@ -67,6 +67,7 @@ describe("manual Gmail sync worker boundary", () => {
     } as unknown as Queue<GmailJob>;
     const env: Env = {
       GMAIL_JOBS: queue,
+      MERCHANT_JOBS: {} as Queue<MerchantCategorizeJob>,
       MONARA_AGENT_BACKEND_SECRET: secret,
       MONARA_BACKEND_URL: "https://web.example",
       COMPOSIO_API_URL: "https://composio.example/api/v3.1",
@@ -83,6 +84,7 @@ describe("manual Gmail sync worker boundary", () => {
           userId: "00000000-0000-4000-8000-000000000001",
           composioConnectedAccountId: "ca_1",
           categoryNames: [],
+          institutionKeys: ["BCA_CC"],
         });
       }
       if (url.endsWith("/tools/execute/GMAIL_FETCH_EMAILS")) {
@@ -107,5 +109,32 @@ describe("manual Gmail sync worker boundary", () => {
     assert.equal(response.status, 202);
     assert.ok(background);
     await background;
+  });
+});
+
+describe("account discovery worker boundary", () => {
+  it("queues a metadata-only discovery for the backend's connection", async () => {
+    const { env, jobs, request } = setup();
+    const response = await handleGmailDiscoveryRequest(request({ connectionId }), env);
+    assert.equal(response.status, 202);
+    assert.deepEqual(jobs, [{ kind: "gmail.discover", connectionId }]);
+  });
+
+  it("refuses callers without the backend credential and caller-supplied identity", async () => {
+    const { env, jobs, request } = setup();
+    assert.equal(
+      (await handleGmailDiscoveryRequest(request({ connectionId }, "Bearer wrong"), env)).status,
+      401,
+    );
+    assert.equal(
+      (
+        await handleGmailDiscoveryRequest(
+          request({ connectionId, userId: "00000000-0000-4000-8000-000000000001" }),
+          env,
+        )
+      ).status,
+      400,
+    );
+    assert.deepEqual(jobs, []);
   });
 });

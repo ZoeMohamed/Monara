@@ -178,6 +178,21 @@ export function createComposioGmailClient(config: ComposioGmailConfig) {
      * Deleting alone leaves the Google grant live, so the next consent would be
      * skipped and the User could not choose permissions again.
      */
+    /**
+     * Deletes the Composio account without revoking at Google. Used when a newer
+     * account for the same mailbox replaces it: both share one Google grant for this
+     * OAuth client, so revoking the old one would also revoke the new one.
+     */
+    async removeConnection(connectedAccountId: string) {
+      const deleted = await request(
+        "DELETE",
+        `/connected_accounts/${encodeURIComponent(connectedAccountId)}`,
+      );
+      if (!deleted.ok && deleted.status !== 404) {
+        throw new ComposioRequestError("Composio did not delete the connection.", deleted.status);
+      }
+    },
+
     async deleteConnection(connectedAccountId: string) {
       const path = `/connected_accounts/${encodeURIComponent(connectedAccountId)}`;
       const revoked = await request("POST", `${path}/revoke`);

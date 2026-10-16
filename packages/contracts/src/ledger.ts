@@ -8,6 +8,7 @@ import {
   paginationInputSchema,
   reversibleActionReceiptSchema,
 } from "./common.ts";
+import { institutionKeySchema } from "./institutions.ts";
 
 export const financialAccountTypeSchema = z.enum(["bank", "wallet", "cash"]);
 
@@ -22,10 +23,17 @@ const financialAccountValuesShape = {
     .nullable(),
 } as const;
 
+/**
+ * The registry entry (packages/contracts/src/institutions) this account belongs to.
+ * Gmail imports from that entry's senders are mapped to the account.
+ */
+const institutionKeyValueSchema = institutionKeySchema.nullable();
+
 export const financialAccountSchema = z
   .object({
     id: financialAccountIdSchema,
     ...financialAccountValuesShape,
+    institutionKey: institutionKeyValueSchema,
     isActive: z.boolean(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,
@@ -35,6 +43,7 @@ export const financialAccountSchema = z
 export const createFinancialAccountInputSchema = z
   .object({
     ...financialAccountValuesShape,
+    institutionKey: institutionKeyValueSchema.default(null),
     clientRequestId: clientRequestIdSchema,
   })
   .strict();
@@ -44,7 +53,11 @@ export const updateFinancialAccountInputSchema = z
     financialAccountId: financialAccountIdSchema,
     expectedUpdatedAt: isoDateTimeSchema,
     changes: z
-      .object({ ...financialAccountValuesShape, isActive: z.boolean() })
+      .object({
+        ...financialAccountValuesShape,
+        institutionKey: institutionKeyValueSchema,
+        isActive: z.boolean(),
+      })
       .partial()
       .strict(),
   })

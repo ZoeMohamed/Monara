@@ -1,0 +1,275 @@
+{
+  "source": "Aiccountant libs/shared/src/schema/payment-methods.ts (PAYMENT_METHOD_DATA), extracted 2026-10-16",
+  "note": "Sender addresses as used in Aiccountant's Gmail queries. Not independently re-verified against live inboxes; banks can change senders. 'cash@system.local' is a placeholder and is excluded.",
+  "withSenderEmails": [
+    {
+      "key": "BCA_MyBCA",
+      "name": "MyBCA",
+      "provider": "BCA",
+      "platform": "BANKING_APP",
+      "senderEmails": ["bca@bca.co.id"]
+    },
+    {
+      "key": "BCA_CC",
+      "name": "BCA Card",
+      "provider": "BCA",
+      "platform": "CREDIT_CARD",
+      "senderEmails": ["KartuKreditBCA@klikbca.com"]
+    },
+    {
+      "key": "BCA_KlikBCA",
+      "name": "KlikBCA",
+      "provider": "BCA",
+      "platform": "BANKING_APP",
+      "senderEmails": ["klikbca@klikbca.com"]
+    },
+    {
+      "key": "BCA_Digital_Blu",
+      "name": "Blu",
+      "provider": "Blu",
+      "platform": "BANKING_APP",
+      "senderEmails": ["receipts@blubybcadigital.id"]
+    },
+    {
+      "key": "Mandiri_Livin",
+      "name": "Livin'",
+      "provider": "Mandiri",
+      "platform": "BANKING_APP",
+      "senderEmails": ["noreply.livin@bankmandiri.co.id"]
+    },
+    {
+      "key": "BNI_Wondr",
+      "name": "Wondr",
+      "provider": "BNI",
+      "platform": "BANKING_APP",
+      "senderEmails": ["wondr@bni.co.id"]
+    },
+    {
+      "key": "BNI_CC",
+      "name": "BNI Card",
+      "provider": "BNI",
+      "platform": "CREDIT_CARD",
+      "senderEmails": ["bnicreditcard@bni.co.id"]
+    },
+    {
+      "key": "BRI_BRImo",
+      "name": "BRImo",
+      "provider": "BRI",
+      "platform": "BANKING_APP",
+      "senderEmails": ["BankBRI@bri.co.id"]
+    },
+    {
+      "key": "CIMB_Octo",
+      "name": "OCTO",
+      "provider": "CIMB",
+      "platform": "BANKING_APP",
+      "senderEmails": ["octo-noreply@cimbniaga.co.id", "octomobile-noreply@cimbniaga.co.id"]
+    },
+    {
+      "key": "CIMB_OctoClick",
+      "name": "OCTO Click",
+      "provider": "CIMB",
+      "platform": "BANKING_APP",
+      "senderEmails": ["octoclicks-noreply@cimbniaga.co.id"]
+    },
+    {
+      "key": "CIMB_CC",
+      "name": "CIMB Card",
+      "provider": "CIMB",
+      "platform": "CREDIT_CARD",
+      "senderEmails": ["Creditcard.notification@cimbniaga.co.id"]
+    },
+    {
+      "key": "Permata_ME",
+      "name": "PermataME",
+      "provider": "Permata",
+      "platform": "BANKING_APP",
+      "senderEmails": ["contact.center@permatabank.co.id"]
+    },
+    {
+      "key": "OCBC_Mobile",
+      "name": "OCBC Mobile",
+      "provider": "OCBC",
+      "platform": "BANKING_APP",
+      "senderEmails": ["notifikasi@ocbc.id", "onlinetransaction@ocbc.id"]
+    },
+    {
+      "key": "Seabank_App",
+      "name": "SeaBank",
+      "provider": "Seabank",
+      "platform": "BANKING_APP",
+      "senderEmails": ["alerts@seabank.co.id"]
+    },
+    {
+      "key": "Danamon_DWallet",
+      "name": "D-Wallet",
+      "provider": "Danamon",
+      "platform": "BANKING_APP",
+      "senderEmails": ["danamononline@danamon.co.id"]
+    },
+    {
+      "key": "UOB_TMRW",
+      "name": "TMRW",
+      "provider": "UOB",
+      "platform": "BANKING_APP",
+      "senderEmails": ["noreply_UOB@uob.co.id"]
+    },
+    {
+      "key": "Maybank_CC",
+      "name": "Maybank Card",
+      "provider": "Maybank",
+      "platform": "CREDIT_CARD",
+      "senderEmails": ["Maybank_Notification_Trx@maybank.co.id"]
+    },
+    {
+      "key": "Mayapada_CC",
+      "name": "Mayapada Card",
+      "provider": "Mayapada",
+      "platform": "CREDIT_CARD",
+      "senderEmails": ["mayapada.ccpl@bankmayapada.com"]
+    },
+    {
+      "key": "BTPN_Jenius",
+      "name": "Jenius",
+      "provider": "SMBC",
+      "platform": "BANKING_APP",
+      "senderEmails": ["jenius_noreply@smbci.com"]
+    },
+    {
+      "key": "OVO",
+      "name": "OVO",
+      "provider": "OVO",
+      "platform": "E_WALLET",
+      "senderEmails": ["noreply@ovo.co.id"]
+    },
+    {
+      "key": "Superbank_App",
+      "name": "Superbank",
+      "provider": "Superbank",
+      "platform": "BANKING_APP",
+      "senderEmails": ["noreply@no-reply.superbank.id"]
+    },
+    {
+      "key": "Jago_App",
+      "name": "Jago",
+      "provider": "Jago",
+      "platform": "BANKING_APP",
+      "senderEmails": ["noreply@jago.com"]
+    },
+    {
+      "key": "Panin_CC",
+      "name": "Panin Card",
+      "provider": "Panin",
+      "platform": "CREDIT_CARD",
+      "senderEmails": ["panin.kk.notifikasi@panin.co.id"]
+    },
+    {
+      "key": "Krom_App",
+      "name": "Krom",
+      "provider": "Krom",
+      "platform": "BANKING_APP",
+      "senderEmails": ["noreply@krom.id"]
+    },
+    {
+      "key": "Danamon_DPro",
+      "name": "D-Pro",
+      "provider": "Danamon",
+      "platform": "BANKING_APP",
+      "senderEmails": ["dbank.app@danamon.co.id"]
+    }
+  ],
+  "noKnownSenderEmail": [
+    {
+      "key": "BCA_mBCA",
+      "name": "mBCA",
+      "provider": "BCA",
+      "platform": "BANKING_APP",
+      "senderEmails": []
+    },
+    {
+      "key": "Mandiri_CC",
+      "name": "Mandiri Card",
+      "provider": "Mandiri",
+      "platform": "CREDIT_CARD",
+      "senderEmails": []
+    },
+    {
+      "key": "BNC",
+      "name": "Bank Neo Commerce",
+      "provider": "BNC",
+      "platform": "BANKING_APP",
+      "senderEmails": []
+    },
+    {
+      "key": "BNI_mBNI",
+      "name": "mBNI",
+      "provider": "BNI",
+      "platform": "BANKING_APP",
+      "senderEmails": []
+    },
+    {
+      "key": "BRI_CC",
+      "name": "BRI Card",
+      "provider": "BRI",
+      "platform": "CREDIT_CARD",
+      "senderEmails": []
+    },
+    {
+      "key": "BTPN_CC",
+      "name": "BTPN Card",
+      "provider": "BTPN",
+      "platform": "CREDIT_CARD",
+      "senderEmails": []
+    },
+    {
+      "key": "CC",
+      "name": "Credit Card",
+      "provider": "CASH",
+      "platform": "CREDIT_CARD",
+      "senderEmails": []
+    },
+    {
+      "key": "GoPay_Wallet",
+      "name": "GoPay",
+      "provider": "GoPay",
+      "platform": "E_WALLET",
+      "senderEmails": []
+    },
+    {
+      "key": "HSBC_CC",
+      "name": "HSBC Card",
+      "provider": "HSBC",
+      "platform": "CREDIT_CARD",
+      "senderEmails": []
+    }
+  ],
+  "allSenderEmails": [
+    "alerts@seabank.co.id",
+    "BankBRI@bri.co.id",
+    "bca@bca.co.id",
+    "bnicreditcard@bni.co.id",
+    "contact.center@permatabank.co.id",
+    "Creditcard.notification@cimbniaga.co.id",
+    "danamononline@danamon.co.id",
+    "dbank.app@danamon.co.id",
+    "jenius_noreply@smbci.com",
+    "KartuKreditBCA@klikbca.com",
+    "klikbca@klikbca.com",
+    "mayapada.ccpl@bankmayapada.com",
+    "Maybank_Notification_Trx@maybank.co.id",
+    "noreply.livin@bankmandiri.co.id",
+    "noreply@jago.com",
+    "noreply@krom.id",
+    "noreply@no-reply.superbank.id",
+    "noreply@ovo.co.id",
+    "noreply_UOB@uob.co.id",
+    "notifikasi@ocbc.id",
+    "octo-noreply@cimbniaga.co.id",
+    "octoclicks-noreply@cimbniaga.co.id",
+    "octomobile-noreply@cimbniaga.co.id",
+    "onlinetransaction@ocbc.id",
+    "panin.kk.notifikasi@panin.co.id",
+    "receipts@blubybcadigital.id",
+    "wondr@bni.co.id"
+  ]
+}

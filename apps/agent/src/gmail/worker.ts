@@ -1,12 +1,27 @@
-import { type GmailJob, gmailJobSchema, requestGmailSyncInputSchema } from "@monara/contracts";
-import { createComposioGmailReader } from "@monara/integrations";
+import {
+  type GmailJob,
+  gmailJobSchema,
+  type MerchantCategorizeJob,
+  merchantCategorizeJobSchema,
+  requestGmailSyncInputSchema,
+  startGmailDiscoveryInputSchema,
+} from "@monara/contracts";
+import {
+  BraveSearchError,
+  createBraveSearchClient,
+  createComposioGmailReader,
+  GmailReadError,
+} from "@monara/integrations";
 import type { Env } from "../env.ts";
-import { createGmailBackend } from "./backend.ts";
+import { createMerchantPipeline, MerchantBusyError } from "../merchant/pipeline.ts";
+import { BackendOperationError, createGmailBackend } from "./backend.ts";
 import { createLlmClient } from "./llm.ts";
 import { createGmailPipeline } from "./pipeline.ts";
 
 /** Matches max_retries for the Gmail queue consumer in wrangler.jsonc. */
 const GMAIL_QUEUE_MAX_RETRIES = 3;
+/** A busy merchant is usually searched within seconds by the job that claimed it. */
+const MERCHANT_BUSY_RETRY_SECONDS = 15;
 const QUEUE_SEND_BATCH_LIMIT = 100;
 const MANUAL_FALLBACK_MESSAGE_LIMIT = 5;
 
@@ -14,6 +29,17 @@ const MANUAL_FALLBACK_MESSAGE_LIMIT = 5;
 function logEvent(level: "info" | "error", fields: Record<string, unknown>): void {
   // biome-ignore lint/suspicious/noConsole: Workers Logs collects console output.
   console[level === "info" ? "log" : "error"](JSON.stringify(fields));
+}
+
+/** The error type plus its HTTP status and code where it has them. Never messages or bodies. */
+function failureFields(error: unknown): Record<string, unknown> {
+  const reason = error instanceof Error ? error.name : "UnknownError";
+  if (error instanceof GmailReadError) return { reason, status: error.status, code: error.code };
+  if (error instanceof BackendOperationError) {
+    return { reason, operation: error.operation, status: error.status, code: error.code };
+  }
+  if (error instanceof BraveSearchError) return { reason, status: error.status };
+  return { reason };
 }
 
 function retryDelaySeconds(attempts: number): number {
@@ -25,6 +51,33 @@ function requireQueue(env: Env): Queue<GmailJob> {
   return env.GMAIL_JOBS;
 }
 
+function requireMerchantQueue(env: Env): Queue<MerchantCategorizeJob> {
+  if (!env.MERCHANT_JOBS) throw new Error("Missing required binding: MERCHANT_JOBS.");
+  return env.MERCHANT_JOBS;
+}
+
+function createBackend(env: Env) {
+  return createGmailBackend({
+    baseUrl: env.MONARA_BACKEND_URL ?? "",
+    secret: env.MONARA_AGENT_BACKEND_SECRET ?? "",
+  });
+}
+
+function createLlm(env: Env) {
+  return createLlmClient({
+    baseUrl: env.LLM_BASE_URL ?? "",
+    apiKey: env.LLM_API_KEY ?? "",
+    model: env.LLM_MODEL ?? "",
+  });
+}
+
+async function sendInBatches<T>(queue: Queue<T>, jobs: readonly T[]): Promise<void> {
+  for (let start = 0; start < jobs.length; start += QUEUE_SEND_BATCH_LIMIT) {
+    const batch = jobs.slice(start, start + QUEUE_SEND_BATCH_LIMIT);
+    await queue.sendBatch(batch.map((body) => ({ body })));
+  }
+}
+
 function isQueueDailyLimit(error: unknown): boolean {
   return error instanceof Error && /daily write operations limit/i.test(error.message);
 }
@@ -32,26 +85,16 @@ function isQueueDailyLimit(error: unknown): boolean {
 /** Throws when any required secret or binding is missing, so jobs fail closed. */
 function createPipeline(env: Env) {
   const queue = requireQueue(env);
+  const merchantQueue = requireMerchantQueue(env);
   return createGmailPipeline({
-    backend: createGmailBackend({
-      baseUrl: env.MONARA_BACKEND_URL ?? "",
-      secret: env.MONARA_AGENT_BACKEND_SECRET ?? "",
-    }),
+    backend: createBackend(env),
     reader: createComposioGmailReader({
       apiUrl: env.COMPOSIO_API_URL ?? "",
       apiKey: env.COMPOSIO_API_KEY ?? "",
     }),
-    llm: createLlmClient({
-      baseUrl: env.LLM_BASE_URL ?? "",
-      apiKey: env.LLM_API_KEY ?? "",
-      model: env.LLM_MODEL ?? "",
-    }),
-    async enqueue(jobs) {
-      for (let start = 0; start < jobs.length; start += QUEUE_SEND_BATCH_LIMIT) {
-        const batch = jobs.slice(start, start + QUEUE_SEND_BATCH_LIMIT);
-        await queue.sendBatch(batch.map((body) => ({ body })));
-      }
-    },
+    llm: createLlm(env),
+    enqueue: (jobs) => sendInBatches(queue, jobs),
+    enqueueMerchant: (jobs) => sendInBatches(merchantQueue, jobs),
   });
 }
 
@@ -73,12 +116,8 @@ async function hasBackendCredential(request: Request, secret: string): Promise<b
   return difference === 0;
 }
 
-/** Manual sync. Only the web backend may call this, after checking the User owns the connection. */
-export async function handleGmailSyncRequest(
-  request: Request,
-  env: Env,
-  context?: Pick<ExecutionContext, "waitUntil">,
-): Promise<Response> {
+/** A response when the caller is not the web backend or the queue is missing; null when allowed. */
+async function rejectUnlessBackend(request: Request, env: Env): Promise<Response | null> {
   const secret = env.MONARA_AGENT_BACKEND_SECRET?.trim();
   if (!secret || !env.GMAIL_JOBS) {
     return Response.json({ error: "Gmail sync is not configured." }, { status: 503 });
@@ -86,6 +125,34 @@ export async function handleGmailSyncRequest(
   if (!(await hasBackendCredential(request, secret))) {
     return Response.json({ error: "Unauthorized." }, { status: 401 });
   }
+  return null;
+}
+
+/**
+ * Account discovery after a Gmail connection. Only the web backend may call this,
+ * after checking the User owns the connection.
+ */
+export async function handleGmailDiscoveryRequest(request: Request, env: Env): Promise<Response> {
+  const rejected = await rejectUnlessBackend(request, env);
+  if (rejected) return rejected;
+  const input = startGmailDiscoveryInputSchema.safeParse(await request.json().catch(() => null));
+  if (!input.success || !env.GMAIL_JOBS) {
+    return Response.json({ error: "connectionId is invalid." }, { status: 400 });
+  }
+  await env.GMAIL_JOBS.send({ kind: "gmail.discover", connectionId: input.data.connectionId });
+  return Response.json({ status: "queued" }, { status: 202 });
+}
+
+/** Manual sync. Only the web backend may call this, after checking the User owns the connection. */
+export async function handleGmailSyncRequest(
+  request: Request,
+  env: Env,
+  context?: Pick<ExecutionContext, "waitUntil">,
+): Promise<Response> {
+  const rejected = await rejectUnlessBackend(request, env);
+  if (rejected) return rejected;
+  if (!env.GMAIL_JOBS)
+    return Response.json({ error: "Gmail sync is not configured." }, { status: 503 });
   const input = requestGmailSyncInputSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
     return Response.json({ error: "connectionId and since are invalid." }, { status: 400 });
@@ -115,7 +182,7 @@ export async function handleGmailSyncRequest(
           logEvent("error", {
             event: "gmail.manual_fallback_failed",
             connectionId: job.connectionId,
-            reason: fallbackError instanceof Error ? fallbackError.name : "UnknownError",
+            ...failureFields(fallbackError),
           });
         }),
     );
@@ -129,31 +196,72 @@ export async function scheduleGmailSyncs(env: Env): Promise<void> {
   logEvent("info", { event: "gmail.syncs_scheduled", count });
 }
 
-/** Queue consumer: runs each job, acking finished or invalid jobs and retrying failures. */
+/**
+ * Queue consumer: runs a batch's jobs concurrently, since each is mostly waiting on
+ * Gmail or the model. Each job acks or retries on its own; finished or invalid jobs
+ * are acked and failures are retried with backoff.
+ */
 export async function consumeGmailJobs(batch: MessageBatch<unknown>, env: Env): Promise<void> {
   const pipeline = createPipeline(env);
-  for (const message of batch.messages) {
-    const job = gmailJobSchema.safeParse(message.body);
-    if (!job.success) {
-      logEvent("error", { event: "gmail.job_invalid" });
-      message.ack();
-      continue;
-    }
-    const ids = {
-      kind: job.data.kind,
-      connectionId: job.data.connectionId,
-      attempt: message.attempts,
-    };
-    try {
-      const outcome = await pipeline.runJob(job.data, {
-        isFinalAttempt: message.attempts > GMAIL_QUEUE_MAX_RETRIES,
-      });
-      logEvent("info", { event: "gmail.job_done", ...ids, outcome });
-      message.ack();
-    } catch (error) {
-      const reason = error instanceof Error ? error.name : "UnknownError";
-      logEvent("error", { event: "gmail.job_failed", ...ids, reason });
-      message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
-    }
-  }
+  await Promise.all(
+    batch.messages.map(async (message) => {
+      const job = gmailJobSchema.safeParse(message.body);
+      if (!job.success) {
+        logEvent("error", { event: "gmail.job_invalid" });
+        message.ack();
+        return;
+      }
+      const ids = {
+        kind: job.data.kind,
+        connectionId: job.data.connectionId,
+        attempt: message.attempts,
+      };
+      try {
+        const outcome = await pipeline.runJob(job.data, {
+          isFinalAttempt: message.attempts > GMAIL_QUEUE_MAX_RETRIES,
+        });
+        logEvent("info", { event: "gmail.job_done", ...ids, outcome });
+        message.ack();
+      } catch (error) {
+        logEvent("error", { event: "gmail.job_failed", ...ids, ...failureFields(error) });
+        message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
+      }
+    }),
+  );
+}
+
+/**
+ * Merchant queue consumer: categorizes imported transactions concurrently. A merchant
+ * another job is searching, or a rate-limited search, is retried after a short wait.
+ */
+export async function consumeMerchantJobs(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+  const pipeline = createMerchantPipeline({
+    backend: createBackend(env),
+    llm: createLlm(env),
+    search: createBraveSearchClient({ apiKey: env.BRAVE_SEARCH_API_KEY ?? "" }),
+  });
+  await Promise.all(
+    batch.messages.map(async (message) => {
+      const job = merchantCategorizeJobSchema.safeParse(message.body);
+      if (!job.success) {
+        logEvent("error", { event: "merchant.job_invalid" });
+        message.ack();
+        return;
+      }
+      const ids = { kind: job.data.kind, attempt: message.attempts };
+      try {
+        const outcome = await pipeline.runJob(job.data);
+        logEvent("info", { event: "merchant.job_done", ...ids, outcome });
+        message.ack();
+      } catch (error) {
+        logEvent("error", { event: "merchant.job_failed", ...ids, ...failureFields(error) });
+        message.retry({
+          delaySeconds:
+            error instanceof MerchantBusyError
+              ? MERCHANT_BUSY_RETRY_SECONDS
+              : retryDelaySeconds(message.attempts),
+        });
+      }
+    }),
+  );
 }

@@ -58,8 +58,17 @@ export async function POST(request: NextRequest, context: Context) {
     }
 
     // Read counts first: once the sync is queued, nothing after it may fail and invite a retry.
-    const counts = await gmailIngestionRepository().syncCounts(identity.id, connectionId);
-    await requestAgentSync({ connectionId, since: connection.lastSyncedAt });
+    const repository = gmailIngestionRepository();
+    const counts = await repository.syncCounts(identity.id, connectionId);
+    // Stored before the agent is asked, so a reload still shows the sync. CONFLICT while
+    // another sync of this connection is queued or running.
+    const requestedAt = await repository.requestSync(identity.id, connectionId);
+    try {
+      await requestAgentSync({ connectionId, since: connection.lastSyncedAt });
+    } catch (error) {
+      await repository.failSync({ connectionId, error: "agent_unavailable", requestedAt });
+      throw error;
+    }
     return Response.json(gmailSyncResultSchema.parse({ status: "queued", counts }), {
       headers: noStoreHeaders,
       status: 202,

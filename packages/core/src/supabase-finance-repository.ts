@@ -22,6 +22,7 @@ type AccountRow = Pick<
   | "account_type"
   | "currency"
   | "last_four"
+  | "institution_key"
   | "is_active"
   | "created_at"
   | "updated_at"
@@ -60,7 +61,7 @@ type ReminderRow = Pick<
 const TRANSACTION_COLUMNS =
   "id, financial_account_id, from_financial_account_id, to_financial_account_id, category_id, source_type, transaction_type, merchant_name, amount::text, currency, occurred_on, occurred_time, description, location, account_hint, ai_confidence, review_status, deleted_at, created_at, updated_at";
 const ACCOUNT_COLUMNS =
-  "id, name, institution, account_type, currency, last_four, is_active, created_at, updated_at";
+  "id, name, institution, account_type, currency, last_four, institution_key, is_active, created_at, updated_at";
 const CATEGORY_COLUMNS =
   "id, name, slug, icon, color, is_default, is_archived, created_at, updated_at";
 const BUDGET_COLUMNS =
@@ -171,6 +172,7 @@ function toAccount(row: AccountRow): FinancialAccount {
     accountType: row.account_type,
     currency: row.currency,
     lastFour: row.last_four,
+    institutionKey: row.institution_key,
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -461,6 +463,7 @@ export function createSupabaseFinanceRepository(
           account_type: input.accountType,
           currency: input.currency,
           last_four: input.lastFour,
+          institution_key: input.institutionKey,
         })
         .select(ACCOUNT_COLUMNS)
         .single();
@@ -481,7 +484,8 @@ export function createSupabaseFinanceRepository(
         financialAccount.institution !== input.institution ||
         financialAccount.accountType !== input.accountType ||
         financialAccount.currency !== input.currency ||
-        financialAccount.lastFour !== input.lastFour
+        financialAccount.lastFour !== input.lastFour ||
+        financialAccount.institutionKey !== input.institutionKey
       ) {
         throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
       }
@@ -499,6 +503,9 @@ export function createSupabaseFinanceRepository(
           : { account_type: input.changes.accountType }),
         ...(input.changes.currency === undefined ? {} : { currency: input.changes.currency }),
         ...(input.changes.lastFour === undefined ? {} : { last_four: input.changes.lastFour }),
+        ...(input.changes.institutionKey === undefined
+          ? {}
+          : { institution_key: input.changes.institutionKey }),
         ...(input.changes.isActive === undefined ? {} : { is_active: input.changes.isActive }),
       };
       const result = await client

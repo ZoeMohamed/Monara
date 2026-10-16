@@ -1,6 +1,9 @@
 import {
   disconnectGmailConnectionInputSchema,
+  type GmailDiscovery,
+  type GmailSyncStatus,
   gmailConnectionListSchema,
+  gmailDiscoverySchema,
   gmailSyncResultSchema,
   operationErrorSchema,
   startGmailConnectionResultSchema,
@@ -13,9 +16,49 @@ export type GmailMailbox = {
   lastSyncedAt: string | null;
   sync:
     | { state: "idle" | "queued" | "running" }
-    | { state: "completed"; imported: number; skipped: number; failed: number }
+    | {
+        state: "completed";
+        transactions: number;
+        confirmed: number;
+        skipped: number;
+        failed: number;
+      }
     | { state: "failed"; message: string };
 };
+
+/** A mailbox whose sync the page should keep checking on. */
+export function isSyncInProgress(mailbox: GmailMailbox) {
+  return mailbox.sync.state === "queued" || mailbox.sync.state === "running";
+}
+
+const SYNC_ERROR_MESSAGES: Record<NonNullable<GmailSyncStatus["error"]>, string> = {
+  agent_unavailable: "Gmail sync is unavailable right now. Try again later.",
+  gmail_unavailable: "Gmail could not be read. Try again, or reconnect this mailbox.",
+  sync_failed: "The sync did not finish. Try again.",
+  stalled: "The sync stopped making progress. Try again.",
+};
+
+function toMailboxSync(sync: GmailSyncStatus): GmailMailbox["sync"] {
+  switch (sync.state) {
+    case "idle":
+    case "queued":
+    case "running":
+      return { state: sync.state };
+    case "completed":
+      return {
+        state: "completed",
+        transactions: sync.counts.importedTransactions,
+        confirmed: sync.counts.confirmedTransactions,
+        skipped: sync.counts.skipped,
+        failed: sync.counts.failed,
+      };
+    case "failed":
+      return {
+        state: "failed",
+        message: SYNC_ERROR_MESSAGES[sync.error ?? "sync_failed"],
+      };
+  }
+}
 
 export type GmailConnectionsState =
   | { status: "unavailable" | "loading" | "requires-sign-in" }
@@ -122,8 +165,8 @@ export async function loadGmailConnections(options: RequestOptions = {}): Promis
       email: connection.gmailAddress,
       status: connection.status === "active" ? "active" : "reconnect-required",
       lastSyncedAt: connection.lastSyncedAt,
-      // The connection list has no durable job-status field; Sync Now updates this local state.
-      sync: { state: "idle" },
+      // Stored on the server, so a reload or another tab shows the same sync.
+      sync: toMailboxSync(connection.sync),
     }));
 }
 
@@ -176,4 +219,32 @@ export async function requestGmailSync(id: string, options: RequestOptions = {})
     throw new GmailClientError("error", "Gmail did not confirm that the sync was queued.");
   }
   return result.data;
+}
+
+function connectionPath(id: string, suffix: string) {
+  const input = disconnectGmailConnectionInputSchema.safeParse({ connectionId: id });
+  if (!input.success) throw new GmailClientError("error", "Invalid Gmail connection id.");
+  return `${CONNECTIONS_URL}/${encodeURIComponent(input.data.connectionId)}/${suffix}`;
+}
+
+/** Banks, cards, and wallets found in one of the User's mailboxes. */
+export async function loadGmailDiscovery(
+  id: string,
+  options: RequestOptions = {},
+): Promise<GmailDiscovery> {
+  const response = await request(connectionPath(id, "discovery"), "GET", options);
+  const payload: unknown = await response.json().catch(() => null);
+  const result = gmailDiscoverySchema.safeParse(payload);
+  if (!result.success) {
+    throw new GmailClientError("error", "Gmail returned invalid account suggestions. Try again.");
+  }
+  return result.data;
+}
+
+/** Looks for the User's banks, cards, and wallets in a mailbox again. */
+export async function requestGmailDiscovery(id: string, options: RequestOptions = {}) {
+  const response = await request(connectionPath(id, "discovery"), "POST", options);
+  if (response.status !== 202) {
+    throw new GmailClientError("error", "Gmail did not confirm that the search started.");
+  }
 }

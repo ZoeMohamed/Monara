@@ -18,6 +18,19 @@ const connection = {
   status: "active",
   lastSyncedAt: null,
   createdAt: "2026-10-14T04:00:00Z",
+  sync: {
+    state: "idle",
+    error: null,
+    requestedAt: null,
+    counts: {
+      imported: 0,
+      skipped: 0,
+      failed: 0,
+      inProgress: 0,
+      importedTransactions: 0,
+      confirmedTransactions: 0,
+    },
+  },
 };
 
 describe("Gmail connection response boundary", () => {
@@ -62,6 +75,46 @@ describe("Gmail connection response boundary", () => {
         sync: { state: "idle" },
       },
     ]);
+  });
+
+  it("shows the stored sync status, including how a finished or failed sync ended", async () => {
+    const counts = {
+      ...connection.sync.counts,
+      importedTransactions: 3,
+      confirmedTransactions: 2,
+      skipped: 7,
+    };
+    const mailboxes = await loadGmailConnections({
+      fetcher: async () =>
+        Response.json({
+          connections: [
+            { ...connection, sync: { ...connection.sync, state: "running" } },
+            {
+              ...connection,
+              id: "ce9e8c47-9249-4121-9f4f-dce7b6f26bfd",
+              sync: { state: "completed", error: null, requestedAt: connection.createdAt, counts },
+            },
+            {
+              ...connection,
+              id: "0d6c5f1e-8f53-4a42-9d0a-6a1f4f8f2b10",
+              sync: {
+                state: "failed",
+                error: "stalled",
+                requestedAt: connection.createdAt,
+                counts,
+              },
+            },
+          ],
+        }),
+    });
+    assert.deepEqual(
+      mailboxes.map((mailbox) => mailbox.sync),
+      [
+        { state: "running" },
+        { state: "completed", transactions: 3, confirmed: 2, skipped: 7, failed: 0 },
+        { state: "failed", message: "The sync stopped making progress. Try again." },
+      ],
+    );
   });
 
   it("rejects malformed lists and provider-only fields", async () => {

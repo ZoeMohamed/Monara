@@ -17,7 +17,7 @@ A transaction extracted from a source that awaits review and does not contribute
 _Avoid_: Confirmed transaction when review is outstanding
 
 **Confirmed Transaction**:
-A reviewed transaction included in the User's financial totals.
+A reviewed transaction included in the User's financial totals. A Gmail import is confirmed without review only when its sender is authenticated and the extraction is confident and complete.
 _Avoid_: Pending transaction
 
 **Gmail Connection**:

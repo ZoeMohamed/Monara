@@ -4,6 +4,8 @@ import {
   type CreateFinancialAccountInput,
   createFinancialAccountInputSchema,
   type FinancialAccount,
+  type Institution,
+  institutions,
   type UpdateFinancialAccountInput,
   updateFinancialAccountInputSchema,
 } from "@monara/contracts";
@@ -20,7 +22,14 @@ import { ModalDialog } from "@/components/modal-dialog";
 import { type BrandIdentity, brands } from "@/data/brand-identity";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
 
-type AccountDraft = { name: string; accountType: "bank" | "wallet" | "cash"; institution: string };
+type AccountDraft = {
+  name: string;
+  accountType: "bank" | "wallet" | "cash";
+  institution: string;
+  /** Registry entry whose Gmail notifications belong to this account; "" for none. */
+  institutionKey: string;
+  lastFour: string;
+};
 type AccountErrors = Partial<Record<keyof AccountDraft, string>>;
 type DemoAccountChanges = Partial<
   Pick<FinancialAccount, "name" | "institution" | "accountType" | "isActive">
@@ -31,6 +40,8 @@ function draftOf(account?: FinancialAccount): AccountDraft {
     name: account?.name ?? "",
     accountType: account?.accountType ?? "bank",
     institution: account?.institution ?? "",
+    institutionKey: account?.institutionKey ?? "",
+    lastFour: account?.lastFour ?? "",
   };
 }
 
@@ -39,6 +50,8 @@ function accountChanges(draft: AccountDraft) {
     name: draft.name.trim(),
     accountType: draft.accountType,
     institution: draft.accountType === "cash" ? null : draft.institution.trim() || null,
+    lastFour: draft.accountType === "cash" ? null : draft.lastFour.trim() || null,
+    institutionKey: draft.accountType === "cash" ? null : draft.institutionKey || null,
   };
 }
 
@@ -46,8 +59,13 @@ function accountErrors(issues: { path: readonly PropertyKey[]; message: string }
   const errors: AccountErrors = {};
   for (const issue of issues) {
     const field = issue.path[0] === "changes" ? issue.path[1] : issue.path[0];
-    if (field === "name" || field === "institution" || field === "accountType") {
-      errors[field] ??= issue.message;
+    if (
+      field === "name" ||
+      field === "institution" ||
+      field === "accountType" ||
+      field === "lastFour"
+    ) {
+      errors[field] ??= field === "lastFour" ? "Enter exactly 4 digits." : issue.message;
     }
   }
   return errors;
@@ -75,8 +93,32 @@ function accountMatchesChanges(
     (changes.accountType === undefined || account.accountType === changes.accountType) &&
     (changes.currency === undefined || account.currency === changes.currency) &&
     (changes.lastFour === undefined || account.lastFour === changes.lastFour) &&
+    (changes.institutionKey === undefined || account.institutionKey === changes.institutionKey) &&
     (changes.isActive === undefined || account.isActive === changes.isActive)
   );
+}
+
+/** Registry entries that fit an account type: banks and cards, or wallets. */
+function notificationChoices(accountType: AccountDraft["accountType"]): Institution[] {
+  if (accountType === "cash") return [];
+  return institutions
+    .filter((entry) =>
+      accountType === "wallet" ? entry.platform === "E_WALLET" : entry.platform !== "E_WALLET",
+    )
+    .toSorted((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name));
+}
+
+/** The values a draft submits, with the Gmail fields cleared for cash. */
+function accountValues(draft: AccountDraft) {
+  const cash = draft.accountType === "cash";
+  return {
+    name: draft.name.trim(),
+    accountType: draft.accountType,
+    institution: cash ? null : draft.institution.trim() || null,
+    currency: "IDR" as const,
+    lastFour: cash ? null : draft.lastFour.trim() || null,
+    institutionKey: cash ? null : draft.institutionKey || null,
+  };
 }
 
 // The most common Indonesian choices first; the logo search finds every other one.
@@ -195,6 +237,62 @@ function AccountFields({
           )}
         </div>
       )}
+      {draft.accountType !== "cash" && (
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor={`${prefix}-notifications`}>
+            Gmail notifications from <span className="font-normal text-muted">(optional)</span>
+          </label>
+          <select
+            className={styles.input}
+            disabled={disabled}
+            id={`${prefix}-notifications`}
+            name="institutionKey"
+            onChange={(event) => onChange({ institutionKey: event.target.value })}
+            value={draft.institutionKey}
+            aria-describedby={`${prefix}-notifications-hint`}
+          >
+            <option value="">None</option>
+            {notificationChoices(draft.accountType).map((entry) => (
+              <option key={entry.key} value={entry.key}>
+                {entry.name === entry.provider ? entry.name : `${entry.provider} · ${entry.name}`}
+                {entry.senderEmails.length === 0 ? " (no email alerts yet)" : ""}
+              </option>
+            ))}
+          </select>
+          <p className={styles.meta} id={`${prefix}-notifications-hint`}>
+            Transactions from these emails are added to this account.
+          </p>
+        </div>
+      )}
+      {draft.accountType !== "cash" && (
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor={`${prefix}-last-four`}>
+            Last 4 digits <span className="font-normal text-muted">(optional)</span>
+          </label>
+          <input
+            aria-describedby={
+              errors.lastFour ? `${prefix}-last-four-error` : `${prefix}-last-four-hint`
+            }
+            aria-invalid={Boolean(errors.lastFour)}
+            className={styles.input}
+            disabled={disabled}
+            id={`${prefix}-last-four`}
+            inputMode="numeric"
+            maxLength={4}
+            name="lastFour"
+            onChange={(event) => onChange({ lastFour: event.target.value.replace(/\D/g, "") })}
+            value={draft.lastFour}
+          />
+          <p className={styles.meta} id={`${prefix}-last-four-hint`}>
+            Tells apart two cards or accounts from the same bank.
+          </p>
+          {errors.lastFour && (
+            <p className={styles.error} id={`${prefix}-last-four-error`}>
+              {errors.lastFour}
+            </p>
+          )}
+        </div>
+      )}
       <p className={styles.meta}>Use this account for payments and transfers · IDR.</p>
     </>
   );
@@ -228,12 +326,7 @@ function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () 
     if (inFlight.current || props.refreshRequired) return;
     if (!request.current) {
       const parsed = createFinancialAccountInputSchema.safeParse({
-        name: state.draft.name.trim(),
-        accountType: state.draft.accountType,
-        institution:
-          state.draft.accountType === "cash" ? null : state.draft.institution.trim() || null,
-        currency: "IDR",
-        lastFour: null,
+        ...accountValues(state.draft),
         clientRequestId: "preflight",
       });
       if (!parsed.success) {
@@ -874,24 +967,15 @@ export function DemoFinancialAccountSetup({
 }) {
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<AccountDraft>({
-    name: "",
-    accountType: "bank",
-    institution: "",
-  });
+  const [draft, setDraft] = useState<AccountDraft>(() => draftOf());
   const [error, setError] = useState<string | null>(null);
   const selected = accounts.find((account) => account.id === selectedId);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      onCreate({
-        ...draft,
-        institution: draft.accountType === "cash" ? null : draft.institution.trim() || null,
-        currency: "IDR",
-        lastFour: null,
-      });
+      onCreate(accountValues(draft));
       setOpen(false);
-      setDraft({ name: "", accountType: "bank", institution: "" });
+      setDraft(draftOf());
       setError(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Check the account details.");

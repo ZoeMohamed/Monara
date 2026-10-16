@@ -59,6 +59,11 @@ function financeService(): FinanceService {
   return createFinanceService(createRepository(client));
 }
 
+/** Budget follow-up for Gmail imports confirmed without review. See evaluateConfirmedImports. */
+export function evaluateConfirmedGmailImports(userId: string, transactionIds: readonly string[]) {
+  return financeService().evaluateConfirmedImports(userId, transactionIds);
+}
+
 export function isFinanceOperation(value: string): value is FinanceOperation {
   return (FINANCE_OPERATIONS as readonly string[]).includes(value);
 }

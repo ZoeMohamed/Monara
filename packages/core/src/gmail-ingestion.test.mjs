@@ -8,9 +8,11 @@ import {
 
 const connectionId = "00000000-0000-4000-8000-000000000010";
 const processedMessageId = "00000000-0000-4000-8000-000000000020";
+const userId = "00000000-0000-4000-8000-000000000001";
+const transactionId = "00000000-0000-4000-8000-000000000030";
 
 /** Records which repository method ran and with what. */
-function fakeRepository() {
+function fakeRepository(recorded = {}, categoryResult = {}) {
   const calls = [];
   const record = (name, result) => async (input) => {
     calls.push({ name, input });
@@ -21,7 +23,23 @@ function fakeRepository() {
     listActiveConnections: record("listActiveConnections", { connections: [] }),
     resolveConnection: record("resolveConnection", { connectionId }),
     claimMessage: record("claimMessage", { processedMessageId, alreadyFinished: false }),
-    recordExtraction: record("recordExtraction", { transactionIds: [], alreadyFinished: false }),
+    recordExtraction: record("recordExtraction", {
+      transactionIds: [],
+      alreadyFinished: false,
+      uncategorizedTransactionIds: [],
+      userId,
+      confirmedTransactionIds: [],
+      ...recorded,
+    }),
+    startSync: record("startSync", undefined),
+    claimMessages: record("claimMessages", { pending: 0 }),
+    failSync: record("failSync", undefined),
+    setImportedCategory: record("setImportedCategory", {
+      applied: true,
+      userId,
+      confirmed: true,
+      ...categoryResult,
+    }),
     markSynced: record("markSynced", undefined),
     markError: record("markError", undefined),
     syncCounts: record("syncCounts", undefined),
@@ -76,5 +94,102 @@ describe("runGmailIngestionOperation", () => {
     });
     assert.deepEqual(result, {});
     assert.deepEqual(repository.calls, [{ name: "markError", input: connectionId }]);
+  });
+
+  const extracted = {
+    kind: "expense",
+    merchantName: "Kopi Contoh",
+    money: { amountMinor: "25000", currency: "IDR" },
+    occurredOn: "2026-10-12",
+    occurredTime: null,
+    description: null,
+    location: null,
+    accountHint: "BCA ****4242",
+    accountLastFour: "4242",
+    confidence: 0.95,
+  };
+  const recordInput = {
+    processedMessageId,
+    outcome: "transactions",
+    items: [extracted],
+    institutionKey: "BCA_CC",
+    senderVerified: true,
+  };
+
+  it("follows up on auto-confirmed items and returns only the contract fields", async () => {
+    const repository = fakeRepository({
+      transactionIds: [transactionId],
+      confirmedTransactionIds: [transactionId],
+    });
+    const confirmed = [];
+    const result = await runGmailIngestionOperation(repository, "record-extraction", recordInput, {
+      onTransactionsConfirmed: async (owner, ids) => {
+        confirmed.push({ owner, ids });
+      },
+    });
+    assert.deepEqual(result, {
+      transactionIds: [transactionId],
+      alreadyFinished: false,
+      uncategorizedTransactionIds: [],
+    });
+    assert.deepEqual(confirmed, [{ owner: userId, ids: [transactionId] }]);
+  });
+
+  it("never repeats the follow-up for an already recorded message", async () => {
+    const repository = fakeRepository({
+      transactionIds: [transactionId],
+      alreadyFinished: true,
+      confirmedTransactionIds: [transactionId],
+    });
+    let called = false;
+    await runGmailIngestionOperation(repository, "record-extraction", recordInput, {
+      onTransactionsConfirmed: async () => {
+        called = true;
+      },
+    });
+    assert.equal(called, false);
+  });
+
+  it("records an agent sync failure only with a known reason", async () => {
+    const repository = fakeRepository();
+    assert.deepEqual(
+      await runGmailIngestionOperation(repository, "report-sync-failure", {
+        connectionId,
+        reason: "gmail_unavailable",
+      }),
+      {},
+    );
+    assert.deepEqual(repository.calls, [
+      { name: "failSync", input: { connectionId, error: "gmail_unavailable" } },
+    ]);
+    // Only the web backend may report that the agent itself could not be reached.
+    await assert.rejects(
+      runGmailIngestionOperation(repository, "report-sync-failure", {
+        connectionId,
+        reason: "agent_unavailable",
+      }),
+      { code: "VALIDATION_FAILED" },
+    );
+  });
+
+  it("checks budgets again when categorization fills a confirmed transaction", async () => {
+    for (const [result, expected] of [
+      [{}, [{ owner: userId, ids: [transactionId] }]],
+      [{ confirmed: false }, []],
+      [{ applied: false }, []],
+    ]) {
+      const repository = fakeRepository({}, result);
+      const followUps = [];
+      assert.deepEqual(
+        await runGmailIngestionOperation(
+          repository,
+          "set-imported-category",
+          { transactionId, categoryName: "Food" },
+          { onTransactionsConfirmed: async (owner, ids) => void followUps.push({ owner, ids }) },
+        ),
+        { applied: result.applied ?? true },
+      );
+      assert.deepEqual(followUps, expected);
+    }
   });
 });

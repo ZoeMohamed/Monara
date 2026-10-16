@@ -12,14 +12,27 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WhatsAppConversation"] }],
   // Declared only. The queue is created in Cloudflare by an authorized deploy, never by local commands.
   "queues": {
-    "producers": [{ "binding": "GMAIL_JOBS", "queue": "monara-gmail-jobs" }],
+    "producers": [
+      { "binding": "GMAIL_JOBS", "queue": "monara-gmail-jobs" },
+      { "binding": "MERCHANT_JOBS", "queue": "monara-merchant-jobs" }
+    ],
     "consumers": [
       {
         "queue": "monara-gmail-jobs",
-        "max_batch_size": 5,
+        // A batch runs concurrently (src/gmail/worker.ts), so this caps parallel model calls.
+        "max_batch_size": 10,
         "max_batch_timeout": 5,
         // Keep in sync with GMAIL_QUEUE_MAX_RETRIES in src/gmail/worker.ts.
         "max_retries": 3
+      },
+      {
+        // Web searches are rate limited, so merchant jobs run in small batches on one
+        // consumer at a time; extraction never waits on them.
+        "queue": "monara-merchant-jobs",
+        "max_batch_size": 5,
+        "max_batch_timeout": 5,
+        "max_concurrency": 1,
+        "max_retries": 5
       }
     ]
   },
