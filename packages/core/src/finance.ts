@@ -1125,6 +1125,11 @@ export function createFinanceService(
               isActive: previous.isActive,
             },
           });
+          await evaluateBudgetThresholdsFor(
+            verified.userId,
+            previous.categoryId,
+            undoneAt.slice(0, 10),
+          );
           break;
         }
         default:

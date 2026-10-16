@@ -1335,9 +1335,16 @@ describe("undo_action", () => {
       expectedUpdatedAt: created.budget.updatedAt,
       changes: { limit: { amountMinor: "2000000", currency: "IDR" } },
     });
+    // 1.3M is under the raised limit's warning line but over the restored one's.
+    await service.addTransaction(callerA, {
+      ...coffee("undo-budget-spend"),
+      money: { amountMinor: "1300000", currency: "IDR" },
+    });
+    const remindersBeforeUndo = memory.state.reminderKeys.size;
     await service.undoAction(callerA, { actionId: raised.action.actionId });
     const [budgetAfterUndo] = (await service.listBudgets(callerA, {})).items;
     assert.equal(budgetAfterUndo.limit.amountMinor, "1500000");
+    assert.equal(memory.state.reminderKeys.size, remindersBeforeUndo + 1);
 
     const other = await service.createBudget(callerA, {
       clientRequestId: "undo-budget-2",

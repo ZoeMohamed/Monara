@@ -39,25 +39,40 @@ function createMemoryLinks() {
         if (existing) Object.assign(existing, values);
         else rows.push({ id: String(++sequence), userId: input.userId, ...values });
       },
+      async claimAttempt(input) {
+        const row = byId(input.id);
+        if (
+          row?.status !== "pending" ||
+          row.verificationCodeDigest !== input.codeDigest ||
+          row.verificationAttempts !== input.attempts
+        ) {
+          return false;
+        }
+        row.verificationAttempts += 1;
+        return true;
+      },
       async markVerified(input) {
-        Object.assign(byId(input.id), {
+        const row = byId(input.id);
+        if (row?.status !== "pending" || row.verificationCodeDigest !== input.codeDigest) {
+          return false;
+        }
+        Object.assign(row, {
           status: "verified",
           verificationCodeDigest: null,
           verificationExpiresAt: null,
           verificationAttempts: 0,
           verifiedAt: input.verifiedAt,
         });
+        return true;
       },
-      async recordFailedAttempt(input) {
+      async lockPending(input) {
         const row = byId(input.id);
-        row.verificationAttempts = input.attempts;
-        if (input.revoke) {
-          Object.assign(row, {
-            status: "revoked",
-            verificationCodeDigest: null,
-            verificationExpiresAt: null,
-          });
-        }
+        if (row?.status !== "pending" || row.verificationCodeDigest !== input.codeDigest) return;
+        Object.assign(row, {
+          status: "revoked",
+          verificationCodeDigest: null,
+          verificationExpiresAt: null,
+        });
       },
       async touchInbound() {},
       async revoke(userId) {
@@ -148,6 +163,44 @@ describe("WhatsApp Link service", () => {
       await service.resolveSender({ phoneE164: sender, verificationCode: restarted.code }),
       { status: "code_rejected", reason: "expired" },
     );
+  });
+
+  it("counts concurrent wrong codes and never tries more than the limit", async () => {
+    const { service, memory } = setup();
+    const started = await service.start(userA, { phone });
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () =>
+        service.resolveSender({ phoneE164: sender, verificationCode: wrong(started.code) }),
+      ),
+    );
+    // Guesses that lose the race are rejected uncounted, without being checked.
+    assert.ok(results.every((result) => result.status === "code_rejected"));
+    const row = memory.rows[0];
+    assert.ok(row.status === "revoked" || row.verificationAttempts < MAX_VERIFICATION_ATTEMPTS);
+    while (row.status === "pending") {
+      await service.resolveSender({ phoneE164: sender, verificationCode: wrong(started.code) });
+    }
+    assert.ok(row.verificationAttempts <= MAX_VERIFICATION_ATTEMPTS);
+    assert.deepEqual(
+      await service.resolveSender({ phoneE164: sender, verificationCode: started.code }),
+      { status: "unlinked" },
+    );
+  });
+
+  it("does not verify a challenge replaced after it was read", async () => {
+    const { service, memory } = setup();
+    const first = await service.start(userA, { phone });
+    const { repository } = memory;
+    const claim = repository.claimAttempt;
+    // A new start lands between reading challenge A and counting the attempt.
+    repository.claimAttempt = async (input) => {
+      repository.claimAttempt = claim;
+      await service.start(userA, { phone });
+      return claim(input);
+    };
+    const result = await service.resolveSender({ phoneE164: sender, verificationCode: first.code });
+    assert.deepEqual(result, { status: "code_rejected", reason: "incorrect" });
+    assert.equal(memory.rows[0].status, "pending");
   });
 
   it("keeps one verified owner per number and fails closed without a secret", async () => {

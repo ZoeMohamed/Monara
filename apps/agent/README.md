@@ -22,9 +22,9 @@ Each handler returns 503 when a secret or binding it needs is missing.
 
 | Tier | Tools | Behaviour |
 | --- | --- | --- |
-| T0 | `get_summary`, `suggest_budget`, `list_transactions`, `list_financial_accounts`, `list_categories`, `list_budgets`, `list_recurring_bills`, `list_reminders` | Run freely. |
-| T1 | `add_transaction`, `edit_transaction`, `confirm_pending`, `reject_pending`, `create_budget`, `edit_budget`, `set_reminder_preferences`, `undo_action` | Run supported operations and return receipts; durable live Undo is unavailable. |
-| T2 | `delete_transaction`, `delete_budget`, `delete_bill` | Never run. Calling one asks the backend for a confirmation. |
+| T0 | `get_summary`, `suggest_budget`, `list_transactions`, `list_financial_accounts`, `list_categories`, `list_budgets`, `list_reminders` | Run freely. |
+| T1 | `add_transaction`, `edit_transaction`, `confirm_pending`, `reject_pending`, `create_budget`, `edit_budget`, `undo_action` | Run and return receipts. `undo_action` reverses a transaction or Budget change within ten minutes. |
+| T2 | `delete_transaction`, `delete_budget` | Never run. Calling one asks the backend for a confirmation. |
 | T3 | none | Connections, WhatsApp linking, export, and credentials are not Agent Tools. |
 
 Three rules are enforced in code, not by the prompt:
@@ -94,7 +94,7 @@ The schemas are in `packages/contracts/src/gmail-extraction.ts`. A 404 with the 
 
 ## Still to do
 
-Implement sender-resolution/verified linking, missing Agent operations, durable Undo and client-turn status/idempotency. Accept owned reads/writes and destructive confirmation against a disposable local Supabase stack before configured-provider testing.
+Add the missing Agent operations (recurring bills, Reminder preferences) and client-turn status/idempotency. Accept owned reads/writes and destructive confirmation against a disposable local Supabase stack before configured-provider testing.
 
 The Gmail queue and cron are declared in `wrangler.jsonc` and simulated by `wrangler dev`. Creating the queue in Cloudflare requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
 

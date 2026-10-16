@@ -17,7 +17,14 @@ interface LinkRow {
   verified_at: string | null;
 }
 
-function fail(): never {
+function fail(error?: { code?: string } | null): never {
+  // whatsapp_links_verified_phone_key: another account verified this number first.
+  if (error?.code === "23505") {
+    throw new FinanceOperationError(
+      "CONFLICT",
+      "That number is already linked to another Monara account.",
+    );
+  }
   throw new FinanceOperationError("INTERNAL", "The WhatsApp Link could not be saved.");
 }
 
@@ -84,6 +91,19 @@ export function createSupabaseWhatsAppLinkRepository(
       if (result.error) fail();
     },
 
+    async claimAttempt(input) {
+      const result = await client
+        .from("whatsapp_links")
+        .update({ verification_attempts: input.attempts + 1 })
+        .eq("id", input.id)
+        .eq("status", "pending")
+        .eq("verification_code_digest", input.codeDigest)
+        .eq("verification_attempts", input.attempts)
+        .select("id");
+      if (result.error) fail();
+      return result.data.length === 1;
+    },
+
     async markVerified(input) {
       const result = await client
         .from("whatsapp_links")
@@ -96,25 +116,24 @@ export function createSupabaseWhatsAppLinkRepository(
           last_inbound_at: input.verifiedAt,
         })
         .eq("id", input.id)
-        .eq("status", "pending");
-      if (result.error) fail();
+        .eq("status", "pending")
+        .eq("verification_code_digest", input.codeDigest)
+        .select("id");
+      if (result.error) fail(result.error);
+      return result.data.length === 1;
     },
 
-    async recordFailedAttempt(input) {
+    async lockPending(input) {
       const result = await client
         .from("whatsapp_links")
-        .update(
-          input.revoke
-            ? {
-                status: "revoked",
-                verification_code_digest: null,
-                verification_expires_at: null,
-                verification_attempts: input.attempts,
-              }
-            : { verification_attempts: input.attempts },
-        )
+        .update({
+          status: "revoked",
+          verification_code_digest: null,
+          verification_expires_at: null,
+        })
         .eq("id", input.id)
-        .eq("status", "pending");
+        .eq("status", "pending")
+        .eq("verification_code_digest", input.codeDigest);
       if (result.error) fail();
     },
 

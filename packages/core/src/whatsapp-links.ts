@@ -17,6 +17,9 @@ import {
   protectPhone,
 } from "./whatsapp-link.ts";
 
+/** How often one code check re-reads the link when concurrent attempts race it. */
+const CLAIM_RETRIES = 3;
+
 export interface StoredWhatsAppLink {
   id: string;
   userId: string;
@@ -41,8 +44,16 @@ export interface WhatsAppLinkRepository {
     codeDigest: string;
     expiresAt: string;
   }): Promise<void>;
-  markVerified(input: { id: string; verifiedAt: string }): Promise<void>;
-  recordFailedAttempt(input: { id: string; attempts: number; revoke: boolean }): Promise<void>;
+  /**
+   * Counts one code attempt: raises the count from `attempts` by one only while the
+   * link is still pending with this challenge and that count. False when another
+   * request or a new challenge got there first.
+   */
+  claimAttempt(input: { id: string; codeDigest: string; attempts: number }): Promise<boolean>;
+  /** Verifies the link only while it still holds this challenge. False when it does not. */
+  markVerified(input: { id: string; codeDigest: string; verifiedAt: string }): Promise<boolean>;
+  /** Revokes a pending link locked by too many attempts, only while it holds this challenge. */
+  lockPending(input: { id: string; codeDigest: string }): Promise<void>;
   touchInbound(input: { id: string; at: string }): Promise<void>;
   revoke(userId: string): Promise<void>;
 }
@@ -146,34 +157,68 @@ export function createWhatsAppLinkService(input: {
       if (!verificationCode) return { status: "unlinked" };
 
       let reason: WhatsAppCodeRejection | null = null;
-      for (const link of links) {
-        if (link.status !== "pending" || !link.verificationCodeDigest) continue;
-        if (!link.verificationExpiresAt) continue;
-        const outcome = await checkVerificationCode({
-          link: {
-            phoneE164Hmac: link.phoneE164Hmac,
-            verificationCodeDigest: link.verificationCodeDigest,
-            verificationExpiresAt: link.verificationExpiresAt,
-            verificationAttempts: link.verificationAttempts,
-          },
-          code: verificationCode,
-          secret: key,
-          now: at,
-        });
-        if (outcome.verified) {
-          await repository.markVerified({ id: link.id, verifiedAt: at.toISOString() });
-          return { status: "verified", userId: link.userId };
-        }
-        if (outcome.attempts !== link.verificationAttempts || outcome.locked) {
-          await repository.recordFailedAttempt({
-            id: link.id,
-            attempts: outcome.attempts,
-            revoke: outcome.locked,
-          });
-        }
-        reason = outcome.reason;
+      for (const found of links) {
+        const outcome = await tryCode(found, verificationCode, key, at);
+        if (outcome === "verified") return { status: "verified", userId: found.userId };
+        reason = outcome ?? reason;
       }
       return reason ? { status: "code_rejected", reason } : { status: "unlinked" };
     },
   };
+
+  /**
+   * Checks one code against one pending link. A guess counts before its result is
+   * used, through a compare-and-set on the attempt count, so concurrent messages
+   * cannot try more than the allowed number of codes. Null when the link has no
+   * live challenge.
+   */
+  async function tryCode(
+    found: StoredWhatsAppLink,
+    code: string,
+    key: string,
+    at: Date,
+  ): Promise<"verified" | WhatsAppCodeRejection | null> {
+    let link: StoredWhatsAppLink | null = found;
+    for (let round = 0; round < CLAIM_RETRIES; round++) {
+      if (link?.status !== "pending" || link.phoneE164Hmac !== found.phoneE164Hmac) return null;
+      const codeDigest = link.verificationCodeDigest;
+      if (!codeDigest || !link.verificationExpiresAt) return null;
+      const outcome = await checkVerificationCode({
+        link: {
+          phoneE164Hmac: link.phoneE164Hmac,
+          verificationCodeDigest: codeDigest,
+          verificationExpiresAt: link.verificationExpiresAt,
+          verificationAttempts: link.verificationAttempts,
+        },
+        code,
+        secret: key,
+        now: at,
+      });
+      // Expired, or already locked: nothing to count.
+      if (!outcome.verified && outcome.attempts === link.verificationAttempts) {
+        if (outcome.locked) await repository.lockPending({ id: link.id, codeDigest });
+        return outcome.reason;
+      }
+      const claimed = await repository.claimAttempt({
+        id: link.id,
+        codeDigest,
+        attempts: link.verificationAttempts,
+      });
+      if (claimed) {
+        if (outcome.verified) {
+          const verified = await repository.markVerified({
+            id: link.id,
+            codeDigest,
+            verifiedAt: at.toISOString(),
+          });
+          return verified ? "verified" : "incorrect";
+        }
+        if (outcome.locked) await repository.lockPending({ id: link.id, codeDigest });
+        return outcome.reason;
+      }
+      link = await repository.findByUser(link.userId);
+    }
+    // Still racing after the retries: reject without saying whether the code was right.
+    return "incorrect";
+  }
 }
