@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(49);
+select plan(52);
 
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'financial_accounts', 'financial_accounts exists');
@@ -365,6 +365,98 @@ select throws_ok(
 );
 
 set constraints transactions_financial_account_id_user_id_fkey deferred;
+
+insert into public.transactions (
+  id,
+  user_id,
+  client_request_id,
+  financial_account_id,
+  source_type,
+  transaction_type,
+  merchant_name,
+  amount,
+  currency,
+  occurred_on,
+  review_status
+)
+values (
+  'a4000000-0000-4000-8000-000000000003',
+  'a0000000-0000-4000-8000-000000000001',
+  'historical-wallet-transaction',
+  'a1000000-0000-4000-8000-000000000002',
+  'manual_form',
+  'expense',
+  'Historical wallet merchant',
+  12000,
+  'IDR',
+  '2026-10-12',
+  'confirmed'
+);
+
+update public.financial_accounts
+set is_active = false
+where id = 'a1000000-0000-4000-8000-000000000002';
+
+select lives_ok(
+  $$update public.transactions
+    set description = 'Corrected historical note',
+        financial_account_id = 'a1000000-0000-4000-8000-000000000002',
+        review_status = 'confirmed'
+    where id = 'a4000000-0000-4000-8000-000000000003'$$::text,
+  'historical transactions remain editable after their account is deactivated'::text
+);
+
+select throws_ok(
+  $$insert into public.transactions (
+      user_id, client_request_id, financial_account_id, source_type,
+      transaction_type, merchant_name, amount, currency, occurred_on, review_status
+    ) values (
+      'a0000000-0000-4000-8000-000000000001', 'inactive-account-write',
+      'a1000000-0000-4000-8000-000000000002', 'manual_form',
+      'expense', 'Inactive wallet write', 1000, 'IDR', '2026-10-12', 'confirmed'
+    )$$::text,
+  '23514'::char(5),
+  'Confirmed transactions require active Financial Accounts.',
+  'new confirmed transactions cannot select an inactive account'::text
+);
+
+insert into public.transactions (
+  id,
+  user_id,
+  processed_gmail_message_id,
+  source_item_index,
+  financial_account_id,
+  source_type,
+  transaction_type,
+  merchant_name,
+  amount,
+  currency,
+  occurred_on,
+  review_status
+)
+values (
+  'a4000000-0000-4000-8000-000000000004',
+  'a0000000-0000-4000-8000-000000000001',
+  'a3000000-0000-4000-8000-000000000001',
+  2,
+  'a1000000-0000-4000-8000-000000000002',
+  'gmail_email',
+  'expense',
+  'Pending inactive wallet import',
+  1500,
+  'IDR',
+  '2026-10-12',
+  'pending'
+);
+
+select throws_ok(
+  $$update public.transactions
+    set review_status = 'confirmed'
+    where id = 'a4000000-0000-4000-8000-000000000004'$$::text,
+  '23514'::char(5),
+  'Confirmed transactions require active Financial Accounts.',
+  'a pending import cannot confirm against an inactive account'::text
+);
 
 select throws_ok(
   $$insert into public.transactions (
