@@ -31,6 +31,7 @@
     "db:validate": "node scripts/check-db.mjs --validate-only",
     "db:status": "node scripts/db.mjs status",
     "worktree:setup": "node scripts/worktree.mjs setup",
+    "worktree:bootstrap": "pnpm install --frozen-lockfile && pnpm db:start --runtime docker",
     "worktree:teardown": "node scripts/worktree.mjs teardown",
     "worktree:prune": "node scripts/worktree.mjs prune",
     "worktree:status": "node scripts/worktree.mjs status",

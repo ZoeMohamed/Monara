@@ -1,8 +1,7 @@
 worktree_path = ".worktrees"
 
 setup = [
-  "node scripts/worktree.mjs setup",
-  "pnpm install --frozen-lockfile",
+  "pnpm worktree:bootstrap",
 ]
 
 teardown = [
