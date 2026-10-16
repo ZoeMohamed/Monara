@@ -41,7 +41,7 @@ The Agent keeps no conversation for in-app chat. The caller sends the earlier tu
 
 ## WhatsApp
 
-A sender's number is only a claim. For each inbound message the webhook calls `POST {MONARA_BACKEND_URL}/api/agent/whatsapp/resolve-sender` with the number and, when the whole message is a six-digit code, that code (`resolveWhatsAppSenderInputSchema`). The expected contract answers `linked`, `verified`, `code_rejected`, or `unlinked`. That backend route and verified-link initiation are not implemented yet; current handler code does not establish an operational WhatsApp channel. The rules for codes live in `packages/core/src/whatsapp-link.ts`.
+A sender's number is only a claim. For each inbound message the webhook calls `POST {MONARA_BACKEND_URL}/api/agent/whatsapp/resolve-sender` with the number and, when the whole message is a six-digit code, that code (`resolveWhatsAppSenderInputSchema`). It answers `linked`, `verified`, `code_rejected`, or `unlinked`. A User starts linking in Settings, which shows the code to send. The route is in `apps/web/src/app/api/agent/whatsapp/resolve-sender`, the service in `packages/core/src/whatsapp-links.ts`, and the rules for codes in `packages/core/src/whatsapp-link.ts`.
 
 A linked User's text goes to their `WhatsAppConversation` Durable Object (`src/whatsapp/conversation.ts`, logic in `session.ts`), and the webhook answers Kapso straight away. The object answers messages one at a time, keeps recent turns so follow-up questions work, and deletes them after 30 minutes of silence. Within the Durable Object, a processed message does not replay the Agent turn; only sending the reply is retried. Live transport/idempotency acceptance remains outstanding.
 
@@ -57,9 +57,9 @@ The Agent reads and changes records only through the Next.js backend (`src/conve
 | `request_destructive_action` | `{ action, input }` (`requestDestructiveActionInputSchema`) | `destructiveActionConfirmationSchema`. Nothing is deleted. |
 | `confirm_destructive_action` | `confirmDestructiveActionInputSchema` | Ignored. The backend checks the confirmation is this User's, unused, and not expired. |
 
-`apps/web/src/app/api/agent/operations/[operation]/route.ts` implements the authenticated operation boundary, and `apps/web/src/app/api/chat/route.ts` implements the web-session bridge. `apps/web/src/lib/finance/service.ts` is the authoritative allowlist. Transaction/account/category/budget reads, read-only three-month Budget suggestions and supported transaction/review/budget writes exist; `get_summary` computes totals from transaction reads. Transaction/budget deletion requires a bound, expiring confirmation. Stored action receipts do not execute reversal.
+`apps/web/src/app/api/agent/operations/[operation]/route.ts` implements the authenticated operation boundary, and `apps/web/src/app/api/chat/route.ts` implements the web-session bridge. `apps/web/src/lib/finance/service.ts` is the authoritative allowlist. Transaction/account/category/budget reads, read-only three-month Budget suggestions and supported transaction/review/budget writes exist; `get_summary` computes totals from transaction reads. Transaction/budget deletion requires a bound, expiring confirmation. `undo_action` reverses a transaction or Budget change from its receipt within ten minutes.
 
-The worker still advertises `list_recurring_bills`, `list_reminders`, `set_reminder_preferences`, `undo_action` and `delete_bill`, which the Agent backend does not support. New list/read/dismiss notification operations are web-only. Unsupported operations fail explicitly. Reconcile this catalog before claiming every scenario works against the live backend.
+Recurring bills and Reminder preferences have no backend operations yet, so the worker does not offer them. Mark-read and dismiss for notifications stay web-only.
 
 ## Gmail ingestion
 

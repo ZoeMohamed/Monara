@@ -82,7 +82,6 @@ test("every read tool is T0 and has a schema the model can be given", () => {
       "list_financial_accounts",
       "list_categories",
       "list_budgets",
-      "list_recurring_bills",
       "list_reminders",
     ],
   );

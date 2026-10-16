@@ -8,10 +8,8 @@ import {
   listBudgetsInputSchema,
   listCategoriesInputSchema,
   listFinancialAccountsInputSchema,
-  listRecurringBillsInputSchema,
   listRemindersInputSchema,
   listTransactionsInputSchema,
-  recurringBillPageSchema,
   reminderPageSchema,
   transactionPageSchema,
 } from "@monara/contracts";
@@ -160,12 +158,6 @@ export const readTools = [
     description: `Lists the User's Budgets with their limit and cadence (weekly or monthly). ${PAGING}`,
     input: listBudgetsInputSchema,
     output: budgetPageSchema,
-  }),
-  readTool({
-    name: "list_recurring_bills",
-    description: `Lists the User's recurring bills and when each is next due. ${PAGING}`,
-    input: listRecurringBillsInputSchema,
-    output: recurringBillPageSchema,
   }),
   readTool({
     name: "list_reminders",

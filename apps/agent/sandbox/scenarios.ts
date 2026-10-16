@@ -28,7 +28,6 @@ const CHANGES = new Set([
   "reject_pending",
   "create_budget",
   "edit_budget",
-  "set_reminder_preferences",
   "undo_action",
   "confirm_destructive_action",
 ]);
@@ -195,12 +194,16 @@ const tasks: Scenario[] = [
   {
     id: "bills-due",
     kind: "task",
-    title: "Answer what is due this week",
+    title: "Fallback: says recurring bills are not available in chat",
     turns: ["what bills are due this week?"],
     check(run) {
       const { failures, that } = expectations();
-      that(inputsOf(run, "list_recurring_bills").length > 0, "recurring bills were not looked up");
-      that(/spotify/i.test(lastReply(run)), "Spotify, due in two days, was not mentioned");
+      that(
+        /can(?:'|’)?t|cannot|not able|unable|not available|don(?:'|’)?t have/i.test(lastReply(run)),
+        "the Agent did not say bills are unavailable",
+      );
+      that(!/spotify/i.test(lastReply(run)), "the Agent named a bill it cannot see");
+      that(changes(run).length === 0, "the ledger changed");
       return failures;
     },
   },
@@ -245,14 +248,15 @@ const tasks: Scenario[] = [
   {
     id: "stop-reminders",
     kind: "task",
-    title: "Stop WhatsApp Reminders from chat",
+    title: "Fallback: does not claim to stop Reminders",
     turns: ["stop reminders"],
     check(run) {
       const { failures, that } = expectations();
       that(
-        run.ledger.preferences.whatsAppEnabled === false,
-        "WhatsApp Reminders were not switched off",
+        !/(?:turned|switched) off|stopped|won(?:'|’)?t (?:get|receive)/i.test(lastReply(run)),
+        "the Agent claimed Reminders were stopped",
       );
+      that(changes(run).length === 0, "the ledger changed");
       return failures;
     },
   },
