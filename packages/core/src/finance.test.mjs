@@ -778,8 +778,34 @@ function createMemoryFinanceRepository() {
         changedAt: input.changedAt,
         undoExpiresAt: input.undoExpiresAt,
       };
-      actions.push({ ownerId: input.userId, state: input.state, receipt });
+      actions.push({ ownerId: input.userId, state: input.state, receipt, consumedAt: null });
       return receipt;
+    },
+    async findUndoAction(ownerId, actionId) {
+      const action = actions.find(
+        (entry) => entry.ownerId === ownerId && entry.receipt.actionId === actionId,
+      );
+      return action
+        ? {
+            state: structuredClone(action.state),
+            resourceType: action.receipt.resourceType,
+            resourceId: action.receipt.resourceId,
+            expiresAt: action.receipt.undoExpiresAt,
+            consumedAt: action.consumedAt,
+          }
+        : null;
+    },
+    async consumeUndoAction(input) {
+      const action = actions.find(
+        (entry) =>
+          entry.ownerId === input.userId &&
+          entry.receipt.actionId === input.actionId &&
+          entry.consumedAt === null &&
+          entry.receipt.undoExpiresAt > input.consumedAt,
+      );
+      if (!action) return false;
+      action.consumedAt = input.consumedAt;
+      return true;
     },
   };
 
@@ -1221,6 +1247,112 @@ describe("Agent T2 confirmation simulation", () => {
       (error) => error instanceof FinanceOperationError && error.code === "CONFLICT",
     );
     assert.equal((await service.listTransactions(caller, {})).items.length, 1);
+  });
+});
+
+describe("undo_action", () => {
+  const coffee = (clientRequestId) => ({
+    clientRequestId,
+    kind: "expense",
+    merchantName: "Synthetic Coffee",
+    money: { amountMinor: "25000", currency: "IDR" },
+    occurredOn: "2026-10-15",
+    occurredTime: null,
+    description: null,
+    location: null,
+    accountHint: null,
+    categoryId: category.id,
+    financialAccountId: "40000000-0000-4000-8000-000000000004",
+    fromFinancialAccountId: null,
+    toFinancialAccountId: null,
+  });
+  const failsWith = (code) => (error) =>
+    error instanceof FinanceOperationError && error.code === code;
+
+  it("reverses an add or an edit once, for its own User, before it expires", async () => {
+    const memory = createMemoryFinanceRepository();
+    let currentTime = new Date("2026-10-15T01:00:30.000Z");
+    const service = createFinanceService(memory.repository, { now: () => currentTime });
+    const caller = { ...callerA, channel: "whatsapp", directSource: "whatsapp_text" };
+
+    const added = await service.addTransaction(caller, coffee("undo-edit"));
+    const edited = await service.editTransaction(caller, {
+      transactionId: added.transaction.id,
+      expectedUpdatedAt: added.transaction.updatedAt,
+      changes: { money: { amountMinor: "28000", currency: "IDR" } },
+    });
+    assert.equal(edited.transaction.money.amountMinor, "28000");
+
+    await assert.rejects(
+      service.undoAction({ ...caller, userId: ownerB }, { actionId: edited.action.actionId }),
+      failsWith("NOT_FOUND"),
+    );
+    assert.deepEqual(await service.undoAction(caller, { actionId: edited.action.actionId }), {
+      ok: true,
+    });
+    const [restored] = (await service.listTransactions(caller, {})).items;
+    assert.equal(restored.money.amountMinor, "25000");
+    await assert.rejects(
+      service.undoAction(caller, { actionId: edited.action.actionId }),
+      failsWith("CONFLICT"),
+    );
+
+    // The edit's undo changed the record, so the add's receipt is now stale.
+    await assert.rejects(
+      service.undoAction(caller, { actionId: added.action.actionId }),
+      failsWith("CONFLICT"),
+    );
+
+    const second = await service.addTransaction(caller, coffee("undo-add"));
+    await service.undoAction(caller, { actionId: second.action.actionId });
+    assert.equal((await service.listTransactions(caller, {})).items.length, 1);
+
+    const late = await service.addTransaction(caller, coffee("undo-late"));
+    currentTime = new Date("2026-10-15T01:15:00.000Z");
+    await assert.rejects(
+      service.undoAction(caller, { actionId: late.action.actionId }),
+      failsWith("CONFLICT"),
+    );
+    assert.equal((await service.listTransactions(caller, {})).items.length, 2);
+  });
+
+  it("restores a Budget's previous limit and removes a Budget it created", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-15T01:00:30.000Z"),
+    });
+    const created = await service.createBudget(callerA, {
+      clientRequestId: "undo-budget",
+      categoryId: category.id,
+      name: "Food",
+      cadence: "monthly",
+      limit: { amountMinor: "1500000", currency: "IDR" },
+      warningPercent: 80,
+      startsOn: "2026-10-01",
+    });
+    const raised = await service.updateBudget(callerA, {
+      budgetId: created.budget.id,
+      expectedUpdatedAt: created.budget.updatedAt,
+      changes: { limit: { amountMinor: "2000000", currency: "IDR" } },
+    });
+    await service.undoAction(callerA, { actionId: raised.action.actionId });
+    const [budgetAfterUndo] = (await service.listBudgets(callerA, {})).items;
+    assert.equal(budgetAfterUndo.limit.amountMinor, "1500000");
+
+    const other = await service.createBudget(callerA, {
+      clientRequestId: "undo-budget-2",
+      categoryId: category.id,
+      name: "Coffee",
+      cadence: "weekly",
+      limit: { amountMinor: "100000", currency: "IDR" },
+      warningPercent: 80,
+      startsOn: "2026-10-01",
+    });
+    await service.undoAction(callerA, { actionId: other.action.actionId });
+    assert.deepEqual(
+      (await service.listBudgets(callerA, {})).items.map((item) => item.name),
+      ["Food"],
+    );
   });
 });
 
