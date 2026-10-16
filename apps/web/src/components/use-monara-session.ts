@@ -1,6 +1,10 @@
 "use client";
 
-import { calendarDateSchema, createFinancialAccountInputSchema } from "@monara/contracts";
+import {
+  calendarDateSchema,
+  createFinancialAccountInputSchema,
+  updateFinancialAccountInputSchema,
+} from "@monara/contracts";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppSession } from "@/components/app-session-context";
 import { useTransactionActions } from "@/components/transaction-actions";
@@ -384,6 +388,52 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
         },
       ]);
       setNotice({ message: "Account added for this demo visit." });
+    },
+    updateDemoAccount: (accountId, changes) => {
+      if (live) return;
+      const account = demoAccounts.find((item) => item.id === accountId);
+      if (!account) throw new Error("That account is no longer available.");
+      const parsed = updateFinancialAccountInputSchema.safeParse({
+        financialAccountId: account.id,
+        expectedUpdatedAt: account.updatedAt,
+        changes,
+      });
+      if (!parsed.success) throw new Error("Check the account details.");
+      const name = parsed.data.changes.name ?? account.name;
+      if (
+        demoAccounts.some(
+          (item) => item.id !== account.id && item.name.toLowerCase() === name.toLowerCase(),
+        )
+      )
+        throw new Error("Choose a different account name.");
+      const updated = {
+        ...account,
+        ...parsed.data.changes,
+        updatedAt: new Date().toISOString(),
+      };
+      setDemoAccounts((accounts) =>
+        accounts.map((item) => (item.id === account.id ? updated : item)),
+      );
+      if (updated.name !== account.name) {
+        setTransactions((transactions) =>
+          transactions.map((transaction) => ({
+            ...transaction,
+            method:
+              transaction.method
+                ?.split(" → ")
+                .map((part) => (part === account.name ? updated.name : part))
+                .join(" → ") ?? null,
+          })),
+        );
+      }
+      setNotice({
+        message:
+          parsed.data.changes.isActive === false
+            ? "Account deactivated for this demo visit. Its transaction history is unchanged."
+            : parsed.data.changes.isActive === true
+              ? "Account reactivated for this demo visit."
+              : "Account updated for this demo visit.",
+      });
     },
     createDemoBudget: (input) => {
       if (live) return;

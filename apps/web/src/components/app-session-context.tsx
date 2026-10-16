@@ -23,6 +23,10 @@ export type AppSession = {
   updateDemoCategory: (original: string, changes: { name: string; icon: string }) => void;
   archiveDemoCategory: (name: string) => void;
   createDemoAccount: (input: Omit<CreateFinancialAccountInput, "clientRequestId">) => void;
+  updateDemoAccount: (
+    accountId: string,
+    changes: Partial<Pick<FinancialAccount, "name" | "institution" | "accountType" | "isActive">>,
+  ) => void;
   createDemoBudget: (input: {
     category: string;
     icon: string | null;

@@ -265,6 +265,7 @@ export function ProfileRoute() {
           <DemoFinancialAccountSetup
             accounts={session.financialAccounts}
             onCreate={session.createDemoAccount}
+            onUpdate={session.updateDemoAccount}
           />
         )
       }
