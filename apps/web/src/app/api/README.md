@@ -11,7 +11,7 @@ The Next.js backend lives here. Financial writes belong to these routes, includi
 | `GET /api/brands?q=` | Public, session-free search over the bundled Simple Icons (CC0) logo catalog for the logo picker. `/brand-icons/[slug].svg` serves the matching mark from the same bundle, so no third-party logo service is called. |
 | `GET /api/health/supabase` | Reports configuration/connectivity availability without returning credentials. |
 
-Google Auth start, callback, and sign-out handlers live under `src/app/auth`. WhatsApp resolve-sender/linking routes, automatic Gmail ingestion/sync, personal Reminder persistence/scheduling, delivery preferences, recurring-bill operations and persisted Undo execution remain incomplete. Notification list/read/dismiss operations are web-only; they do not enable the worker's `list_reminders` tool. Do not infer supported Agent operations from the worker's tool catalog: the backend allowlist is authoritative.
+Google Auth start, callback, and sign-out handlers live under `src/app/auth`. WhatsApp linking lives under `whatsapp/link` (signed-in User) and `agent/whatsapp/resolve-sender` (Agent secret). Personal Reminder scheduling, delivery preferences and recurring-bill operations remain incomplete. The Agent may list Reminders; mark-read and dismiss are web-only. Do not infer supported Agent operations from the worker's tool catalog: the backend allowlist is authoritative.
 
 Keep route handlers thin: validate requests using @monara/contracts, resolve identity and ownership, then call @monara/core services and @monara/db repositories. Financial writes belong here, including writes requested by the Cloudflare agent.
 
