@@ -70,14 +70,13 @@ function DesktopSidebar({
           </Link>
         ))}
       </nav>
-      <Button
+      <button
         aria-label={
           reminderCount > 0 ? `Notifications, ${reminderCount} need attention` : "Notifications"
         }
         className={`${styles.sideLink} mt-3 h-auto`}
-        onPress={onOpenReminders}
+        onClick={onOpenReminders}
         type="button"
-        variant="ghost"
       >
         <Icon name="bell" /> Notifications
         {reminderCount > 0 ? (
@@ -85,7 +84,7 @@ function DesktopSidebar({
             {reminderCount}
           </span>
         ) : null}
-      </Button>
+      </button>
       <div className={styles.sideStatus}>
         {live ? (
           <>
