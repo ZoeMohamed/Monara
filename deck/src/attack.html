@@ -1,42 +1,60 @@
-<!doctype html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:1728px;height:724px;overflow:hidden;background:transparent;font-family:Poppins,sans-serif;color:#1b1b1b}
-h1{font-size:54px;font-weight:700;color:#191919;letter-spacing:-1px;height:80px}
-h1 span{color:#3171FD}
-.panel{position:absolute;left:0;top:96px;width:560px;height:724px;background:#fff;border:3px solid #dce7ff;border-radius:22px;box-shadow:0 4px 14px rgba(40,50,80,.08)}
-.ph{position:absolute;left:0;top:0;width:100%;height:60px;background:#3171FD;border-radius:19px 19px 0 0;color:#fff;font-weight:700;font-size:20px;letter-spacing:3px;display:flex;align-items:center;padding-left:30px}
-.cell{position:absolute;width:132px;height:132px;border:3px solid #fff}
-.mk{position:absolute;width:52px;height:52px;border-radius:50%;background:#1f4fc4;color:#fff;font-weight:700;font-size:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(20,48,127,.35);border:3px solid #fff}
-.ax{position:absolute;font-size:15px;font-weight:700;color:#4d5160;letter-spacing:1px}
-.row{position:absolute;left:592px;width:1136px;height:118px;background:#fff;border:3px solid #dce7ff;border-radius:22px;box-shadow:0 4px 14px rgba(40,50,80,.08);display:flex;align-items:center}
-.hd{background:#3171FD;border-color:#3171FD;height:60px;color:#fff;font-weight:700;font-size:20px;letter-spacing:3px}
-.n{width:56px;height:56px;border-radius:50%;background:#1f4fc4;color:#fff;font-weight:700;font-size:27px;display:flex;align-items:center;justify-content:center;margin:0 20px 0 22px;flex:none}
-.c1{width:318px;font-size:25px;font-weight:700;color:#14307f;line-height:1.2}
-.c1 small{display:block;font-size:16px;font-weight:500;color:#5a6075;margin-top:4px;line-height:1.25}
-.c2{flex:1;padding:0 26px 0 20px;font-size:21px;color:#3b4254;line-height:1.32;border-left:3px solid #e6ecfa;height:78px;display:flex;align-items:center}
-.hd .c1{margin-left:30px;color:#fff;font-size:20px;font-weight:700;width:370px}.hd .c2{color:#fff;font-size:20px;font-weight:700;border:none;padding-left:0}
-.cap{position:absolute;left:30px;top:658px;width:500px;font-size:16px;color:#5a6075;line-height:1.35}
-</style></head><body><div style="position:absolute;left:0;top:-96px;width:1728px;height:820px">
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="base.css">
+<style>html,body{width:1728px;height:724px}
+.panel{position:absolute;left:0;top:0;width:560px;height:724px;background:#fff;border:3px solid var(--pale);border-radius:22px;box-shadow:0 4px 14px rgba(40,50,80,.08);overflow:hidden}
+.ph{position:absolute;left:0;top:0;width:100%;height:60px;background:var(--brand);color:#fff;font-weight:700;font-size:20px;letter-spacing:3px;display:flex;align-items:center;padding-left:30px}
+.lg{position:absolute;top:80px;width:168px;text-align:center}
+.lg svg{display:block;margin:0 auto 6px}
+.lg b{display:block;font-size:15px;font-weight:700;color:var(--navy);line-height:1.2}
+.lg span{display:block;font-size:12.5px;font-weight:500;color:var(--muted);line-height:1.3;margin-top:2px}
+.cell{position:absolute;width:124px;height:124px;border:3px solid #fff}
+.mk{position:absolute;width:64px;height:64px}
+.mk svg{position:absolute;inset:0;filter:drop-shadow(0 3px 5px rgba(20,48,127,.35))}
+.mk i{position:absolute;left:0;right:0;font-style:normal;font-weight:700;font-size:24px;color:#fff;text-align:center}
+.ax{position:absolute;font-size:14px;font-weight:700;color:var(--muted);letter-spacing:1px}
+.row{position:absolute;left:592px;width:1136px;height:118px;background:#fff;border:3px solid var(--pale);border-radius:22px;box-shadow:0 4px 14px rgba(40,50,80,.08);display:flex;align-items:center}
+.hd{background:var(--brand);border-color:var(--brand);height:60px;color:#fff;font-weight:700;font-size:20px;letter-spacing:3px}
+.n{position:relative;width:64px;height:64px;margin:0 18px 0 22px;flex:none}
+.n svg{position:absolute;inset:0}
+.n i{position:absolute;left:0;right:0;font-style:normal;font-weight:700;font-size:26px;color:#fff;text-align:center}
+.c1{width:318px;font-size:24px;font-weight:700;color:var(--navy);line-height:1.2}
+.c1 small{display:block;font-size:15px;font-weight:500;color:#5a6075;margin-top:4px;line-height:1.25}
+.c2{flex:1;padding:0 26px 0 22px;font-size:19.5px;color:#3b4254;line-height:1.35;border-left:3px solid var(--line);height:78px;display:flex;align-items:center}
+.c2 b{font-weight:700;color:var(--brand-dark)}
+.hd .c1{margin-left:30px;color:#fff;font-size:20px;width:392px}.hd .c2{color:#fff;font-size:20px;font-weight:700;border:none;padding-left:0}
+.cap{position:absolute;left:30px;width:500px;font-size:14px;color:#5a6075;line-height:1.35}
+</style></head><body>
 <div class="panel"><div class="ph">RISK HEAT MAP</div></div>
 <div id="g"></div>
-<div class="row hd" style="top:96px"><div class="c1">ATTACK THE JUDGES TEST</div><div class="c2">HOW THE DESIGN ANSWERS IT</div></div>
+<div class="row hd" style="top:0"><div class="c1">RISK</div><div class="c2">MITIGATION</div></div>
 <script>
+const COL='#1f4fc4';
+// circle = designed out, square = enforced by the server, triangle = you confirm
+const SH={
+ c:s=>`<svg width="${s}" height="${s}" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" fill="${COL}" stroke="#fff" stroke-width="3"/></svg>`,
+ s:s=>`<svg width="${s}" height="${s}" viewBox="0 0 64 64"><rect x="4" y="4" width="56" height="56" rx="9" fill="${COL}" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>`,
+ t:s=>`<svg width="${s}" height="${s}" viewBox="0 0 64 64"><path d="M32 3 L62 58 H2 Z" fill="${COL}" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>`
+};
+const topPct={c:0.32,s:0.32,t:0.36};
 const shade={2:'#f1f5ff',3:'#dce7ff',4:'#bcd0ff',5:'#8fb0ff',6:'#5b8fff'};
-let h='';const X0=124,Y0=186;
-for(let r=0;r<3;r++)for(let c=0;c<3;c++){const L=3-r,I=c+1;h+=`<div class="cell" style="left:${X0+c*138}px;top:${Y0+r*138}px;background:${shade[L+I]}"></div>`}
-const mk={1:[2,0],5:[1,0],2:[2,1],3:[1,1],4:[2,2]};
-for(const k in mk){const [c,r]=mk[k];h+=`<div class="mk" style="left:${X0+c*138+40}px;top:${Y0+r*138+40}px">${k}</div>`}
-['HIGH','MEDIUM','LOW'].forEach((t,i)=>h+=`<div class="ax" style="left:40px;top:${Y0+i*138+56}px;width:76px;text-align:right">${t}</div>`);
-['LOW','MEDIUM','HIGH'].forEach((t,i)=>h+=`<div class="ax" style="left:${X0+i*138}px;top:${Y0+420}px;width:132px;text-align:center">${t}</div>`);
-h+=`<div class="ax" style="left:${X0}px;top:${Y0+452}px;width:408px;text-align:center;font-size:17px;color:#14307f">IMPACT</div>`;
-h+=`<div class="ax" style="left:-26px;top:${Y0+195}px;width:110px;text-align:center;font-size:17px;color:#14307f;transform:rotate(-90deg)">LIKELIHOOD</div>`;
-h+=`<div class="cap" style="left:30px;top:${Y0+510}px">Team assessment of the design, before the build is tested.</div>`;
+let h='';const X0=128,Y0=176,P=130,W=124;
+const legend=[['c','Designed out','No such capability'],['s','Server-enforced','Checked every request'],['t','You confirm','Counts after you confirm']];
+legend.forEach((l,i)=>h+=`<div class="lg" style="left:${i*184+6}px">${SH[l[0]](38)}<b>${l[1]}</b><span>${l[2]}</span></div>`);
+for(let r=0;r<3;r++)for(let c=0;c<3;c++){const L=3-r,I=c+1;h+=`<div class="cell" style="left:${X0+c*P}px;top:${Y0+r*P}px;background:${shade[L+I]}"></div>`}
+// risk number: [impact col, likelihood row, shape]
+const mk={1:[2,0,'s'],5:[1,0,'t'],2:[2,1,'s'],3:[1,1,'s'],4:[2,2,'c']};
+for(const k in mk){const [c,r,sh]=mk[k];h+=`<div class="mk" style="left:${X0+c*P+30}px;top:${Y0+r*P+30}px">${SH[sh](64)}<i style="top:${topPct[sh]*64}px;line-height:${sh==='t'?30:30}px">${k}</i></div>`}
+['HIGH','MEDIUM','LOW'].forEach((t,i)=>h+=`<div class="ax" style="left:36px;top:${Y0+i*P+54}px;width:84px;text-align:right">${t}</div>`);
+['LOW','MEDIUM','HIGH'].forEach((t,i)=>h+=`<div class="ax" style="left:${X0+i*P}px;top:${Y0+3*P+4}px;width:${W}px;text-align:center">${t}</div>`);
+h+=`<div class="ax" style="left:${X0}px;top:${Y0+3*P+30}px;width:${3*P-6}px;text-align:center;font-size:16px;color:var(--navy)">IMPACT</div>`;
+h+=`<div class="ax" style="left:-22px;top:${Y0+180}px;width:110px;text-align:center;font-size:16px;color:var(--navy);transform:rotate(-90deg)">LIKELIHOOD</div>`;
+h+=`<div class="cap" style="top:${Y0+3*P+66}px">Team assessment of the design, before the build is tested.</div>`;
 const rows=[
-["Prompt injection","Hidden instructions in an email or receipt","Content is treated as data, never as instructions. Every Agent Tool sits in a permission tier."],
-["Privilege escalation","Reaching another user's data or actions","The server verifies identity and ownership on every request. A WhatsApp number must be linked and verified first, and row-level security is the last line."],
-["Data extraction","Coaxing the Agent into revealing data","The Agent reads only the signed-in user's own data, through backend operations. Raw emails and conversations are never logged, and keys stay server-side."],
-["Induced transfers","Tricking the Agent into moving money","Monara has no payment tool, so it cannot move money. Deletes and other destructive actions always ask first."],
-["Invented amounts","Made-up or wrong figures in the ledger","Fields are never guessed. Every extracted item stays Pending until you confirm it."]
+['s',"Prompt injection","Hidden instructions in an email or receipt","Content is treated as <b>data, never as instructions</b>. Every Agent Tool sits in a <b>permission tier</b>."],
+['s',"Privilege escalation","Reaching another user's data or actions","The server checks <b>identity and ownership</b> on every request, and row-level security is the last line. A WhatsApp number must be linked and verified first."],
+['s',"Data extraction","Coaxing the Agent into revealing data","The Agent reads only the signed-in user's own data, through backend operations. Raw emails and conversations are <b>never logged</b>, and keys stay server-side."],
+['c',"Induced transfers","Tricking the Agent into moving money","Monara has <b>no payment tool</b>, so it cannot move money. Deletes and other destructive actions always <b>ask first</b>."],
+['t',"Invented amounts","Made-up or wrong figures in the ledger","Fields are never guessed. Every extracted item stays <b>Pending until you confirm it</b>."]
 ];
-rows.forEach((r,i)=>{h+=`<div class="row" style="top:${176+i*128}px"><div class="n">${i+1}</div><div class="c1">${r[0]}<small>${r[1]}</small></div><div class="c2">${r[2]}</div></div>`});
+rows.forEach((r,i)=>{h+=`<div class="row" style="top:${80+i*128}px"><div class="n">${SH[r[0]](64)}<i style="top:${topPct[r[0]]*64}px;line-height:30px">${i+1}</i></div><div class="c1">${r[1]}<small>${r[2]}</small></div><div class="c2"><span>${r[3]}</span></div></div>`});
 document.getElementById('g').innerHTML=h;
-</script></div></body></html>
+</script></body></html>
