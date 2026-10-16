@@ -592,6 +592,50 @@ describe("financial HTTP boundary", () => {
     assert.equal(result.financialAccount.lastFour, null);
   });
 
+  it("updates accounts with the reviewed version and preserves their identity", async () => {
+    const input = {
+      financialAccountId: accountId,
+      expectedUpdatedAt: timestamp,
+      changes: { name: "Daily wallet", institution: "GoPay", accountType: "wallet" },
+    };
+    const result = await callFinanceOperation(
+      "update_financial_account",
+      input,
+      async (path, options) => {
+        assert.equal(path, "/api/finance/operations/update_financial_account");
+        assert.deepEqual(JSON.parse(options.body), input);
+        return Response.json({
+          financialAccount: { ...accounts[0], ...input.changes },
+          action: action("financial_account", accountId),
+        });
+      },
+    );
+    assert.equal(result.financialAccount.id, accountId);
+    assert.equal(result.financialAccount.name, "Daily wallet");
+    assert.equal(result.financialAccount.accountType, "wallet");
+  });
+
+  it("deactivates an account without deleting its record", async () => {
+    const result = await callFinanceOperation(
+      "update_financial_account",
+      {
+        financialAccountId: accountId,
+        expectedUpdatedAt: timestamp,
+        changes: { isActive: false },
+      },
+      async (path, options) => {
+        assert.equal(path, "/api/finance/operations/update_financial_account");
+        assert.deepEqual(JSON.parse(options.body).changes, { isActive: false });
+        return Response.json({
+          financialAccount: { ...accounts[0], isActive: false },
+          action: action("financial_account", accountId),
+        });
+      },
+    );
+    assert.equal(result.financialAccount.id, accountId);
+    assert.equal(result.financialAccount.isActive, false);
+  });
+
   it("keeps decimal-string money exact and uses the private cookie request boundary", async () => {
     const huge = record({ money: { amountMinor: "99999999999999999999", currency: "IDR" } });
     const response = await callFinanceOperation("list_transactions", {}, async (path, options) => {

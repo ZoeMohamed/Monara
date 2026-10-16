@@ -6,6 +6,8 @@ import {
   type FinancialAccount,
   type Institution,
   institutions,
+  type UpdateFinancialAccountInput,
+  updateFinancialAccountInputSchema,
 } from "@monara/contracts";
 import { Button } from "@monara/ui";
 import { type FormEvent, useId, useRef, useState } from "react";
@@ -29,14 +31,72 @@ type AccountDraft = {
   lastFour: string;
 };
 type AccountErrors = Partial<Record<keyof AccountDraft, string>>;
+type DemoAccountChanges = Partial<
+  Pick<FinancialAccount, "name" | "institution" | "accountType" | "isActive">
+>;
 
-const emptyDraft: AccountDraft = {
-  name: "",
-  accountType: "bank",
-  institution: "",
-  institutionKey: "",
-  lastFour: "",
-};
+function draftOf(account?: FinancialAccount): AccountDraft {
+  return {
+    name: account?.name ?? "",
+    accountType: account?.accountType ?? "bank",
+    institution: account?.institution ?? "",
+    institutionKey: account?.institutionKey ?? "",
+    lastFour: account?.lastFour ?? "",
+  };
+}
+
+function accountChanges(draft: AccountDraft) {
+  return {
+    name: draft.name.trim(),
+    accountType: draft.accountType,
+    institution: draft.accountType === "cash" ? null : draft.institution.trim() || null,
+    lastFour: draft.accountType === "cash" ? null : draft.lastFour.trim() || null,
+    institutionKey: draft.accountType === "cash" ? null : draft.institutionKey || null,
+  };
+}
+
+function accountErrors(issues: { path: readonly PropertyKey[]; message: string }[]): AccountErrors {
+  const errors: AccountErrors = {};
+  for (const issue of issues) {
+    const field = issue.path[0] === "changes" ? issue.path[1] : issue.path[0];
+    if (
+      field === "name" ||
+      field === "institution" ||
+      field === "accountType" ||
+      field === "lastFour"
+    ) {
+      errors[field] ??= field === "lastFour" ? "Enter exactly 4 digits." : issue.message;
+    }
+  }
+  return errors;
+}
+
+function accountErrorsFromFields(fields?: Record<string, string[]>): AccountErrors {
+  return {
+    ...(fields?.["changes.name"]?.[0] ? { name: fields["changes.name"][0] } : {}),
+    ...(fields?.["changes.institution"]?.[0]
+      ? { institution: fields["changes.institution"][0] }
+      : {}),
+    ...(fields?.["changes.accountType"]?.[0]
+      ? { accountType: fields["changes.accountType"][0] }
+      : {}),
+  };
+}
+
+function accountMatchesChanges(
+  account: FinancialAccount,
+  changes: UpdateFinancialAccountInput["changes"],
+) {
+  return (
+    (changes.name === undefined || account.name === changes.name) &&
+    (changes.institution === undefined || account.institution === changes.institution) &&
+    (changes.accountType === undefined || account.accountType === changes.accountType) &&
+    (changes.currency === undefined || account.currency === changes.currency) &&
+    (changes.lastFour === undefined || account.lastFour === changes.lastFour) &&
+    (changes.institutionKey === undefined || account.institutionKey === changes.institutionKey) &&
+    (changes.isActive === undefined || account.isActive === changes.isActive)
+  );
+}
 
 /** Registry entries that fit an account type: banks and cards, or wallets. */
 function notificationChoices(accountType: AccountDraft["accountType"]): Institution[] {
@@ -240,7 +300,7 @@ function AccountFields({
 
 function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () => void }) {
   const [state, setState] = useState({
-    draft: emptyDraft,
+    draft: draftOf(),
     errors: {} as AccountErrors,
     pending: false,
     uncertain: false,
@@ -270,17 +330,7 @@ function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () 
         clientRequestId: "preflight",
       });
       if (!parsed.success) {
-        const errors: AccountErrors = {};
-        for (const issue of parsed.error.issues) {
-          const field = issue.path[0];
-          if (
-            field === "name" ||
-            field === "institution" ||
-            field === "accountType" ||
-            field === "lastFour"
-          )
-            errors[field] ??= field === "lastFour" ? "Enter exactly 4 digits." : issue.message;
-        }
+        const errors = accountErrors(parsed.error.issues);
         setState((previous) => ({ ...previous, errors, error: "Check the marked fields." }));
         return;
       }
@@ -384,13 +434,311 @@ function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () 
   );
 }
 
+type AccountEditorProps = FinanceManagerProps & {
+  account: FinancialAccount;
+  onClose: () => void;
+};
+
+type AccountEditorState = {
+  draft: AccountDraft;
+  errors: AccountErrors;
+  mode: "edit" | "status";
+  pending: boolean;
+  uncertain: boolean;
+  conflict: boolean;
+  error: string | null;
+};
+
+function useAccountEditor({ account, onClose, ...props }: AccountEditorProps) {
+  const original = useRef(account);
+  const request = useRef<UpdateFinancialAccountInput | null>(null);
+  const inFlight = useRef(false);
+  const [state, setState] = useState<AccountEditorState>({
+    draft: draftOf(account),
+    errors: {},
+    mode: "edit",
+    pending: false,
+    uncertain: false,
+    conflict: false,
+    error: null as string | null,
+  });
+  const current = props.snapshot.financialAccounts.find((item) => item.id === original.current.id);
+  const versionChanged = current?.updatedAt !== original.current.updatedAt;
+  const reconciled = Boolean(
+    state.uncertain &&
+      versionChanged &&
+      current &&
+      request.current &&
+      accountMatchesChanges(current, request.current.changes),
+  );
+  const blocked = Boolean(props.refreshRequired) || versionChanged || state.conflict;
+  const values = accountChanges(state.draft);
+  const unchanged = accountMatchesChanges(original.current, values);
+  const locked = state.pending || state.uncertain || blocked;
+  const active = current?.isActive ?? original.current.isActive;
+  const close = () => {
+    if (!inFlight.current) onClose();
+  };
+  const change = (patch: Partial<AccountDraft>) =>
+    setState((previous) => ({
+      ...previous,
+      draft: { ...previous.draft, ...patch },
+      errors: {},
+      error: null,
+    }));
+  const save = async (changes: UpdateFinancialAccountInput["changes"]) => {
+    if (inFlight.current || blocked || reconciled || state.uncertain) return;
+    const parsed = updateFinancialAccountInputSchema.safeParse({
+      financialAccountId: original.current.id,
+      expectedUpdatedAt: original.current.updatedAt,
+      changes,
+    });
+    if (!parsed.success) {
+      setState((previous) => ({
+        ...previous,
+        errors: accountErrors(parsed.error.issues),
+        error: "Check the marked fields.",
+      }));
+      return;
+    }
+    const submitted = parsed.data;
+    request.current = submitted;
+    inFlight.current = true;
+    setState((previous) => ({ ...previous, pending: true, error: null, errors: {} }));
+    try {
+      await props.runMutation(async () => {
+        const result = await callFinanceOperation("update_financial_account", submitted);
+        if (
+          result.financialAccount.id !== submitted.financialAccountId ||
+          !accountMatchesChanges(result.financialAccount, submitted.changes)
+        ) {
+          throw new FinanceClientError(
+            "DEPENDENCY_UNAVAILABLE",
+            "The account update could not be verified. Refresh your records.",
+            null,
+            true,
+          );
+        }
+        return result;
+      });
+      onClose();
+    } catch (error) {
+      const known = error instanceof FinanceClientError;
+      const uncertain = !known || error.actionMayHaveCompleted;
+      if (!uncertain && !state.uncertain) request.current = null;
+      setState((previous) => ({
+        ...previous,
+        pending: false,
+        uncertain: previous.uncertain || uncertain,
+        conflict: known && error.code === "CONFLICT",
+        error: known
+          ? error.message
+          : "The account update could not be verified. Refresh your records.",
+        errors: known ? accountErrorsFromFields(error.fieldErrors) : previous.errors,
+      }));
+    } finally {
+      inFlight.current = false;
+    }
+  };
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (state.mode === "edit" && !unchanged) void save(values);
+  };
+  const setMode = (mode: AccountEditorState["mode"]) =>
+    setState((previous) => ({ ...previous, mode, error: null }));
+  return {
+    active,
+    blocked,
+    change,
+    close,
+    locked,
+    name: original.current.name,
+    onRefreshRecords: props.onRefreshRecords,
+    reconciled,
+    save,
+    setMode,
+    state,
+    submit,
+    unchanged,
+    versionChanged,
+  };
+}
+
+type LiveAccountEditor = ReturnType<typeof useAccountEditor>;
+
+function AccountStatusFields({ editor }: { editor: LiveAccountEditor }) {
+  const { active, blocked, onRefreshRecords, save, setMode, state } = editor;
+  return (
+    <>
+      <p className="text-sm leading-6 text-muted">
+        {active
+          ? "This account will no longer be available for new payments or transfers. Existing transaction history stays linked to it."
+          : "This account will become available for new payments and transfers again."}
+      </p>
+      {state.error ? (
+        <p className={styles.error} role="alert">
+          {state.error}
+        </p>
+      ) : null}
+      {(blocked || state.uncertain) && (
+        <FinanceRecovery
+          message="Check your records before retrying this account change."
+          onRefreshRecords={onRefreshRecords}
+        />
+      )}
+      <div className={styles.footer}>
+        <Button
+          className="min-h-11"
+          isDisabled={state.pending}
+          onPress={() => setMode("edit")}
+          variant="secondary"
+        >
+          Back
+        </Button>
+        <Button
+          className="min-h-11"
+          isDisabled={state.pending || state.uncertain || blocked}
+          onPress={() => void save({ isActive: !active })}
+          variant={active ? "danger" : "primary"}
+        >
+          {state.pending ? "Saving…" : active ? "Deactivate account" : "Reactivate account"}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function AccountEditFields({ editor }: { editor: LiveAccountEditor }) {
+  const {
+    active,
+    blocked,
+    change,
+    close,
+    locked,
+    onRefreshRecords,
+    setMode,
+    state,
+    unchanged,
+    versionChanged,
+  } = editor;
+  return (
+    <>
+      <AccountFields
+        disabled={locked}
+        draft={state.draft}
+        errors={state.errors}
+        onChange={change}
+      />
+      <div className="rounded-2xl border border-separator p-3">
+        <p className="text-sm font-semibold">Account status</p>
+        <p className="mt-1 text-xs leading-5 text-muted">
+          {active
+            ? "Active accounts are available for new payments and transfers."
+            : "Inactive accounts stay in your history but cannot be used for new transactions."}
+        </p>
+        <Button
+          className={`mt-2 min-h-11 rounded-full ${active ? "text-danger" : ""}`}
+          isDisabled={locked}
+          onPress={() => setMode("status")}
+          variant="ghost"
+        >
+          {active ? "Deactivate account" : "Reactivate account"}
+        </Button>
+      </div>
+      {state.error ? (
+        <p className={styles.error} role="alert">
+          {state.error}
+        </p>
+      ) : null}
+      {versionChanged || state.conflict ? (
+        <p className={styles.meta} role="status">
+          This account changed while you were editing. Refresh, then reopen it.
+        </p>
+      ) : null}
+      {(blocked || state.uncertain) && (
+        <FinanceRecovery
+          message="Check your records before retrying. A retry keeps the same reviewed account version."
+          onRefreshRecords={onRefreshRecords}
+        />
+      )}
+      <div className={styles.footer}>
+        <Button className="min-h-11" isDisabled={state.pending} onPress={close} variant="secondary">
+          Cancel
+        </Button>
+        <Button
+          className="min-h-11"
+          isDisabled={state.pending || state.uncertain || blocked || unchanged}
+          type="submit"
+        >
+          {state.pending ? "Saving…" : state.uncertain ? "Retry same change" : "Save account"}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function AccountEditorContent({ editor }: { editor: LiveAccountEditor }) {
+  if (editor.reconciled) {
+    return (
+      <>
+        <p className="text-sm leading-6" role="status">
+          The updated account now appears in your records.
+        </p>
+        <Button className="min-h-11" onPress={editor.close}>
+          Done
+        </Button>
+      </>
+    );
+  }
+  if (editor.state.mode === "status") return <AccountStatusFields editor={editor} />;
+  return <AccountEditFields editor={editor} />;
+}
+
+function AccountEditor(props: AccountEditorProps) {
+  const editor = useAccountEditor(props);
+  const title =
+    editor.state.mode === "edit"
+      ? "Edit account"
+      : editor.active
+        ? `Deactivate ${editor.name}?`
+        : `Reactivate ${editor.name}?`;
+  return (
+    <ModalDialog labelledBy="account-editor-title" onClose={editor.close}>
+      <form
+        aria-busy={editor.state.pending}
+        className={styles.form}
+        noValidate
+        onSubmit={editor.submit}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-xl font-bold" id="account-editor-title">
+            {title}
+          </h2>
+          <Button
+            aria-label="Close account editor"
+            isDisabled={editor.state.pending}
+            isIconOnly
+            onPress={editor.close}
+            variant="ghost"
+          >
+            <Icon name="close" />
+          </Button>
+        </div>
+        <AccountEditorContent editor={editor} />
+      </form>
+    </ModalDialog>
+  );
+}
+
 export function FinancialAccountSetup({
   allowAdditional = false,
   ...props
 }: FinanceManagerProps & { allowAdditional?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const titleId = useId();
   const accounts = props.snapshot.financialAccounts;
+  const selected = accounts.find((account) => account.id === selectedId);
   if (!allowAdditional && accounts.some((account) => account.isActive)) return null;
   return (
     <section aria-labelledby={titleId} className={`${styles.item} mt-4`}>
@@ -411,11 +759,18 @@ export function FinancialAccountSetup({
                       ? "Wallet"
                       : "Cash"}
                   {account.institution ? ` · ${account.institution}` : ""} · {account.currency}
+                  {!account.isActive ? " · Inactive" : ""}
                 </p>
               </div>
-              {!account.isActive ? (
-                <span className="shrink-0 text-xs text-muted">Inactive</span>
-              ) : null}
+              <Button
+                aria-label={`Edit ${account.name}`}
+                className="min-h-11 shrink-0 rounded-full px-4"
+                isDisabled={Boolean(props.refreshRequired)}
+                onPress={() => setSelectedId(account.id)}
+                variant="secondary"
+              >
+                Edit
+              </Button>
             </li>
           ))}
         </ul>
@@ -433,26 +788,194 @@ export function FinancialAccountSetup({
         {allowAdditional ? "Add bank or wallet" : "Add your first account"}
       </Button>
       {open && <AccountForm {...props} onClose={() => setOpen(false)} />}
+      {selected ? (
+        <AccountEditor
+          {...props}
+          account={selected}
+          key={selected.id}
+          onClose={() => setSelectedId(null)}
+        />
+      ) : null}
     </section>
+  );
+}
+
+type DemoAccountEditorProps = {
+  account: FinancialAccount;
+  onUpdate: (accountId: string, changes: DemoAccountChanges) => void;
+  onClose: () => void;
+};
+
+function useDemoAccountEditor({ account, onUpdate, onClose }: DemoAccountEditorProps) {
+  const [state, setState] = useState({
+    draft: draftOf(account),
+    errors: {} as AccountErrors,
+    mode: "edit" as "edit" | "status",
+    error: null as string | null,
+  });
+  const values = accountChanges(state.draft);
+  const unchanged = accountMatchesChanges(account, values);
+  const change = (patch: Partial<AccountDraft>) =>
+    setState((previous) => ({
+      ...previous,
+      draft: { ...previous.draft, ...patch },
+      errors: {},
+      error: null,
+    }));
+  const update = (changes: DemoAccountChanges) => {
+    try {
+      onUpdate(account.id, changes);
+      onClose();
+    } catch (failure) {
+      setState((previous) => ({
+        ...previous,
+        error: failure instanceof Error ? failure.message : "Check the account details.",
+      }));
+    }
+  };
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (state.mode !== "edit" || unchanged) return;
+    const parsed = updateFinancialAccountInputSchema.safeParse({
+      financialAccountId: account.id,
+      expectedUpdatedAt: account.updatedAt,
+      changes: values,
+    });
+    if (!parsed.success) {
+      setState((previous) => ({
+        ...previous,
+        errors: accountErrors(parsed.error.issues),
+        error: "Check the marked fields.",
+      }));
+      return;
+    }
+    update(parsed.data.changes);
+  };
+  const setMode = (mode: "edit" | "status") =>
+    setState((previous) => ({ ...previous, mode, error: null }));
+  return { account, change, onClose, setMode, state, submit, unchanged, update };
+}
+
+type DemoAccountEditorState = ReturnType<typeof useDemoAccountEditor>;
+
+function DemoAccountStatusFields({ editor }: { editor: DemoAccountEditorState }) {
+  const { account, setMode, state, update } = editor;
+  return (
+    <>
+      <p className="text-sm leading-6 text-muted">
+        {account.isActive
+          ? "This account will no longer be available for new payments or transfers. Existing transaction history stays linked to it."
+          : "This account will become available for new payments and transfers again."}
+      </p>
+      {state.error ? (
+        <p className={styles.error} role="alert">
+          {state.error}
+        </p>
+      ) : null}
+      <p className={styles.meta}>Changes last for this demo visit.</p>
+      <div className={styles.footer}>
+        <Button className="min-h-11" onPress={() => setMode("edit")} variant="secondary">
+          Back
+        </Button>
+        <Button
+          className="min-h-11"
+          onPress={() => update({ isActive: !account.isActive })}
+          variant={account.isActive ? "danger" : "primary"}
+        >
+          {account.isActive ? "Deactivate account" : "Reactivate account"}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function DemoAccountEditFields({ editor }: { editor: DemoAccountEditorState }) {
+  const { account, change, onClose, setMode, state, unchanged } = editor;
+  return (
+    <>
+      <AccountFields disabled={false} draft={state.draft} errors={state.errors} onChange={change} />
+      <div className="rounded-2xl border border-separator p-3">
+        <p className="text-sm font-semibold">Account status</p>
+        <p className="mt-1 text-xs leading-5 text-muted">
+          {account.isActive
+            ? "Active accounts are available for new payments and transfers."
+            : "Inactive accounts stay in your history but cannot be used for new transactions."}
+        </p>
+        <Button
+          className={`mt-2 min-h-11 rounded-full ${account.isActive ? "text-danger" : ""}`}
+          onPress={() => setMode("status")}
+          variant="ghost"
+        >
+          {account.isActive ? "Deactivate account" : "Reactivate account"}
+        </Button>
+      </div>
+      {state.error ? (
+        <p className={styles.error} role="alert">
+          {state.error}
+        </p>
+      ) : null}
+      <p className={styles.meta}>Changes last for this demo visit.</p>
+      <div className={styles.footer}>
+        <Button className="min-h-11" onPress={onClose} variant="secondary">
+          Cancel
+        </Button>
+        <Button className="min-h-11" isDisabled={unchanged} type="submit">
+          Save account
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function DemoAccountEditor({ account, onUpdate, onClose }: DemoAccountEditorProps) {
+  const editor = useDemoAccountEditor({ account, onUpdate, onClose });
+  const status = editor.state.mode === "status";
+  const title = status
+    ? account.isActive
+      ? `Deactivate ${account.name}?`
+      : `Reactivate ${account.name}?`
+    : "Edit account";
+  return (
+    <ModalDialog labelledBy="demo-account-editor-title" onClose={onClose}>
+      <form className={styles.form} noValidate onSubmit={editor.submit}>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-xl font-bold" id="demo-account-editor-title">
+            {title}
+          </h2>
+          <Button aria-label="Close account editor" isIconOnly onPress={onClose} variant="ghost">
+            <Icon name="close" />
+          </Button>
+        </div>
+        {status ? (
+          <DemoAccountStatusFields editor={editor} />
+        ) : (
+          <DemoAccountEditFields editor={editor} />
+        )}
+      </form>
+    </ModalDialog>
   );
 }
 
 export function DemoFinancialAccountSetup({
   accounts,
   onCreate,
+  onUpdate,
 }: {
   accounts: FinancialAccount[];
   onCreate: (input: Omit<CreateFinancialAccountInput, "clientRequestId">) => void;
+  onUpdate: (accountId: string, changes: DemoAccountChanges) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState<AccountDraft>(emptyDraft);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<AccountDraft>(() => draftOf());
   const [error, setError] = useState<string | null>(null);
+  const selected = accounts.find((account) => account.id === selectedId);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
       onCreate(accountValues(draft));
       setOpen(false);
-      setDraft(emptyDraft);
+      setDraft(draftOf());
       setError(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Check the account details.");
@@ -476,8 +999,17 @@ export function DemoFinancialAccountSetup({
                     ? "Bank"
                     : "Cash"}
                 {account.institution ? ` · ${account.institution}` : ""}
+                {!account.isActive ? " · Inactive" : ""}
               </p>
             </div>
+            <Button
+              aria-label={`Edit ${account.name}`}
+              className="min-h-11 shrink-0 rounded-full px-4"
+              onPress={() => setSelectedId(account.id)}
+              variant="secondary"
+            >
+              Edit
+            </Button>
           </li>
         ))}
       </ul>
@@ -525,6 +1057,14 @@ export function DemoFinancialAccountSetup({
           </form>
         </ModalDialog>
       )}
+      {selected ? (
+        <DemoAccountEditor
+          account={selected}
+          key={selected.id}
+          onClose={() => setSelectedId(null)}
+          onUpdate={onUpdate}
+        />
+      ) : null}
     </section>
   );
 }
