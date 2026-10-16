@@ -65,6 +65,20 @@ export function parseEnv(content) {
   return entries;
 }
 
+// Templates supply new keys; inherited and existing local values take precedence.
+// Only a newly created web env must discard another checkout's database credentials.
+export function seedEnvContent({ template, source = "", existing, values, blankKeys = [] }) {
+  const inherited = parseEnv(existing ?? source);
+  const overrides =
+    existing === undefined ? Object.fromEntries(blankKeys.map((key) => [key, ""])) : {};
+  return setEnvValues(existing ?? (source || template), {
+    ...parseEnv(template),
+    ...inherited,
+    ...overrides,
+    ...values,
+  });
+}
+
 export function worktreeEnvContent(slot) {
   const ports = portsForSlot(slot);
   return [

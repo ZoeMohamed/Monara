@@ -3,7 +3,7 @@
   "scripts": [
     {
       "name": "Setup worktree",
-      "command": "pnpm install --frozen-lockfile",
+      "command": "pnpm install --frozen-lockfile && pnpm db:start --runtime docker",
       "icon": "configure",
       "runOnWorktreeCreate": true,
       "async": false

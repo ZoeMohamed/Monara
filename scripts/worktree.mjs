@@ -1,6 +1,7 @@
 // Per-worktree local environment: port slot, env files, and local Supabase stack cleanup.
 // Usage: node scripts/worktree.mjs <setup|teardown|prune|status> [--quiet]
 import { execFileSync, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -11,10 +12,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { atomicWriteEnv } from "./lib/atomic-env.mjs";
 import {
   allocateSlot,
+  parseEnv,
   portsForSlot,
   releaseSlot,
+  seedEnvContent,
   setEnvValues,
   worktreeEnvContent,
 } from "./lib/worktree.mjs";
@@ -93,11 +97,16 @@ const writeClaims = (registry, claims) =>
   writeFileSync(registry, `${JSON.stringify(claims, null, 2)}\n`);
 
 function seedEnvFile({ destination, mainSource, template, values, blankKeys = [] }) {
-  if (existsSync(destination)) return false;
-  const source = existsSync(mainSource) ? mainSource : template;
-  const blanked = Object.fromEntries(blankKeys.map((key) => [key, ""]));
-  const content = setEnvValues(readFileSync(source, "utf8"), { ...blanked, ...values });
-  writeFileSync(destination, content);
+  const existing = existsSync(destination) ? readFileSync(destination, "utf8") : undefined;
+  const content = seedEnvContent({
+    template: readFileSync(template, "utf8"),
+    source: existsSync(mainSource) ? readFileSync(mainSource, "utf8") : "",
+    existing,
+    values,
+    blankKeys,
+  });
+  if (content === existing) return false;
+  atomicWriteEnv(destination, content);
   return true;
 }
 
@@ -149,21 +158,47 @@ async function setup(context) {
   const ports = portsForSlot(slot);
   writeFileSync(join(context.root, ".worktree.env"), worktreeEnvContent(slot));
 
+  const source = process.env.MONARA_ENV_SOURCE
+    ? canonical(resolve(process.env.MONARA_ENV_SOURCE))
+    : context.main;
+  if (
+    process.env.MONARA_ENV_SOURCE &&
+    !["apps/web/.env.local", "apps/agent/.dev.vars"].every((file) => existsSync(join(source, file)))
+  ) {
+    throw new Error("MONARA_ENV_SOURCE must contain apps/web/.env.local and apps/agent/.dev.vars.");
+  }
+
   const seeded = [
     seedEnvFile({
       destination: join(context.root, "apps/web/.env.local"),
-      mainSource: join(context.main, "apps/web/.env.local"),
+      mainSource: join(source, "apps/web/.env.local"),
       template: join(context.root, "apps/web/.env.example"),
       values: { MONARA_AGENT_URL: `http://localhost:${ports.agent}` },
       blankKeys: SUPABASE_ENV_KEYS,
     }),
     seedEnvFile({
       destination: join(context.root, "apps/agent/.dev.vars"),
-      mainSource: join(context.main, "apps/agent/.dev.vars"),
+      mainSource: join(source, "apps/agent/.dev.vars"),
       template: join(context.root, "apps/agent/.dev.vars.example"),
       values: { MONARA_BACKEND_URL: `http://localhost:${ports.web}` },
     }),
   ];
+  const envPaths = ["apps/web/.env.local", "apps/agent/.dev.vars"].map((file) =>
+    join(context.root, file),
+  );
+  const contents = envPaths.map((file) => readFileSync(file, "utf8"));
+  const secrets = contents
+    .map((content) => parseEnv(content).MONARA_AGENT_BACKEND_SECRET?.trim())
+    .filter(Boolean);
+  if (new Set(secrets).size > 1) {
+    throw new Error(
+      "Web and agent MONARA_AGENT_BACKEND_SECRET values differ. Align the local env files before continuing.",
+    );
+  }
+  const secret = secrets[0] ?? randomBytes(32).toString("hex");
+  contents.forEach((content, index) => {
+    atomicWriteEnv(envPaths[index], setEnvValues(content, { MONARA_AGENT_BACKEND_SECRET: secret }));
+  });
   log(
     `Worktree slot ${slot}: web ${ports.web}, agent ${ports.agent}, inspector ${ports.inspector}.`,
   );

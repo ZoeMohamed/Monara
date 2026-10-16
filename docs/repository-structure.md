@@ -75,12 +75,14 @@ pnpm db:stop
 
 ## Worktrees
 
-Every linked worktree gets an isolated local environment. `pnpm install` runs `scripts/worktree.mjs setup` through the `prepare` script, so any tool that creates a worktree and installs dependencies is covered. A Husky `post-checkout` hook cannot do this, because `.husky/_` does not exist in a fresh worktree until the first install.
+Every linked worktree gets an isolated local environment. Run `pnpm worktree:bootstrap` for a complete setup: install locked dependencies, prepare local env files and ports, start the Docker-backed Supabase stack, apply pending local migrations without resetting data, and verify the migrated database API before reporting readiness. After setup succeeds, run `pnpm dev`; start `pnpm dev:agent` separately when needed. OrbStack (macOS) or Docker Desktop (Windows) must be running. A failed database startup fails setup rather than reporting success.
+
+`pnpm install` alone remains independent of Docker and runs `scripts/worktree.mjs setup` through the `prepare` script, so any tool that creates a worktree and installs dependencies is covered. A Husky `post-checkout` hook cannot do this, because `.husky/_` does not exist in a fresh worktree until the first install.
 
 | Resource | How it is isolated |
 | --- | --- |
 | Web, agent, and inspector ports | A numbered slot `n` from a locked registry in git's common directory: web `3000+n`, agent `8787+n`, inspector `9229+n`. The main checkout is slot 0. The slot is written to the ignored `.worktree.env`, and `pnpm dev` and `pnpm dev:agent` read it. |
-| Env files | `apps/web/.env.local` and `apps/agent/.dev.vars` are copied from the main checkout (or from the `.example` templates), with `MONARA_AGENT_URL` and `MONARA_BACKEND_URL` pointed at the worktree's ports. The Supabase values are left blank so the worktree cannot reach another checkout's database. |
+| Env files | `apps/web/.env.local` and `apps/agent/.dev.vars` are copied from the main checkout (or from the `.example` templates), with `MONARA_AGENT_URL` and `MONARA_BACKEND_URL` pointed at the worktree's ports. Set `MONARA_ENV_SOURCE` to another checkout root to choose an explicit source; both env files must exist there. Existing local values are preserved, missing template keys are added, and a missing shared web/agent secret is generated locally. Conflicting shared secrets fail setup. Only new env files have their inherited Supabase values cleared; database startup replaces them with the verified local stack credentials. |
 | Supabase | Stack mode (`supabase stack`) gives each worktree its own containers, data, and ports. `supabase/config.toml` sets no fixed ports. Stack mode is experimental, so the CLI version is pinned exactly. |
 
 ```bash
@@ -91,7 +93,7 @@ pnpm worktree:prune      # clear claims and stacks of worktrees that no longer e
 
 Run `pnpm worktree:teardown` before removing a worktree. If a worktree was removed without it, `pnpm worktree:prune` cleans up. `.wt/config.toml` wires setup and teardown into the `wt` CLI.
 
-The root `t3.json` defines T3 Code's **Setup worktree** action. It runs `pnpm install --frozen-lockfile`, which installs dependencies and runs environment setup through `prepare`. `runOnWorktreeCreate: true` runs it for each new T3 worktree, and `async: false` holds the agent until setup exits. For an existing T3 project, import the actions from `t3.json` in **Settings → Project → Actions** and verify **Setup worktree** appears with automatic worktree execution enabled. The file must be present in the checkout used to create the worktree; adding it on a feature branch does not update the project's main checkout. See [T3 project settings](https://github.com/pingdotgg/t3code/blob/main/docs/user/project-settings.md) and [the worktree environment decision](adr/0003-worktree-environments.md).
+The root `t3.json` defines T3 Code's **Setup worktree** action. It runs `pnpm install --frozen-lockfile && pnpm db:start --runtime docker`, the same steps as `pnpm worktree:bootstrap`. This installs dependencies, runs environment setup through `prepare`, and starts and verifies the local database. `runOnWorktreeCreate: true` runs it for each new T3 worktree, and `async: false` holds the agent until setup exits. For an existing T3 project, import the actions from `t3.json` in **Settings → Project → Actions** and verify **Setup worktree** appears with automatic worktree execution enabled. The file must be present in the checkout used to create the worktree; adding it on a feature branch does not update the project's main checkout. See [T3 project settings](https://github.com/pingdotgg/t3code/blob/main/docs/user/project-settings.md) and [the worktree environment decision](adr/0003-worktree-environments.md).
 
 ## Quality gates
 
@@ -123,6 +125,8 @@ cp apps/web/.env.example apps/web/.env.local
 cp apps/agent/.dev.vars.example apps/agent/.dev.vars
 cp playground/llm/.env.example playground/llm/.env
 ```
+
+Keep the main checkout's ignored `apps/web/.env.local` and `apps/agent/.dev.vars` as the default credential source for future worktrees. If those files are absent, setup uses empty templates; it cannot recover credentials from an arbitrary sibling worktree. Provider credentials, Google OAuth setup, external callbacks and user authorizations must already be configured for those integrations; local bootstrap does not provision or authorize them.
 
 Set only values needed for your feature. Every teammate keeps real credentials in ignored local files. The web and agent must use the same server-side agent/backend credential when that authentication flow is implemented; callers still need verified User context. Provider webhook signature verification remains separate.
 
