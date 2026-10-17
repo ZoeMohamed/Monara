@@ -108,10 +108,17 @@ export function demoReply(text: string, context: DemoContext): DemoReply {
   const lower = message.toLowerCase();
   const month = context.today.slice(0, 7);
   const monthName = formatMonth(month).split(" ")[0];
+  if (/visuali[sz]|image|chart|graph|gambar|grafik/.test(lower)) {
+    return {
+      reply:
+        "Image charts aren’t connected in this demo yet. Open Reports for the visual breakdown, or ask me for a quick spending summary.",
+    };
+  }
   if (/\b(usd|eur|dollar|dollars|euro|euros)\b|[$€]/i.test(message)) {
     return { reply: "Use a rupiah amount like “25rb” or “Rp25.000”." };
   }
   const readOnlyRequest =
+    /summary|summari[sz]/i.test(message) ||
     /\?/.test(message) ||
     /^(can|could|should|how|what|where|when|why|is|are|do|does|did|will|would|berapa|apakah|bisa|boleh)\b/i.test(
       message,
@@ -182,7 +189,7 @@ export function demoReply(text: string, context: DemoContext): DemoReply {
     if (items.length === 0) return { reply: "No confirmed spending in the last 7 days." };
     const biggest = [...items].sort((a, b) => (b.amount ?? 0) - (a.amount ?? 0))[0];
     return {
-      reply: `In the last 7 days you spent ${formatRupiah(sum(items))} across ${items.length} ${items.length === 1 ? "payment" : "payments"}. The biggest was ${biggest.merchant ?? "a payment"} at ${formatRupiah(biggest.amount ?? 0)}.`,
+      reply: `Here’s your week: ${formatRupiah(sum(items))} across ${items.length} ${items.length === 1 ? "payment" : "payments"}. The biggest one was ${biggest.merchant ?? "a payment"} at ${formatRupiah(biggest.amount ?? 0)}.`,
     };
   }
 
@@ -201,7 +208,7 @@ export function demoReply(text: string, context: DemoContext): DemoReply {
     };
   }
 
-  if (/where|went|spend|spent|category|categories|habis/.test(lower)) {
+  if (/where|went|spend|spent|category|categories|habis|summary|summari[sz]/.test(lower)) {
     const spending = sum(confirmedExpenses(context, `${month}-01`, context.today));
     const top = categories(context).slice(0, 3);
     if (top.length === 0) return { reply: `No confirmed spending in ${monthName} yet.` };

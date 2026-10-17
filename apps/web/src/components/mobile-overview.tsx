@@ -10,6 +10,7 @@ import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon, type IconName } from "@/components/icon";
 import { MonaraMascot } from "@/components/monara-mascot";
 import { TransactionRow } from "@/components/transaction-row";
+import { WeeklySpendingCard } from "@/components/weekly-spending-card";
 import { categoryColor } from "@/data/category-style";
 import {
   daysInMonth,
@@ -991,7 +992,7 @@ function BackendInsightsCard({
             <strong data-amount>
               {formatRupiah(BigInt(forecast.projectedOverspend.amountMinor))}
             </strong>
-            {` — ${formatRupiah(BigInt(forecast.spending.amountMinor))} spent in ${forecast.elapsedDays} of ${forecast.periodDays} days; projected ${formatRupiah(BigInt(forecast.projectedSpending.amountMinor))} vs ${formatRupiah(BigInt(forecast.limit.amountMinor))} limit`}
+            {`. ${formatRupiah(BigInt(forecast.spending.amountMinor))} spent in ${forecast.elapsedDays} of ${forecast.periodDays} days; projected ${formatRupiah(BigInt(forecast.projectedSpending.amountMinor))} vs ${formatRupiah(BigInt(forecast.limit.amountMinor))} limit`}
           </Fact>
         ))}
         {matchedUnusualTransactions.map(({ flag, transaction }) => (
@@ -1058,7 +1059,7 @@ function FeatureGrid({
         />
         {openAccounts ? (
           <Feature
-            hint="Accounts for payments and transfers"
+            hint="Accounts for your payments"
             icon="wallet"
             name="Banks & wallets"
             onOpen={openAccounts}
@@ -1141,6 +1142,9 @@ export function MobileOverview({
               openBudgets={openBudgets}
               openReports={openReports}
             />
+            {model.weekly ? (
+              <WeeklySpendingCard week={model.weekly} openBudgets={openBudgets} />
+            ) : null}
             {model.isCurrentMonth ? (
               <AttentionCard
                 items={model.attention}

@@ -107,6 +107,15 @@ test("questions without punctuation never create a demo transaction", () => {
   assert.match(separatedUnit.reply, /Not comfortably/);
 });
 
+test("summary and visual requests never create a payment or claim an image was generated", () => {
+  const summary = demoReply("summary 25rb", context());
+  assert.equal(summary.log, undefined);
+  assert.match(summary.reply, /50,000/);
+  const visual = demoReply("Visualize my spending", context());
+  assert.equal(visual.log, undefined);
+  assert.match(visual.reply, /aren’t connected in this demo yet/);
+});
+
 test("unrecognized dates, accounts, currencies, and transaction types never become cash expenses", () => {
   for (const message of [
     "salary 9jt",

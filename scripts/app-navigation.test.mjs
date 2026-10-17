@@ -186,7 +186,7 @@ test("selected months leave enough calendar history for every report", () => {
 });
 
 test("unknown types, views, and add flags keep safe defaults", () => {
-  for (const value of ["", "all", "EXPENSE", "debit", "../income", "income&add=1"]) {
+  for (const value of ["", "all", "transfer", "EXPENSE", "debit", "../income", "income&add=1"]) {
     const parsed = parseAppView("/transactions", new URLSearchParams({ type: value }));
     assert.equal(parsed.kindFilter, "all", value);
   }

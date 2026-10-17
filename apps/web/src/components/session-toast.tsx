@@ -30,12 +30,16 @@ function ToastCard({
   notice,
   onUndo,
   onDismiss,
+  onRecover,
 }: {
   notice: SaveNotice;
-  onUndo: () => void;
+  onUndo: () => void | Promise<void>;
   onDismiss: () => void;
+  onRecover: (action: "refresh" | "history") => void | Promise<void>;
 }) {
   const [held, setHeld] = useState({ pointer: false, focus: false });
+  const [working, setWorking] = useState(false);
+  const inFlight = useRef(false);
   const paused = held.pointer || held.focus;
   const cardRef = useRef<HTMLDivElement>(null);
   // Tracking the notice being dismissed lets a newer notice replace it mid-exit.
@@ -43,13 +47,25 @@ function ToastCard({
   const leaving = leavingNotice === notice;
 
   useEffect(() => {
-    if (paused || leaving) return;
+    if (paused || leaving || working || notice.tone === "warning") return;
     const timer = window.setTimeout(
       () => setLeavingNotice(notice),
       notice.undo ? undoMs : messageMs,
     );
     return () => window.clearTimeout(timer);
-  }, [notice, paused, leaving]);
+  }, [notice, paused, leaving, working]);
+
+  const act = async (action: () => void | Promise<void>) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setWorking(true);
+    try {
+      await action();
+    } finally {
+      inFlight.current = false;
+      setWorking(false);
+    }
+  };
 
   // Hovering or focusing the toast holds it open so Undo is never pulled away mid-reach.
   useEffect(() => {
@@ -84,18 +100,35 @@ function ToastCard({
       }}
       ref={cardRef}
     >
-      <span aria-hidden className={styles.mark}>
-        <Icon name="check" strokeWidth={2.6} />
+      <span aria-hidden className={styles.mark} data-tone={notice.tone ?? "success"}>
+        <Icon name={notice.tone === "warning" ? "info" : "check"} strokeWidth={2.6} />
       </span>
       <p className={styles.message}>{notice.message}</p>
       {notice.undo ? (
-        <Button className={styles.undo} onPress={onUndo} type="button" variant="ghost">
-          Undo
+        <Button
+          className={styles.undo}
+          isDisabled={working}
+          onPress={() => void act(onUndo)}
+          type="button"
+          variant="ghost"
+        >
+          {working ? "Undoing…" : "Undo"}
+        </Button>
+      ) : null}
+      {notice.recovery ? (
+        <Button
+          className={styles.undo}
+          isDisabled={working}
+          onPress={() => void act(() => onRecover(notice.recovery as "refresh" | "history"))}
+          variant="ghost"
+        >
+          {working ? "Checking…" : notice.recovery === "refresh" ? "Refresh" : "History"}
         </Button>
       ) : null}
       <Button
         aria-label="Dismiss message"
         className={styles.close}
+        isDisabled={working}
         onPress={() => setLeavingNotice(notice)}
         type="button"
         variant="ghost"
@@ -111,10 +144,12 @@ export function SessionToast({
   notice,
   onUndo,
   onDismiss,
+  onRecover,
 }: {
   notice: SaveNotice | null;
-  onUndo: () => void;
+  onUndo: () => void | Promise<void>;
   onDismiss: () => void;
+  onRecover: (action: "refresh" | "history") => void | Promise<void>;
 }) {
   // Modal focus containment makes outside actions unreachable. Start the toast's
   // display and Undo window when the modal closes, keeping the result available.
@@ -122,7 +157,7 @@ export function SessionToast({
   return (
     <div aria-live="polite" className={styles.layer} role="status">
       {notice && !deferred ? (
-        <ToastCard notice={notice} onDismiss={onDismiss} onUndo={onUndo} />
+        <ToastCard notice={notice} onDismiss={onDismiss} onUndo={onUndo} onRecover={onRecover} />
       ) : null}
     </div>
   );

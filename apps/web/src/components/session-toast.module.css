@@ -59,6 +59,11 @@
   height: 17px;
 }
 
+.mark[data-tone="warning"] {
+  background: var(--warning);
+  color: var(--ink);
+}
+
 .message {
   min-width: 0;
   flex: 1;

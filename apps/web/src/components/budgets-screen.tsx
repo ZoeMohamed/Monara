@@ -2,7 +2,7 @@
 
 import type { Category, FinancialInsights } from "@monara/contracts";
 import { Button, Card, Chip, ProgressBar } from "@monara/ui";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
 
 import { BillCalendar } from "@/components/bill-calendar";
@@ -351,7 +351,7 @@ function BudgetGauge({ used, elapsed, over }: { used: number; elapsed?: number; 
           x="100"
           y="98"
         >
-          {used}%
+          {used > 999 ? "999%+" : `${used}%`}
         </text>
       </svg>
       <figcaption className="mt-1 text-center text-xs text-muted">Budgets used</figcaption>
@@ -466,12 +466,18 @@ function BudgetSummaryCard({
       </dl>
       <BudgetSummaryProgress elapsedPercent={elapsedPercent} summary={summary} />
       {summary.overBudget > BigInt(0) ? (
-        <p className="mt-4 text-sm text-danger">
-          <span className="font-semibold tabular-nums">
-            {formatRupiah(summary.overBudget)} over
-          </span>{" "}
-          across categories above their limits.
-        </p>
+        <div className="mt-4 rounded-xl bg-warning-soft p-3 text-sm leading-6 text-warning-soft-foreground">
+          <p>
+            <span className="font-semibold tabular-nums">
+              {formatRupiah(summary.overBudget)} over
+            </span>{" "}
+            across categories above their limits.
+          </p>
+          <p className="mt-1">
+            You can still make a plan. Open a category below to check its spending or adjust the
+            limit for the rest of the period.
+          </p>
+        </div>
       ) : null}
       {currentMonth && calendarPeriods ? <DailyBudgetGuide safe={safe} /> : null}
     </Card>
@@ -688,6 +694,73 @@ export function BudgetsScreen({
   const [editing, setEditing] = useState<Budget | null>(null);
   const [creating, setCreating] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{
+    message: string;
+    category?: string;
+    undo?: { budgetId: string; before: DemoBudgetChanges; after: DemoBudgetChanges };
+    error?: string;
+  } | null>(null);
+  const feedbackRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!feedback) return;
+    feedbackRef.current?.scrollIntoView({ block: "center" });
+    feedbackRef.current?.focus({ preventScroll: true });
+  }, [feedback]);
+  const saveDemoBudget = (budgetId: string, changes: DemoBudgetChanges) => {
+    const current = budgets.find((budget) => budget.id === budgetId);
+    if (!current || !onEditBudget)
+      throw new Error(
+        "This budget is no longer available. Close the form and choose another budget.",
+      );
+    onEditBudget(budgetId, changes);
+    setFeedback({
+      message: `${current.category} budget updated. Its progress uses your saved settings.`,
+      category: current.category,
+      undo: {
+        budgetId,
+        before: {
+          cadence: current.cadence,
+          limit: current.limit,
+          startsOn: current.startsOn ?? `${today.slice(0, 7)}-01`,
+          warningPercent: current.warningPercent,
+          icon: current.icon,
+        },
+        after: changes,
+      },
+    });
+  };
+  const undoDemoBudget = () => {
+    if (!feedback?.undo || !onEditBudget) return;
+    const { budgetId, before, after } = feedback.undo;
+    const current = budgets.find((budget) => budget.id === budgetId);
+    if (
+      !current ||
+      current.limit !== after.limit ||
+      current.startsOn !== after.startsOn ||
+      current.warningPercent !== after.warningPercent ||
+      current.cadence !== after.cadence ||
+      current.icon !== after.icon
+    ) {
+      setFeedback({
+        message: "This budget changed again. Open its latest details before making another change.",
+        category: feedback.category,
+      });
+      return;
+    }
+    try {
+      onEditBudget(budgetId, before);
+      setFeedback({
+        message: "Budget changes undone. Your previous limit and start date are back.",
+        category: feedback.category,
+      });
+    } catch {
+      setFeedback({
+        ...feedback,
+        error:
+          "We couldn’t undo that change. Your current budget is still in place. Try again or open its details.",
+      });
+    }
+  };
   const detail = budgets.find((budget) => budget.id === detailId);
   const editDetail = () => {
     if (!detail) return;
@@ -716,6 +789,53 @@ export function BudgetsScreen({
           <p className="text-xs font-semibold text-muted sm:text-sm">{formatMonth(month)}</p>
         )}
       </div>
+
+      {feedback && (
+        <div
+          className="mt-4 rounded-2xl border border-border bg-surface p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          ref={feedbackRef}
+          role="status"
+          tabIndex={-1}
+        >
+          <p className="text-sm leading-6">{feedback.message}</p>
+          {feedback.error && (
+            <p className="mt-2 text-sm text-danger" role="alert">
+              {feedback.error}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {feedback.undo && (
+              <Button
+                className="min-h-11 rounded-full"
+                onPress={undoDemoBudget}
+                variant="secondary"
+              >
+                Undo change
+              </Button>
+            )}
+            {feedback.category && (
+              <Button
+                className="min-h-11 rounded-full"
+                onPress={() => {
+                  const budget = budgets.find((item) => item.category === feedback.category);
+                  if (budget) setDetailId(budget.id);
+                }}
+                variant="ghost"
+              >
+                View budget
+              </Button>
+            )}
+            <Button
+              aria-label="Dismiss budget update"
+              className="min-h-11 rounded-full"
+              onPress={() => setFeedback(null)}
+              variant="ghost"
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div
         className={`mt-4 grid min-w-0 gap-5 ${showBills ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" : ""} lg:gap-6`}
@@ -772,7 +892,7 @@ export function BudgetsScreen({
           budget={editing}
           key={editing.id}
           onClose={() => setEditing(null)}
-          onSave={onEditBudget}
+          onSave={saveDemoBudget}
           today={today}
           transactions={transactions}
         />
@@ -782,7 +902,13 @@ export function BudgetsScreen({
           budgets={budgets}
           transactions={transactions}
           today={today}
-          onSave={onCreateBudget}
+          onSave={(input) => {
+            onCreateBudget(input);
+            setFeedback({
+              message: `${input.category} budget added. Confirmed expenses in its period now count toward this limit.`,
+              category: input.category,
+            });
+          }}
           onClose={() => setCreating(false)}
           demoCategories={demoCategories}
         />

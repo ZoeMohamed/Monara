@@ -196,11 +196,7 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
       )}
       {pendingAction && "id" in pendingAction && pendingAction.id === mailbox.id && (
         <p role="status" className="mt-3 text-sm text-muted">
-          {pendingAction.kind === "disconnect"
-            ? "Disconnecting…"
-            : pendingAction.kind === "reconnect"
-              ? "Reconnecting…"
-              : "Queueing sync…"}
+          {pendingAction.kind === "disconnect" ? "Disconnecting…" : "Reconnecting…"}
         </p>
       )}
     </Card>

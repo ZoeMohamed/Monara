@@ -87,3 +87,36 @@ test("new wallet transactions resolve one payment method and Category", () => {
   assert.equal(invalid.method, null);
   assert.equal(invalid.financialAccountId, null);
 });
+
+test("exclusion reasons keep one account and stay out of totals", () => {
+  const resources = {
+    financialAccounts: initialDemoAccounts(),
+    categories: demoEditorCategories([]),
+  };
+  const reason = resources.categories.find(({ name }) => name === "Internal");
+  const selection = demoTransactionSelection(
+    { kind: "exclusion", method: resources.financialAccounts[0].id, category: reason.id },
+    resources,
+  );
+  assert.equal(selection.category, "Internal");
+  assert.equal(selection.categoryIcon, "internal");
+  assert.equal(selection.financialAccountId, resources.financialAccounts[0].id);
+  const item = {
+    ...selection,
+    id: "excluded",
+    merchant: "Move to savings",
+    kind: "exclusion",
+    amount: 250000,
+    date: "2026-10-15",
+    time: null,
+    currency: "IDR",
+    status: "confirmed",
+    emoji: "⊘",
+    confidence: null,
+  };
+  assert.deepEqual(transactionErrors(item), {});
+  const summary = demoSummary([item], "2026-10");
+  assert.equal(summary.spending, 0n);
+  assert.equal(summary.income, 0n);
+  assert.equal(summary.confirmed.length, 0);
+});

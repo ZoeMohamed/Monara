@@ -43,13 +43,37 @@ function sourceOf(transaction: Transaction) {
   return { ...sources[kind], kind };
 }
 
+const missingLabels = {
+  kind: "type",
+  amount: "amount",
+  currency: "currency",
+  date: "date",
+  category: "category",
+} as const;
+
+/** Names every detail still missing. Only confirming a non-exclusion also needs an account. */
+function missingForConfirm(transaction: Transaction): string[] {
+  const missing: string[] = Object.keys(transactionErrors(transaction)).map(
+    (key) => missingLabels[key as keyof typeof missingLabels] ?? key,
+  );
+  if (transaction.status === "pending" && transaction.kind !== "exclusion" && !transaction.method)
+    missing.push("account");
+  return missing;
+}
+
+function listOf(items: string[]): string {
+  return items.length < 2
+    ? (items[0] ?? "")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
 function detailsOf(
   transaction: Transaction,
   formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
 ) {
   const pending = transaction.status === "pending";
   const editable = pending || transaction.status === "confirmed";
-  const valid = Object.keys(transactionErrors(transaction)).length === 0;
+  const missing = missingForConfirm(transaction);
   const date = isCalendarDate(transaction.date)
     ? dateFormatter.format(new Date(`${transaction.date}T00:00:00Z`))
     : "Date not provided";
@@ -57,7 +81,7 @@ function detailsOf(
   return {
     pending,
     editable,
-    valid,
+    valid: missing.length === 0,
     // Secondary facts stay one tap away under “More details”.
     rows: [
       ["Type", transaction.kind ? typeLabels[transaction.kind] : "Not selected"],
@@ -69,14 +93,19 @@ function detailsOf(
     amount:
       transaction.amount === null
         ? "Amount missing"
-        : !Number.isSafeInteger(transaction.amount) || transaction.amount <= 0
+        : !Number.isSafeInteger(transaction.amount) ||
+            transaction.amount < 0 ||
+            (transaction.amount === 0 && transaction.kind !== "exclusion")
           ? "Amount invalid"
           : transaction.currency === "IDR"
             ? `${sign}${formatRupiah(transaction.amount)}`
             : "Currency missing",
-    help: valid
-      ? "Not included in totals until confirmed."
-      : "Complete the missing fields to confirm.",
+    help:
+      missing.length === 0
+        ? "Not included in totals until confirmed."
+        : pending
+          ? `Add the ${listOf(missing)} to confirm, or exclude it if it isn’t a real transaction.`
+          : `Add the ${listOf(missing)} to include it in your totals.`,
   };
 }
 
@@ -103,7 +132,7 @@ function DeleteConfirmation({
       ? "This expense will leave your spending and budgets."
       : transaction.kind === "income"
         ? "This income will leave your income totals."
-        : "This exclusion will leave your transaction history.";
+        : "This exclusion will leave your history. Spending and budgets stay the same.";
   return (
     <div className="p-5 sm:p-6">
       <h2 id="transaction-details-title" className="text-xl font-bold">
@@ -161,6 +190,7 @@ type TransactionDetailsProps = {
   /** Opens the exclude confirmation for a pending import. */
   onExclude?: () => void;
   onDelete?: () => void | Promise<void>;
+  onReject?: () => void;
   pending?: boolean;
   confirmationError?: string | null;
   refreshRequired?: boolean;
@@ -330,11 +360,6 @@ function PaymentMoneyFlow({ transaction, financialAccounts }: MoneyFlowProps) {
   );
 }
 
-// Money moves from an account, through a category, to a place; income runs the other way.
-function MoneyFlow(props: MoneyFlowProps) {
-  return <PaymentMoneyFlow {...props} />;
-}
-
 function TransactionInformation({
   transaction,
   details,
@@ -382,7 +407,7 @@ function TransactionInformation({
         </h2>
         <p className={styles.when}>{details.when}</p>
       </div>
-      <MoneyFlow financialAccounts={financialAccounts} transaction={transaction} />
+      <PaymentMoneyFlow financialAccounts={financialAccounts} transaction={transaction} />
       <p className={styles.source}>
         <Icon name={source.icon} />
         {source.label}
@@ -404,6 +429,11 @@ function TransactionInformation({
           ))}
         </dl>
       </details>
+      {transaction.kind === "exclusion" ? (
+        <p className="mt-3 text-sm text-muted">
+          Kept in your history, excluded from spending, income and budgets.
+        </p>
+      ) : null}
       {details.pending && (
         <p className="mt-4 text-sm text-muted" id="transaction-review-help">
           {details.help}

@@ -90,35 +90,29 @@ function Receipt({
   );
 }
 
-function Envelope() {
+/** Gmail's four-colour mark on a white app tile; the mark's 88 × 66 box is scaled and centred on it. */
+function GmailTile() {
   return (
     <g transform="translate(54 74)">
       <g className={styles.envelope}>
         <rect
+          className={styles.gmailTile}
           fill="#fff"
-          height="50"
-          rx="9"
+          height="84"
+          rx="22"
           stroke="var(--border)"
-          strokeWidth="2"
-          width="70"
-          x="-35"
-          y="-25"
+          strokeWidth="1.5"
+          width="84"
+          x="-42"
+          y="-42"
         />
-        <path
-          d="M-30 -17 L0 6 L30 -17"
-          fill="none"
-          stroke="#ea4335"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="5.5"
-        />
-        <path
-          d="M-30 -17 V19 M30 -17 V19"
-          fill="none"
-          stroke="#4285f4"
-          strokeLinecap="round"
-          strokeWidth="5.5"
-        />
+        <g transform="scale(0.66) translate(-96 -75)">
+          <path d="M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6" fill="#4285f4" />
+          <path d="M120 108h14c3.32 0 6-2.69 6-6V59l-20 15" fill="#34a853" />
+          <path d="M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2" fill="#fbbc04" />
+          <path d="M72 74V48l24 18 24-18v26L96 92" fill="#ea4335" />
+          <path d="M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2" fill="#c5221f" />
+        </g>
       </g>
     </g>
   );
@@ -129,16 +123,16 @@ function ConnectScene() {
     <>
       <path
         className={styles.link}
-        d="M96 78 C 126 66, 140 92, 158 108"
+        d="M106 76 C 132 64, 144 92, 158 108"
         fill="none"
         stroke="var(--brand)"
         strokeLinecap="round"
         strokeWidth="3.5"
       />
-      <Envelope />
-      <Receipt className={styles.flyingReceipt} delay="0s" x={92} y={76} />
-      <Receipt className={styles.flyingReceipt} delay="1.3s" x={92} y={76} />
-      <Receipt className={styles.flyingReceipt} delay="2.6s" x={92} y={76} />
+      <GmailTile />
+      <Receipt className={styles.flyingReceipt} delay="0s" x={102} y={74} />
+      <Receipt className={styles.flyingReceipt} delay="1.3s" x={102} y={74} />
+      <Receipt className={styles.flyingReceipt} delay="2.6s" x={102} y={74} />
       <Cat x={236} y={118} />
       <Sparkle delay="0s" size={10} x={300} y={46} />
       <Sparkle delay="0.7s" size={7} x={324} y={80} />

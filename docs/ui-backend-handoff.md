@@ -1,6 +1,8 @@
 # UI backend handoff
 
-Erdafa owns the UI. Zoe owns financial services/schema; Argya owns conversational tools; Abhip coordinates contracts and Reminders. Reconciled on 14 October 2026 against public [Action Tracker](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.5tiin0qzk1mg), [PRD v2.1](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.7t8u9nqsrfc) text exports and current checkout. Source integration and local checks do not establish live-provider acceptance.
+The [17 October meeting UI handoff](ui-meeting-handoff-2026-10-17.md) supersedes the ledger transfer UI, separate review tabs and manual Gmail sync controls described below, and records the exclusion, onboarding, weekly gauge and chat integration boundaries.
+
+Erdafa owns UI, Zoe financial services/schema, Adlyn Gmail/extraction, Argya Agent/WhatsApp and Abhip Reminders/submission. Reconciled **16 October 2026** against the [PRD](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.pm2pb9a5y3zd), [tracker](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.5tiin0qzk1mg), [Brainstorm](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.0) and current source. [ER1–ER12 and teammate dependencies](ui-actions-2026-10-16.md) · [UI technical draft](tech/ui.md).
 
 ## Current boundaries
 

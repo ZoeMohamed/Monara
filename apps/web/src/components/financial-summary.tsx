@@ -88,7 +88,7 @@ export function FinancialSummary({
   return (
     <Card aria-labelledby={titleId} className={styles.summary} data-compact={compact} role="region">
       <h2 className="sr-only" id={titleId}>
-        {model.label} confirmed totals. Excluded records do not count.
+        {model.label} confirmed totals. Exclusions left out.
       </h2>
       <dl className={styles.metrics}>
         <SummaryMetric

@@ -1,6 +1,6 @@
 "use client";
 
-import { type Category, calendarDateSchema } from "@monara/contracts";
+import { type Category, calendarDateSchema, isExclusionCategoryName } from "@monara/contracts";
 import { Button, FieldError, Input, Label, ListBox, Select, TextField } from "@monara/ui";
 import { type FormEvent, useState } from "react";
 import styles from "@/components/budget-manager.module.css";
@@ -17,12 +17,14 @@ export type CreateDemoBudgetInput = {
   limit: number;
   startsOn: string;
   warningPercent: number;
+  cadence: "monthly" | "weekly";
 };
 
 function useDemoBudgetDraft(
   today: string,
   onSave: (input: CreateDemoBudgetInput) => void,
   onClose: () => void,
+  initialCadence: "monthly" | "weekly",
 ) {
   const [draft, setDraft] = useState({
     category: "",
@@ -30,10 +32,26 @@ function useDemoBudgetDraft(
     amount: "",
     startsOn: today,
     warningPercent: "80",
+    cadence: initialCadence,
   });
   const [errors, setErrors] = useState<Partial<Record<keyof typeof draft, string>>>({});
-  const change = (patch: Partial<typeof draft>) =>
+  const [initial] = useState(draft);
+  const [discard, setDiscard] = useState(false);
+  const dirty = Object.keys(draft).some(
+    (key) => draft[key as keyof typeof draft] !== initial[key as keyof typeof draft],
+  );
+  const close = () => {
+    if (dirty) setDiscard(true);
+    else onClose();
+  };
+  const change = (patch: Partial<typeof draft>) => {
     setDraft((previous) => ({ ...previous, ...patch }));
+    setErrors((previous) => {
+      const next = { ...previous };
+      for (const key of Object.keys(patch) as (keyof typeof draft)[]) delete next[key];
+      return next;
+    });
+  };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const next: typeof errors = {};
@@ -46,6 +64,8 @@ function useDemoBudgetDraft(
     if (limit === null || limit <= 0) next.amount = "Enter a positive whole amount of rupiah.";
     if (draft.category.trim().length === 0 || draft.category.trim().length > 100)
       next.category = "Enter a category name, up to 100 characters.";
+    if (isExclusionCategoryName(draft.category.trim()))
+      next.category = "Choose an expense category. Exclusions do not count toward budgets.";
     if (!calendarDateSchema.safeParse(draft.startsOn).success)
       next.startsOn = "Choose a valid start date.";
     const warningPercent = Number(draft.warningPercent);
@@ -53,6 +73,10 @@ function useDemoBudgetDraft(
       next.warningPercent = "Enter a percentage from 1 to 100.";
     if (Object.keys(next).length > 0 || limit === null) {
       setErrors(next);
+      const form = event.currentTarget;
+      requestAnimationFrame(() =>
+        form.querySelector<HTMLInputElement>('input[aria-invalid="true"]')?.focus(),
+      );
       return;
     }
     try {
@@ -62,6 +86,7 @@ function useDemoBudgetDraft(
         limit,
         startsOn: draft.startsOn,
         warningPercent,
+        cadence: draft.cadence,
       });
     } catch (error) {
       setErrors({
@@ -74,7 +99,7 @@ function useDemoBudgetDraft(
     }
     onClose();
   };
-  return { draft, errors, change, submit };
+  return { draft, errors, change, submit, close, discard, keepEditing: () => setDiscard(false) };
 }
 
 export function DemoBudgetCreator({
@@ -84,6 +109,7 @@ export function DemoBudgetCreator({
   onSave,
   onClose,
   demoCategories,
+  initialCadence = "monthly",
 }: {
   budgets: Budget[];
   transactions: Transaction[];
@@ -91,10 +117,15 @@ export function DemoBudgetCreator({
   onSave: (input: CreateDemoBudgetInput) => void;
   onClose: () => void;
   demoCategories?: Category[];
+  initialCadence?: "monthly" | "weekly";
 }) {
-  const editor = useDemoBudgetDraft(today, onSave, onClose);
+  const editor = useDemoBudgetDraft(today, onSave, onClose, initialCadence);
   const [newCategory, setNewCategory] = useState(false);
-  const budgeted = new Set(budgets.map((budget) => budget.category.trim().toLowerCase()));
+  const budgeted = new Set(
+    budgets
+      .filter((budget) => budget.cadence === editor.draft.cadence)
+      .map((budget) => budget.category.trim().toLowerCase()),
+  );
   const categories = (
     demoCategories
       ? demoCategories
@@ -109,16 +140,40 @@ export function DemoBudgetCreator({
             ),
           ]),
         ].sort((a, b) => a.localeCompare(b))
-  ).filter((category) => !budgeted.has(category.trim().toLowerCase()));
+  ).filter(
+    (category) =>
+      !budgeted.has(category.trim().toLowerCase()) && !isExclusionCategoryName(category),
+  );
   const { draft, errors, change } = editor;
+  if (editor.discard)
+    return (
+      <ModalDialog labelledBy="demo-new-budget-discard-title" onClose={editor.keepEditing}>
+        <div className={styles.form}>
+          <h2 className="text-xl font-bold" id="demo-new-budget-discard-title">
+            Discard this budget?
+          </h2>
+          <p className="text-sm leading-6 text-muted">
+            This budget hasn’t been added. Keep editing to hold on to your entries.
+          </p>
+          <div className={styles.footer}>
+            <Button className="min-h-11" onPress={onClose} variant="secondary">
+              Discard budget
+            </Button>
+            <Button autoFocus className="min-h-11" onPress={editor.keepEditing}>
+              Keep editing
+            </Button>
+          </div>
+        </div>
+      </ModalDialog>
+    );
   return (
-    <ModalDialog labelledBy="demo-new-budget-title" onClose={onClose}>
+    <ModalDialog labelledBy="demo-new-budget-title" onClose={editor.close}>
       <form className={styles.form} noValidate onSubmit={editor.submit}>
         <div className={styles.header}>
           <h2 className="text-xl font-bold" id="demo-new-budget-title">
             Add budget
           </h2>
-          <Button aria-label="Close new budget" isIconOnly onPress={onClose} variant="ghost">
+          <Button aria-label="Close new budget" isIconOnly onPress={editor.close} variant="ghost">
             <Icon name="close" />
           </Button>
         </div>
@@ -202,7 +257,7 @@ export function DemoBudgetCreator({
         <DemoBudgetValues editor={editor} />
         <p className={styles.meta}>Changes last for this demo visit.</p>
         <div className={styles.footer}>
-          <Button className="min-h-11" onPress={onClose} variant="secondary">
+          <Button className="min-h-11" onPress={editor.close} variant="secondary">
             Cancel
           </Button>
           <Button className="min-h-11" type="submit">
@@ -218,16 +273,37 @@ function DemoBudgetValues({ editor }: { editor: ReturnType<typeof useDemoBudgetD
   const { draft, errors, change } = editor;
   return (
     <>
+      <fieldset className={styles.field}>
+        <legend className={styles.label}>Period</legend>
+        <div className="mt-1 flex gap-2">
+          {(["monthly", "weekly"] as const).map((cadence) => (
+            <Button
+              aria-pressed={draft.cadence === cadence}
+              className="min-h-11 flex-1 rounded-full"
+              key={cadence}
+              onPress={() => change({ cadence, category: "" })}
+              variant={draft.cadence === cadence ? "primary" : "secondary"}
+            >
+              {cadence === "monthly" ? "Monthly" : "Weekly"}
+            </Button>
+          ))}
+        </div>
+      </fieldset>
       <TextField
         isInvalid={Boolean(errors.amount)}
         name="amount"
         onChange={(amount) => change({ amount })}
         value={draft.amount}
       >
-        <Label>Monthly limit in rupiah</Label>
+        <Label>{draft.cadence === "weekly" ? "Weekly" : "Monthly"} limit in rupiah</Label>
         <Input className="min-h-11 text-base" inputMode="numeric" maxLength={16} />
         <FieldError>{errors.amount}</FieldError>
       </TextField>
+      <p className={styles.meta}>
+        {draft.cadence === "weekly"
+          ? "Resets every seven days from your chosen start date. Only confirmed expenses in that week count."
+          : "Resets each month on your chosen start day. Only confirmed expenses in that period count."}
+      </p>
       <TextField
         isInvalid={Boolean(errors.startsOn)}
         name="startsOn"

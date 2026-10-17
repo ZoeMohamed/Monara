@@ -10,7 +10,6 @@ import {
   formatMonth,
   isCalendarDate,
   newestFirst,
-  reviewFlags,
   safeToSpendToday,
   shiftMonth,
   transactionErrors,
@@ -19,6 +18,7 @@ import {
   updateConfirmedTransaction,
   updatePendingTransaction,
 } from "../apps/web/src/data/demo-ledger.ts";
+import { exclusionCategoryPresets } from "../packages/contracts/src/category-presets.ts";
 
 function syntheticTransaction(overrides = {}) {
   return {
@@ -86,7 +86,6 @@ test("missing extracted values stay null and cannot be silently confirmed", () =
   assert.equal(updatePendingTransaction(original, uncertain.id, values, "confirm"), original);
   const edited = updatePendingTransaction(original, uncertain.id, values, "edit");
   assert.deepEqual(edited, original);
-  assert.ok(reviewFlags(edited[0]).includes("Confidence unavailable"));
   assert.equal(demoSummary(edited).spending, 0n);
 });
 
@@ -150,7 +149,6 @@ test("an imported transaction can be reviewed before an Account is assigned", ()
   for (const kind of ["expense", "income"]) {
     const pending = syntheticTransaction({ kind, method: null });
     assert.deepEqual(transactionErrors(valuesOf(pending)), {});
-    assert.ok(reviewFlags(pending).includes("Financial account not assigned"));
   }
 });
 
@@ -166,6 +164,24 @@ test("an exclusion can close an incomplete import without inventing financial fa
   assert.equal(excluded.status, "confirmed");
   assert.deepEqual(transactionErrors(excluded), {});
   assert.equal(demoSummary([excluded]).spending, 0n);
+});
+
+test("exclusion reasons are optional and an excluded import may keep its category", () => {
+  for (const category of [null, "Groceries", ...exclusionCategoryPresets.map(({ name }) => name)]) {
+    const item = syntheticTransaction({ kind: "exclusion", category });
+    assert.deepEqual(transactionErrors(item), {});
+    const confirmed = updatePendingTransaction([item], item.id, valuesOf(item), "confirm");
+    assert.equal(confirmed[0].amount, item.amount);
+    assert.equal(confirmed[0].status, "confirmed");
+    assert.equal(demoSummary(confirmed).spending, 0n);
+    assert.equal(demoSummary(confirmed).income, 0n);
+  }
+});
+
+test("expense and income cannot use an exclusion reason", () => {
+  for (const kind of ["expense", "income"]) {
+    assert.ok(transactionErrors(syntheticTransaction({ kind, category: "Internal" })).category);
+  }
 });
 
 test("the removed transfer direction cannot be edited or confirmed", () => {
@@ -586,7 +602,6 @@ test("budget state distinguishes the warning threshold, exactly at limit, and on
 test("high extraction confidence never promotes a pending import into confirmed totals", () => {
   const pending = syntheticTransaction({ confidence: 100 });
   assert.deepEqual(transactionErrors(valuesOf(pending)), {});
-  assert.ok(!reviewFlags(pending).includes("Low confidence"));
   assert.equal(pending.status, "pending");
   assert.equal(demoSummary([pending]).spending, 0n);
   const confirmed = updatePendingTransaction([pending], pending.id, valuesOf(pending), "confirm");
@@ -873,13 +888,13 @@ test("payday usage respects its as-of date, excludes the previous cycle, and sup
   assert.equal(safeToSpendToday(entries, [future], "2026-10-11").dailyGuideAvailable, false);
 });
 
-test("an unassigned income gets one Account flag", () => {
-  const flags = reviewFlags(syntheticTransaction({ kind: "income", method: null }));
-  assert.ok(flags.includes("Financial account not assigned"));
-  assert.equal(flags.filter((flag) => flag === "Financial account not assigned").length, 1);
-  assert.ok(
-    reviewFlags(syntheticTransaction({ method: null })).includes("Financial account not assigned"),
-  );
+test("an incomplete exclusion stays valid while an incomplete expense explains what is missing", () => {
+  const exclusion = syntheticTransaction({ kind: "exclusion", amount: null, method: null });
+  assert.deepEqual(transactionErrors(exclusion), {});
+  const expense = transactionErrors(syntheticTransaction({ amount: null, date: null }));
+  assert.ok(expense.amount);
+  assert.ok(expense.date);
+  assert.ok(Object.values(expense).every((message) => !/confidence/i.test(message)));
 });
 
 test("newest-first ordering uses date then time and puts undated records last", () => {
