@@ -1,15 +1,10 @@
 import type { Metadata } from "next";
 
 import { LegalPage } from "@/components/legal-page";
+import { privacy } from "@/lib/legal/privacy";
 
-export const metadata: Metadata = { title: "Privacy Policy" };
+export const metadata: Metadata = { title: privacy.title };
 
 export default function PrivacyPage() {
-  return (
-    <LegalPage title="Privacy Policy">
-      <p className="text-[var(--muted)] text-sm">
-        How Monara handles your email and financial data will be described here.
-      </p>
-    </LegalPage>
-  );
+  return <LegalPage document={privacy} />;
 }

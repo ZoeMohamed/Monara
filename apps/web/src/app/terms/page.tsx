@@ -1,15 +1,10 @@
 import type { Metadata } from "next";
 
 import { LegalPage } from "@/components/legal-page";
+import { terms } from "@/lib/legal/terms";
 
-export const metadata: Metadata = { title: "Terms" };
+export const metadata: Metadata = { title: terms.title };
 
 export default function TermsPage() {
-  return (
-    <LegalPage title="Terms">
-      <p className="text-[var(--muted)] text-sm">
-        The terms for using Monara will be published here.
-      </p>
-    </LegalPage>
-  );
+  return <LegalPage document={terms} />;
 }
