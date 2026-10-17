@@ -548,6 +548,25 @@ function createMemoryFinanceRepository() {
       transactions.push({ ownerId: userId, clientRequestId: values.clientRequestId, value: row });
       return row;
     },
+    async createPendingTransaction({ userId, source, clientRequestId, values, confidence }) {
+      const existing = transactions.find(
+        (entry) => entry.ownerId === userId && entry.clientRequestId === clientRequestId,
+      );
+      if (existing) return existing.value;
+      const createdAt = stamp();
+      const row = {
+        id: nextId(),
+        ...values,
+        reviewStatus: "pending",
+        source,
+        confidence,
+        deletedAt: null,
+        createdAt,
+        updatedAt: createdAt,
+      };
+      transactions.push({ ownerId: userId, clientRequestId, value: row });
+      return row;
+    },
     async replaceTransaction(input) {
       const entry = transactions.find(
         (candidate) =>
@@ -1475,5 +1494,50 @@ describe("ZO6-ZO8 backend journey simulation", () => {
     });
     assert.equal((await service.listBudgets(callerA, {})).items.length, 0);
     assert.ok(editedExpense.action.actionId);
+  });
+});
+
+describe("receipt photos", () => {
+  const receipt = {
+    clientRequestId: "wa:wamid.receipt-1",
+    values: {
+      kind: "expense",
+      merchantName: "Indomaret Kemang Raya",
+      money: { amountMinor: "37000", currency: "IDR" },
+      occurredOn: "2026-10-17",
+      occurredTime: "12:41",
+      description: null,
+      location: null,
+      accountHint: "BCA DEBIT ****1234",
+      categoryId: category.id,
+      financialAccountId: null,
+    },
+    confidence: 0.92,
+  };
+  const whatsApp = { userId: ownerA, channel: "whatsapp" };
+
+  it("saves a pending transaction that does not count until confirmed, once per message", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-17T06:00:00.000Z"),
+    });
+    const { transaction } = await service.addReceiptTransaction(whatsApp, receipt);
+    assert.equal(transaction.reviewStatus, "pending");
+    assert.equal(transaction.source, "whatsapp_receipt");
+    assert.equal(transaction.confidence, 0.92);
+    const again = await service.addReceiptTransaction(whatsApp, receipt);
+    assert.equal(again.transaction.id, transaction.id, "a redelivered photo saved twice");
+
+    const summary = await service.getDashboard(whatsApp, { month: "2026-10" });
+    assert.equal(summary.spending.amountMinor, "0");
+  });
+
+  it("keeps receipts on WhatsApp and rejects unreadable values", async () => {
+    const service = createFinanceService(createMemoryFinanceRepository().repository);
+    await assert.rejects(
+      service.addReceiptTransaction({ userId: ownerA, channel: "web" }, receipt),
+      (error) => error instanceof FinanceOperationError && error.code === "FORBIDDEN",
+    );
+    await assert.rejects(service.addReceiptTransaction(whatsApp, { ...receipt, confidence: 2 }));
   });
 });

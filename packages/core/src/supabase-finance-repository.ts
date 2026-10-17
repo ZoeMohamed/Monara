@@ -351,6 +351,33 @@ export function createSupabaseFinanceRepository(
       return findTransaction(userId, transactionId);
     },
 
+    async createPendingTransaction({ userId, source, clientRequestId, values, confidence }) {
+      const inserted = await client
+        .from("transactions")
+        .insert({
+          user_id: userId,
+          client_request_id: clientRequestId,
+          source_type: source,
+          review_status: "pending",
+          ai_confidence: confidence,
+          ...transactionUpdate(values),
+        })
+        .select(TRANSACTION_COLUMNS)
+        .single();
+      if (!inserted.error) return toTransaction(inserted.data as unknown as ExactTransactionRow);
+      if (inserted.error.code !== "23505") fail(inserted.error);
+      // The same WhatsApp message delivered twice: return what the first delivery saved.
+      const existing = await client
+        .from("transactions")
+        .select(TRANSACTION_COLUMNS)
+        .eq("user_id", userId)
+        .eq("client_request_id", clientRequestId)
+        .maybeSingle();
+      if (existing.error) fail(existing.error);
+      if (!existing.data) fail(inserted.error);
+      return toTransaction(existing.data as unknown as ExactTransactionRow);
+    },
+
     async createTransaction({ userId, source, values }) {
       const inserted = await client
         .from("transactions")
