@@ -114,6 +114,8 @@ describe("in-app chat client", () => {
         (error) => {
           assert.ok(error instanceof ChatClientError);
           assert.equal(error.actionMayHaveCompleted, uncertain);
+          assert.equal(error.code, code);
+          assert.equal(error.status, status);
           assert.equal(error.message, "Synthetic boundary error.");
           return true;
         },

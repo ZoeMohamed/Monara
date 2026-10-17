@@ -1,7 +1,6 @@
 "use client";
 
-import type { AgentChatTurn } from "@monara/contracts";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useAppSession } from "@/components/app-session-context";
 import { BudgetManager, type BudgetManagerPanel } from "@/components/budget-manager";
@@ -9,6 +8,7 @@ import { BudgetsScreen } from "@/components/budgets-screen";
 import { CategoryManager, DemoCategoryManager } from "@/components/category-manager";
 import type { ChatReply } from "@/components/chat-action-result";
 import { ChatScreen } from "@/components/chat-screen";
+import { useChatSession } from "@/components/chat-session-context";
 import { DashboardScreen } from "@/components/dashboard-screen";
 import {
   DemoFinancialAccountSetup,
@@ -40,6 +40,9 @@ export function OverviewRoute() {
       setMonth={navigation.setMonth}
       transactions={session.transactions}
       budgets={session.budgets}
+      weeklyBudgets={session.financeSnapshot?.allBudgets.filter(
+        (budget) => budget.cadence === "weekly",
+      )}
       today={session.today}
       bills={session.bills}
       insights={
@@ -72,18 +75,18 @@ export function TransactionsRoute() {
       setMonth={navigation.setMonth}
       transactions={session.transactions}
       reviewOpen={navigation.view.reviewOpen}
-      setReviewOpen={(reviewOpen) => navigation.navigate({ reviewOpen })}
+      setReviewOpen={(reviewOpen) =>
+        navigation.navigate(reviewOpen ? { reviewOpen, kindFilter: "all" } : { reviewOpen })
+      }
       openTransaction={(transaction) => navigation.openTransaction(transaction.id)}
-      onEdit={navigation.openEdit}
       onConfirm={session.confirm}
-      onReject={session.reject}
       query={session.query}
       onQueryChange={session.setQuery}
       kindFilter={navigation.view.kindFilter}
-      onKindChange={(kindFilter) => navigation.navigate({ kindFilter })}
+      onKindChange={(kindFilter) => navigation.navigate({ kindFilter, reviewOpen: false })}
       onClearFilters={() => {
         session.setQuery("");
-        navigation.navigate({ kindFilter: "all" }, "replace");
+        navigation.navigate({ kindFilter: "all", reviewOpen: false }, "replace");
       }}
       onAdd={navigation.openAdd}
       onConnectGmail={navigation.openGmail}
@@ -118,6 +121,11 @@ export function BudgetsRoute() {
   return (
     <BudgetsScreen
       demo={session.dataMode === "demo"}
+      insights={
+        session.financeSnapshot?.month === session.navigation.view.month
+          ? session.financeSnapshot.dashboard.insights
+          : undefined
+      }
       onEditBudget={session.dataMode === "demo" ? session.updateDemoBudget : undefined}
       demoCategories={session.dataMode === "demo" ? session.categories : undefined}
       onCreateBudget={session.dataMode === "demo" ? session.createDemoBudget : undefined}
@@ -158,11 +166,22 @@ export function BudgetsRoute() {
 
 export function ChatRoute() {
   const session = useAppSession();
-  const history = useRef<AgentChatTurn[]>([]);
-  const [conversation, setConversation] = useState(0);
+  const chat = useChatSession();
+  const conversation =
+    chat.state.conversations.find((item) => item.id === chat.state.activeId) ??
+    chat.state.conversations[0];
+  const mounted = useRef(true);
+  const { dispatch } = chat;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      dispatch({ type: "close-confirmations", id: conversation.id });
+    };
+  }, [conversation.id, dispatch]);
   const demo = session.dataMode === "demo";
 
-  const send = async (text: string) => {
+  const requestReply = async (text: string): Promise<string | ChatReply> => {
     if (demo) {
       const result = demoReply(text, {
         transactions: session.transactions,
@@ -171,6 +190,15 @@ export function ChatRoute() {
         today: session.today,
       });
       if (result.log) session.logDemoPayment(result.log.merchant, result.log.amount);
+      dispatch({
+        type: "history",
+        id: conversation.id,
+        history: nextHistory(conversation.history, text, {
+          reply: result.reply,
+          actions: [],
+          confirmation: null,
+        }),
+      });
       return result.reply;
     }
     try {
@@ -178,25 +206,32 @@ export function ChatRoute() {
       return await session.runMutation<ChatReply>(
         async () => {
           try {
-            const response = await sendChatMessage(text, history.current);
-            history.current = nextHistory(history.current, text, response);
-            return response;
+            const response = await sendChatMessage(text, conversation.history);
+            const safeResponse = mounted.current ? response : { ...response, confirmation: null };
+            dispatch({
+              type: "history",
+              id: conversation.id,
+              history: nextHistory(conversation.history, text, safeResponse),
+            });
+            return safeResponse;
           } catch (failure) {
-            if (failure instanceof ChatClientError && failure.actionMayHaveCompleted) {
+            if (failure instanceof ChatClientError) {
               // A lost reply cannot establish whether an earlier confirmation was consumed.
-              history.current = history.current.map((turn) => {
-                const verifiedTurn = { ...turn };
-                delete verifiedTurn.confirmation;
-                return verifiedTurn;
-              });
-              throw new FinanceClientError("DEPENDENCY_UNAVAILABLE", failure.message, null, true);
+              if (failure.actionMayHaveCompleted)
+                dispatch({ type: "close-confirmations", id: conversation.id });
+              throw new FinanceClientError(
+                failure.code,
+                failure.message,
+                failure.status,
+                failure.actionMayHaveCompleted,
+              );
             }
             throw failure;
           }
         },
         {
-          shouldRefresh: (response) =>
-            response.actions.length > 0 || text.trim().toLowerCase() === "yes",
+          // Undo changes existing records without issuing another action receipt.
+          // Reconcile every verified turn rather than inferring writes from reply text.
           refreshFailureMessage:
             "Your records could not be refreshed. Refresh before making another change.",
           onRefreshFailure: (response, refreshWarning) => ({ ...response, refreshWarning }),
@@ -211,15 +246,70 @@ export function ChatRoute() {
     }
   };
 
+  const send = async (text: string) => {
+    if (!chat.beginSend()) throw new Error("Give me a sec to finish the current message.");
+    const append = (message: {
+      role: "user" | "agent" | "error";
+      text: string;
+      result?: ChatReply;
+    }) =>
+      dispatch({
+        type: "message",
+        id: conversation.id,
+        message: { id: crypto.randomUUID(), ...message },
+        at: new Date().toISOString(),
+      });
+    append({ role: "user", text });
+    try {
+      const response = await requestReply(text);
+      const safeReply =
+        typeof response === "string" || mounted.current
+          ? response
+          : { ...response, confirmation: null };
+      append({
+        role: "agent",
+        text: typeof safeReply === "string" ? safeReply : safeReply.reply,
+        ...(typeof safeReply === "string" ? {} : { result: safeReply }),
+      });
+      return safeReply;
+    } catch (failure) {
+      dispatch({ type: "close-confirmations", id: conversation.id });
+      append({
+        role: "error",
+        text:
+          failure instanceof Error
+            ? failure.message
+            : "Couldn’t get a reply. Give it another try in a moment.",
+      });
+      throw failure;
+    } finally {
+      chat.endSend();
+    }
+  };
+
   return (
     <ChatScreen
       demo={demo}
       initialPrompt={session.chatPrompt}
-      key={conversation}
+      key={conversation.id}
+      messages={conversation.messages}
+      conversations={chat.state.conversations}
+      activeConversationId={conversation.id}
+      pending={chat.pending}
+      onRestoreConversation={(id) => {
+        if (!chat.pending) dispatch({ type: "restore", id });
+      }}
+      onAddManually={session.navigation.openAdd}
+      onCheckRecords={() =>
+        session.navigation.navigate({
+          screen: "transactions",
+          reviewOpen: false,
+          kindFilter: "all",
+        })
+      }
       onClose={() => session.navigation.navigate({ screen: "home" })}
       onNewChat={() => {
-        history.current = [];
-        setConversation((value) => value + 1);
+        if (!chat.pending) dispatch({ type: "new", id: crypto.randomUUID() });
       }}
       onPromptUsed={session.clearChatPrompt}
       onSend={send}
@@ -271,6 +361,7 @@ export function ProfileRoute() {
       }
       demo={session.dataMode === "demo"}
       online={session.online}
+      onOpenReminders={session.openReminders}
       onReplayTour={session.replayTour}
       profile={session.profile}
     />

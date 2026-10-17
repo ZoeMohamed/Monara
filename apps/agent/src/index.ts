@@ -3,9 +3,9 @@ import type { Env } from "./env.ts";
 import {
   consumeGmailJobs,
   consumeMerchantJobs,
-  handleGmailDiscoveryRequest,
+  handleGmailIngestRequest,
   handleGmailSyncRequest,
-  scheduleGmailSyncs,
+  scheduleGmailDaily,
 } from "./gmail/index.ts";
 import { healthResponse, notFoundResponse } from "./http.ts";
 import { dispatchReminders } from "./reminders.ts";
@@ -28,19 +28,18 @@ export default {
     if (request.method === "POST" && path === "/webhooks/kapso") {
       return handleKapsoWebhook(request, env);
     }
+    if (request.method === "POST" && path === "/gmail/ingest") {
+      return handleGmailIngestRequest(request, env, context);
+    }
     if (request.method === "POST" && path === "/gmail/sync") {
       return handleGmailSyncRequest(request, env, context);
-    }
-    if (request.method === "POST" && path === "/gmail/discover") {
-      return handleGmailDiscoveryRequest(request, env);
     }
     return notFoundResponse();
   },
 
-  async scheduled(_controller, env) {
-    // Reminder dispatch logs its own failures; a Gmail failure still fails the run as before.
-    const [gmail] = await Promise.allSettled([scheduleGmailSyncs(env), dispatchReminders(env)]);
-    if (gmail.status === "rejected") throw gmail.reason;
+  scheduled(controller, env) {
+    if (controller.cron === "0 1 * * *") return scheduleGmailDaily(env);
+    if (controller.cron === "*/15 * * * *") return dispatchReminders(env);
   },
 
   queue(batch, env) {

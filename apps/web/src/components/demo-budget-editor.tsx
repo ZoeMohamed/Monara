@@ -16,6 +16,7 @@ export type DemoBudgetChanges = {
   startsOn: string;
   warningPercent: number;
   icon?: string;
+  cadence: "monthly" | "weekly";
 };
 
 export function DemoBudgetEditor({
@@ -36,8 +37,28 @@ export function DemoBudgetEditor({
     startsOn: budget.startsOn ?? `${today.slice(0, 7)}-01`,
     warningPercent: String(budget.warningPercent),
     icon: budget.icon ?? (null as string | null),
+    cadence: budget.cadence,
   });
   const [errors, setErrors] = useState<Partial<Record<keyof typeof draft, string>>>({});
+  const [initial] = useState(draft);
+  const [discard, setDiscard] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const dirty = Object.keys(draft).some(
+    (key) => draft[key as keyof typeof draft] !== initial[key as keyof typeof draft],
+  );
+  const close = () => {
+    if (dirty) setDiscard(true);
+    else onClose();
+  };
+  const change = (patch: Partial<typeof draft>) => {
+    setDraft((previous) => ({ ...previous, ...patch }));
+    setErrors((previous) => {
+      const next = { ...previous };
+      for (const key of Object.keys(patch) as (keyof typeof draft)[]) delete next[key];
+      return next;
+    });
+    setSaveError(null);
+  };
   const incomeDate = transactions
     .filter(
       (transaction) =>
@@ -51,6 +72,7 @@ export function DemoBudgetEditor({
     .at(-1);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSaveError(null);
     const nextErrors: typeof errors = {};
     let limit: number | null = null;
     try {
@@ -66,41 +88,92 @@ export function DemoBudgetEditor({
       nextErrors.warningPercent = "Enter a percentage from 1 to 100.";
     if (Object.keys(nextErrors).length > 0 || limit === null) {
       setErrors(nextErrors);
+      const form = event.currentTarget;
+      requestAnimationFrame(() =>
+        form.querySelector<HTMLInputElement>('input[aria-invalid="true"]')?.focus(),
+      );
       return;
     }
-    onSave(budget.id, {
-      limit,
-      startsOn: draft.startsOn,
-      warningPercent,
-      icon: categoryIconChoice(budget.category, draft.icon),
-    });
+    try {
+      onSave(budget.id, {
+        limit,
+        startsOn: draft.startsOn,
+        warningPercent,
+        icon: categoryIconChoice(budget.category, draft.icon),
+        cadence: draft.cadence,
+      });
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "This budget couldn’t be saved. Your entries are still here. Try again.",
+      );
+      return;
+    }
     onClose();
   };
+  if (discard)
+    return (
+      <ModalDialog labelledBy="demo-budget-discard-title" onClose={() => setDiscard(false)}>
+        <div className={styles.form}>
+          <h2 className="text-xl font-bold" id="demo-budget-discard-title">
+            Discard budget changes?
+          </h2>
+          <p className="text-sm leading-6 text-muted">
+            Nothing has been saved. Keep editing to hold on to your changes.
+          </p>
+          <div className={styles.footer}>
+            <Button className="min-h-11" onPress={onClose} variant="secondary">
+              Discard changes
+            </Button>
+            <Button autoFocus className="min-h-11" onPress={() => setDiscard(false)}>
+              Keep editing
+            </Button>
+          </div>
+        </div>
+      </ModalDialog>
+    );
   return (
-    <ModalDialog labelledBy="demo-budget-title" onClose={onClose}>
+    <ModalDialog labelledBy="demo-budget-title" onClose={close}>
       <form className={styles.form} noValidate onSubmit={submit}>
         <div className={styles.header}>
           <h2 className="text-xl font-bold" id="demo-budget-title">
             Edit {budget.category} budget
           </h2>
-          <Button aria-label="Close budget form" isIconOnly onPress={onClose} variant="ghost">
+          <Button aria-label="Close budget form" isIconOnly onPress={close} variant="ghost">
             <Icon name="close" />
           </Button>
         </div>
+        <fieldset className={styles.field}>
+          <legend className={styles.label}>Period</legend>
+          <div className="mt-1 flex gap-2">
+            {(["monthly", "weekly"] as const).map((cadence) => (
+              <Button
+                aria-pressed={draft.cadence === cadence}
+                className="min-h-11 flex-1 rounded-full"
+                key={cadence}
+                onPress={() => change({ cadence })}
+                variant={draft.cadence === cadence ? "primary" : "secondary"}
+              >
+                {cadence === "monthly" ? "Monthly" : "Weekly"}
+              </Button>
+            ))}
+          </div>
+        </fieldset>
         <TextField
           isInvalid={Boolean(errors.limit)}
           name="limit"
-          onChange={(limit) => setDraft((previous) => ({ ...previous, limit }))}
+          onChange={(limit) => change({ limit })}
           value={draft.limit}
         >
-          <Label>Monthly limit in rupiah</Label>
+          <Label>{draft.cadence === "weekly" ? "Weekly" : "Monthly"} limit in rupiah</Label>
           <Input autoFocus className="min-h-11 text-base" inputMode="numeric" maxLength={16} />
           <FieldError>{errors.limit}</FieldError>
         </TextField>
         <TextField
           isInvalid={Boolean(errors.startsOn)}
           name="startsOn"
-          onChange={(startsOn) => setDraft((previous) => ({ ...previous, startsOn }))}
+          onChange={(startsOn) => change({ startsOn })}
           type="date"
           value={draft.startsOn}
         >
@@ -109,13 +182,14 @@ export function DemoBudgetEditor({
           <FieldError>{errors.startsOn}</FieldError>
         </TextField>
         <p className={styles.meta}>
-          Resets on this day each month. Shorter months use their last day. Choose your payday or
-          any date that works for you.
+          {draft.cadence === "weekly"
+            ? "Resets every seven days from this date. Changing the period or start date recalculates which confirmed expenses count."
+            : "Resets on this day each month. Shorter months use their last day. Changing the period or start date recalculates which confirmed expenses count."}
         </p>
         {incomeDate && (
           <Button
             className="min-h-11 justify-start rounded-full text-xs"
-            onPress={() => setDraft((previous) => ({ ...previous, startsOn: incomeDate }))}
+            onPress={() => change({ startsOn: incomeDate })}
             variant="secondary"
           >
             <Icon className="h-4 w-4" name="income" />
@@ -125,7 +199,7 @@ export function DemoBudgetEditor({
         <TextField
           isInvalid={Boolean(errors.warningPercent)}
           name="warningPercent"
-          onChange={(warningPercent) => setDraft((previous) => ({ ...previous, warningPercent }))}
+          onChange={(warningPercent) => change({ warningPercent })}
           value={draft.warningPercent}
         >
           <Label>Notify me at (%)</Label>
@@ -134,12 +208,17 @@ export function DemoBudgetEditor({
         </TextField>
         <CategoryIconPicker
           name={budget.category}
-          onChange={(icon) => setDraft((previous) => ({ ...previous, icon }))}
+          onChange={(icon) => change({ icon })}
           value={draft.icon}
         />
         <p className={styles.meta}>Changes last for this demo visit.</p>
+        {saveError && (
+          <p className={styles.error} role="alert">
+            {saveError}
+          </p>
+        )}
         <div className={styles.footer}>
-          <Button className="min-h-11" onPress={onClose} variant="secondary">
+          <Button className="min-h-11" onPress={close} variant="secondary">
             Cancel
           </Button>
           <Button className="min-h-11" type="submit">

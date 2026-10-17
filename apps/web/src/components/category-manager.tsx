@@ -2,6 +2,7 @@
 
 import {
   type Category,
+  isExclusionCategoryName,
   type UpdateCategoryInput,
   updateCategoryInputSchema,
 } from "@monara/contracts";
@@ -271,6 +272,9 @@ function CategoryManagementSelect({
                 size={28}
               />
               {category.name}
+              {isExclusionCategoryName(category.name) ? (
+                <span className="ml-auto text-xs text-muted">Exclusion</span>
+              ) : null}
               <ListBox.ItemIndicator />
             </ListBox.Item>
           ))}
@@ -294,6 +298,13 @@ function CategoryActions({
   onDelete: () => void;
 }) {
   if (!selected) return null;
+  if (isExclusionCategoryName(selected.name)) {
+    return (
+      <p className="mt-3 text-xs leading-5 text-muted">
+        Exclusion reasons stay available in History and do not count toward totals.
+      </p>
+    );
+  }
   return (
     <div className="mt-3 flex flex-wrap justify-end gap-2">
       <Button

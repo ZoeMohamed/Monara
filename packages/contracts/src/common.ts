@@ -136,6 +136,8 @@ export const undoActionInputSchema = z
   })
   .strict();
 
+export const undoActionResultSchema = z.object({ ok: z.literal(true) }).strict();
+
 export const destructiveActionSchema = z.enum([
   "delete_transaction",
   "delete_budget",

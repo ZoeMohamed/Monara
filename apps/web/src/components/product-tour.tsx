@@ -16,8 +16,8 @@ const steps: TourStep[] = [
   },
   {
     target: "chips",
-    title: "Imports wait for you",
-    body: "Receipts from Gmail land in review first. Nothing counts until you confirm it.",
+    title: "A quick second look",
+    body: "Imports that need more detail appear in To review. Exclusions stay out of your spending totals.",
   },
   {
     target: "ask",

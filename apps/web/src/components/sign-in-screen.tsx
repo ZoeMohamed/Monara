@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@monara/ui";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -17,7 +18,7 @@ type SignInScreenProps = {
 
 const benefits: { icon: IconName; text: string }[] = [
   { icon: "mail", text: "Gmail receipts, ready for review" },
-  { icon: "check", text: "Nothing counts until you confirm it" },
+  { icon: "check", text: "Review the details that need a second look" },
   { icon: "chat", text: "Ask “can I afford it?” any time" },
 ];
 
@@ -98,10 +99,15 @@ export function SignInScreen({ available = true, error, next }: SignInScreenProp
           </Link>
           <form action="/auth/sign-in" method="post">
             <input name="next" type="hidden" value={next} />
-            <button className={styles.googleButton} disabled={!available} type="submit">
+            <Button
+              className={styles.googleButton}
+              isDisabled={!available}
+              type="submit"
+              variant="outline"
+            >
               <GoogleMark />
               Continue with Google
-            </button>
+            </Button>
           </form>
         </div>
 

@@ -4,13 +4,14 @@ import {
   type CreateFinancialAccountInput,
   createFinancialAccountInputSchema,
   type FinancialAccount,
+  findInstitution,
   type Institution,
   institutions,
   type UpdateFinancialAccountInput,
   updateFinancialAccountInputSchema,
 } from "@monara/contracts";
-import { Button } from "@monara/ui";
-import { type FormEvent, useId, useRef, useState } from "react";
+import { Button, Input, Label, TextField } from "@monara/ui";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 
 import { AccountBadge } from "@/components/account-badge";
 import { BrandLogoField } from "@/components/brand-logo-field";
@@ -21,6 +22,7 @@ import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import { type BrandIdentity, brands } from "@/data/brand-identity";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
+import { loadGmailConnections } from "@/lib/gmail/client";
 
 type AccountDraft = {
   name: string;
@@ -28,8 +30,62 @@ type AccountDraft = {
   institution: string;
   /** Registry entry whose Gmail notifications belong to this account; "" for none. */
   institutionKey: string;
+  /** The mailbox those notifications arrive in: a connection id, "none", or "" when not chosen. */
+  gmailConnectionId: string;
   lastFour: string;
 };
+
+/** A connected Gmail mailbox an account's alerts can come from. */
+type MailboxOption = { id: string; gmailAddress: string };
+
+/** The User's active Gmail mailboxes; empty in the demo, while loading, or when unreadable. */
+function useActiveMailboxes(enabled: boolean): MailboxOption[] {
+  const [mailboxes, setMailboxes] = useState<MailboxOption[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    const controller = new AbortController();
+    loadGmailConnections({ signal: controller.signal }).then(
+      (connections) => {
+        if (controller.signal.aborted) return;
+        setMailboxes(
+          connections
+            .filter((connection) => connection.status === "active")
+            .map(({ id, email }) => ({ id, gmailAddress: email })),
+        );
+      },
+      () => undefined,
+    );
+    return () => controller.abort();
+  }, [enabled]);
+  return mailboxes;
+}
+
+/** Whether an account of this draft can be fed by Gmail at all. */
+function sendsEmail(draft: AccountDraft): boolean {
+  return (
+    draft.accountType !== "cash" &&
+    (findInstitution(draft.institutionKey)?.senderEmails.length ?? 0) > 0
+  );
+}
+
+/**
+ * The mailbox a draft links to. A new account with only one mailbox to choose from
+ * uses it unless the User picked None; otherwise the User's choice, or null.
+ */
+function mailboxFor(
+  draft: AccountDraft,
+  mailboxes: readonly MailboxOption[],
+  preferOnly: boolean,
+): string | null {
+  if (!sendsEmail(draft) || draft.gmailConnectionId === "none") return null;
+  if (draft.gmailConnectionId) return draft.gmailConnectionId;
+  return preferOnly && mailboxes.length === 1 ? (mailboxes[0]?.id ?? null) : null;
+}
+
+/** A new email-fed account must name its mailbox, or None, once a mailbox exists. */
+function missingMailbox(draft: AccountDraft, mailboxes: readonly MailboxOption[]): boolean {
+  return sendsEmail(draft) && mailboxes.length > 1 && draft.gmailConnectionId === "";
+}
 type AccountErrors = Partial<Record<keyof AccountDraft, string>>;
 type DemoAccountChanges = Partial<
   Pick<FinancialAccount, "name" | "institution" | "accountType" | "isActive">
@@ -41,12 +97,14 @@ function draftOf(account?: FinancialAccount): AccountDraft {
     accountType: account?.accountType ?? "bank",
     institution: account?.institution ?? "",
     institutionKey: account?.institutionKey ?? "",
+    gmailConnectionId: account?.gmailConnectionId ?? "",
     lastFour: account?.lastFour ?? "",
   };
 }
 
 function accountChanges(draft: AccountDraft) {
   return {
+    gmailConnectionId: mailboxFor(draft, [], false),
     name: draft.name.trim(),
     accountType: draft.accountType,
     institution: draft.accountType === "cash" ? null : draft.institution.trim() || null,
@@ -94,6 +152,8 @@ function accountMatchesChanges(
     (changes.currency === undefined || account.currency === changes.currency) &&
     (changes.lastFour === undefined || account.lastFour === changes.lastFour) &&
     (changes.institutionKey === undefined || account.institutionKey === changes.institutionKey) &&
+    (changes.gmailConnectionId === undefined ||
+      account.gmailConnectionId === changes.gmailConnectionId) &&
     (changes.isActive === undefined || account.isActive === changes.isActive)
   );
 }
@@ -109,9 +169,10 @@ function notificationChoices(accountType: AccountDraft["accountType"]): Institut
 }
 
 /** The values a draft submits, with the Gmail fields cleared for cash. */
-function accountValues(draft: AccountDraft) {
+function accountValues(draft: AccountDraft, mailboxes: readonly MailboxOption[] = []) {
   const cash = draft.accountType === "cash";
   return {
+    gmailConnectionId: mailboxFor(draft, mailboxes, true),
     name: draft.name.trim(),
     accountType: draft.accountType,
     institution: cash ? null : draft.institution.trim() || null,
@@ -133,32 +194,40 @@ function AccountFields({
   errors,
   disabled,
   onChange,
+  mailboxes = [],
+  preferOnlyMailbox = false,
 }: {
   draft: AccountDraft;
   errors: AccountErrors;
   disabled: boolean;
   onChange: (patch: Partial<AccountDraft>) => void;
+  /** Connected mailboxes to choose from; none hides the choice, as in the demo. */
+  mailboxes?: readonly MailboxOption[];
+  /** A new account with a single mailbox starts with it chosen. */
+  preferOnlyMailbox?: boolean;
 }) {
   const prefix = useId();
   const chooseInstitution = (institution: string) =>
     onChange({ institution, ...(draft.name.trim() ? {} : { name: institution }) });
   return (
     <>
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor={`${prefix}-name`}>
+      <TextField
+        className={styles.field}
+        isDisabled={disabled}
+        isInvalid={Boolean(errors.name)}
+        name="name"
+        onChange={(name) => onChange({ name })}
+        value={draft.name}
+      >
+        <Label className={styles.label} htmlFor={`${prefix}-name`}>
           Account name
-        </label>
-        <input
+        </Label>
+        <Input
           aria-describedby={errors.name ? `${prefix}-name-error` : `${prefix}-name-hint`}
-          aria-invalid={Boolean(errors.name)}
           className={styles.input}
-          disabled={disabled}
           id={`${prefix}-name`}
           maxLength={100}
-          name="name"
-          onChange={(event) => onChange({ name: event.target.value })}
           placeholder="e.g. BCA, GoPay or Cash"
-          value={draft.name}
         />
         <p className={styles.meta} id={`${prefix}-name-hint`}>
           A name for the bank account, wallet or cash you track.
@@ -168,7 +237,7 @@ function AccountFields({
             {errors.name}
           </p>
         )}
-      </div>
+      </TextField>
       <fieldset className={styles.field} disabled={disabled}>
         <legend className={styles.label}>Type</legend>
         <div className="mt-1 flex gap-2">
@@ -188,20 +257,24 @@ function AccountFields({
       </fieldset>
       {draft.accountType !== "cash" && (
         <div className={styles.field}>
-          <label className={styles.label} htmlFor={`${prefix}-institution`}>
-            Institution <span className="font-normal text-muted">(optional)</span>
-          </label>
-          <input
-            aria-describedby={errors.institution ? `${prefix}-institution-error` : undefined}
-            aria-invalid={Boolean(errors.institution)}
-            className={styles.input}
-            disabled={disabled}
-            id={`${prefix}-institution`}
-            maxLength={150}
+          <TextField
+            className={styles.field}
+            isDisabled={disabled}
+            isInvalid={Boolean(errors.institution)}
             name="institution"
-            onChange={(event) => onChange({ institution: event.target.value })}
+            onChange={(institution) => onChange({ institution })}
             value={draft.institution}
-          />
+          >
+            <Label className={styles.label} htmlFor={`${prefix}-institution`}>
+              Institution <span className="font-normal text-muted">(optional)</span>
+            </Label>
+            <Input
+              aria-describedby={errors.institution ? `${prefix}-institution-error` : undefined}
+              className={styles.input}
+              id={`${prefix}-institution`}
+              maxLength={150}
+            />
+          </TextField>
           <fieldset className="mt-2 flex flex-wrap gap-2">
             <legend className="sr-only">Common institutions</legend>
             {institutionChoices[draft.accountType].map((brand) => {
@@ -264,6 +337,43 @@ function AccountFields({
           </p>
         </div>
       )}
+      {sendsEmail(draft) && mailboxes.length > 0 && (
+        <div className={styles.field}>
+          <label className={styles.label} htmlFor={`${prefix}-mailbox`}>
+            Email for these alerts
+          </label>
+          <select
+            aria-describedby={
+              errors.gmailConnectionId ? `${prefix}-mailbox-error` : `${prefix}-mailbox-hint`
+            }
+            aria-invalid={Boolean(errors.gmailConnectionId)}
+            className={styles.input}
+            disabled={disabled}
+            id={`${prefix}-mailbox`}
+            name="gmailConnectionId"
+            onChange={(event) => onChange({ gmailConnectionId: event.target.value })}
+            value={mailboxFor(draft, mailboxes, preferOnlyMailbox) ?? draft.gmailConnectionId}
+          >
+            <option disabled value="">
+              Choose an email
+            </option>
+            {mailboxes.map((mailbox) => (
+              <option key={mailbox.id} value={mailbox.id}>
+                {mailbox.gmailAddress}
+              </option>
+            ))}
+            <option value="none">None (I&apos;ll add transactions myself)</option>
+          </select>
+          <p className={styles.meta} id={`${prefix}-mailbox-hint`}>
+            Monara reads this bank&apos;s alerts only from the email you choose.
+          </p>
+          {errors.gmailConnectionId && (
+            <p className={styles.error} id={`${prefix}-mailbox-error`}>
+              {errors.gmailConnectionId}
+            </p>
+          )}
+        </div>
+      )}
       {draft.accountType !== "cash" && (
         <div className={styles.field}>
           <label className={styles.label} htmlFor={`${prefix}-last-four`}>
@@ -293,7 +403,7 @@ function AccountFields({
           )}
         </div>
       )}
-      <p className={styles.meta}>Use this account for payments and transfers · IDR.</p>
+      <p className={styles.meta}>Use this account for your transactions · IDR.</p>
     </>
   );
 }
@@ -309,6 +419,7 @@ function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () 
   });
   const request = useRef<CreateFinancialAccountInput | null>(null);
   const inFlight = useRef(false);
+  const mailboxes = useActiveMailboxes(true);
   const close = () => {
     if (inFlight.current) return;
     if (!state.discard && !state.uncertain && (state.draft.name || state.draft.institution)) {
@@ -325,8 +436,16 @@ function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () 
     event.preventDefault();
     if (inFlight.current || props.refreshRequired) return;
     if (!request.current) {
+      if (missingMailbox(state.draft, mailboxes)) {
+        setState((previous) => ({
+          ...previous,
+          errors: { gmailConnectionId: "Choose the email that gets these alerts, or None." },
+          error: "Check the marked fields.",
+        }));
+        return;
+      }
       const parsed = createFinancialAccountInputSchema.safeParse({
-        ...accountValues(state.draft),
+        ...accountValues(state.draft, mailboxes),
         clientRequestId: "preflight",
       });
       if (!parsed.success) {
@@ -397,7 +516,9 @@ function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () 
               disabled={locked}
               draft={state.draft}
               errors={state.errors}
+              mailboxes={mailboxes}
               onChange={change}
+              preferOnlyMailbox
             />
             {state.error && (
               <p className={styles.error} role="alert">
@@ -472,7 +593,13 @@ function useAccountEditor({ account, onClose, ...props }: AccountEditorProps) {
       accountMatchesChanges(current, request.current.changes),
   );
   const blocked = Boolean(props.refreshRequired) || versionChanged || state.conflict;
-  const values = accountChanges(state.draft);
+  const mailboxes = useActiveMailboxes(true);
+  const { gmailConnectionId, ...otherChanges } = accountChanges(state.draft);
+  // The mailbox is sent only when it changes, since a new mailbox starts an import.
+  const values =
+    gmailConnectionId === (original.current.gmailConnectionId ?? null)
+      ? otherChanges
+      : { ...otherChanges, gmailConnectionId };
   const unchanged = accountMatchesChanges(original.current, values);
   const locked = state.pending || state.uncertain || blocked;
   const active = current?.isActive ?? original.current.isActive;
@@ -552,6 +679,7 @@ function useAccountEditor({ account, onClose, ...props }: AccountEditorProps) {
     change,
     close,
     locked,
+    mailboxes,
     name: original.current.name,
     onRefreshRecords: props.onRefreshRecords,
     reconciled,
@@ -572,8 +700,8 @@ function AccountStatusFields({ editor }: { editor: LiveAccountEditor }) {
     <>
       <p className="text-sm leading-6 text-muted">
         {active
-          ? "This account will no longer be available for new payments or transfers. Existing transaction history stays linked to it."
-          : "This account will become available for new payments and transfers again."}
+          ? "This account will no longer be available for new transactions. Existing transaction history stays linked to it."
+          : "This account will become available for new transactions again."}
       </p>
       {state.error ? (
         <p className={styles.error} role="alert">
@@ -615,6 +743,7 @@ function AccountEditFields({ editor }: { editor: LiveAccountEditor }) {
     change,
     close,
     locked,
+    mailboxes,
     onRefreshRecords,
     setMode,
     state,
@@ -627,13 +756,14 @@ function AccountEditFields({ editor }: { editor: LiveAccountEditor }) {
         disabled={locked}
         draft={state.draft}
         errors={state.errors}
+        mailboxes={mailboxes}
         onChange={change}
       />
       <div className="rounded-2xl border border-separator p-3">
         <p className="text-sm font-semibold">Account status</p>
         <p className="mt-1 text-xs leading-5 text-muted">
           {active
-            ? "Active accounts are available for new payments and transfers."
+            ? "Active accounts are available for new transactions."
             : "Inactive accounts stay in your history but cannot be used for new transactions."}
         </p>
         <Button
@@ -864,8 +994,8 @@ function DemoAccountStatusFields({ editor }: { editor: DemoAccountEditorState })
     <>
       <p className="text-sm leading-6 text-muted">
         {account.isActive
-          ? "This account will no longer be available for new payments or transfers. Existing transaction history stays linked to it."
-          : "This account will become available for new payments and transfers again."}
+          ? "This account will no longer be available for new transactions. Existing transaction history stays linked to it."
+          : "This account will become available for new transactions again."}
       </p>
       {state.error ? (
         <p className={styles.error} role="alert">
@@ -898,7 +1028,7 @@ function DemoAccountEditFields({ editor }: { editor: DemoAccountEditorState }) {
         <p className="text-sm font-semibold">Account status</p>
         <p className="mt-1 text-xs leading-5 text-muted">
           {account.isActive
-            ? "Active accounts are available for new payments and transfers."
+            ? "Active accounts are available for new transactions."
             : "Inactive accounts stay in your history but cannot be used for new transactions."}
         </p>
         <Button

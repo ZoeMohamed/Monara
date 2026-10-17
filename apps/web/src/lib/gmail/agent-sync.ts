@@ -1,17 +1,13 @@
-import {
-  type RequestGmailSyncInput,
-  requestGmailSyncInputSchema,
-  startGmailDiscoveryInputSchema,
-} from "@monara/contracts";
+import { type RequestGmailIngestInput, requestGmailIngestInputSchema } from "@monara/contracts";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
-/** Raised when the agent did not accept the sync. Carries the status only. */
-export class AgentSyncError extends Error {
+/** Raised when the agent did not accept the import. Carries the status only. */
+class AgentSyncError extends Error {
   readonly status: number | null;
 
   constructor(status: number | null) {
-    super("The agent did not queue the Gmail sync.");
+    super("The agent did not queue the Gmail import.");
     this.name = "AgentSyncError";
     this.status = status;
   }
@@ -37,17 +33,9 @@ async function postToAgent(path: string, body: unknown): Promise<void> {
 }
 
 /**
- * Asks the agent worker to queue a sync for a connection. Call it only after
- * checking that the signed-in User owns the connection and that it is active.
+ * Asks the agent worker to import a connection's mail. Call it only after checking
+ * that the signed-in User owns the connection and that it is active.
  */
-export async function requestAgentSync(input: RequestGmailSyncInput): Promise<void> {
-  await postToAgent("/gmail/sync", requestGmailSyncInputSchema.parse(input));
-}
-
-/**
- * Asks the agent worker to find which banks, cards, and wallets email this mailbox.
- * Call it only after checking that the signed-in User owns the active connection.
- */
-export async function requestAgentDiscovery(connectionId: string): Promise<void> {
-  await postToAgent("/gmail/discover", startGmailDiscoveryInputSchema.parse({ connectionId }));
+export async function requestAgentIngest(input: RequestGmailIngestInput): Promise<void> {
+  await postToAgent("/gmail/ingest", requestGmailIngestInputSchema.parse(input));
 }

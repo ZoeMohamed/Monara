@@ -154,13 +154,14 @@
     padding-left: max(20px, env(safe-area-inset-left, 0px));
   }
 
-  .shell[data-screen="home"] .main {
+  .shell[data-screen="home"] .main,
+  .shell[data-screen="onboarding"] .main {
     padding-top: 0;
     padding-inline: 0;
   }
 
   /* Only Home carries the floating header; other screens lead with their own title. */
-  .shell:not([data-screen="home"]) .mobileHeader {
+  .shell:not(:is([data-screen="home"], [data-screen="onboarding"])) .mobileHeader {
     display: none;
   }
 

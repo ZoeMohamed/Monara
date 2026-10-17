@@ -73,7 +73,9 @@ sequenceDiagram
 | `undo_action`, `list_reminders` | Implemented; Undo covers transaction and Budget changes |
 | WhatsApp `resolve-sender` and link start, status, unlink | Implemented |
 
-Recurring bills (`list_recurring_bills`, `delete_bill`, `confirm_recurring_bill`), `set_reminder_preferences` and `bulk_edit` have no backend operation, so the Agent does not offer them and says so when asked. T1 and destructive-confirmation action logs exist; complete per-tool/failure audit coverage remains Planned. Receipt photos and voice notes get a fixed reply until extraction (F14) takes them.
+Recurring bills (`list_recurring_bills`, `delete_bill`, `confirm_recurring_bill`), `set_reminder_preferences` and `bulk_edit` have no backend operation, so the Agent does not offer them and says so when asked. T1 and destructive-confirmation action logs exist; complete per-tool/failure audit coverage remains Planned. Voice notes get a fixed reply.
+
+**Receipt photos (F14).** A linked User's photo on WhatsApp goes through the same per-User queue as text. `apps/agent/src/whatsapp/receipt.ts` downloads it from Kapso, sends it to the vision model with the User's Category names, and checks the reading like Gmail extraction: the total must parse as Rupiah (a bare "37.000" counts, another currency does not), a date more than a day ahead or 400 days old is dropped and caps confidence at 0.5, and the account is set only when exactly one active account matches the card digits or name. It is saved through `add_receipt_transaction` as a **pending** transaction with source `whatsapp_receipt`, keyed by the WhatsApp message id so a redelivered photo saves nothing new, and never counts until the User confirms it. The reply joins the conversation history, so "confirm" or "it was GoPay" can follow. A non-receipt or an unreadable total saves nothing. The photo and caption are data: a caption asking to record Rp 99.000.000 of income was ignored in a live run. The photo bytes are kept only for the model call.
 
 ## Key decisions
 

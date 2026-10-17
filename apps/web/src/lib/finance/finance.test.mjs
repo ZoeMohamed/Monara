@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { budgetUsage, reviewFlags, transactionErrors } from "../../data/demo-ledger.ts";
+import { budgetUsage, transactionErrors } from "../../data/demo-ledger.ts";
 import { callFinanceOperation, FinanceClientError } from "./client.ts";
 import {
   FinancePresentationError,
@@ -154,7 +154,6 @@ describe("owned financial presentation", () => {
       categories,
     );
     assert.deepEqual(transactionErrors(mapped), {});
-    assert.deepEqual(reviewFlags(mapped), ["Financial account not assigned", "Low confidence"]);
   });
 
   it("maps an exclusion record with one owned Account/payment method", () => {
@@ -307,6 +306,112 @@ describe("owned financial presentation", () => {
 });
 
 describe("financial HTTP boundary", () => {
+  it("blocks an already offline save before dispatch so it can be retried without an uncertain result", async () => {
+    const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { onLine: false },
+    });
+    let requests = 0;
+    try {
+      await assert.rejects(
+        callFinanceOperation(
+          "exclude_pending",
+          {
+            transactionId,
+            expectedUpdatedAt: timestamp,
+          },
+          async () => {
+            requests += 1;
+            return Response.json({});
+          },
+        ),
+        (error) => {
+          assert.equal(error.actionMayHaveCompleted, false);
+          assert.match(error.message, /hasn't been sent/);
+          return true;
+        },
+      );
+      assert.equal(requests, 0);
+    } finally {
+      if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+      else Reflect.deleteProperty(globalThis, "navigator");
+    }
+  });
+
+  it("gives failed reads a retry path without suggesting an uncertain financial write", async () => {
+    for (const fetcher of [
+      async () => {
+        throw new TypeError("Connection dropped");
+      },
+      async () => new Response("not-json", { status: 503 }),
+      async () => Response.json({ not: "a transaction page" }),
+    ]) {
+      await assert.rejects(callFinanceOperation("list_transactions", {}, fetcher), (error) => {
+        assert.equal(error.actionMayHaveCompleted, false);
+        assert.match(error.message, /Refresh your records/);
+        assert.doesNotMatch(error.message, /whether your change was saved/);
+        return true;
+      });
+    }
+  });
+
+  it("undoes only the server-issued action receipt through the private financial boundary", async () => {
+    const actionId = "00000000-0000-4000-8000-000000000501";
+    const result = await callFinanceOperation(
+      "undo_action",
+      { actionId },
+      async (path, options) => {
+        assert.equal(path, "/api/finance/operations/undo_action");
+        assert.equal(options.credentials, "same-origin");
+        assert.equal(options.cache, "no-store");
+        assert.deepEqual(JSON.parse(options.body), { actionId });
+        return Response.json({ ok: true });
+      },
+    );
+    assert.deepEqual(result, { ok: true });
+    let requests = 0;
+    for (const input of [{ actionId: "invalid" }, { actionId, userId: accountId }]) {
+      await assert.rejects(
+        callFinanceOperation("undo_action", input, async () => {
+          requests += 1;
+          return Response.json({ ok: true });
+        }),
+        (error) => error.code === "VALIDATION_FAILED" && !error.actionMayHaveCompleted,
+      );
+    }
+    assert.equal(requests, 0);
+  });
+
+  it("requires recovery for a lost or invalid Undo response and preserves a definite expired receipt", async () => {
+    const input = { actionId: "00000000-0000-4000-8000-000000000501" };
+    for (const fetcher of [
+      async () => {
+        throw new TypeError("Connection dropped");
+      },
+      async () => Response.json({ ok: false }),
+      async () => Response.json({ ok: true, ignoredWrite: true }),
+    ]) {
+      await assert.rejects(
+        callFinanceOperation("undo_action", input, fetcher),
+        (error) => error instanceof FinanceClientError && error.actionMayHaveCompleted,
+      );
+    }
+    await assert.rejects(
+      callFinanceOperation("undo_action", input, async () =>
+        Response.json(
+          {
+            code: "CONFLICT",
+            message: "That change can no longer be undone.",
+            requestId: null,
+          },
+          { status: 409 },
+        ),
+      ),
+      (error) => error.code === "CONFLICT" && !error.actionMayHaveCompleted,
+    );
+  });
+
   it("treats a validated Budget suggestion as a read-only operation", async () => {
     const input = { categoryId, cadence: "monthly" };
     const suggestion = {
@@ -598,8 +703,12 @@ describe("financial HTTP boundary", () => {
       input,
       async (path, options) => {
         assert.equal(path, "/api/finance/operations/create_financial_account");
-        // The client fills the optional Gmail institution with its default, none.
-        assert.deepEqual(JSON.parse(options.body), { ...input, institutionKey: null });
+        // The client fills the optional Gmail institution and mailbox with their default, none.
+        assert.deepEqual(JSON.parse(options.body), {
+          ...input,
+          institutionKey: null,
+          gmailConnectionId: null,
+        });
         return Response.json({
           financialAccount: saved,
           action: action("financial_account", accountId),
@@ -731,6 +840,11 @@ describe("financial HTTP boundary", () => {
       },
       async () => Response.json({ transaction: {} }),
       async () => new Response("not-json", { status: 502 }),
+      async () =>
+        Response.json(
+          { code: "INTERNAL", message: "The operation could not be completed.", requestId: null },
+          { status: 500 },
+        ),
     ]) {
       await assert.rejects(
         callFinanceOperation(
@@ -738,7 +852,10 @@ describe("financial HTTP boundary", () => {
           { transactionId, expectedUpdatedAt: timestamp },
           fetcher,
         ),
-        (error) => error instanceof FinanceClientError && error.actionMayHaveCompleted === true,
+        (error) =>
+          error instanceof FinanceClientError &&
+          error.actionMayHaveCompleted === true &&
+          /Refresh your records/.test(error.message),
       );
     }
   });

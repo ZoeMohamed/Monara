@@ -71,15 +71,24 @@ function SummaryComparison({ comparison }: { comparison: FinancialSummaryModel["
   );
 }
 
-/** Shared confirmed totals and comparison presentation, independent of calendar scale. */
-export function FinancialSummary({ model }: { model: FinancialSummaryModel }) {
+/**
+ * Shared confirmed totals and comparison presentation, independent of calendar scale.
+ * `compact` is the one-row strip on a white card that sits above a long list.
+ */
+export function FinancialSummary({
+  model,
+  compact = false,
+}: {
+  model: FinancialSummaryModel;
+  compact?: boolean;
+}) {
   const titleId = useId();
   const summary = model;
   const scale = summary.income > summary.spending ? summary.income : summary.spending;
   return (
-    <Card aria-labelledby={titleId} className={styles.summary} role="region">
+    <Card aria-labelledby={titleId} className={styles.summary} data-compact={compact} role="region">
       <h2 className="sr-only" id={titleId}>
-        {model.label} confirmed totals. Excluded records do not count.
+        {model.label} confirmed totals. Exclusions left out.
       </h2>
       <dl className={styles.metrics}>
         <SummaryMetric

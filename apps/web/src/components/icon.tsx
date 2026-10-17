@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 
 const glyphs = {
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v6M12 7h.01" />
+    </>
+  ),
   pause: <path d="M9 5v14M15 5v14" />,
   play: <path d="m8 4 12 8-12 8Z" />,
   reports: (
@@ -144,6 +150,18 @@ const glyphs = {
       <path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L12 14.8 8 16l1.2-4Z" />
     </>
   ),
+  history: (
+    <>
+      <path d="M3 11a9 9 0 1 1 2 7M3 5v6h6M12 7v5l3 2" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <circle cx="8" cy="8" r="1.5" />
+      <path d="m21 15-5-5L6 21" />
+    </>
+  ),
   sparkle: (
     <path d="M12 3c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7Z" />
   ),
@@ -230,6 +248,62 @@ const glyphs = {
     </>
   ),
   transfer: <path d="M4 8h15l-3-3M20 16H5l3 3" />,
+  internal: <path d="M4 8h15l-3-3M20 16H5l3 3" />,
+  repayment: (
+    <>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M3 11h18M8 3v4M5 5l3-3 3 3M7 16h4" />
+    </>
+  ),
+  reimbursed: (
+    <>
+      <path d="M5 8a8 8 0 1 1-1 8M5 3v5h5" />
+      <path d="M12 8v8M15 10h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4h-4" />
+    </>
+  ),
+  investment: (
+    <>
+      <path d="M4 20h16M6 16v-4M12 16V8M18 16V4M4 8l5-4 4 2 6-4" />
+    </>
+  ),
+  "one-off": (
+    <>
+      <path d="m12 3 10 18H2Z" />
+      <path d="M12 9v5M12 17h.01" />
+    </>
+  ),
+  cancelled: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m6 6 12 12" />
+    </>
+  ),
+  groceries: (
+    <>
+      <path d="M3 4h2l3 12h11l2-9H6M9 7V4M14 7V3M18 7V5" />
+      <circle cx="9" cy="20" r="1" />
+      <circle cx="18" cy="20" r="1" />
+    </>
+  ),
+  services: <path d="M14 5a5 5 0 0 0-6 6L3 16a3 3 0 0 0 5 5l5-5a5 5 0 0 0 6-6l-4 4-4-4Z" />,
+  travel: <path d="m3 10 7 1 8-8a2 2 0 0 1 3 3l-8 8 1 7-3-2-2-5-5-2Z" />,
+  drinks: (
+    <>
+      <path d="M5 3h14l-7 9ZM12 12v9M8 21h8M8 6h8" />
+    </>
+  ),
+  family: (
+    <>
+      <circle cx="9" cy="7" r="3" />
+      <path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v3" />
+    </>
+  ),
+  giving: (
+    <>
+      <path d="M3 13h4l3 3h5a2 2 0 0 0 0-4h-4M3 21h4l13-6M7 13v8" />
+      <path d="M15 9s-4-2-4-5a2 2 0 0 1 4-1 2 2 0 0 1 4 1c0 3-4 5-4 5Z" />
+    </>
+  ),
   dot: <circle cx="12" cy="12" r="3" />,
   whatsapp: (
     <>

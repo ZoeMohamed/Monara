@@ -100,7 +100,18 @@ export function BudgetDetails({
           </p>
         </div>
         {period ? (
-          <BudgetUsageDetails usage={period} />
+          <>
+            <BudgetUsageDetails usage={period} />
+            {period.remaining <= 0n && (
+              <p className="rounded-xl bg-warning-soft p-3 text-sm leading-6 text-warning-soft-foreground">
+                {period.remaining < 0n
+                  ? "This category is past its limit."
+                  : "You’ve reached this category’s limit."}{" "}
+                You can adjust the budget to make a plan for the rest of this period. Your
+                transactions stay in your history.
+              </p>
+            )}
+          </>
         ) : (
           <p className="text-sm text-muted">Usage is unavailable for this period.</p>
         )}

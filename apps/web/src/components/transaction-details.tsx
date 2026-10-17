@@ -34,11 +34,6 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
   timeZone: "UTC",
 });
-const confidenceFormatter = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 });
-
-function validConfidence(confidence: number | null) {
-  return confidence !== null && Number.isFinite(confidence) && confidence >= 0 && confidence <= 100;
-}
 
 // Live records state their source; demo imports are the ones carrying extraction confidence.
 function sourceOf(transaction: Transaction) {
@@ -48,13 +43,37 @@ function sourceOf(transaction: Transaction) {
   return { ...sources[kind], kind };
 }
 
+const missingLabels = {
+  kind: "type",
+  amount: "amount",
+  currency: "currency",
+  date: "date",
+  category: "category",
+} as const;
+
+/** Names every detail still missing. Only confirming a non-exclusion also needs an account. */
+function missingForConfirm(transaction: Transaction): string[] {
+  const missing: string[] = Object.keys(transactionErrors(transaction)).map(
+    (key) => missingLabels[key as keyof typeof missingLabels] ?? key,
+  );
+  if (transaction.status === "pending" && transaction.kind !== "exclusion" && !transaction.method)
+    missing.push("account");
+  return missing;
+}
+
+function listOf(items: string[]): string {
+  return items.length < 2
+    ? (items[0] ?? "")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
 function detailsOf(
   transaction: Transaction,
   formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
 ) {
   const pending = transaction.status === "pending";
   const editable = pending || transaction.status === "confirmed";
-  const valid = Object.keys(transactionErrors(transaction)).length === 0;
+  const missing = missingForConfirm(transaction);
   const date = isCalendarDate(transaction.date)
     ? dateFormatter.format(new Date(`${transaction.date}T00:00:00Z`))
     : "Date not provided";
@@ -62,29 +81,31 @@ function detailsOf(
   return {
     pending,
     editable,
-    valid,
+    valid: missing.length === 0,
     // Secondary facts stay one tap away under “More details”.
     rows: [
       ["Type", transaction.kind ? typeLabels[transaction.kind] : "Not selected"],
       ["Currency", transaction.currency || "Not provided"],
       ["Status", statusLabels[transaction.status]],
-      ...(validConfidence(transaction.confidence) && sourceOf(transaction).kind !== "manual_form"
-        ? [["Extraction confidence", `${confidenceFormatter.format(transaction.confidence ?? 0)}%`]]
-        : []),
     ],
     merchant: transaction.merchant || "Transaction",
     when: transaction.time ? `${date} · ${transaction.time}` : date,
     amount:
       transaction.amount === null
         ? "Amount missing"
-        : !Number.isSafeInteger(transaction.amount) || transaction.amount <= 0
+        : !Number.isSafeInteger(transaction.amount) ||
+            transaction.amount < 0 ||
+            (transaction.amount === 0 && transaction.kind !== "exclusion")
           ? "Amount invalid"
           : transaction.currency === "IDR"
             ? `${sign}${formatRupiah(transaction.amount)}`
             : "Currency missing",
-    help: valid
-      ? "Not included in totals until confirmed."
-      : "Complete the missing fields to confirm.",
+    help:
+      missing.length === 0
+        ? "Not included in totals until confirmed."
+        : pending
+          ? `Add the ${listOf(missing)} to confirm, or exclude it if it isn’t a real transaction.`
+          : `Add the ${listOf(missing)} to include it in your totals.`,
   };
 }
 
@@ -111,7 +132,7 @@ function DeleteConfirmation({
       ? "This expense will leave your spending and budgets."
       : transaction.kind === "income"
         ? "This income will leave your income totals."
-        : "This exclusion will leave your transaction history.";
+        : "This exclusion will leave your history. Spending and budgets stay the same.";
   return (
     <div className="p-5 sm:p-6">
       <h2 id="transaction-details-title" className="text-xl font-bold">
@@ -166,7 +187,10 @@ type TransactionDetailsProps = {
   onClose: () => void;
   onEdit: () => void;
   onConfirm: () => void | Promise<void>;
+  /** Opens the exclude confirmation for a pending import. */
+  onExclude?: () => void;
   onDelete?: () => void | Promise<void>;
+  onReject?: () => void;
   pending?: boolean;
   confirmationError?: string | null;
   refreshRequired?: boolean;
@@ -336,11 +360,6 @@ function PaymentMoneyFlow({ transaction, financialAccounts }: MoneyFlowProps) {
   );
 }
 
-// Money moves from an account, through a category, to a place; income runs the other way.
-function MoneyFlow(props: MoneyFlowProps) {
-  return <PaymentMoneyFlow {...props} />;
-}
-
 function TransactionInformation({
   transaction,
   details,
@@ -388,7 +407,7 @@ function TransactionInformation({
         </h2>
         <p className={styles.when}>{details.when}</p>
       </div>
-      <MoneyFlow financialAccounts={financialAccounts} transaction={transaction} />
+      <PaymentMoneyFlow financialAccounts={financialAccounts} transaction={transaction} />
       <p className={styles.source}>
         <Icon name={source.icon} />
         {source.label}
@@ -410,6 +429,11 @@ function TransactionInformation({
           ))}
         </dl>
       </details>
+      {transaction.kind === "exclusion" ? (
+        <p className="mt-3 text-sm text-muted">
+          Kept in your history, excluded from spending, income and budgets.
+        </p>
+      ) : null}
       {details.pending && (
         <p className="mt-4 text-sm text-muted" id="transaction-review-help">
           {details.help}
@@ -430,8 +454,16 @@ function TransactionActions({
   deletion: Pick<ReturnType<typeof useTransactionDeletion>, "openDelete">;
   deleteButton: RefObject<HTMLButtonElement | null>;
 }) {
-  const { transaction, onClose, onEdit, onConfirm, onDelete, confirmationError, onRefreshRecords } =
-    props;
+  const {
+    transaction,
+    onClose,
+    onEdit,
+    onConfirm,
+    onExclude,
+    onDelete,
+    confirmationError,
+    onRefreshRecords,
+  } = props;
   const pending = Boolean(props.pending);
   const refreshRequired = Boolean(props.refreshRequired);
   const locked = pending || refreshRequired;
@@ -448,42 +480,60 @@ function TransactionActions({
           onRefreshRecords={onRefreshRecords}
         />
       )}
-      <div className="mt-6 flex flex-wrap justify-end gap-3">
-        {onDelete && transaction.status === "confirmed" && details.valid ? (
+      {details.pending ? (
+        // Closing is the X or a tap outside, so the three review actions share the row equally.
+        <div className="mt-6 grid grid-cols-3 gap-3">
           <Button
-            className="mr-auto min-h-11 text-danger"
-            onPress={deletion.openDelete}
-            ref={deleteButton}
-            variant="ghost"
-            isDisabled={locked}
+            className="min-h-11 w-full gap-1.5 text-danger"
+            isDisabled={!onExclude || locked}
+            onPress={onExclude}
+            variant="secondary"
           >
-            Delete
+            <Icon className="h-4 w-4" name="eye-off" />
+            Exclude
           </Button>
-        ) : null}
-        <Button className="min-h-11" variant="secondary" onPress={onClose} isDisabled={pending}>
-          Close
-        </Button>
-        {details.editable && (
           <Button
-            className="min-h-11"
-            variant={details.pending ? "secondary" : "primary"}
-            onPress={onEdit}
+            className="min-h-11 w-full gap-1.5"
             isDisabled={locked}
+            onPress={onEdit}
+            variant="secondary"
           >
+            <Icon className="h-4 w-4" name="pencil" />
             Edit
           </Button>
-        )}
-        {details.pending && (
           <Button
-            className="min-h-11"
-            isDisabled={!details.valid || locked}
             aria-describedby="transaction-review-help"
+            className="min-h-11 w-full gap-1.5"
+            isDisabled={!details.valid || locked}
             onPress={onConfirm}
           >
+            <Icon className="h-4 w-4" name="check" strokeWidth={2.4} />
             {pending ? "Confirming…" : "Confirm"}
           </Button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          {onDelete && transaction.status === "confirmed" && details.valid ? (
+            <Button
+              className="mr-auto min-h-11 text-danger"
+              onPress={deletion.openDelete}
+              ref={deleteButton}
+              variant="ghost"
+              isDisabled={locked}
+            >
+              Delete
+            </Button>
+          ) : null}
+          <Button className="min-h-11" variant="secondary" onPress={onClose} isDisabled={pending}>
+            Close
+          </Button>
+          {details.editable && (
+            <Button className="min-h-11" variant="primary" onPress={onEdit} isDisabled={locked}>
+              Edit
+            </Button>
+          )}
+        </div>
+      )}
     </>
   );
 }

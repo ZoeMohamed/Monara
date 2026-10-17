@@ -1,0 +1,268 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
+import { after, describe, it } from "node:test";
+import ts from "typescript";
+
+const editorUrl = new URL("../../components/transaction-editor.tsx", import.meta.url).href;
+const runtimeKey = Symbol.for("monara.transaction-editor-test");
+const reactSource = `
+  const runtime = () => globalThis[Symbol.for("monara.transaction-editor-test")];
+  export const useReducer = (...args) => runtime().useReducer(...args);
+  export const useState = (...args) => runtime().useState(...args);
+  export const useRef = (...args) => runtime().useRef(...args);
+  export const useEffect = (...args) => runtime().useEffect(...args);
+`;
+const uiSource = `export const Button = null, FieldError = null, Form = null,
+  Input = null, Label = null, ListBox = null, Select = null, TextField = null,
+  BrandLogoField = null, FinanceRecovery = null, CategoryAvatar = null,
+  Icon = null, ModalDialog = null;`;
+const hooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (context.parentURL !== editorUrl) return nextResolve(specifier, context);
+    if (specifier === "react") {
+      return { url: `data:text/javascript,${encodeURIComponent(reactSource)}`, shortCircuit: true };
+    }
+    if (specifier === "react/jsx-runtime") {
+      return {
+        url: "data:text/javascript,export const jsx = () => null, jsxs = () => null, Fragment = null;",
+        shortCircuit: true,
+      };
+    }
+    if (specifier === "@monara/ui" || specifier.startsWith("@/components/")) {
+      return { url: `data:text/javascript,${encodeURIComponent(uiSource)}`, shortCircuit: true };
+    }
+    if (specifier.startsWith("@/")) {
+      return nextResolve(new URL(`../../${specifier.slice(2)}.ts`, import.meta.url).href, context);
+    }
+    return nextResolve(specifier, context);
+  },
+  load(url, context, nextLoad) {
+    if (url !== editorUrl) return nextLoad(url, context);
+    // Inspect the actual private hook without adding a production export or JSX
+    // renderer. TypeScript only erases types/JSX; the hook logic is unchanged.
+    const source = `${readFileSync(new URL(url), "utf8")}\nexport { useTransactionEditorState as useEditorStateForTest };`;
+    const result = ts.transpileModule(source, {
+      fileName: "transaction-editor.tsx",
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        jsx: ts.JsxEmit.ReactJSX,
+      },
+    });
+    return { format: "module", source: result.outputText, shortCircuit: true };
+  },
+});
+const { useEditorStateForTest } = await import(editorUrl);
+hooks.deregister();
+
+const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  value: { addEventListener() {}, removeEventListener() {} },
+});
+after(() => {
+  if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+  else Reflect.deleteProperty(globalThis, "window");
+  delete globalThis[runtimeKey];
+});
+
+const accountId = "00000000-0000-4000-8000-000000000101";
+const categoryId = "00000000-0000-4000-8000-000000000201";
+const originalVersion = "2026-10-17T10:00:00Z";
+const latestVersion = "2026-10-17T10:01:00Z";
+const resources = {
+  financialAccounts: [{ id: accountId, name: "Daily bank", isActive: true }],
+  categories: [{ id: categoryId, name: "Resto & Cafe", isArchived: false }],
+};
+
+function transaction(version = originalVersion, merchant = "Original lunch", amount = 25000) {
+  return {
+    id: "00000000-0000-4000-8000-000000000301",
+    merchant,
+    amount,
+    date: "2026-10-17",
+    time: null,
+    kind: "expense",
+    currency: "IDR",
+    status: "confirmed",
+    method: "Daily bank",
+    category: "Resto & Cafe",
+    backend: {
+      merchantName: merchant,
+      categoryId,
+      financialAccountId: accountId,
+      updatedAt: version,
+    },
+  };
+}
+
+function mountEditor(overrides = {}) {
+  const slots = [];
+  let cursor = 0;
+  let effects = [];
+  const saved = [];
+  const draftChanges = [];
+  const closes = [];
+  const props = {
+    transaction: transaction(),
+    resources: structuredClone(resources),
+    today: "2026-10-17",
+    onSave: (...args) => {
+      saved.push(args);
+    },
+    onDraftChange: (draft) => {
+      draftChanges.push(draft);
+    },
+    onClose: (preserve) => {
+      closes.push(preserve);
+    },
+    ...overrides,
+  };
+  const same = (before, after) =>
+    before?.length === after?.length &&
+    before.every((value, index) => Object.is(value, after[index]));
+  const runtime = {
+    useState(initial) {
+      const index = cursor++;
+      slots[index] ??= { value: typeof initial === "function" ? initial() : initial };
+      return [
+        slots[index].value,
+        (next) => {
+          slots[index].value = typeof next === "function" ? next(slots[index].value) : next;
+        },
+      ];
+    },
+    useReducer(reducer, initial, initialize) {
+      const index = cursor++;
+      slots[index] ??= { value: initialize ? initialize(initial) : initial };
+      return [
+        slots[index].value,
+        (action) => {
+          slots[index].value = reducer(slots[index].value, action);
+        },
+      ];
+    },
+    useRef(initial) {
+      const index = cursor++;
+      slots[index] ??= { current: initial };
+      return slots[index];
+    },
+    useEffect(effect, dependencies) {
+      const index = cursor++;
+      if (same(slots[index]?.dependencies, dependencies)) return;
+      effects.push(() => {
+        slots[index]?.cleanup?.();
+        slots[index] = { dependencies, cleanup: effect() };
+      });
+    },
+  };
+  const useRenderEditor = () => {
+    cursor = 0;
+    effects = [];
+    globalThis[runtimeKey] = runtime;
+    const current = useEditorStateForTest(props);
+    for (const effect of effects) effect();
+    return current;
+  };
+  return { props, saved, closes, draftChanges, render: useRenderEditor };
+}
+
+function submitEvent() {
+  const focused = [];
+  return {
+    focused,
+    nativeEvent: {},
+    preventDefault() {},
+    currentTarget: {
+      querySelector(selector) {
+        return {
+          focus() {
+            focused.push(selector);
+          },
+        };
+      },
+    },
+  };
+}
+
+describe("transaction editor recovery", () => {
+  it("blocks a changed record until the user reviews it, then preserves their draft explicitly", async () => {
+    const editor = mountEditor();
+    editor.render().changeDraft({ merchant: "My corrected lunch", amount: "30000" });
+    editor.props.transaction = transaction(latestVersion, "Updated elsewhere", 28000);
+    const conflicted = editor.render();
+    assert.equal(conflicted.changedElsewhere, true);
+    assert.equal(conflicted.state.draft.merchant, "My corrected lunch");
+    await conflicted.submit(submitEvent());
+    assert.equal(editor.saved.length, 0);
+
+    conflicted.reviewLatest(false);
+    const reviewed = editor.render();
+    assert.equal(reviewed.changedElsewhere, false);
+    assert.equal(reviewed.state.draft.merchant, "My corrected lunch");
+    assert.equal(reviewed.state.draft.amount, "30000");
+    assert.equal(reviewed.state.draft.reviewedUpdatedAt, latestVersion);
+    await reviewed.submit(submitEvent());
+    assert.equal(editor.saved.length, 1);
+    assert.equal(editor.saved[0][0].merchant, "My corrected lunch");
+    assert.equal(editor.saved[0][0].amount, 30000);
+    assert.equal(editor.saved[0][2], latestVersion);
+  });
+
+  it("uses the latest saved values only after the user chooses them", () => {
+    const editor = mountEditor();
+    editor.render().changeDraft({ merchant: "My draft", amount: "30000" });
+    editor.props.transaction = transaction(latestVersion, "Updated elsewhere", 28000);
+    editor.render().reviewLatest(true);
+    const reviewed = editor.render();
+    assert.equal(reviewed.changedElsewhere, false);
+    assert.equal(reviewed.state.draft.merchant, "Updated elsewhere");
+    assert.equal(reviewed.state.draft.amount, "28000");
+    assert.equal(reviewed.state.draft.reviewedUpdatedAt, latestVersion);
+    assert.equal(editor.saved.length, 0);
+    assert.deepEqual(editor.draftChanges.at(-1), reviewed.state.draft);
+  });
+
+  it("locks a reopened uncertain create and preserves it on close", () => {
+    const editor = mountEditor({
+      transaction: undefined,
+      initialUncertain: true,
+      initialDraft: {
+        merchant: "Submitted lunch",
+        amount: "25000",
+        date: "2026-10-17",
+        time: "",
+        kind: "expense",
+        currency: "IDR",
+        category: categoryId,
+        method: accountId,
+      },
+    });
+    editor.render().changeDraft({ merchant: "A different lunch", amount: "26000" });
+    assert.equal(editor.render().state.draft.merchant, "Submitted lunch");
+    assert.equal(editor.render().state.draft.amount, "25000");
+    assert.equal(editor.draftChanges.length, 0);
+    editor.render().requestClose();
+    assert.deepEqual(editor.closes, [true]);
+  });
+
+  it("focuses an inactive account or archived category before sending a save", async () => {
+    for (const field of ["method", "category"]) {
+      const unavailable = structuredClone(resources);
+      if (field === "method") unavailable.financialAccounts[0].isActive = false;
+      else unavailable.categories[0].isArchived = true;
+      const editor = mountEditor({ resources: unavailable });
+      const event = submitEvent();
+      await editor.render().submit(event);
+      assert.equal(editor.saved.length, 0);
+      assert.match(
+        editor.render().state.errors[field],
+        field === "method" ? /active account/ : /archived or removed/,
+      );
+      assert.equal(event.focused.length, 1);
+      assert.match(event.focused[0], new RegExp(`data-field="${field}"`));
+      assert.equal(editor.render().state.phase, "editing");
+    }
+  });
+});

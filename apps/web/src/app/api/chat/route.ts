@@ -1,4 +1,4 @@
-import { agentChatRequestSchema, agentChatResponseSchema } from "@monara/contracts";
+import { agentChatRequestSchema, webChatResponseSchema } from "@monara/contracts";
 
 import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       "Monara couldn't answer. Check your records before trying again.",
     );
   }
-  const result = agentChatResponseSchema.safeParse(await response.json().catch(() => null));
+  const result = webChatResponseSchema.safeParse(await response.json().catch(() => null));
   if (!result.success) {
     return failure(
       502,

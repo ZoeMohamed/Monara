@@ -3,6 +3,7 @@
 import {
   calendarDateSchema,
   createFinancialAccountInputSchema,
+  type ReversibleActionReceipt,
   updateFinancialAccountInputSchema,
 } from "@monara/contracts";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -39,9 +40,13 @@ import type { FinanceSnapshot } from "@/lib/finance/presentation";
 
 export type SaveNotice = {
   message: string;
+  tone?: "success" | "warning";
+  recovery?: "refresh" | "history";
   undo?:
     | { kind: "update"; before: Transaction; expected: Transaction }
-    | { kind: "delete"; transaction: Transaction; index: number };
+    | { kind: "delete"; transaction: Transaction; index: number }
+    | { kind: "create"; transaction: Transaction }
+    | { kind: "backend"; receipt: ReversibleActionReceipt };
 };
 
 function subscribeToConnection(callback: () => void) {
@@ -267,6 +272,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     dismissBill,
     closeEditor,
     rejectSelected,
+    lockedCreate,
   } = useTransactionActions({
     live,
     resources,
@@ -447,14 +453,23 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
         category.length > 100 ||
         !Number.isSafeInteger(input.limit) ||
         input.limit <= 0 ||
+        !["monthly", "weekly"].includes(input.cadence) ||
         !Number.isInteger(input.warningPercent) ||
         input.warningPercent < 1 ||
         input.warningPercent > 100 ||
         !calendarDateSchema.safeParse(input.startsOn).success
       )
         throw new Error("Check the budget details.");
-      if (demoBudgets.some((budget) => budget.category.toLowerCase() === category.toLowerCase()))
-        throw new Error("This category already has a budget. Open it to edit its limit.");
+      if (
+        demoBudgets.some(
+          (budget) =>
+            budget.category.toLowerCase() === category.toLowerCase() &&
+            budget.cadence === input.cadence,
+        )
+      )
+        throw new Error(
+          `This category already has a ${input.cadence} budget. Open it to edit its limit.`,
+        );
       const savedCategory = demoCategories.find(
         (item) => item.name.toLowerCase() === category.toLowerCase(),
       );
@@ -485,7 +500,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
           category,
           icon: input.icon ?? undefined,
           emoji: "•",
-          cadence: "monthly",
+          cadence: input.cadence,
           limit: input.limit,
           startsOn: input.startsOn,
           warningPercent: input.warningPercent,
@@ -512,10 +527,22 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     personalReminders,
     updateDemoBudget: (budgetId, changes) => {
       if (live) return;
+      const selected = demoBudgets.find((budget) => budget.id === budgetId);
+      if (
+        selected &&
+        demoBudgets.some(
+          (budget) =>
+            budget.id !== budgetId &&
+            budget.category.toLowerCase() === selected.category.toLowerCase() &&
+            budget.cadence === changes.cadence,
+        )
+      )
+        throw new Error(
+          `This category already has a ${changes.cadence} budget. Keep its current period or edit the other budget.`,
+        );
       setBudgets((items) =>
         items.map((budget) => (budget.id === budgetId ? { ...budget, ...changes } : budget)),
       );
-      const selected = demoBudgets.find((budget) => budget.id === budgetId);
       if (selected && changes.icon)
         setDemoCategories((categories) =>
           categories.map((category) =>
@@ -626,6 +653,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     setDrafts,
     editorKey,
     closeEditor,
+    lockedCreate,
     save,
     add,
     deleteTransaction,

@@ -46,7 +46,7 @@ A sender's number is only a claim. For each inbound message the webhook calls `P
 
 A linked User's text goes to their `WhatsAppConversation` Durable Object (`src/whatsapp/conversation.ts`, logic in `session.ts`), and the webhook answers Kapso straight away. The object answers messages one at a time, keeps recent turns so follow-up questions work, and deletes them after 30 minutes of silence. Within the Durable Object, a processed message does not replay the Agent turn; only sending the reply is retried. Live transport/idempotency acceptance remains outstanding.
 
-Photos and voice notes get a fixed reply until extraction (F14) can take them. `WhatsAppTransport.fetchMedia` is ready for that handoff. Budget alerts are sent by the backend with `sendTemplate`; the cron below only asks it to send the ones held back by quiet hours.
+A receipt photo from a linked User is read in its conversation (`src/whatsapp/receipt.ts`) and saved as a pending transaction through `add_receipt_transaction`; see `docs/tech/agent.md`. Voice notes get a fixed reply. Budget alerts are sent by the backend with `sendTemplate`; the reminder cron only asks it to send alerts held back by quiet hours.
 
 ## Backend operations
 
@@ -68,7 +68,7 @@ Gmail sync reads only mail from the banks, cards, and wallets the User has as Fi
 
 After a User connects Gmail, the web backend calls `POST /gmail/discover`. A discovery job lists 90 days of metadata (sender, subject, date) from every registry sender, without reading bodies or calling the model, and records which entries emailed the mailbox and which card endings their subjects show. The Gmail page suggests adding or linking accounts from these findings.
 
-A cron trigger runs every 15 minutes. It calls `/api/agent/reminders/dispatch` so the backend sends WhatsApp budget alerts held back by quiet hours, and it queues a sync job for each active Gmail Connection on the `monara-gmail-jobs` queue. A sync job lists one page of mail from the exact senders of the User's accounts (`from:(…)`) and queues one extraction job per message. If there are more pages, it queues a follow-up sync job. The first sync covers the last 30 days; later syncs start from the previous sync time. A User with no such accounts has nothing to sync.
+A reminder cron runs every 15 minutes and calls `/api/agent/reminders/dispatch` so the backend sends WhatsApp budget alerts held back by quiet hours. A separate Gmail cron runs daily at 01:00 UTC. For each active Gmail Connection it queues a `gmail.discover` job, which asks the web backend to look for new banks and wallets, and, when accounts read from that mailbox, a catch-up sync job on the `monara-gmail-jobs` queue. A sync job lists one page of mail from the exact senders of the mailbox's accounts (`from:(…)`) and queues parse jobs of up to 10 messages. If there are more pages, it queues a follow-up sync job. A first import covers the last 30 days; a catch-up starts a day before the last finished import, so an import that failed or never finished runs again. Mail recorded as failed is not retried. A mailbox with no accounts has nothing to sync.
 
 An extraction job (`src/gmail/pipeline.ts`):
 
@@ -76,7 +76,7 @@ An extraction job (`src/gmail/pipeline.ts`):
 2. Claims the message so it is processed only once.
 3. Reads the message through Composio and skips it unless its From address is a sender of one of the User's accounts.
 4. Checks Gmail's own `Authentication-Results` header for DKIM or SPF passing for the sender's domain (`src/gmail/sender.ts`).
-5. Extracts transactions with one LLM call (`src/gmail/extract.ts`).
+5. Extracts transactions with one LLM call (`src/gmail/parse/extract.ts`).
 6. Records them through the backend with the sender's institution and verification. The backend maps the account from the institution (by card ending when the User has several), takes the Category from the User's history for that merchant, and auto-confirms only verified, confident, complete items.
 7. Queues a categorization job for each transaction still without a Category.
 

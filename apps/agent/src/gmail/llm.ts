@@ -23,6 +23,8 @@ class LlmError extends Error {
 export interface JsonCompletionRequest {
   system: string;
   user: string;
+  /** A data: URL of a photo for a model that can see, such as a receipt. */
+  imageUrl?: string;
   schemaName: string;
   schema: Record<string, unknown>;
 }
@@ -54,7 +56,15 @@ export function createLlmClient(config: LlmConfig) {
             model,
             messages: [
               { role: "system", content: request.system },
-              { role: "user", content: request.user },
+              {
+                role: "user",
+                content: request.imageUrl
+                  ? [
+                      { type: "text", text: request.user },
+                      { type: "image_url", image_url: { url: request.imageUrl } },
+                    ]
+                  : request.user,
+              },
             ],
             response_format: {
               type: "json_schema",

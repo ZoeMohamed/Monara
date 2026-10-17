@@ -185,7 +185,7 @@ export function cashFlowMonths(transactions: Transaction[], month: string) {
   });
 }
 
-/** Twelve real calendar months; only valid confirmed income and expense enter totals. */
+/** Twelve real calendar months; confirmed exclusions stay in the ledger but never in totals. */
 export function financialYear(transactions: Transaction[], year: string, today = demoToday) {
   if (!/^\d{4}$/.test(year) || !isCalendarDate(`${year}-01-01`)) {
     throw new Error("Choose a valid calendar year.");

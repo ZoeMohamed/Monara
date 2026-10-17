@@ -1,6 +1,8 @@
 import { FinanceOperationError } from "@monara/core";
+import { after } from "next/server";
 
 import { financeErrorResponse, financeSuccessResponse } from "@/lib/finance/service";
+import { importAfterNameSaved } from "@/lib/gmail/import";
 import { isSameOriginRequest } from "@/lib/http/origin";
 import { profileService } from "@/lib/profile/service";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
@@ -21,9 +23,10 @@ export async function PUT(request: Request) {
     );
   }
   try {
-    return financeSuccessResponse(
-      await profileService().setFullName(identity.id, await request.json()),
-    );
+    const saved = await profileService().setFullName(identity.id, await request.json());
+    // Mailboxes that already have accounts but were never imported start now.
+    after(() => importAfterNameSaved(identity.id).catch(() => undefined));
+    return financeSuccessResponse(saved);
   } catch (error) {
     return financeErrorResponse(error);
   }

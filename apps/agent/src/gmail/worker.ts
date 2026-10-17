@@ -1,10 +1,11 @@
 import {
   type GmailJob,
+  type GmailSyncJob,
   gmailJobSchema,
   type MerchantCategorizeJob,
   merchantCategorizeJobSchema,
+  requestGmailIngestInputSchema,
   requestGmailSyncInputSchema,
-  startGmailDiscoveryInputSchema,
 } from "@monara/contracts";
 import {
   BraveSearchError,
@@ -71,6 +72,12 @@ function createLlm(env: Env) {
   });
 }
 
+/** A whole number from 1 to 10 from an optional setting; undefined when unset or invalid. */
+function smallCount(value: string | undefined): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 10 ? parsed : undefined;
+}
+
 async function sendInBatches<T>(queue: Queue<T>, jobs: readonly T[]): Promise<void> {
   for (let start = 0; start < jobs.length; start += QUEUE_SEND_BATCH_LIMIT) {
     const batch = jobs.slice(start, start + QUEUE_SEND_BATCH_LIMIT);
@@ -95,6 +102,8 @@ function createPipeline(env: Env) {
     llm: createLlm(env),
     enqueue: (jobs) => sendInBatches(queue, jobs),
     enqueueMerchant: (jobs) => sendInBatches(merchantQueue, jobs),
+    parseBatchSize: smallCount(env.GMAIL_PARSE_BATCH_SIZE),
+    parseConcurrency: smallCount(env.GMAIL_PARSE_CONCURRENCY),
   });
 }
 
@@ -129,21 +138,34 @@ async function rejectUnlessBackend(request: Request, env: Env): Promise<Response
 }
 
 /**
- * Account discovery after a Gmail connection. Only the web backend may call this,
- * after checking the User owns the connection.
+ * Imports a connection's mail: onboarding, a newly linked account, or a new-mail
+ * trigger. Only the web backend may call this, after checking the User owns the
+ * connection.
  */
-export async function handleGmailDiscoveryRequest(request: Request, env: Env): Promise<Response> {
+export async function handleGmailIngestRequest(
+  request: Request,
+  env: Env,
+  context?: Pick<ExecutionContext, "waitUntil">,
+): Promise<Response> {
   const rejected = await rejectUnlessBackend(request, env);
   if (rejected) return rejected;
-  const input = startGmailDiscoveryInputSchema.safeParse(await request.json().catch(() => null));
-  if (!input.success || !env.GMAIL_JOBS) {
-    return Response.json({ error: "connectionId is invalid." }, { status: 400 });
+  const input = requestGmailIngestInputSchema.safeParse(await request.json().catch(() => null));
+  if (!input.success) {
+    return Response.json({ error: "The ingest request is invalid." }, { status: 400 });
   }
-  await env.GMAIL_JOBS.send({ kind: "gmail.discover", connectionId: input.data.connectionId });
-  return Response.json({ status: "queued" }, { status: 202 });
+  return queueSync(env, context, {
+    kind: "gmail.sync",
+    connectionId: input.data.connectionId,
+    since: null,
+    pageToken: null,
+    startedAt: null,
+    institutionKeys: input.data.institutionKeys,
+    messageIds: input.data.messageIds,
+    tracksSync: input.data.tracksSync,
+  });
 }
 
-/** Manual sync. Only the web backend may call this, after checking the User owns the connection. */
+/** Manual sync, kept while a web backend that predates /gmail/ingest may still call it. */
 export async function handleGmailSyncRequest(
   request: Request,
   env: Env,
@@ -151,19 +173,29 @@ export async function handleGmailSyncRequest(
 ): Promise<Response> {
   const rejected = await rejectUnlessBackend(request, env);
   if (rejected) return rejected;
-  if (!env.GMAIL_JOBS)
-    return Response.json({ error: "Gmail sync is not configured." }, { status: 503 });
   const input = requestGmailSyncInputSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
     return Response.json({ error: "connectionId and since are invalid." }, { status: 400 });
   }
-  const job = {
+  return queueSync(env, context, {
     kind: "gmail.sync",
     connectionId: input.data.connectionId,
     since: input.data.since,
     pageToken: null,
     startedAt: null,
-  } as const;
+    institutionKeys: null,
+    messageIds: null,
+    tracksSync: true,
+  });
+}
+
+async function queueSync(
+  env: Env,
+  context: Pick<ExecutionContext, "waitUntil"> | undefined,
+  job: GmailSyncJob,
+): Promise<Response> {
+  if (!env.GMAIL_JOBS)
+    return Response.json({ error: "Gmail sync is not configured." }, { status: 503 });
   try {
     await env.GMAIL_JOBS.send(job);
   } catch (error) {
@@ -190,10 +222,10 @@ export async function handleGmailSyncRequest(
   return Response.json({ status: "queued" }, { status: 202 });
 }
 
-/** Cron: queues one sync job per active Gmail connection. */
-export async function scheduleGmailSyncs(env: Env): Promise<void> {
-  const count = await createPipeline(env).scheduleSyncs();
-  logEvent("info", { event: "gmail.syncs_scheduled", count });
+/** Daily cron: queues discovery for every active mailbox and a catch-up import for each that feeds accounts. */
+export async function scheduleGmailDaily(env: Env): Promise<void> {
+  const counts = await createPipeline(env).scheduleDaily();
+  logEvent("info", { event: "gmail.daily_scheduled", ...counts });
 }
 
 /**
@@ -219,6 +251,7 @@ export async function consumeGmailJobs(batch: MessageBatch<unknown>, env: Env): 
       try {
         const outcome = await pipeline.runJob(job.data, {
           isFinalAttempt: message.attempts > GMAIL_QUEUE_MAX_RETRIES,
+          isRetry: message.attempts > 1,
         });
         logEvent("info", { event: "gmail.job_done", ...ids, outcome });
         message.ack();

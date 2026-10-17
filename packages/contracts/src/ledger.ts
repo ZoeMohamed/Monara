@@ -4,6 +4,7 @@ import {
   clientRequestIdSchema,
   currencySchema,
   financialAccountIdSchema,
+  gmailConnectionIdSchema,
   isoDateTimeSchema,
   paginationInputSchema,
   reversibleActionReceiptSchema,
@@ -29,11 +30,18 @@ const financialAccountValuesShape = {
  */
 const institutionKeyValueSchema = institutionKeySchema.nullable();
 
+/**
+ * The one Gmail connection this account's bank emails are imported from; null for a
+ * manual-only account. The server checks that it is the User's own active connection.
+ */
+const gmailConnectionValueSchema = gmailConnectionIdSchema.nullable();
+
 export const financialAccountSchema = z
   .object({
     id: financialAccountIdSchema,
     ...financialAccountValuesShape,
     institutionKey: institutionKeyValueSchema,
+    gmailConnectionId: gmailConnectionValueSchema.default(null),
     isActive: z.boolean(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,
@@ -44,6 +52,7 @@ export const createFinancialAccountInputSchema = z
   .object({
     ...financialAccountValuesShape,
     institutionKey: institutionKeyValueSchema.default(null),
+    gmailConnectionId: gmailConnectionValueSchema.default(null),
     clientRequestId: clientRequestIdSchema,
   })
   .strict();
@@ -56,6 +65,7 @@ export const updateFinancialAccountInputSchema = z
       .object({
         ...financialAccountValuesShape,
         institutionKey: institutionKeyValueSchema,
+        gmailConnectionId: gmailConnectionValueSchema,
         isActive: z.boolean(),
       })
       .partial()

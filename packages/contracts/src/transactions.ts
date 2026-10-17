@@ -123,6 +123,20 @@ export const createTransactionInputSchema = confirmedTransactionValuesSchema
     }
   });
 
+/**
+ * A transaction read from a receipt photo sent on WhatsApp (PRD F14). It is
+ * always created pending, so the User reviews it before it counts.
+ */
+export const addReceiptTransactionInputSchema = z
+  .object({
+    clientRequestId: clientRequestIdSchema,
+    values: transactionValuesSchema,
+    confidence: z.number().min(0).max(1).nullable(),
+  })
+  .strict();
+
+export type AddReceiptTransactionInput = z.infer<typeof addReceiptTransactionInputSchema>;
+
 const editableTransactionFieldsSchema = transactionValuesSchema.partial().strict();
 const editableConfirmedTransactionFieldsSchema = transactionValuesSchema
   .extend({

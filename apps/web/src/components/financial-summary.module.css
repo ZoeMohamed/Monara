@@ -122,6 +122,48 @@
   height: 13px;
 }
 
+.summary[data-compact] {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 18px;
+}
+
+.summary[data-compact] .metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary[data-compact] .metric[data-kind="spending"] {
+  grid-column: auto;
+}
+
+.summary[data-compact] .metric dt {
+  gap: 4px;
+  font-size: 11px;
+}
+
+.summary[data-compact] .metricIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.summary[data-compact] .metric dd {
+  min-height: 0;
+  margin-top: 3px;
+  padding-top: 0;
+  font-size: clamp(13px, 3.6vw, 18px);
+}
+
+.summary[data-compact] .track {
+  display: none;
+}
+
+.summary[data-compact] .comparison {
+  margin-top: 10px;
+  padding-top: 8px;
+  font-size: 11px;
+}
+
 @media (min-width: 768px) {
   .summary {
     padding: 24px;
@@ -151,4 +193,52 @@
   .comparison {
     font-size: 13px;
   }
+}
+
+/* Compact: one row of three totals on a white card, like the transaction groups below it. */
+.summary[data-compact="true"] {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.summary[data-compact="true"] .metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px;
+}
+
+.summary[data-compact="true"] .metric[data-kind="spending"] {
+  grid-column: auto;
+}
+
+.summary[data-compact="true"] .metric dt {
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.summary[data-compact="true"] .metricIcon {
+  width: 14px;
+  height: 14px;
+}
+
+.summary[data-compact="true"] .metric dd,
+.summary[data-compact="true"] .metric[data-kind="spending"] dd {
+  min-height: 0;
+  margin-top: 2px;
+  padding-top: 0;
+  font-size: clamp(14px, 4.2vw, 18px);
+  letter-spacing: -0.03em;
+  line-height: 1.3;
+}
+
+.summary[data-compact="true"] .track {
+  display: none;
+}
+
+.summary[data-compact="true"] .comparison {
+  margin-top: 8px;
+  padding-top: 8px;
 }

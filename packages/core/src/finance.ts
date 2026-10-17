@@ -1,4 +1,5 @@
 import {
+  addReceiptTransactionInputSchema,
   type Budget,
   type BudgetPage,
   type BudgetSuggestion,
@@ -135,6 +136,14 @@ export interface FinanceRepository {
     userId: string;
     source: TransactionSource;
     values: CreateTransactionInput;
+  }): Promise<Transaction>;
+  /** Idempotent on clientRequestId: a repeat returns the transaction already created. */
+  createPendingTransaction(input: {
+    userId: string;
+    source: TransactionSource;
+    clientRequestId: string;
+    values: TransactionValues;
+    confidence: number | null;
   }): Promise<Transaction>;
   replaceTransaction(input: {
     userId: string;
@@ -860,6 +869,37 @@ export function createFinanceService(
       });
       await evaluateBudgetThresholds(verified.userId, transaction);
       return transactionMutationResultSchema.parse({ transaction, action: receipt });
+    },
+
+    /**
+     * Saves what was read from a WhatsApp receipt photo as a pending transaction.
+     * Extracted values never count until the User confirms them (PRD F14).
+     */
+    async addReceiptTransaction(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      if (verified.channel !== "whatsapp") {
+        throw new FinanceOperationError("FORBIDDEN", "Receipt photos arrive on WhatsApp only.");
+      }
+      const parsed = addReceiptTransactionInputSchema.parse(input);
+      const transaction = await repository.createPendingTransaction({
+        userId: verified.userId,
+        source: "whatsapp_receipt",
+        clientRequestId: parsed.clientRequestId,
+        values: parsed.values,
+        confidence: parsed.confidence,
+      });
+      // A repeat of the same message must describe what was saved, so a
+      // different reading or another kind of record under this id is refused.
+      const saved = transactionValuesSchema.parse(transactionValues(transaction));
+      if (
+        transaction.deletedAt !== null ||
+        transaction.source !== "whatsapp_receipt" ||
+        transaction.reviewStatus !== "pending" ||
+        JSON.stringify(saved) !== JSON.stringify(transactionValuesSchema.parse(parsed.values))
+      ) {
+        throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
+      }
+      return { transaction };
     },
 
     async editTransaction(operationCaller: FinanceCaller, input: unknown) {

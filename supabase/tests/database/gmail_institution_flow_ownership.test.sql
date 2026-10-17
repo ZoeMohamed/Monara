@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(29);
+select plan(33);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001, the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234), and default Categories.
@@ -80,6 +80,39 @@ select is(
   array[row('BCA_CC', 5)::text],
   'a new scan replaces the previous findings'
 );
+update public.gmail_institution_discoveries
+  set dismissed_at = statement_timestamp()
+  where gmail_connection_id = '12000000-0000-4000-8000-000000000001'
+    and institution_key = 'BCA_CC';
+select public.record_gmail_discovery(
+  '12000000-0000-4000-8000-000000000001',
+  $$[{"institutionKey": "BCA_CC", "emailCount": 6, "lastFours": [], "lastSeenAt": null},
+     {"institutionKey": "Jago_App", "emailCount": 1, "lastFours": [], "lastSeenAt": null}]$$::jsonb
+);
+select is(
+  (select array_agg(
+      row(found.institution_key, found.dismissed_at is not null,
+        found.first_seen_at > connection.discovery_first_completed_at)::text
+      order by found.institution_key)
+    from public.gmail_institution_discoveries as found
+    join public.gmail_connections as connection on connection.id = found.gmail_connection_id
+    where found.gmail_connection_id = '12000000-0000-4000-8000-000000000001'),
+  array[row('BCA_CC', true, false)::text, row('Jago_App', false, true)::text],
+  'a rescan keeps a dismissal and marks only findings after the first scan as new'
+);
+select public.record_gmail_discovery(
+  '12000000-0000-4000-8000-000000000001',
+  $$[{"institutionKey": "Jago_App", "emailCount": 2, "lastFours": [], "lastSeenAt": null}]$$::jsonb
+);
+select ok(
+  exists (
+    select 1 from public.gmail_institution_discoveries
+    where gmail_connection_id = '12000000-0000-4000-8000-000000000001'
+      and institution_key = 'BCA_CC'
+      and dismissed_at is not null
+  ),
+  'a dismissed finding stays dismissed when a later scan no longer sees it'
+);
 select throws_ok(
   $$select public.record_gmail_discovery('12000000-0000-4000-8000-000000000001',
       '[{"institutionKey": "BCA_CC", "emailCount": 1, "lastFours": ["12"], "lastSeenAt": null}]'::jsonb)$$,
@@ -88,9 +121,9 @@ select throws_ok(
   'only four-digit endings are stored'
 );
 
--- Account mapping from the sender's institution.
+-- Account mapping from the sender's institution, for accounts fed by this mailbox.
 update public.financial_accounts
-  set institution_key = 'BCA_CC'
+  set institution_key = 'BCA_CC', gmail_connection_id = '12000000-0000-4000-8000-000000000001'
   where id = '11000000-0000-4000-8000-000000000001';
 update public.financial_accounts
   set institution_key = 'BCA_CC'
@@ -122,12 +155,12 @@ create temporary table recorded_001 on commit drop as
   );
 
 select is(
-  (select row(item.review_status, account.name)::text
+  (select row(item.review_status, account.name, item.gmail_auto_confirm_pending)::text
     from public.transactions as item
     left join public.financial_accounts as account on account.id = item.financial_account_id
     where item.id = (select transaction_ids[1] from recorded_001)),
-  row('confirmed', 'Daily bank')::text,
-  'a verified sender maps to the owner''s account of that institution and auto-confirms'
+  row('pending', 'Daily bank', true)::text,
+  'a verified sender maps to the owner''s account and qualifies, but waits for a Category'
 );
 select is(
   (select uncategorized_transaction_ids from recorded_001),
@@ -175,10 +208,12 @@ select is(
 
 -- A second BCA_CC account: only the stated ending tells them apart.
 insert into public.financial_accounts (
-  id, user_id, client_request_id, name, institution, account_type, last_four, institution_key
+  id, user_id, client_request_id, name, institution, account_type, last_four, institution_key,
+  gmail_connection_id
 ) values (
   '11000000-0000-4000-8000-000000000009', '10000000-0000-4000-8000-000000000001',
-  'inst-second-card', 'Second card', 'BCA', 'bank', '5555', 'BCA_CC'
+  'inst-second-card', 'Second card', 'BCA', 'bank', '5555', 'BCA_CC',
+  '12000000-0000-4000-8000-000000000001'
 );
 
 select public.record_gmail_extraction(
@@ -284,17 +319,18 @@ select public.record_gmail_extraction(
   p_institution_key => 'BCA_CC'
 );
 select is(
-  (select array_agg(row(source.gmail_message_id, item.review_status)::text
+  (select array_agg(
+      row(source.gmail_message_id, item.review_status, item.gmail_auto_confirm_pending)::text
       order by source.gmail_message_id)
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     where source.gmail_message_id in ('inst-007', 'inst-008', 'inst-009')),
   array[
-    row('inst-007', 'pending')::text,
-    row('inst-008', 'confirmed')::text,
-    row('inst-009', 'pending')::text
+    row('inst-007', 'pending', false)::text,
+    row('inst-008', 'pending', true)::text,
+    row('inst-009', 'pending', false)::text
   ],
-  'below 95 percent stays pending, exactly 95 percent confirms, and incomplete data stays pending'
+  'below 95 percent never qualifies, exactly 95 percent qualifies, and incomplete data never does'
 );
 
 -- Categorization write-back.
@@ -305,12 +341,12 @@ select is(
   'categorization fills an empty category with the owner''s own Category'
 );
 select is(
-  (select category.slug
+  (select row(category.slug, item.gmail_auto_confirm_pending)::text
     from public.transactions as item
     join public.categories as category on category.id = item.category_id
     where item.id = (select transaction_ids[1] from recorded_001)),
-  'food-drinks',
-  'the Category matched by name ignoring case'
+  row('food-drinks', false)::text,
+  'the Category matched by name ignoring case, and the transaction stopped waiting'
 );
 select is(
   (select applied from public.set_imported_category((select transaction_ids[1] from recorded_001), 'Transport')),
@@ -340,6 +376,26 @@ select is(
   'a name that is not one of the owner''s Categories changes nothing'
 );
 
+create temporary table qualified on commit drop as
+  select item.id
+    from public.transactions as item
+    join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
+    where source.gmail_message_id = 'inst-008';
+select is(
+  (select row(applied, review_status)::text
+    from public.set_imported_category((select id from qualified), 'Not a category')),
+  row(false, 'pending')::text,
+  'a qualifying transaction without a confident Category stays pending review'
+);
+update public.transactions set description = 'Edited by the User'
+  where id = (select id from qualified);
+select is(
+  (select row(applied, review_status)::text
+    from public.set_imported_category((select id from qualified), 'Food & Drinks')),
+  row(false, 'pending')::text,
+  'a qualifying transaction the User edited is never confirmed by categorization'
+);
+
 -- The owner's own history comes first.
 select public.record_gmail_extraction(
   (select id from public.processed_gmail_messages where gmail_message_id = 'inst-006'),
@@ -352,13 +408,13 @@ select public.record_gmail_extraction(
   p_institution_key => 'BCA_CC'
 );
 select is(
-  (select category.slug
+  (select row(category.slug, item.review_status, item.gmail_auto_confirm_pending)::text
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     join public.categories as category on category.id = item.category_id
     where source.gmail_message_id = 'inst-006'),
-  'food-drinks',
-  'a merchant the owner confirmed before gets the same Category on import'
+  row('food-drinks', 'confirmed', false)::text,
+  'a merchant the owner confirmed before gets the same Category and confirms on import'
 );
 select is(
   (select cardinality(uncategorized_transaction_ids) from public.record_gmail_extraction(

@@ -1,9 +1,15 @@
+import { exclusionCategoryPresets, expenseCategoryPresets } from "@monara/contracts";
+
 // One palette for every category visual, so a slice, a ribbon and a list row always match.
 const categoryColors: Record<string, string> = {
   Digital: "var(--accent)",
   Transport: "#1597b6",
   Shopping: "#8870c9",
   "Food & Drinks": "#208577",
+  "Resto & Cafe": "#208577",
+  "Ride-hail": "#1597b6",
+  Retail: "#8870c9",
+  Groceries: "#3e9464",
   Other: "#ba8736",
   Uncategorized: "var(--muted)",
 };
@@ -27,6 +33,21 @@ type CategoryGlyph =
   | "film"
   | "income"
   | "transfer"
+  | "groceries"
+  | "services"
+  | "store"
+  | "travel"
+  | "drinks"
+  | "family"
+  | "giving"
+  | "shield"
+  | "pulse"
+  | "repayment"
+  | "internal"
+  | "reimbursed"
+  | "investment"
+  | "one-off"
+  | "cancelled"
   | "dot";
 
 // Match whole category words: "Rent" gets a house, while "Current" stays neutral.
@@ -46,5 +67,9 @@ const categoryIcons: [RegExp, CategoryGlyph][] = [
 
 /** A drawn glyph per category meaning; anything unrecognised uses a neutral dot. */
 export function categoryIcon(name: string): CategoryGlyph {
+  const preset = [...expenseCategoryPresets, ...exclusionCategoryPresets].find(
+    (category) => category.name === name,
+  );
+  if (preset) return preset.icon;
   return categoryIcons.find(([pattern]) => pattern.test(name))?.[1] ?? "dot";
 }

@@ -7,11 +7,11 @@ const state = {
   user: { id: "00000000-0000-4000-8000-000000000001" },
   starts: [],
   completions: [],
-  queued: [],
-  requested: [],
-  failures: [],
   discoveries: [],
-  agentFails: false,
+  inlineDiscoveries: [],
+  discoveryState: "completed",
+  discoveryFailure: null,
+  dismissed: [],
 };
 globalThis.monaraGmailRouteTest = state;
 const service = `
@@ -31,23 +31,40 @@ export function gmailConnectionService() { return {
   async list() { return [{id:"${connectionId}",status:"active",lastSyncedAt:"2026-10-14T04:00:00Z"}]; },
 }; }
 export function gmailIngestionRepository() { return {
-  async syncCounts() { return {imported:2,skipped:1,failed:0,inProgress:0,importedTransactions:2}; },
-  async requestSync(userId, connectionId) {
-    globalThis.monaraGmailRouteTest.requested.push({userId,connectionId});
-    return "2026-10-16T07:30:00.000Z";
+  async discoveryFor(userId, connectionId) {
+    if (userId !== globalThis.monaraGmailRouteTest.user.id || connectionId !== "${connectionId}") {
+      throw Object.assign(new Error("not found"), { code: "NOT_FOUND" });
+    }
+    return { state: globalThis.monaraGmailRouteTest.discoveryState, suggestions: [] };
   },
-  async failSync(input) { globalThis.monaraGmailRouteTest.failures.push(input); },
+  async dismissDiscovery(userId, connectionId, institutionKey) {
+    if (userId !== globalThis.monaraGmailRouteTest.user.id || connectionId !== "${connectionId}") {
+      return false;
+    }
+    globalThis.monaraGmailRouteTest.dismissed.push(institutionKey);
+    return true;
+  },
 }; }
 `;
-const agentSync = `
-export class AgentSyncError extends Error {}
-export async function requestAgentSync(input) {
-  if (globalThis.monaraGmailRouteTest.agentFails) throw new AgentSyncError();
-  globalThis.monaraGmailRouteTest.queued.push(input);
-}
-export async function requestAgentDiscovery(connectionId) {
-  if (globalThis.monaraGmailRouteTest.agentFails) throw new AgentSyncError();
+const discovery = `
+export function startDiscoveryAfterResponse(connectionId) {
   globalThis.monaraGmailRouteTest.discoveries.push(connectionId);
+}
+export async function runDiscovery(connectionId) {
+  globalThis.monaraGmailRouteTest.inlineDiscoveries.push(connectionId);
+  if (globalThis.monaraGmailRouteTest.discoveryFailure === "unavailable") throw new Error("gmail down");
+  if (globalThis.monaraGmailRouteTest.discoveryFailure === "disconnected") {
+    const error = new globalThis.monaraGmailRouteTest.GmailIngestionError("gone");
+    error.code = "NOT_FOUND";
+    throw error;
+  }
+  globalThis.monaraGmailRouteTest.discoveryState = "completed";
+}
+export async function rerunDiscoveryIfNeeded(connectionId) {
+  const state = globalThis.monaraGmailRouteTest.discoveryState;
+  if (state !== "idle" && state !== "failed") return false;
+  await runDiscovery(connectionId).catch(() => undefined);
+  return true;
 }
 `;
 const hooks = registerHooks({
@@ -59,8 +76,18 @@ const hooks = registerHooks({
         url: `data:text/javascript,${encodeURIComponent("export async function getAuthenticatedIdentity() { return globalThis.monaraGmailRouteTest.user; }")}`,
         shortCircuit: true,
       };
-    if (specifier === "@/lib/gmail/agent-sync")
-      return { url: `data:text/javascript,${encodeURIComponent(agentSync)}`, shortCircuit: true };
+    if (specifier === "@/lib/gmail/trigger")
+      return {
+        url: `data:text/javascript,${encodeURIComponent("export function syncTriggersAfterResponse() {}")}`,
+        shortCircuit: true,
+      };
+    if (specifier === "@/lib/gmail/discovery")
+      return { url: `data:text/javascript,${encodeURIComponent(discovery)}`, shortCircuit: true };
+    if (specifier === "@monara/core")
+      return {
+        url: `data:text/javascript,${encodeURIComponent("export class GmailConnectionError extends Error {} export class GmailIngestionError extends Error {} globalThis.monaraGmailRouteTest.GmailIngestionError = GmailIngestionError;")}`,
+        shortCircuit: true,
+      };
     if (specifier === "@/lib/http/origin")
       return nextResolve(new URL("../http/origin.ts", import.meta.url).href, context);
     if (specifier === "@/lib/onboarding/flow")
@@ -72,7 +99,12 @@ const hooks = registerHooks({
 });
 const { POST } = await import("../../app/api/gmail/connections/route.ts");
 const { GET: callback } = await import("../../app/api/gmail/connections/callback/route.ts");
-const { POST: sync } = await import("../../app/api/gmail/connections/[connectionId]/sync/route.ts");
+const discoveryRoute = await import(
+  "../../app/api/gmail/connections/[connectionId]/discovery/route.ts"
+);
+const dismissRoute = await import(
+  "../../app/api/gmail/connections/[connectionId]/discovery/[institutionKey]/route.ts"
+);
 hooks.deregister();
 
 function withTunnel(run) {
@@ -81,7 +113,6 @@ function withTunnel(run) {
   process.env.NGROK_DOMAIN = "example.ngrok-free.dev";
   state.starts = [];
   state.completions = [];
-  state.queued = [];
   state.user = { id: "00000000-0000-4000-8000-000000000001" };
   return Promise.resolve()
     .then(run)
@@ -206,76 +237,111 @@ describe("Gmail route callback origin and session boundary", () => {
       assert.match(profile.headers.get("location"), /\/connections\/gmail\?result=connected$/);
       assert.equal(profile.headers.get("set-cookie"), null);
     }));
-
-  it("still connects when the agent cannot start account discovery", () =>
-    withTunnel(async () => {
-      state.agentFails = true;
-      try {
-        const request = new Request(
-          "http://localhost:3005/api/gmail/connections/callback?session_uri=synthetic-twice",
-          { headers: { host: "example.ngrok-free.dev" } },
-        );
-        request.nextUrl = new URL(request.url);
-        const response = await callback(request);
-        assert.match(response.headers.get("location"), /result=connected$/);
-      } finally {
-        state.agentFails = false;
-      }
-    }));
 });
 
-describe("Gmail Sync Now origin and cursor boundary", () => {
-  it("refuses cross-site requests before queueing work", () =>
-    withTunnel(async () => {
-      const response = await sync(
-        new Request(`https://monara.example/api/gmail/connections/${connectionId}/sync`, {
-          method: "POST",
-          headers: { origin: "https://attacker.example", "sec-fetch-site": "cross-site" },
-        }),
-        { params: Promise.resolve({ connectionId }) },
-      );
-      assert.equal(response.status, 403);
-      assert.deepEqual(state.queued, []);
-    }));
+describe("Gmail account discovery in the web backend", () => {
+  const context = { params: Promise.resolve({ connectionId }) };
+  const sameOrigin = () =>
+    new Request(`http://localhost:3005/api/gmail/connections/${connectionId}/discovery`, {
+      method: "POST",
+      headers: { host: "localhost:3005", origin: "http://localhost:3005" },
+    });
 
-  it("queues an owned active connection from its last successful cursor", () =>
-    withTunnel(async () => {
-      const response = await sync(
-        new Request(`https://monara.example/api/gmail/connections/${connectionId}/sync`, {
-          method: "POST",
-          headers: { origin: "https://monara.example", "sec-fetch-site": "same-origin" },
-        }),
-        { params: Promise.resolve({ connectionId }) },
-      );
-      assert.equal(response.status, 202);
-      assert.deepEqual(state.queued, [{ connectionId, since: "2026-10-14T04:00:00Z" }]);
-      // The queued state is stored for the signed-in User before the agent is asked.
-      assert.deepEqual(state.requested, [{ userId: state.user.id, connectionId }]);
-      assert.equal((await response.json()).status, "queued");
-    }));
+  it("reruns a discovery that never ran or failed before answering", async () => {
+    for (const before of ["idle", "failed"]) {
+      state.discoveryState = before;
+      state.inlineDiscoveries = [];
+      const response = await discoveryRoute.GET(new Request("http://localhost/x"), context);
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).state, "completed");
+      assert.deepEqual(state.inlineDiscoveries, [connectionId]);
+    }
+  });
 
-  it("stores the failure when the agent cannot queue the sync", () =>
-    withTunnel(async () => {
-      state.agentFails = true;
-      state.failures.length = 0;
-      try {
-        const response = await sync(
-          new Request(`https://monara.example/api/gmail/connections/${connectionId}/sync`, {
-            method: "POST",
-            headers: { origin: "https://monara.example", "sec-fetch-site": "same-origin" },
-          }),
-          { params: Promise.resolve({ connectionId }) },
-        );
-        assert.equal((await response.json()).code, "DEPENDENCY_UNAVAILABLE");
-        assert.deepEqual(state.failures, [
-          {
-            connectionId,
-            error: "agent_unavailable",
-            requestedAt: "2026-10-16T07:30:00.000Z",
-          },
-        ]);
-      } finally {
-        state.agentFails = false;
-      }
-    }));
+  it("answers a finished or running discovery without searching again", async () => {
+    for (const current of ["completed", "running"]) {
+      state.discoveryState = current;
+      state.inlineDiscoveries = [];
+      const response = await discoveryRoute.GET(new Request("http://localhost/x"), context);
+      assert.equal((await response.json()).state, current);
+      assert.deepEqual(state.inlineDiscoveries, []);
+    }
+  });
+
+  it("searches only the signed-in User's own connection", async () => {
+    state.discoveryState = "idle";
+    state.inlineDiscoveries = [];
+    const other = {
+      params: Promise.resolve({ connectionId: "00000000-0000-4000-8000-000000000099" }),
+    };
+    const response = await discoveryRoute.GET(new Request("http://localhost/x"), other);
+    assert.notEqual(response.status, 200);
+    assert.deepEqual(state.inlineDiscoveries, []);
+    state.discoveryState = "completed";
+  });
+
+  it("searches again on request and answers with the result", async () => {
+    state.discoveryState = "failed";
+    state.inlineDiscoveries = [];
+    const response = await discoveryRoute.POST(sameOrigin(), context);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).state, "completed");
+    assert.deepEqual(state.inlineDiscoveries, [connectionId]);
+  });
+
+  it("reports an unavailable inbox when the requested search fails", async () => {
+    state.discoveryFailure = "unavailable";
+    try {
+      const response = await discoveryRoute.POST(sameOrigin(), context);
+      assert.equal((await response.json()).code, "DEPENDENCY_UNAVAILABLE");
+    } finally {
+      state.discoveryFailure = null;
+      state.discoveryState = "completed";
+    }
+  });
+
+  it("asks for a reconnect when authorization disappeared during search", async () => {
+    state.discoveryFailure = "disconnected";
+    try {
+      const response = await discoveryRoute.POST(sameOrigin(), context);
+      assert.equal((await response.json()).code, "CONFLICT");
+    } finally {
+      state.discoveryFailure = null;
+      state.discoveryState = "completed";
+    }
+  });
+});
+
+describe("dismissing a newly found account", () => {
+  const request = (origin = "http://localhost:3005") =>
+    new Request(`http://localhost:3005/api/gmail/connections/${connectionId}/discovery/BCA_CC`, {
+      method: "PATCH",
+      headers: { host: "localhost:3005", origin },
+    });
+  const params = (id, institutionKey = "BCA_CC") => ({
+    params: Promise.resolve({ connectionId: id, institutionKey }),
+  });
+
+  it("dismisses only the signed-in User's own finding", async () => {
+    state.dismissed = [];
+    assert.equal((await dismissRoute.PATCH(request(), params(connectionId))).status, 204);
+    assert.deepEqual(state.dismissed, ["BCA_CC"]);
+    const other = await dismissRoute.PATCH(
+      request(),
+      params("00000000-0000-4000-8000-000000000099"),
+    );
+    assert.equal((await other.json()).code, "NOT_FOUND");
+    assert.deepEqual(state.dismissed, ["BCA_CC"]);
+  });
+
+  it("refuses cross-site requests and invalid keys before writing", async () => {
+    state.dismissed = [];
+    assert.equal(
+      (await dismissRoute.PATCH(request("https://evil.example"), params(connectionId))).status,
+      403,
+    );
+    const invalid = await dismissRoute.PATCH(request(), params(connectionId, "bad key!"));
+    assert.equal((await invalid.json()).code, "VALIDATION_FAILED");
+    assert.deepEqual(state.dismissed, []);
+  });
 });

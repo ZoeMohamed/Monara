@@ -47,6 +47,10 @@
   animation: float 3.2s ease-in-out infinite;
 }
 
+.gmailTile {
+  filter: drop-shadow(0 6px 10px rgb(28 47 94 / 12%)) drop-shadow(0 1px 2px rgb(28 47 94 / 8%));
+}
+
 .link {
   stroke-dasharray: 1 9;
   animation: flow 0.9s linear infinite;
@@ -240,7 +244,7 @@
   }
 }
 
-/* Leaves the envelope, arcs over the link, and is swallowed at the cat's cheek. */
+/* Leaves the Gmail tile, arcs over the link, and is swallowed at the cat's cheek. */
 @keyframes fly {
   0% {
     opacity: 0;
@@ -254,18 +258,18 @@
 
   20% {
     opacity: 1;
-    transform: translate(34px, -10px) scale(1) rotate(6deg);
+    transform: translate(28px, -10px) scale(1) rotate(6deg);
   }
 
   30% {
     opacity: 1;
-    transform: translate(62px, 22px) scale(0.85) rotate(12deg);
+    transform: translate(54px, 24px) scale(0.85) rotate(12deg);
   }
 
   35%,
   100% {
     opacity: 0;
-    transform: translate(76px, 34px) scale(0.2) rotate(18deg);
+    transform: translate(66px, 36px) scale(0.2) rotate(18deg);
   }
 }
 

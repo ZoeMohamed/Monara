@@ -14,11 +14,10 @@ import {
   gmailConnectionsErrorState,
   isSyncInProgress,
   loadGmailConnections,
-  requestGmailSync,
   startGmailConnection,
 } from "@/lib/gmail/client";
 
-/** How often the page checks on a queued or running sync. */
+/** How often the page checks on an import that is queued or running. */
 const SYNC_POLL_MS = 3_000;
 
 type ClientState = {
@@ -32,7 +31,6 @@ type ClientAction =
   | { type: "loaded"; mailboxes: GmailMailbox[] }
   | { type: "load-error"; error: unknown }
   | { type: "pending"; action: NonNullable<ClientState["pendingAction"]> }
-  | { type: "sync-queued"; id: string }
   | { type: "action-error"; error: unknown };
 
 function reducer(state: ClientState, action: ClientAction): ClientState {
@@ -49,21 +47,6 @@ function reducer(state: ClientState, action: ClientAction): ClientState {
       };
     case "pending":
       return { ...state, pendingAction: action.action, actionError: undefined };
-    case "sync-queued":
-      return {
-        ...state,
-        view:
-          state.view.status === "ready"
-            ? {
-                ...state.view,
-                mailboxes: state.view.mailboxes.map((mailbox) =>
-                  mailbox.id === action.id ? { ...mailbox, sync: { state: "queued" } } : mailbox,
-                ),
-              }
-            : state.view,
-        pendingAction: undefined,
-        actionError: undefined,
-      };
     case "action-error":
       return {
         view:
@@ -117,7 +100,7 @@ export function GmailConnectionsClient({ callbackError }: { callbackError?: stri
 
   const syncing = state.view.status === "ready" && state.view.mailboxes.some(isSyncInProgress);
 
-  // The sync runs in the background on the server; keep checking until it ends.
+  // Imports run in the background on the server; keep checking until they end.
   useEffect(() => {
     if (!syncing) return;
     const signal = controllerRef.current?.signal;
@@ -195,31 +178,6 @@ export function GmailConnectionsClient({ callbackError }: { callbackError?: stri
     if (!signal?.aborted) await refresh();
   };
 
-  const sync = async (id: string) => {
-    const signal = controllerRef.current?.signal;
-    if (
-      state.view.status !== "ready" ||
-      !state.view.mailboxes.some(
-        (mailbox) =>
-          mailbox.id === id && mailbox.status === "active" && mailbox.sync.state === "idle",
-      ) ||
-      signal?.aborted ||
-      actionPendingRef.current
-    ) {
-      return;
-    }
-    actionPendingRef.current = true;
-    dispatch({ type: "pending", action: { kind: "sync", id } });
-    try {
-      await requestGmailSync(id, { signal });
-      if (!signal?.aborted) dispatch({ type: "sync-queued", id });
-    } catch (error) {
-      if (!signal?.aborted) dispatch({ type: "action-error", error });
-    } finally {
-      actionPendingRef.current = false;
-    }
-  };
-
   return (
     <GmailConnectionsScreen
       state={state.view}
@@ -229,7 +187,6 @@ export function GmailConnectionsClient({ callbackError }: { callbackError?: stri
       actions={{
         connect: () => void connect(),
         reconnect: (id) => void connect(id),
-        sync: (id) => void sync(id),
         disconnect: (id) => void disconnect(id),
       }}
     />
