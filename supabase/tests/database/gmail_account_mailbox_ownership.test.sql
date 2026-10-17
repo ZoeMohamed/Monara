@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(9);
+select plan(10);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001 and the
 -- accounts "Daily bank" (11000000-...-0001, 4242) and "Daily wallet". User 2 owns
@@ -126,6 +126,15 @@ select lives_ok(
   'an account can always be made manual-only'
 );
 
+reset role;
+
+set local role authenticated;
+select throws_ok(
+  $$select composio_trigger_id from public.gmail_connections$$,
+  '42501',
+  null,
+  'signed-in Users cannot read mailbox trigger ids'
+);
 reset role;
 
 select * from finish();

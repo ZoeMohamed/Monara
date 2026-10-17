@@ -112,6 +112,13 @@ export interface GmailIngestionRepository {
     userId: UserId;
     confirmed: boolean;
   }>;
+  /** The Composio trigger watching a connection, whatever its status; null when none. */
+  triggerIdOf(connectionId: GmailConnectionId): Promise<string | null>;
+  setTriggerId(connectionId: GmailConnectionId, triggerId: string | null): Promise<void>;
+  /** The active connection behind a Composio connected account, or null. */
+  connectionForComposioAccount(
+    composioConnectedAccountId: string,
+  ): Promise<GmailConnectionId | null>;
   /** Sets an active connection to error so syncs stop until the User reconnects. */
   markError(connectionId: GmailConnectionId): Promise<void>;
   /** Message outcomes for one of the User's connections; NOT_FOUND if it is not theirs. */

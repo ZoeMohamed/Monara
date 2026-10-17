@@ -63,6 +63,11 @@ const hooks = registerHooks({
         url: `data:text/javascript,${encodeURIComponent("export async function getAuthenticatedIdentity() { return globalThis.monaraGmailRouteTest.user; }")}`,
         shortCircuit: true,
       };
+    if (specifier === "@/lib/gmail/trigger")
+      return {
+        url: `data:text/javascript,${encodeURIComponent("export function syncTriggersAfterResponse() {}")}`,
+        shortCircuit: true,
+      };
     if (specifier === "@/lib/gmail/discovery")
       return { url: `data:text/javascript,${encodeURIComponent(discovery)}`, shortCircuit: true };
     if (specifier === "@/lib/http/origin")

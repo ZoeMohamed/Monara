@@ -9,6 +9,7 @@ import {
   runFinanceOperation,
 } from "@/lib/finance/service";
 import { importAfterAccountLinked } from "@/lib/gmail/import";
+import { syncUserTriggers } from "@/lib/gmail/trigger";
 import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
@@ -54,6 +55,10 @@ export async function POST(
       { userId: identity.id, channel: "web", directSource: "manual_form" },
       input,
     );
+    if (operation === "create_financial_account" || operation === "update_financial_account") {
+      // Each mailbox's new-mail trigger follows the senders of the accounts it feeds.
+      after(() => syncUserTriggers(identity.id).catch(() => undefined));
+    }
     const reason = linkReason(operation, input);
     if (reason) {
       // The account's recent mail imports after the response; a failure shows on the mailbox.

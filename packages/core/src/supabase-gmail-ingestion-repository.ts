@@ -239,6 +239,35 @@ export function createSupabaseGmailIngestionRepository(
       if (error) fail(error);
     },
 
+    async triggerIdOf(connectionId) {
+      const { data, error } = await client
+        .from("gmail_connections")
+        .select("composio_trigger_id")
+        .eq("id", connectionId)
+        .maybeSingle();
+      if (error) fail(error);
+      return data?.composio_trigger_id ?? null;
+    },
+
+    async setTriggerId(connectionId, triggerId) {
+      const { error } = await client
+        .from("gmail_connections")
+        .update({ composio_trigger_id: triggerId })
+        .eq("id", connectionId);
+      if (error) fail(error);
+    },
+
+    async connectionForComposioAccount(composioConnectedAccountId) {
+      const { data, error } = await client
+        .from("gmail_connections")
+        .select("id")
+        .eq("composio_connected_account_id", composioConnectedAccountId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (error) fail(error);
+      return data?.id ?? null;
+    },
+
     async markError(connectionId) {
       const { data, error } = await client
         .from("gmail_connections")

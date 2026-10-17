@@ -2,6 +2,7 @@ import { GmailConnectionError } from "@monara/core";
 import type { NextRequest } from "next/server";
 import { startDiscoveryAfterResponse } from "@/lib/gmail/discovery";
 import { gmailConnectionService } from "@/lib/gmail/service";
+import { syncTriggersAfterResponse } from "@/lib/gmail/trigger";
 import { browserOrigin } from "@/lib/http/origin";
 import { ONBOARDING_RETURN_COOKIE, returnsToOnboarding } from "@/lib/onboarding/flow";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
@@ -44,6 +45,8 @@ export async function GET(request: NextRequest) {
     const connection = await gmailConnectionService().complete(identity.id, sessionUri);
     // Runs after the redirect; the detect step starts it again if it fails or stalls.
     startDiscoveryAfterResponse(connection.id);
+    // A reconnected mailbox gets its trigger back for the accounts it still feeds.
+    syncTriggersAfterResponse(identity.id);
     return finish("connected");
   } catch (error) {
     return finish(error instanceof GmailConnectionError ? error.code : "DEPENDENCY_UNAVAILABLE");

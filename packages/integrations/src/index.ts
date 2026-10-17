@@ -20,6 +20,14 @@ export {
   GmailReadError,
   parseSenderAddress,
 } from "./gmail-read.ts";
+export type { ComposioGmailEvent, ComposioGmailTriggers } from "./gmail-trigger.ts";
+export {
+  ComposioTriggerError,
+  createComposioGmailTriggers,
+  GMAIL_NEW_MESSAGE_TRIGGER,
+  parseComposioGmailEvent,
+  verifyComposioWebhook,
+} from "./gmail-trigger.ts";
 export type { KapsoInboundMedia, KapsoInboundMessage, WhatsAppTransport } from "./whatsapp.ts";
 export {
   createKapsoTransport,
