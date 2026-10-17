@@ -1,7 +1,9 @@
 .ledgerGroup {
   min-width: 0;
   overflow: hidden;
+  border: 1px solid var(--border);
   border-radius: 16px;
+  background: var(--surface);
 }
 
 .ledgerGroup > button {
@@ -12,32 +14,9 @@
   border-top: 1px solid var(--separator);
 }
 
-.reviewRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 44px;
-  align-items: center;
-  padding-right: 4px;
-  background: color-mix(in srgb, var(--warning) 9%, var(--surface));
-}
-
-.reviewCount {
-  display: inline-grid;
-  min-width: 18px;
-  height: 18px;
-  place-items: center;
-  padding-inline: 4px;
-  border-radius: 99px;
-  background: var(--warning);
-  color: var(--warning-foreground);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
 @media (min-width: 1024px) {
   .ledgerGroup {
-    border: 1px solid var(--border);
     border-radius: 20px;
-    background: var(--surface);
   }
 
   .ledgerGroup > button {

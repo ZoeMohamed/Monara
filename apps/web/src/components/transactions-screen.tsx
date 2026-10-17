@@ -3,51 +3,92 @@
 import { Button, Card, InputGroup, Label, TextField } from "@monara/ui";
 import { useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
+
 import { FinancialSummary } from "@/components/financial-summary";
-import { Icon } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
-import { ReviewRow } from "@/components/review-queue";
 import { TransactionRow } from "@/components/transaction-row";
 import styles from "@/components/transactions-screen.module.css";
 import type { LedgerKind } from "@/data/app-navigation";
-import { demoToday, formatMonth, type Transaction } from "@/data/demo-ledger";
-import { financialSummaryModel } from "@/data/finance-analytics";
-import { filterHistory, groupHistory, historyForMonth } from "@/data/ledger-history";
+import { demoToday, formatMonth, type Transaction, transactionErrors } from "@/data/demo-ledger";
 
-const kindFilters: { id: LedgerKind; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "expense", label: "Expenses" },
-  { id: "income", label: "Income" },
-  { id: "exclusion", label: "Exclusions" },
+import { financialSummaryModel } from "@/data/finance-analytics";
+
+type KindFilter = LedgerKind;
+
+// With nothing selected the list shows everything, so there is no "All" chip. The icons
+// match the summary card: the arrow for spending, the tray for income.
+const kindFilters: { id: Exclude<KindFilter, "all">; label: string; icon: IconName }[] = [
+  { id: "expense", label: "Expenses", icon: "trend-up" },
+  { id: "income", label: "Income", icon: "income" },
+  { id: "exclusion", label: "Exclusions", icon: "eye-off" },
 ];
 
-const dayFormatter = new Intl.DateTimeFormat("en-US", {
+const ledgerDayFormatter = new Intl.DateTimeFormat("en-US", {
   weekday: "long",
   day: "numeric",
   month: "short",
   timeZone: "UTC",
 });
 
-function HistoryFilters({
+const undatedKey = "undated";
+
+/** Newest day first. Imports with no date have no day to sit under, so they lead the list. */
+function groupByDate(transactions: Transaction[]) {
+  const groups = new Map<string, { transactions: Transaction[]; spending: bigint }>();
+  for (const transaction of transactions) {
+    const key = transaction.date ?? undatedKey;
+    const group = groups.get(key) ?? { transactions: [], spending: BigInt(0) };
+    group.transactions.push(transaction);
+    if (transaction.status === "confirmed" && transaction.kind === "expense") {
+      group.spending += BigInt(transaction.amount ?? 0);
+    }
+    groups.set(key, group);
+  }
+  return [...groups].sort(([first], [second]) =>
+    first === undatedKey ? -1 : second === undatedKey ? 1 : second.localeCompare(first),
+  );
+}
+
+function filteredTransactions(transactions: Transaction[], query: string, kind: KindFilter) {
+  const normalizedQuery = query.trim().toLowerCase();
+  return transactions
+    .filter(
+      (transaction) =>
+        (kind === "all" || transaction.kind === kind) &&
+        `${transaction.merchant ?? ""} ${transaction.category ?? ""} ${transaction.method ?? ""}`
+          .toLowerCase()
+          .includes(normalizedQuery),
+    )
+    .sort((first, second) =>
+      `${second.date ?? ""} ${second.time ?? ""}`.localeCompare(
+        `${first.date ?? ""} ${first.time ?? ""}`,
+      ),
+    );
+}
+
+function LedgerFilters({
   query,
-  kind,
-  reviewOnly,
+  kindFilter,
+  reviewOpen,
   pendingCount,
-  onQuery,
-  onFilter,
+  onQueryChange,
+  onKindChange,
+  onReviewChange,
 }: {
   query: string;
-  kind: LedgerKind;
-  reviewOnly: boolean;
+  kindFilter: KindFilter;
+  reviewOpen: boolean;
   pendingCount: number;
-  onQuery: (value: string) => void;
-  onFilter: (kind: LedgerKind, review: boolean) => void;
+  onQueryChange: (query: string) => void;
+  onKindChange: (kind: KindFilter) => void;
+  onReviewChange: (open: boolean) => void;
 }) {
-  const buttonClass = (active: boolean) =>
-    `min-h-11 min-w-0 shrink-0 gap-1 rounded-full px-2.5 text-[11px] font-bold ${active ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`;
+  const chip = (active: boolean) =>
+    `h-9 min-h-9 min-w-0 shrink-0 gap-1.5 rounded-full px-3.5 text-xs font-bold ${active ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`;
   return (
     <>
-      <TextField className="mt-4 min-w-0" onChange={onQuery} value={query}>
+      <TextField className="mt-3 min-w-0" onChange={onQueryChange} value={query}>
         <Label className="sr-only">Search</Label>
         <InputGroup className="rounded-2xl">
           <InputGroup.Prefix>
@@ -63,81 +104,126 @@ function HistoryFilters({
       </TextField>
       <fieldset
         aria-label="Filter transactions"
-        className="mt-3 flex min-w-0 gap-1 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
+        className="mt-2 flex min-w-0 gap-2 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
       >
-        {kindFilters.map((filter) => (
-          <Button
-            aria-pressed={!reviewOnly && kind === filter.id}
-            className={buttonClass(!reviewOnly && kind === filter.id)}
-            key={filter.id}
-            onPress={() => onFilter(filter.id, false)}
-            variant="ghost"
-          >
-            {filter.label}
-          </Button>
-        ))}
         <Button
-          aria-pressed={reviewOnly}
-          className={buttonClass(reviewOnly)}
-          onPress={() => onFilter("all", true)}
+          aria-label={`To review, ${pendingCount} waiting`}
+          aria-pressed={reviewOpen}
+          className={chip(reviewOpen)}
+          onPress={() => onReviewChange(!reviewOpen)}
           variant="ghost"
         >
+          <Icon className="h-4 w-4" name="inbox" />
           To review
-          {pendingCount > 0 ? <span className={styles.reviewCount}>{pendingCount}</span> : null}
+          {pendingCount > 0 ? (
+            <span
+              aria-hidden
+              className="grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-accent-foreground tabular-nums"
+            >
+              {pendingCount}
+            </span>
+          ) : null}
         </Button>
+        {kindFilters.map((filter) => {
+          const active = !reviewOpen && kindFilter === filter.id;
+          return (
+            <Button
+              aria-pressed={active}
+              className={chip(active)}
+              key={filter.id}
+              onPress={() => onKindChange(active ? "all" : filter.id)}
+              variant="ghost"
+            >
+              <Icon className="h-4 w-4" name={filter.icon} />
+              {filter.label}
+            </Button>
+          );
+        })}
       </fieldset>
     </>
+  );
+}
+
+function LedgerResultCount({
+  visibleCount,
+  totalCount,
+  filtersActive,
+  onClear,
+}: {
+  visibleCount: number;
+  totalCount: number;
+  filtersActive: boolean;
+  onClear: () => void;
+}) {
+  // The count is read out to screen readers always, and shown only while a filter narrows the list.
+  const count = (
+    <p className={filtersActive ? "text-xs text-muted" : "sr-only"} role="status">
+      {visibleCount} {visibleCount === 1 ? "transaction" : "transactions"}
+      {filtersActive ? ` of ${totalCount}` : ""}
+    </p>
+  );
+  if (!filtersActive) return count;
+  return (
+    <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+      {count}
+      {visibleCount > 0 || totalCount === 0 ? (
+        <Button
+          className="h-9 min-h-9 rounded-full text-xs text-accent"
+          onPress={onClear}
+          size="sm"
+          variant="ghost"
+        >
+          Clear filters
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
 function GroupedLedger({
   transactions,
   openTransaction,
-  onEdit,
   onConfirm,
 }: {
   transactions: Transaction[];
   openTransaction: (transaction: Transaction) => void;
-  onEdit: (id: string) => void;
   onConfirm: (id: string) => void;
 }) {
   const { formatRupiah } = useAmountDisplay();
   return (
-    <div className="mt-3 space-y-4">
-      {groupHistory(transactions).map(([date, group]) => (
+    <div className="mt-2 space-y-3">
+      {groupByDate(transactions).map(([date, group]) => (
         <section aria-labelledby={`ledger-day-${date}`} key={date}>
-          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-2 lg:px-5">
-            <h2 className="text-xs font-semibold text-muted" id={`ledger-day-${date}`}>
-              {date === "undated" ? (
-                "Date needed"
+          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-1 lg:px-5">
+            <h2 className="min-w-0 text-sm font-semibold" id={`ledger-day-${date}`}>
+              {date === undatedKey ? (
+                "No date"
               ) : (
-                <time dateTime={date}>{dayFormatter.format(new Date(`${date}T00:00:00Z`))}</time>
+                <time dateTime={date}>
+                  {ledgerDayFormatter.format(new Date(`${date}T00:00:00Z`))}
+                </time>
               )}
             </h2>
             {group.spending > BigInt(0) ? (
-              <p className="text-xs font-medium text-muted tabular-nums">
+              <p className="text-xs font-medium text-muted tabular-nums [overflow-wrap:anywhere]">
                 −{formatRupiah(group.spending)}
               </p>
             ) : null}
           </div>
           <div className={styles.ledgerGroup}>
-            {group.transactions.map((transaction) =>
-              transaction.status === "pending" ? (
-                <ReviewRow
-                  key={transaction.id}
-                  transaction={transaction}
-                  onOpen={() => openTransaction(transaction)}
-                  onEdit={() => onEdit(transaction.id)}
-                  onConfirm={() => onConfirm(transaction.id)}
-                />
-              ) : (
-                <TransactionRow
-                  key={transaction.id}
-                  onClick={() => openTransaction(transaction)}
-                  transaction={transaction}
-                />
-              ),
-            )}
+            {group.transactions.map((transaction) => (
+              <TransactionRow
+                key={transaction.id}
+                onClick={() => openTransaction(transaction)}
+                onConfirm={
+                  transaction.status === "pending" &&
+                  Object.keys(transactionErrors(transaction)).length === 0
+                    ? () => onConfirm(transaction.id)
+                    : undefined
+                }
+                transaction={transaction}
+              />
+            ))}
           </div>
         </section>
       ))}
@@ -145,71 +231,148 @@ function GroupedLedger({
   );
 }
 
-type EmptyHistoryProps = {
+function EmptyLedger({
+  month,
+  reviewing,
+  noTransactions,
+  onClear,
+  onAdd,
+  onReview,
+  onConnectGmail,
+}: {
   month: string;
-  empty: boolean;
-  reviewOnly: boolean;
-  pendingCount: number;
+  reviewing: boolean;
+  noTransactions: boolean;
   onClear: () => void;
   onAdd?: () => void;
+  onReview?: () => void;
   onConnectGmail?: () => void;
-};
-
-function emptyHistoryContent({ month, empty, reviewOnly, pendingCount }: EmptyHistoryProps) {
-  if (reviewOnly && pendingCount === 0)
-    return {
-      title: "You’re all caught up",
-      body: "No transactions need review in this month.",
-      button: "See all transactions",
-    };
-  if (empty)
-    return {
-      title: "No transactions yet",
-      body: `Your transactions for ${formatMonth(month)} will show up here.`,
-      button: "Clear filters",
-    };
-  return {
-    title: "No matches",
-    body: "Try another search or clear your filters.",
-    button: "Clear filters",
-  };
-}
-
-function EmptyHistoryActions({ props, button }: { props: EmptyHistoryProps; button: string }) {
-  const { empty, reviewOnly, onAdd, onConnectGmail, onClear } = props;
-  if (!empty || reviewOnly)
+}) {
+  if (reviewing && noTransactions) {
     return (
-      <Button className="min-h-11" onPress={onClear} variant="secondary">
-        {button}
-      </Button>
+      <Card className="mt-3 block min-w-0 gap-0 rounded-3xl border border-dashed border-border bg-surface p-5 text-center">
+        <h2 className="text-base font-bold">You’re all caught up.</h2>
+        <p className="mt-1 text-sm text-muted">Imports wait here until you confirm them.</p>
+      </Card>
     );
+  }
   return (
-    <>
-      {onAdd ? (
-        <Button className="min-h-11" onPress={onAdd}>
-          <Icon name="plus" />
-          Add transaction
-        </Button>
-      ) : null}
-      {onConnectGmail ? (
-        <Button className="min-h-11" onPress={onConnectGmail} variant="secondary">
-          Connect Gmail
-        </Button>
-      ) : null}
-    </>
+    <Card className="mt-3 block min-w-0 gap-0 rounded-3xl border border-dashed border-border bg-surface p-5 text-center">
+      <h2 className="text-base font-bold">{noTransactions ? "No transactions" : "No matches"}</h2>
+      <p className="mt-1 text-sm text-muted">
+        {noTransactions
+          ? `Add a transaction for ${formatMonth(month)}${onReview ? " or review your imports" : ""}.`
+          : "Try another search or clear your filters."}
+      </p>
+      <div className="mt-4 flex flex-wrap justify-center gap-2">
+        {noTransactions ? (
+          <>
+            {onAdd ? (
+              <Button className="min-h-11" onPress={onAdd}>
+                <Icon name="plus" />
+                Add transaction
+              </Button>
+            ) : null}
+            {onReview ? (
+              <Button className="min-h-11" onPress={onReview} variant="secondary">
+                Review imports
+              </Button>
+            ) : onConnectGmail ? (
+              <Button className="min-h-11" onPress={onConnectGmail} variant="secondary">
+                Connect Gmail
+              </Button>
+            ) : null}
+          </>
+        ) : (
+          <Button className="min-h-11" onPress={onClear} variant="secondary">
+            Clear filters
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }
 
-function EmptyHistory(props: EmptyHistoryProps) {
-  const content = emptyHistoryContent(props);
+function Ledger({
+  transactions,
+  month,
+  today,
+  reviewOpen,
+  pendingCount,
+  openTransaction,
+  query,
+  kindFilter,
+  onQueryChange,
+  onKindChange,
+  onReviewChange,
+  onConfirm,
+  onClearFilters,
+  onAdd,
+  onConnectGmail,
+}: {
+  transactions: Transaction[];
+  month: string;
+  today: string;
+  reviewOpen: boolean;
+  pendingCount: number;
+  openTransaction: (transaction: Transaction) => void;
+  query: string;
+  kindFilter: KindFilter;
+  onQueryChange: (query: string) => void;
+  onKindChange: (kind: KindFilter) => void;
+  onReviewChange: (open: boolean) => void;
+  onConfirm: (id: string) => void;
+  onClearFilters: () => void;
+  onAdd?: () => void;
+  onConnectGmail?: () => void;
+}) {
+  // To review lists every import waiting, whatever its month; the other filters stay in the month.
+  const ledger = reviewOpen
+    ? transactions.filter((transaction) => transaction.status === "pending")
+    : transactions.filter(
+        (transaction) => transaction.date === null || transaction.date.startsWith(`${month}-`),
+      );
+  const visible = filteredTransactions(ledger, query, reviewOpen ? "all" : kindFilter);
+  const filtersActive = query.trim().length > 0 || (!reviewOpen && kindFilter !== "all");
+
   return (
-    <Card className="mt-3 block gap-0 rounded-3xl border border-dashed border-border bg-surface p-5 text-center">
-      <h2 className="text-base font-bold">{content.title}</h2>
-      <p className="mt-1 text-sm text-muted">{content.body}</p>
-      <div className="mt-3 flex flex-wrap justify-center gap-2">
-        <EmptyHistoryActions props={props} button={content.button} />
-      </div>
-    </Card>
+    <>
+      {reviewOpen ? null : (
+        <FinancialSummary compact model={financialSummaryModel(transactions, month, today)} />
+      )}
+      <LedgerFilters
+        query={query}
+        kindFilter={kindFilter}
+        reviewOpen={reviewOpen}
+        pendingCount={pendingCount}
+        onQueryChange={onQueryChange}
+        onKindChange={onKindChange}
+        onReviewChange={onReviewChange}
+      />
+      <LedgerResultCount
+        visibleCount={visible.length}
+        totalCount={ledger.length}
+        filtersActive={filtersActive}
+        onClear={onClearFilters}
+      />
+      {visible.length > 0 ? (
+        <GroupedLedger
+          transactions={visible}
+          openTransaction={openTransaction}
+          onConfirm={onConfirm}
+        />
+      ) : (
+        <EmptyLedger
+          month={month}
+          reviewing={reviewOpen}
+          noTransactions={ledger.length === 0}
+          onClear={onClearFilters}
+          onAdd={onAdd}
+          onReview={pendingCount > 0 ? () => onReviewChange(true) : undefined}
+          onConnectGmail={onConnectGmail}
+        />
+      )}
+    </>
   );
 }
 
@@ -217,15 +380,15 @@ export function TransactionsScreen({
   transactions,
   openTransaction,
   reviewOpen,
-  onFilterChange,
-  onEdit,
+  setReviewOpen,
   onConfirm,
   month,
   today = demoToday,
   setMonth,
   query: controlledQuery,
-  kindFilter: controlledKind,
+  kindFilter: controlledKindFilter,
   onQueryChange,
+  onKindChange,
   onClearFilters,
   onAdd,
   onConnectGmail,
@@ -233,42 +396,50 @@ export function TransactionsScreen({
   transactions: Transaction[];
   openTransaction: (transaction: Transaction) => void;
   reviewOpen: boolean;
-  onFilterChange: (kind: LedgerKind, review: boolean) => void;
-  onEdit: (id: string) => void;
+  setReviewOpen: (value: boolean) => void;
   onConfirm: (id: string) => void;
   month: string;
   today?: string;
   setMonth: (month: string) => void;
   query?: string;
-  kindFilter?: LedgerKind;
+  kindFilter?: KindFilter;
   onQueryChange?: (query: string) => void;
+  onKindChange?: (kind: KindFilter) => void;
   onClearFilters?: () => void;
   onAdd?: () => void;
   onConnectGmail?: () => void;
 }) {
-  const [filters, setFilters] = useState<{ query: string; kind: LedgerKind }>({
+  const [filters, setFilters] = useState<{ query: string; kind: KindFilter }>({
     query: "",
     kind: "all",
   });
   const query = controlledQuery ?? filters.query;
-  const kind = controlledKind ?? filters.kind;
-  const records = historyForMonth(transactions, month);
-  const visible = filterHistory(records, query, kind, reviewOpen);
-  const pendingCount = records.filter((item) => item.status === "pending").length;
-  const active = !!query.trim() || kind !== "all" || reviewOpen;
-  const changeQuery = (value: string) =>
-    onQueryChange ? onQueryChange(value) : setFilters((current) => ({ ...current, query: value }));
-  const changeFilter = (value: LedgerKind, review: boolean) => {
-    onFilterChange(value, review);
-    if (controlledKind === undefined) setFilters((current) => ({ ...current, kind: value }));
-  };
-  const clear = () => {
+  const kindFilter = controlledKindFilter ?? filters.kind;
+  const pendingCount = transactions.filter((item) => item.status === "pending").length;
+
+  function changeQuery(value: string) {
+    if (onQueryChange) onQueryChange(value);
+    else setFilters((current) => ({ ...current, query: value }));
+  }
+
+  // Picking a type leaves To review, so the chips act as one choice.
+  function changeKind(value: KindFilter) {
+    if (onKindChange) onKindChange(value);
+    else {
+      setFilters((current) => ({ ...current, kind: value }));
+      setReviewOpen(false);
+    }
+  }
+
+  function clearFilters() {
     if (onClearFilters) onClearFilters();
     else {
-      changeQuery("");
-      changeFilter("all", false);
+      onQueryChange?.("");
+      onKindChange?.("all");
+      setFilters({ query: "", kind: "all" });
     }
-  };
+  }
+
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -276,61 +447,27 @@ export function TransactionsScreen({
           <span className="lg:hidden">History</span>
           <span className="max-lg:hidden">Transactions</span>
         </h1>
-        <MonthSelector month={month} currentMonth={today.slice(0, 7)} onChange={setMonth} />
-      </div>
-      <FinancialSummary compact model={financialSummaryModel(transactions, month, today)} />
-      <HistoryFilters
-        query={query}
-        kind={kind}
-        reviewOnly={reviewOpen}
-        pendingCount={pendingCount}
-        onQuery={changeQuery}
-        onFilter={changeFilter}
-      />
-      <div className="mt-2 flex min-h-8 items-center justify-between gap-2">
-        <p className="text-xs text-muted" role="status">
-          {visible.length} {visible.length === 1 ? "transaction" : "transactions"}
-          {reviewOpen ? " to review" : ""}
-        </p>
-        {active ? (
-          <Button
-            className="min-h-11 rounded-full text-xs text-accent"
-            onPress={clear}
-            size="sm"
-            variant="ghost"
-          >
-            Clear filters
-          </Button>
+        {!reviewOpen ? (
+          <MonthSelector month={month} currentMonth={today.slice(0, 7)} onChange={setMonth} />
         ) : null}
       </div>
-      {pendingCount > 0 && kind !== "exclusion" ? (
-        <p className="text-[11px] text-muted">
-          Highlighted transactions need review before they count toward totals.
-        </p>
-      ) : null}
-      {kind === "exclusion" ? (
-        <p className="text-[11px] text-muted">
-          Kept in your history, left out of spending and budgets.
-        </p>
-      ) : null}
-      {visible.length ? (
-        <GroupedLedger
-          transactions={visible}
-          openTransaction={openTransaction}
-          onEdit={onEdit}
-          onConfirm={onConfirm}
-        />
-      ) : (
-        <EmptyHistory
-          month={month}
-          empty={records.length === 0}
-          reviewOnly={reviewOpen}
-          pendingCount={pendingCount}
-          onClear={clear}
-          onAdd={onAdd}
-          onConnectGmail={onConnectGmail}
-        />
-      )}
+      <Ledger
+        transactions={transactions}
+        month={month}
+        today={today}
+        reviewOpen={reviewOpen}
+        pendingCount={pendingCount}
+        openTransaction={openTransaction}
+        query={query}
+        kindFilter={kindFilter}
+        onQueryChange={changeQuery}
+        onKindChange={changeKind}
+        onReviewChange={setReviewOpen}
+        onConfirm={onConfirm}
+        onClearFilters={clearFilters}
+        onAdd={onAdd}
+        onConnectGmail={onConnectGmail}
+      />
     </div>
   );
 }

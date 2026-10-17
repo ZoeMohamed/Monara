@@ -1,14 +1,10 @@
 "use client";
 
 import { Button } from "@monara/ui";
-import { useAmountDisplay } from "@/components/app-session-context";
-
-import { BrandMark } from "@/components/brand-mark";
-import { Icon, type IconName } from "@/components/icon";
+import { AccountBadge } from "@/components/account-badge";
+import { useAmountDisplay, useTransactionAccount } from "@/components/app-session-context";
+import { Icon } from "@/components/icon";
 import styles from "@/components/transaction-row.module.css";
-import { useMerchantLogo } from "@/components/use-brand-logo";
-import { chosenCategoryIcon } from "@/data/category-icons";
-import { categoryColor } from "@/data/category-style";
 import { formatDay, type Transaction } from "@/data/demo-ledger";
 
 function transactionRowModel(
@@ -18,25 +14,16 @@ function transactionRowModel(
 ) {
   const date = showDate && transaction.date ? formatDay(transaction.date) : null;
   const metadata = [
-    transaction.status === "pending" ? "To review" : null,
+    transaction.status === "pending" ? "Needs review" : null,
+    transaction.kind === "exclusion" ? "Excluded" : null,
     date,
     transaction.time,
-    transaction.kind === "exclusion" && transaction.status !== "pending" ? "Excluded" : null,
   ]
     .filter(Boolean)
     .join(" · ");
   const category =
-    transaction.category ??
-    (transaction.kind === "income"
-      ? "Income"
-      : transaction.kind === "exclusion"
-        ? "Exclusion"
-        : "Uncategorized");
+    transaction.category ?? (transaction.kind === "income" ? "Income" : "Uncategorized");
   const sign = transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : "";
-  const icon: IconName =
-    transaction.kind === "income"
-      ? "income"
-      : chosenCategoryIcon(category, transaction.categoryIcon);
 
   return {
     merchant: transaction.merchant ?? "Merchant or source missing",
@@ -45,50 +32,34 @@ function transactionRowModel(
     amount:
       transaction.amount === null ? "Amount missing" : `${sign}${formatRupiah(transaction.amount)}`,
     amountColor:
-      transaction.kind === "income"
-        ? "text-success"
-        : transaction.kind === "exclusion"
-          ? "text-muted"
+      transaction.kind === "exclusion"
+        ? "text-muted"
+        : transaction.kind === "income"
+          ? "text-success"
           : "text-foreground",
-    tint:
-      transaction.kind === "income"
-        ? "var(--success)"
-        : transaction.kind === "exclusion"
-          ? "var(--muted)"
-          : categoryColor(category),
-    icon,
     metadata,
   };
 }
 
+/** The leading mark is the Financial Account the money moved through, not the merchant. */
 export function TransactionRow({
   transaction,
   onClick,
+  onConfirm,
   showDate = false,
 }: {
   transaction: Transaction;
   onClick?: () => void;
+  /** Adds a one-tap confirm beside a pending row, so a clean import needs no detour. */
+  onConfirm?: () => void;
   showDate?: boolean;
 }) {
   const { formatRupiah } = useAmountDisplay();
+  const account = useTransactionAccount(transaction);
   const model = transactionRowModel(transaction, showDate, formatRupiah);
-  const brand = useMerchantLogo(transaction.merchant);
   const content = (
     <>
-      {brand ? (
-        <BrandMark brand={brand} />
-      ) : (
-        <span
-          aria-hidden
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-base"
-          style={{
-            background: `color-mix(in srgb, ${model.tint} 10%, var(--surface))`,
-            color: model.tint,
-          }}
-        >
-          <Icon name={model.icon} />
-        </span>
-      )}
+      <AccountBadge account={account} name={transaction.method} size={36} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-foreground">
           {model.merchant}
@@ -109,11 +80,12 @@ export function TransactionRow({
       </span>
     </>
   );
-  return onClick ? (
+  const status = transaction.status;
+  const row = onClick ? (
     <Button
       className={styles.row}
       data-kind={transaction.kind ?? "unknown"}
-      data-review={transaction.status === "pending" || undefined}
+      data-status={status}
       onPress={onClick}
       type="button"
       variant="ghost"
@@ -121,12 +93,23 @@ export function TransactionRow({
       {content}
     </Button>
   ) : (
-    <div
-      className={styles.row}
-      data-kind={transaction.kind ?? "unknown"}
-      data-review={transaction.status === "pending" || undefined}
-    >
+    <div className={styles.row} data-kind={transaction.kind ?? "unknown"} data-status={status}>
       {content}
+    </div>
+  );
+  if (!onConfirm) return row;
+  return (
+    <div className={styles.item} data-status={status}>
+      {row}
+      <Button
+        aria-label={`Confirm ${model.merchant}`}
+        className={styles.confirm}
+        isIconOnly
+        onPress={onConfirm}
+        variant="ghost"
+      >
+        <Icon className="h-5 w-5" name="check" strokeWidth={2.6} />
+      </Button>
     </div>
   );
 }

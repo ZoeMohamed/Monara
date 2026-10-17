@@ -3,11 +3,11 @@
   width: 100%;
   min-width: 0;
   height: auto;
-  min-height: 68px;
+  min-height: 52px;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px;
-  padding: 12px 10px;
+  gap: 10px;
+  padding: 8px 10px;
   border-radius: 12px;
   text-align: left;
   white-space: normal;
@@ -21,30 +21,7 @@
 }
 
 .row[data-kind="exclusion"] {
-  background: color-mix(in srgb, var(--surface-secondary) 40%, transparent);
-}
-
-.row[data-kind="exclusion"] > span:first-child {
-  opacity: 0.65;
-}
-
-.row[data-kind="exclusion"] > :where(span:nth-child(2) > span:first-child) {
-  color: var(--muted);
-}
-
-/* The review wrapper paints the highlight so the row and its confirm button read as one. */
-.row[data-review="true"] {
-  background: transparent;
-}
-
-.row[data-review="true"] > span:first-child {
-  width: 32px;
-  height: 32px;
-}
-
-.row[data-review="true"] {
-  gap: 8px;
-  padding-inline: 8px;
+  opacity: 0.82;
 }
 
 @media (hover: hover) {
@@ -57,4 +34,51 @@
 .row[data-focus-visible="true"] {
   outline: 2px solid var(--focus);
   outline-offset: -2px;
+}
+
+/* A pending import: a light tint. The "Needs review" label carries the meaning. */
+.row[data-status="pending"],
+.item[data-status="pending"] {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.item > .row {
+  flex: 1;
+  width: auto;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Green tab on the item's far edge: the row's full height (54px) at 3 wide to 4 tall (40px), flush with the card. */
+.confirm {
+  width: 40px;
+  min-width: 40px;
+  height: auto;
+  min-height: 0;
+  align-self: stretch;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 0;
+  background: var(--success);
+  color: #fff;
+  --button-bg-hover: color-mix(in srgb, var(--success) 85%, black);
+  --button-bg-pressed: color-mix(in srgb, var(--success) 75%, black);
+}
+
+/* Hover deepens the whole item's tint; the row itself stays clear so the item shows through. */
+@media (hover: hover) {
+  .item > button.row:hover,
+  .item > button.row[data-hovered="true"] {
+    background: transparent;
+  }
+
+  .item[data-status="pending"]:hover {
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  }
 }

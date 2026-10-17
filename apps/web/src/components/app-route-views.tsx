@@ -75,13 +75,15 @@ export function TransactionsRoute() {
       setMonth={navigation.setMonth}
       transactions={session.transactions}
       reviewOpen={navigation.view.reviewOpen}
-      onFilterChange={(kindFilter, reviewOpen) => navigation.navigate({ kindFilter, reviewOpen })}
+      setReviewOpen={(reviewOpen) =>
+        navigation.navigate(reviewOpen ? { reviewOpen, kindFilter: "all" } : { reviewOpen })
+      }
       openTransaction={(transaction) => navigation.openTransaction(transaction.id)}
-      onEdit={navigation.openEdit}
       onConfirm={session.confirm}
       query={session.query}
       onQueryChange={session.setQuery}
       kindFilter={navigation.view.kindFilter}
+      onKindChange={(kindFilter) => navigation.navigate({ kindFilter, reviewOpen: false })}
       onClearFilters={() => {
         session.setQuery("");
         navigation.navigate({ kindFilter: "all", reviewOpen: false }, "replace");

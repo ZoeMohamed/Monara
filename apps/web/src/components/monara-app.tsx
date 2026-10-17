@@ -235,8 +235,7 @@ function RejectDialog({
           Exclude this transaction?
         </h2>
         <p className="mt-3 break-words text-sm leading-6 text-muted">
-          {transaction.merchant ?? "This transaction"} will leave the Review Queue and stay out of
-          totals.{" "}
+          {transaction.merchant ?? "This transaction"} will leave To review and stay out of totals.{" "}
           {transaction.backend
             ? "The imported record stays in Exclusions for audit."
             : "You can undo this from the confirmation message."}
@@ -488,7 +487,7 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
           onClose={navigation.closePopup}
           onEdit={() => navigation.openEdit(selected.id)}
           onConfirm={() => confirm(selected.id)}
-          onReject={() => session.reject(selected.id)}
+          onExclude={() => navigation.openReject(selected.id)}
           onDelete={() => deleteTransaction(selected)}
           pending={mutationPending}
           confirmationError={confirmError}
