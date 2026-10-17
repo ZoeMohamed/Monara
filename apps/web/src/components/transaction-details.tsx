@@ -34,11 +34,6 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
   timeZone: "UTC",
 });
-const confidenceFormatter = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 });
-
-function validConfidence(confidence: number | null) {
-  return confidence !== null && Number.isFinite(confidence) && confidence >= 0 && confidence <= 100;
-}
 
 // Live records state their source; demo imports are the ones carrying extraction confidence.
 function sourceOf(transaction: Transaction) {
@@ -68,9 +63,6 @@ function detailsOf(
       ["Type", transaction.kind ? typeLabels[transaction.kind] : "Not selected"],
       ["Currency", transaction.currency || "Not provided"],
       ["Status", statusLabels[transaction.status]],
-      ...(validConfidence(transaction.confidence) && sourceOf(transaction).kind !== "manual_form"
-        ? [["Extraction confidence", `${confidenceFormatter.format(transaction.confidence ?? 0)}%`]]
-        : []),
     ],
     merchant: transaction.merchant || "Transaction",
     when: transaction.time ? `${date} · ${transaction.time}` : date,

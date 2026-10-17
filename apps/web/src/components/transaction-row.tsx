@@ -1,14 +1,11 @@
 "use client";
 
+import type { FinancialAccount } from "@monara/contracts";
 import { Button } from "@monara/ui";
+import { AccountBadge } from "@/components/account-badge";
 import { useAmountDisplay } from "@/components/app-session-context";
-
-import { BrandMark } from "@/components/brand-mark";
-import { Icon, type IconName } from "@/components/icon";
+import { Icon } from "@/components/icon";
 import styles from "@/components/transaction-row.module.css";
-import { useMerchantLogo } from "@/components/use-brand-logo";
-import { chosenCategoryIcon } from "@/data/category-icons";
-import { categoryColor } from "@/data/category-style";
 import { formatDay, type Transaction } from "@/data/demo-ledger";
 
 function transactionRowModel(
@@ -28,12 +25,6 @@ function transactionRowModel(
   const category =
     transaction.category ?? (transaction.kind === "income" ? "Income" : "Uncategorized");
   const sign = transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : "";
-  const icon: IconName =
-    transaction.kind === "exclusion"
-      ? "close"
-      : transaction.kind === "income"
-        ? "income"
-        : chosenCategoryIcon(category, transaction.categoryIcon);
 
   return {
     merchant: transaction.merchant ?? "Merchant or source missing",
@@ -47,45 +38,30 @@ function transactionRowModel(
         : transaction.kind === "income"
           ? "text-success"
           : "text-foreground",
-    tint:
-      transaction.kind === "exclusion"
-        ? "var(--muted)"
-        : transaction.kind === "income"
-          ? "var(--success)"
-          : categoryColor(category),
-    icon,
     metadata,
   };
 }
 
+/** The leading mark is the Financial Account the money moved through, not the merchant. */
 export function TransactionRow({
   transaction,
+  account,
   onClick,
+  onConfirm,
   showDate = false,
 }: {
   transaction: Transaction;
+  account?: FinancialAccount;
   onClick?: () => void;
+  /** Adds a one-tap confirm beside a pending row, so a clean import needs no detour. */
+  onConfirm?: () => void;
   showDate?: boolean;
 }) {
   const { formatRupiah } = useAmountDisplay();
   const model = transactionRowModel(transaction, showDate, formatRupiah);
-  const brand = useMerchantLogo(transaction.merchant);
   const content = (
     <>
-      {brand ? (
-        <BrandMark brand={brand} />
-      ) : (
-        <span
-          aria-hidden
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-base"
-          style={{
-            background: `color-mix(in srgb, ${model.tint} 10%, var(--surface))`,
-            color: model.tint,
-          }}
-        >
-          <Icon name={model.icon} />
-        </span>
-      )}
+      <AccountBadge account={account} name={transaction.method} size={36} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-foreground">
           {model.merchant}
@@ -106,10 +82,12 @@ export function TransactionRow({
       </span>
     </>
   );
-  return onClick ? (
+  const status = transaction.status;
+  const row = onClick ? (
     <Button
       className={styles.row}
       data-kind={transaction.kind ?? "unknown"}
+      data-status={status}
       onPress={onClick}
       type="button"
       variant="ghost"
@@ -117,8 +95,23 @@ export function TransactionRow({
       {content}
     </Button>
   ) : (
-    <div className={styles.row} data-kind={transaction.kind ?? "unknown"}>
+    <div className={styles.row} data-kind={transaction.kind ?? "unknown"} data-status={status}>
       {content}
+    </div>
+  );
+  if (!onConfirm) return row;
+  return (
+    <div className={styles.item} data-status={status}>
+      {row}
+      <Button
+        aria-label={`Confirm ${model.merchant}`}
+        className={styles.confirm}
+        isIconOnly
+        onPress={onConfirm}
+        variant="ghost"
+      >
+        <Icon className="h-5 w-5" name="check" strokeWidth={2.2} />
+      </Button>
     </div>
   );
 }
