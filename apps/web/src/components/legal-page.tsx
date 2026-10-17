@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { Logo } from "@/components/logo";
-import type { LegalDocument } from "@/lib/legal/types";
+import { type LegalDocument, legalContactEmail } from "@/lib/legal/types";
 
 /** A plain public page for a legal document. */
 export function LegalPage({ document, backTo }: { document: LegalDocument; backTo: string }) {
@@ -21,12 +21,29 @@ export function LegalPage({ document, backTo }: { document: LegalDocument; backT
       {document.sections.map((section) => (
         <section className="flex flex-col gap-2" key={section.heading}>
           <h2 className="font-extrabold text-lg tracking-tight">{section.heading}</h2>
-          {section.blocks.map((block) =>
-            typeof block === "string" ? (
-              <p className="text-[15px] text-[var(--muted)] leading-6" key={block}>
-                {block}
-              </p>
-            ) : (
+          {section.blocks.map((block) => {
+            if (typeof block === "string") {
+              return (
+                <p className="text-[15px] text-[var(--muted)] leading-6" key={block}>
+                  {block}
+                </p>
+              );
+            }
+            if ("contact" in block) {
+              return (
+                <p className="text-[15px] text-[var(--muted)] leading-6" key={block.contact}>
+                  {block.contact}{" "}
+                  <a
+                    className="font-bold text-[var(--accent)] underline"
+                    href={`mailto:${legalContactEmail}`}
+                  >
+                    {legalContactEmail}
+                  </a>
+                  .
+                </p>
+              );
+            }
+            return (
               <ul className="ml-5 list-disc space-y-1.5" key={block.list.join()}>
                 {block.list.map((item) => (
                   <li className="text-[15px] text-[var(--muted)] leading-6" key={item}>
@@ -34,8 +51,8 @@ export function LegalPage({ document, backTo }: { document: LegalDocument; backT
                   </li>
                 ))}
               </ul>
-            ),
-          )}
+            );
+          })}
         </section>
       ))}
     </main>

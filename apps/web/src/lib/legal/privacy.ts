@@ -86,7 +86,10 @@ export const privacy: LegalDocument = {
     {
       heading: "Contact",
       blocks: [
-        "Contact details for the Monara team, for questions and for deletion or copy requests, will be added here before launch.",
+        {
+          contact:
+            "Questions about this policy, and requests to delete your account and data or to get a copy of it, go to",
+        },
       ],
     },
   ],

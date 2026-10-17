@@ -84,7 +84,9 @@ export const terms: LegalDocument = {
     },
     {
       heading: "Contact",
-      blocks: ["Contact details for the Monara team will be added here before launch."],
+      blocks: [
+        { contact: "Questions about these terms, and requests to have your data deleted, go to" },
+      ],
     },
   ],
 };
