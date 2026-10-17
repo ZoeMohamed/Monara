@@ -110,7 +110,7 @@ export function TransactionRow({
         onPress={onConfirm}
         variant="ghost"
       >
-        <Icon className="h-5 w-5" name="check" strokeWidth={2.2} />
+        <Icon className="h-5 w-5" name="check" strokeWidth={2.6} />
       </Button>
     </div>
   );

@@ -55,14 +55,20 @@
   background: transparent;
 }
 
+/* Green tab on the item's far edge: the row's full height (54px) at 3 wide to 4 tall (40px), flush with the card. */
 .confirm {
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
-  margin-right: 4px;
+  width: 40px;
+  min-width: 40px;
+  height: auto;
+  min-height: 0;
+  align-self: stretch;
   flex-shrink: 0;
-  border-radius: 9999px;
-  color: var(--success);
+  padding: 0;
+  border-radius: 0;
+  background: var(--success);
+  color: #fff;
+  --button-bg-hover: color-mix(in srgb, var(--success) 85%, black);
+  --button-bg-pressed: color-mix(in srgb, var(--success) 75%, black);
 }
 
 /* Hover deepens the whole item's tint; the row itself stays clear so the item shows through. */
