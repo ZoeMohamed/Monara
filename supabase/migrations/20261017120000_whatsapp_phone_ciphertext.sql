@@ -13,3 +13,9 @@ comment on column public.whatsapp_links.phone_e164_ciphertext is
 alter table public.whatsapp_links
   add constraint whatsapp_links_ciphertext_only_when_verified
   check (status = 'verified' or phone_e164_ciphertext is null);
+
+-- One WhatsApp delivery per Reminder: the row is reserved before anything is
+-- sent, so two callers can never both send the same alert. Nothing has written
+-- reminder_deliveries before this change.
+create unique index reminder_deliveries_reminder_channel_key
+  on public.reminder_deliveries (reminder_id, channel);

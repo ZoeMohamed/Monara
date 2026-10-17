@@ -30,6 +30,7 @@ export function budgetAlertService() {
   });
 }
 
+/** Sends budget_alert through Kapso, or undefined when Kapso is not configured. */
 function kapsoSender(): SendBudgetAlert | undefined {
   const apiKey = process.env.KAPSO_API_KEY?.trim();
   const phoneNumberId = process.env.KAPSO_PHONE_NUMBER_ID?.trim();

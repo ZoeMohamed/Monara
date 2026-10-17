@@ -2,6 +2,7 @@ import type { MonaraServiceRoleClient } from "@monara/db";
 import { BUDGET_ALERT_TEMPLATE, type BudgetAlertRepository } from "./budget-alerts.ts";
 import { FinanceOperationError } from "./finance.ts";
 
+/** Database errors can echo records, so only a generic error leaves this module. */
 function fail(): never {
   throw new FinanceOperationError("INTERNAL", "The WhatsApp Reminder could not be saved.");
 }
@@ -33,40 +34,60 @@ export function createSupabaseBudgetAlertRepository(
       return phoneCiphertext ? { phoneCiphertext } : null;
     },
 
-    async hasDelivery(userId, reminderId) {
+    async reserve({ userId, reminderId }) {
       const result = await client
         .from("reminder_deliveries")
+        .insert({
+          user_id: userId,
+          reminder_id: reminderId,
+          channel: "whatsapp",
+          status: "queued",
+          template_name: BUDGET_ALERT_TEMPLATE,
+        })
         .select("id")
-        .eq("user_id", userId)
-        .eq("reminder_id", reminderId)
-        .limit(1);
+        .single();
+      // reminder_deliveries_reminder_channel_key: another call reserved it first.
+      if (result.error?.code === "23505") return null;
       if (result.error) fail();
-      return result.data.length > 0;
+      return result.data.id;
     },
 
-    async countSentSince(userId, since) {
+    async claim({ id, userId, attemptedAt }) {
+      const result = await client
+        .from("reminder_deliveries")
+        .update({ attempted_at: attemptedAt })
+        .eq("id", id)
+        .eq("user_id", userId)
+        .eq("status", "queued")
+        .is("attempted_at", null)
+        .select("id");
+      if (result.error) fail();
+      return result.data.length === 1;
+    },
+
+    async countAttemptedSince(userId, since) {
       const result = await client
         .from("reminder_deliveries")
         .select("id", { count: "exact", head: true })
         .eq("user_id", userId)
-        .eq("status", "sent")
-        .gte("sent_at", since);
+        .in("status", ["sent", "queued"])
+        .gte("attempted_at", since);
       if (result.error) fail();
       return result.count ?? 0;
     },
 
-    async createDelivery(input) {
-      const result = await client.from("reminder_deliveries").insert({
-        user_id: input.userId,
-        reminder_id: input.reminderId,
-        channel: "whatsapp",
-        status: input.status,
-        template_name: BUDGET_ALERT_TEMPLATE,
-        provider_message_id: input.providerMessageId,
-        failure_code: input.failureCode,
-        attempted_at: input.attemptedAt,
-        sent_at: input.status === "sent" ? input.attemptedAt : null,
-      });
+    async settle({ id, userId, outcome }) {
+      const result = await client
+        .from("reminder_deliveries")
+        .update({
+          status: outcome.status,
+          provider_message_id: outcome.providerMessageId,
+          failure_code: outcome.failureCode,
+          sent_at: outcome.status === "sent" ? new Date().toISOString() : null,
+        })
+        .eq("id", id)
+        .eq("user_id", userId)
+        .eq("status", "queued");
       if (result.error) fail();
     },
 
@@ -75,6 +96,7 @@ export function createSupabaseBudgetAlertRepository(
         .from("reminder_deliveries")
         .select("id, user_id, reminder_id")
         .eq("status", "queued")
+        .is("attempted_at", null)
         .order("created_at", { ascending: true })
         .limit(limit);
       if (result.error) fail();
@@ -83,24 +105,6 @@ export function createSupabaseBudgetAlertRepository(
         userId: row.user_id,
         reminderId: row.reminder_id,
       }));
-    },
-
-    async settleQueued({ id, userId, outcome, attemptedAt }) {
-      const result = await client
-        .from("reminder_deliveries")
-        .update({
-          status: outcome.status,
-          provider_message_id: outcome.providerMessageId,
-          failure_code: outcome.failureCode,
-          attempted_at: attemptedAt,
-          sent_at: outcome.status === "sent" ? attemptedAt : null,
-        })
-        .eq("id", id)
-        .eq("user_id", userId)
-        .eq("status", "queued")
-        .select("id");
-      if (result.error) fail();
-      return result.data.length === 1;
     },
   };
 }

@@ -15,41 +15,62 @@ const details = {
 const afternoon = new Date("2026-10-17T07:00:00Z");
 const lateNight = new Date("2026-10-17T16:00:00Z");
 
-async function setup({ linked = true, at = afternoon, sendFails = false } = {}) {
-  const deliveries = [];
-  const sent = [];
-  let clock = at;
+// Mirrors the database: one row per Reminder, claimed once, settled once.
+function createMemoryDeliveries() {
+  const rows = [];
   let sequence = 0;
-  const phoneCiphertext = await encryptPhone("+6281200000001", secret);
-  const repository = {
-    async findRecipient(userId) {
-      return linked && userId === userA ? { phoneCiphertext } : null;
+  const byId = (id) => rows.find((row) => row.id === id);
+  return {
+    rows,
+    async reserve({ userId, reminderId }) {
+      if (rows.some((row) => row.reminderId === reminderId)) return null;
+      const id = String(++sequence);
+      rows.push({ id, userId, reminderId, status: "queued", attemptedAt: null });
+      return id;
     },
-    async hasDelivery(userId, reminderId) {
-      return deliveries.some((row) => row.userId === userId && row.reminderId === reminderId);
-    },
-    async countSentSince(userId, since) {
-      return deliveries.filter(
-        (row) => row.userId === userId && row.status === "sent" && row.attemptedAt >= since,
-      ).length;
-    },
-    async createDelivery(input) {
-      deliveries.push({ id: String(++sequence), ...input });
-    },
-    async listQueued(limit) {
-      return deliveries.filter((row) => row.status === "queued").slice(0, limit);
-    },
-    async settleQueued({ id, outcome, attemptedAt }) {
-      const row = deliveries.find((candidate) => candidate.id === id);
-      if (row?.status !== "queued") return false;
-      Object.assign(row, outcome, { attemptedAt });
+    async claim({ id, attemptedAt }) {
+      const row = byId(id);
+      if (row?.status !== "queued" || row.attemptedAt !== null) return false;
+      row.attemptedAt = attemptedAt;
       return true;
     },
+    async countAttemptedSince(userId, since) {
+      return rows.filter(
+        (row) =>
+          row.userId === userId &&
+          (row.status === "sent" || row.status === "queued") &&
+          row.attemptedAt !== null &&
+          row.attemptedAt >= since,
+      ).length;
+    },
+    async settle({ id, outcome }) {
+      const row = byId(id);
+      if (row?.status === "queued") Object.assign(row, outcome);
+    },
+    async listQueued(limit) {
+      return rows
+        .filter((row) => row.status === "queued" && row.attemptedAt === null)
+        .slice(0, limit);
+    },
   };
+}
+
+async function setup({ linked = true, at = afternoon, sendFails = false } = {}) {
+  const deliveries = createMemoryDeliveries();
+  const sent = [];
+  let clock = at;
+  const phoneCiphertext = await encryptPhone("+6281200000001", secret);
   const service = createBudgetAlertService({
-    repository,
+    repository: {
+      ...deliveries,
+      async findRecipient(userId) {
+        return linked && userId === userA ? { phoneCiphertext } : null;
+      },
+    },
     describe: async (_userId, reminderId) => (reminderId === "gone" ? null : details),
     send: async (message) => {
+      // Yields like a network call, so concurrent deliveries interleave.
+      await new Promise((resolve) => setImmediate(resolve));
       if (sendFails) throw new Error("Kapso said no to +6281200000001");
       sent.push(message);
       return { messageId: `wamid.${sent.length}` };
@@ -59,7 +80,7 @@ async function setup({ linked = true, at = afternoon, sendFails = false } = {}) 
   });
   return {
     service,
-    deliveries,
+    deliveries: deliveries.rows,
     sent,
     setClock: (next) => {
       clock = next;
@@ -95,6 +116,23 @@ describe("WhatsApp budget alerts", () => {
     assert.equal(deliveries[0].providerMessageId, "wamid.1");
   });
 
+  it("sends one alert when the same Reminder is delivered concurrently", async () => {
+    const { service, sent } = await setup();
+    const results = await Promise.all([
+      service.deliver(userA, "r1"),
+      service.deliver(userA, "r1"),
+      service.deliver(userA, "r1"),
+    ]);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(results.filter(Boolean), ["sent"]);
+  });
+
+  it("never passes the daily limit when alerts race", async () => {
+    const { service, sent } = await setup();
+    await Promise.all(["r1", "r2", "r3", "r4", "r5", "r6"].map((id) => service.deliver(userA, id)));
+    assert.ok(sent.length <= 3, `sent ${sent.length} alerts in one day`);
+  });
+
   it("sends nothing to an unlinked or opted-out User, and nothing without Kapso", async () => {
     const unlinked = await setup({ linked: false });
     assert.equal(await unlinked.service.deliver(userA, "r1"), null);
@@ -117,10 +155,10 @@ describe("WhatsApp budget alerts", () => {
     assert.equal(await service.dispatchQueued(), 0, "dispatched during quiet hours");
 
     setClock(new Date("2026-10-18T00:30:00Z")); // 07:30 in Jakarta
-    assert.equal(await service.dispatchQueued(), 1);
-    assert.equal(sent.length, 1);
+    const [first, second] = await Promise.all([service.dispatchQueued(), service.dispatchQueued()]);
+    assert.equal(first + second, 1);
+    assert.equal(sent.length, 1, "two dispatches sent the same alert");
     assert.equal(deliveries[0].status, "sent");
-    assert.equal(await service.dispatchQueued(), 0, "sent the same alert twice");
   });
 
   it("stops at three WhatsApp alerts a day", async () => {

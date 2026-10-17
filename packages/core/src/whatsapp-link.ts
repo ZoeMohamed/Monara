@@ -61,6 +61,7 @@ export async function protectPhone(
 
 const PHONE_CIPHER_VERSION = "v1";
 
+/** The AES-GCM key for sealed numbers, derived from the link secret so it differs from the hash key. */
 async function phoneKey(secret: string): Promise<CryptoKey> {
   if (!secret) throw new Error("A WhatsApp Link secret is required.");
   const base = await crypto.subtle.importKey("raw", encoder.encode(secret), "HKDF", false, [
@@ -80,6 +81,7 @@ async function phoneKey(secret: string): Promise<CryptoKey> {
   );
 }
 
+/** Base64 helpers that work the same in Node and in Workers. */
 const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const fromBase64 = (text: string) => Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
 

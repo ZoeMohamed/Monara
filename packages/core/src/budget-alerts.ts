@@ -18,30 +18,26 @@ type DeliveryOutcome =
   | { status: "sent"; providerMessageId: string; failureCode: null }
   | { status: "skipped" | "failed"; providerMessageId: null; failureCode: string };
 
+/**
+ * One reminder_deliveries row per Reminder. It is reserved as `queued` before
+ * anything is sent, claimed by setting its attempt time, then settled once.
+ */
 export interface BudgetAlertRepository {
   /** The sealed number of a verified link whose User has WhatsApp Reminders on, or null. */
   findRecipient(userId: string): Promise<{ phoneCiphertext: string } | null>;
-  hasDelivery(userId: string, reminderId: string): Promise<boolean>;
-  countSentSince(userId: string, since: string): Promise<number>;
-  createDelivery(input: {
-    userId: string;
-    reminderId: string;
-    status: "queued" | DeliveryOutcome["status"];
-    providerMessageId: string | null;
-    failureCode: string | null;
-    attemptedAt: string | null;
-  }): Promise<void>;
-  /** Queued deliveries of every User, oldest first. */
+  /** Reserves the Reminder's only delivery row. Null when it already has one. */
+  reserve(input: { userId: string; reminderId: string }): Promise<string | null>;
+  /** Claims a reserved, unattempted row for one sender. False when another sender has it. */
+  claim(input: { id: string; userId: string; attemptedAt: string }): Promise<boolean>;
+  /** Rows attempted since `since` that were sent or are still being sent. */
+  countAttemptedSince(userId: string, since: string): Promise<number>;
+  /** Records how a claimed row ended. */
+  settle(input: { id: string; userId: string; outcome: DeliveryOutcome }): Promise<void>;
+  /** Reserved rows nobody has claimed yet, of every User, oldest first. */
   listQueued(limit: number): Promise<{ id: string; userId: string; reminderId: string }[]>;
-  /** Settles a queued delivery. False when another dispatch settled it first. */
-  settleQueued(input: {
-    id: string;
-    userId: string;
-    outcome: DeliveryOutcome;
-    attemptedAt: string;
-  }): Promise<boolean>;
 }
 
+/** Sends the budget_alert template to an E.164 number with its values in order. */
 export type SendBudgetAlert = (input: {
   to: string;
   bodyParameters: string[];
@@ -49,6 +45,7 @@ export type SendBudgetAlert = (input: {
 
 export type BudgetAlertService = ReturnType<typeof createBudgetAlertService>;
 
+/** Builds the service that sends, queues and dispatches WhatsApp budget alerts. */
 export function createBudgetAlertService(input: {
   repository: BudgetAlertRepository;
   describe: (userId: string, reminderId: string) => Promise<BudgetAlertDetails | null>;
@@ -62,15 +59,32 @@ export function createBudgetAlertService(input: {
   const secret = input.secret?.trim();
   const { send } = input;
 
+  /** Claims a reserved row, then sends unless the cap or the Reminder says otherwise. */
+  async function attemptReserved(
+    row: { id: string; userId: string; reminderId: string },
+    phoneCiphertext: string,
+    at: Date,
+  ): Promise<DeliveryOutcome["status"] | null> {
+    const attemptedAt = at.toISOString();
+    if (!(await repository.claim({ id: row.id, userId: row.userId, attemptedAt }))) return null;
+    const outcome = await attempt(row, phoneCiphertext, at);
+    await repository.settle({ id: row.id, userId: row.userId, outcome });
+    return outcome.status;
+  }
+
   async function attempt(
-    userId: string,
-    reminderId: string,
+    row: { userId: string; reminderId: string },
     phoneCiphertext: string,
     at: Date,
   ): Promise<DeliveryOutcome> {
-    const sentToday = await repository.countSentSince(userId, startOfLocalDay(at).toISOString());
-    if (sentToday >= WHATSAPP_DAILY_LIMIT) return skipped("daily_limit");
-    const details = await describe(userId, reminderId);
+    // The count includes this claim and any other in flight, so racing sends
+    // can only fall short of the limit, never pass it.
+    const attempted = await repository.countAttemptedSince(
+      row.userId,
+      startOfLocalDay(at).toISOString(),
+    );
+    if (attempted > WHATSAPP_DAILY_LIMIT) return skipped("daily_limit");
+    const details = await describe(row.userId, row.reminderId);
     if (!details) return skipped("reminder_gone");
     const to = secret ? await decryptPhone(phoneCiphertext, secret) : null;
     if (!to || !send) return failed("recipient_unavailable");
@@ -90,29 +104,13 @@ export function createBudgetAlertService(input: {
       reminderId: string,
     ): Promise<DeliveryOutcome["status"] | "queued" | null> {
       if (!secret || !send) return null;
-      if (await repository.hasDelivery(userId, reminderId)) return null;
       const recipient = await repository.findRecipient(userId);
       if (!recipient) return null;
+      const id = await repository.reserve({ userId, reminderId });
+      if (!id) return null;
       const at = now();
-      if (isQuietHour(at)) {
-        await repository.createDelivery({
-          userId,
-          reminderId,
-          status: "queued",
-          providerMessageId: null,
-          failureCode: null,
-          attemptedAt: null,
-        });
-        return "queued";
-      }
-      const outcome = await attempt(userId, reminderId, recipient.phoneCiphertext, at);
-      await repository.createDelivery({
-        userId,
-        reminderId,
-        ...outcome,
-        attemptedAt: at.toISOString(),
-      });
-      return outcome.status;
+      if (isQuietHour(at)) return "queued";
+      return attemptReserved({ id, userId, reminderId }, recipient.phoneCiphertext, at);
     },
 
     /** Sends alerts held back by quiet hours. Run on a schedule; returns how many were settled. */
@@ -121,18 +119,16 @@ export function createBudgetAlertService(input: {
       const at = now();
       if (isQuietHour(at)) return 0;
       let settled = 0;
-      for (const queued of await repository.listQueued(DISPATCH_BATCH)) {
-        const recipient = await repository.findRecipient(queued.userId);
-        const outcome = recipient
-          ? await attempt(queued.userId, queued.reminderId, recipient.phoneCiphertext, at)
-          : skipped("not_linked");
-        const won = await repository.settleQueued({
-          id: queued.id,
-          userId: queued.userId,
-          outcome,
-          attemptedAt: at.toISOString(),
-        });
-        if (won) settled++;
+      for (const row of await repository.listQueued(DISPATCH_BATCH)) {
+        const recipient = await repository.findRecipient(row.userId);
+        if (!recipient) {
+          if (await repository.claim({ ...row, attemptedAt: at.toISOString() })) {
+            await repository.settle({ ...row, outcome: skipped("not_linked") });
+            settled++;
+          }
+          continue;
+        }
+        if (await attemptReserved(row, recipient.phoneCiphertext, at)) settled++;
       }
       return settled;
     },
@@ -150,11 +146,13 @@ const failed = (failureCode: string): DeliveryOutcome => ({
   failureCode,
 });
 
+/** True between 22:00 and 07:00 in the User's timezone. */
 function isQuietHour(at: Date): boolean {
   const hour = new Date(at.getTime() + UTC_OFFSET_MS).getUTCHours();
   return hour >= QUIET_START_HOUR || hour < QUIET_END_HOUR;
 }
 
+/** Midnight of `at`'s day in the User's timezone, as a UTC instant. */
 function startOfLocalDay(at: Date): Date {
   const local = new Date(at.getTime() + UTC_OFFSET_MS);
   return new Date(
@@ -162,6 +160,7 @@ function startOfLocalDay(at: Date): Date {
   );
 }
 
+/** A whole-rupiah amount written as Rp 1.200.000. */
 function rupiah(amountMinor: string): string {
   return `Rp ${amountMinor.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 }
