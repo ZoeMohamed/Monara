@@ -797,18 +797,24 @@ export function createSupabaseFinanceRepository(
     },
 
     async createBudgetThresholdReminder(input) {
-      const result = await client.from("reminders").insert({
-        user_id: input.userId,
-        budget_id: input.budget.id,
-        kind: "budget_threshold",
-        dedupe_key: input.dedupeKey,
-        threshold_percent: input.thresholdPercent,
-        title: `${input.budget.name} Budget`,
-        message: `${input.budget.name} reached ${input.thresholdPercent}%: IDR ${input.usage.amountMinor} of IDR ${input.budget.limit.amountMinor}.`,
-        scheduled_for: input.scheduledFor,
-      });
-      if (result.error?.code === "23505") return;
+      const result = await client
+        .from("reminders")
+        .insert({
+          user_id: input.userId,
+          budget_id: input.budget.id,
+          kind: "budget_threshold",
+          dedupe_key: input.dedupeKey,
+          threshold_percent: input.thresholdPercent,
+          title: `${input.budget.name} Budget`,
+          message: `${input.budget.name} reached ${input.thresholdPercent}%: IDR ${input.usage.amountMinor} of IDR ${input.budget.limit.amountMinor}.`,
+          scheduled_for: input.scheduledFor,
+        })
+        .select("id")
+        .single();
+      // Already reminded for this threshold and period.
+      if (result.error?.code === "23505") return null;
       if (result.error) fail(result.error);
+      return result.data.id;
     },
 
     async createDestructiveConfirmation(input) {
