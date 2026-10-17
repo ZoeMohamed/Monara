@@ -7,14 +7,10 @@ const state = {
   user: { id: "00000000-0000-4000-8000-000000000001" },
   starts: [],
   completions: [],
-  queued: [],
-  requested: [],
-  failures: [],
   discoveries: [],
   inlineDiscoveries: [],
   discoveryState: "completed",
   discoveryFails: false,
-  agentFails: false,
 };
 globalThis.monaraGmailRouteTest = state;
 const service = `
@@ -34,12 +30,6 @@ export function gmailConnectionService() { return {
   async list() { return [{id:"${connectionId}",status:"active",lastSyncedAt:"2026-10-14T04:00:00Z"}]; },
 }; }
 export function gmailIngestionRepository() { return {
-  async syncCounts() { return {imported:2,skipped:1,failed:0,inProgress:0,importedTransactions:2}; },
-  async requestSync(userId, connectionId) {
-    globalThis.monaraGmailRouteTest.requested.push({userId,connectionId});
-    return "2026-10-16T07:30:00.000Z";
-  },
-  async failSync(input) { globalThis.monaraGmailRouteTest.failures.push(input); },
   async discoveryFor(userId, connectionId) {
     if (userId !== globalThis.monaraGmailRouteTest.user.id || connectionId !== "${connectionId}") {
       throw Object.assign(new Error("not found"), { code: "NOT_FOUND" });
@@ -64,13 +54,6 @@ export async function rerunDiscoveryIfNeeded(connectionId) {
   return true;
 }
 `;
-const agentSync = `
-export class AgentSyncError extends Error {}
-export async function requestAgentSync(input) {
-  if (globalThis.monaraGmailRouteTest.agentFails) throw new AgentSyncError();
-  globalThis.monaraGmailRouteTest.queued.push(input);
-}
-`;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@/lib/gmail/service")
@@ -80,8 +63,6 @@ const hooks = registerHooks({
         url: `data:text/javascript,${encodeURIComponent("export async function getAuthenticatedIdentity() { return globalThis.monaraGmailRouteTest.user; }")}`,
         shortCircuit: true,
       };
-    if (specifier === "@/lib/gmail/agent-sync")
-      return { url: `data:text/javascript,${encodeURIComponent(agentSync)}`, shortCircuit: true };
     if (specifier === "@/lib/gmail/discovery")
       return { url: `data:text/javascript,${encodeURIComponent(discovery)}`, shortCircuit: true };
     if (specifier === "@/lib/http/origin")
@@ -95,7 +76,6 @@ const hooks = registerHooks({
 });
 const { POST } = await import("../../app/api/gmail/connections/route.ts");
 const { GET: callback } = await import("../../app/api/gmail/connections/callback/route.ts");
-const { POST: sync } = await import("../../app/api/gmail/connections/[connectionId]/sync/route.ts");
 const discoveryRoute = await import(
   "../../app/api/gmail/connections/[connectionId]/discovery/route.ts"
 );
@@ -107,7 +87,6 @@ function withTunnel(run) {
   process.env.NGROK_DOMAIN = "example.ngrok-free.dev";
   state.starts = [];
   state.completions = [];
-  state.queued = [];
   state.user = { id: "00000000-0000-4000-8000-000000000001" };
   return Promise.resolve()
     .then(run)
@@ -294,60 +273,4 @@ describe("Gmail account discovery in the web backend", () => {
       state.discoveryState = "completed";
     }
   });
-});
-
-describe("Gmail Sync Now origin and cursor boundary", () => {
-  it("refuses cross-site requests before queueing work", () =>
-    withTunnel(async () => {
-      const response = await sync(
-        new Request(`https://monara.example/api/gmail/connections/${connectionId}/sync`, {
-          method: "POST",
-          headers: { origin: "https://attacker.example", "sec-fetch-site": "cross-site" },
-        }),
-        { params: Promise.resolve({ connectionId }) },
-      );
-      assert.equal(response.status, 403);
-      assert.deepEqual(state.queued, []);
-    }));
-
-  it("queues an owned active connection from its last successful cursor", () =>
-    withTunnel(async () => {
-      const response = await sync(
-        new Request(`https://monara.example/api/gmail/connections/${connectionId}/sync`, {
-          method: "POST",
-          headers: { origin: "https://monara.example", "sec-fetch-site": "same-origin" },
-        }),
-        { params: Promise.resolve({ connectionId }) },
-      );
-      assert.equal(response.status, 202);
-      assert.deepEqual(state.queued, [{ connectionId, since: "2026-10-14T04:00:00Z" }]);
-      // The queued state is stored for the signed-in User before the agent is asked.
-      assert.deepEqual(state.requested, [{ userId: state.user.id, connectionId }]);
-      assert.equal((await response.json()).status, "queued");
-    }));
-
-  it("stores the failure when the agent cannot queue the sync", () =>
-    withTunnel(async () => {
-      state.agentFails = true;
-      state.failures.length = 0;
-      try {
-        const response = await sync(
-          new Request(`https://monara.example/api/gmail/connections/${connectionId}/sync`, {
-            method: "POST",
-            headers: { origin: "https://monara.example", "sec-fetch-site": "same-origin" },
-          }),
-          { params: Promise.resolve({ connectionId }) },
-        );
-        assert.equal((await response.json()).code, "DEPENDENCY_UNAVAILABLE");
-        assert.deepEqual(state.failures, [
-          {
-            connectionId,
-            error: "agent_unavailable",
-            requestedAt: "2026-10-16T07:30:00.000Z",
-          },
-        ]);
-      } finally {
-        state.agentFails = false;
-      }
-    }));
 });

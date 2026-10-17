@@ -12,10 +12,9 @@ export type GmailConnectionsProps = {
   actions?: {
     connect: () => void;
     reconnect: (id: string) => void;
-    sync?: (id: string) => void;
     disconnect: (id: string) => void;
   };
-  pendingAction?: { id: string; kind: "disconnect" | "reconnect" | "sync" } | { kind: "connect" };
+  pendingAction?: { id: string; kind: "disconnect" | "reconnect" } | { kind: "connect" };
   actionError?: string;
   onRetry?: () => void;
 };
@@ -27,10 +26,10 @@ const syncDateFormatter = new Intl.DateTimeFormat("en-GB", {
 });
 
 function lastSyncLabel(value: string | null) {
-  if (!value) return "Not synced yet";
+  if (!value) return "Not imported yet";
   const date = new Date(value);
   return Number.isNaN(date.getTime())
-    ? "Last sync unavailable"
+    ? "Last import unavailable"
     : `${syncDateFormatter.format(date)} WIB`;
 }
 
@@ -45,14 +44,14 @@ function SyncStatus({ sync }: { sync: GmailMailbox["sync"] }) {
   if (sync.state === "completed")
     return (
       <p role="status" className="mt-4 rounded-xl bg-accent-soft p-3 text-sm text-foreground">
-        Last sync: {sync.transactions} {sync.transactions === 1 ? "transaction" : "transactions"}
+        Last import: {sync.transactions} {sync.transactions === 1 ? "transaction" : "transactions"}
         {sync.confirmed > 0 ? ` (${sync.confirmed} confirmed automatically)` : ""} · {sync.skipped}{" "}
         skipped · {sync.failed} failed
       </p>
     );
   return (
     <p role="status" className="mt-4 text-sm text-muted">
-      {sync.state === "queued" ? "Sync queued…" : "Importing transactions…"}
+      {sync.state === "queued" ? "Import queued…" : "Importing transactions…"}
     </p>
   );
 }
@@ -146,26 +145,11 @@ type MailboxCardProps = {
 
 function MailboxActions({ mailbox, actions, pendingAction, onDisconnect }: MailboxCardProps) {
   const busy = pendingAction !== undefined;
-  const syncing =
-    mailbox.sync.state === "queued" ||
-    mailbox.sync.state === "running" ||
-    (pendingAction?.kind === "sync" && pendingAction.id === mailbox.id);
+  // Imports start on their own when an account is linked, and new mail arrives by
+  // itself, so an active mailbox needs no sync button.
   return (
     <div className="mt-5 flex flex-wrap gap-3">
-      {mailbox.status === "active" ? (
-        <Button
-          className="min-h-11"
-          aria-label={`Sync ${mailbox.email} now`}
-          isDisabled={!actions?.sync || busy || syncing}
-          onPress={() => actions?.sync?.(mailbox.id)}
-        >
-          {mailbox.sync.state === "queued"
-            ? "Sync queued"
-            : syncing
-              ? "Sync in progress…"
-              : "Sync now"}
-        </Button>
-      ) : (
+      {mailbox.status === "active" ? null : (
         <Button
           className="min-h-11"
           aria-label={`Reconnect ${mailbox.email}`}
@@ -198,7 +182,7 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
         </Chip>
       </div>
       <p className="mt-3 text-sm text-muted">
-        Last successful sync: {lastSyncLabel(mailbox.lastSyncedAt)}
+        Last successful import: {lastSyncLabel(mailbox.lastSyncedAt)}
       </p>
       <SyncStatus sync={mailbox.sync} />
       <MailboxActions
@@ -207,9 +191,6 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
         pendingAction={pendingAction}
         onDisconnect={onDisconnect}
       />
-      {mailbox.status === "active" && !actions?.sync && (
-        <p className="mt-3 text-sm text-muted">Manual sync is not available yet.</p>
-      )}
       {mailbox.status === "active" && actions && (
         <GmailAccountSuggestions connectionId={mailbox.id} />
       )}

@@ -25,7 +25,7 @@ export function gmailConnectionService() {
 }
 
 /**
- * Gmail ingestion storage for the agent worker and Sync Now. Callers must first
+ * Gmail ingestion storage for the agent worker and Gmail imports. Callers must first
  * authenticate the agent, or scope every call to the signed-in User.
  */
 export function gmailIngestionRepository() {

@@ -4,7 +4,6 @@ import {
   type GmailSyncStatus,
   gmailConnectionListSchema,
   gmailDiscoverySchema,
-  gmailSyncResultSchema,
   operationErrorSchema,
   startGmailConnectionResultSchema,
 } from "@monara/contracts";
@@ -32,10 +31,11 @@ export function isSyncInProgress(mailbox: GmailMailbox) {
 }
 
 const SYNC_ERROR_MESSAGES: Record<NonNullable<GmailSyncStatus["error"]>, string> = {
-  agent_unavailable: "Gmail sync is unavailable right now. Try again later.",
-  gmail_unavailable: "Gmail could not be read. Try again, or reconnect this mailbox.",
-  sync_failed: "The sync did not finish. Try again.",
-  stalled: "The sync stopped making progress. Try again.",
+  agent_unavailable: "The import could not start. Monara tries again tonight.",
+  gmail_unavailable:
+    "Gmail could not be read. Monara tries again tonight, or reconnect this mailbox.",
+  sync_failed: "The import did not finish. Monara tries again tonight.",
+  stalled: "The import stopped making progress. Monara tries again tonight.",
 };
 
 function toMailboxSync(sync: GmailSyncStatus): GmailMailbox["sync"] {
@@ -210,23 +210,6 @@ export async function disconnectGmailConnection(id: string, options: RequestOpti
   if (response.status !== 204) {
     throw new GmailClientError("error", "Gmail did not confirm that the mailbox was disconnected.");
   }
-}
-
-/** Queues an owned mailbox sync. Completion is asynchronous and is never fabricated here. */
-export async function requestGmailSync(id: string, options: RequestOptions = {}) {
-  const input = disconnectGmailConnectionInputSchema.safeParse({ connectionId: id });
-  if (!input.success) throw new GmailClientError("error", "Invalid Gmail connection id.");
-  const response = await request(
-    `${CONNECTIONS_URL}/${encodeURIComponent(input.data.connectionId)}/sync`,
-    "POST",
-    options,
-  );
-  const payload: unknown = await response.json().catch(() => null);
-  const result = gmailSyncResultSchema.safeParse(payload);
-  if (!result.success) {
-    throw new GmailClientError("error", "Gmail did not confirm that the sync was queued.");
-  }
-  return result.data;
 }
 
 function connectionPath(id: string, suffix: string) {
