@@ -11,7 +11,8 @@ import { useTransactionActions } from "@/components/transaction-actions";
 import type { TransactionDraft } from "@/components/transaction-editor";
 import { useAppNavigation } from "@/components/use-app-navigation";
 import { useFinanceSync } from "@/components/use-finance-sync";
-import { replayTour, useTourPending } from "@/components/use-product-tour";
+import { useFirstRun } from "@/components/use-first-run";
+import { replayTour } from "@/components/use-product-tour";
 import type { AppView } from "@/data/app-navigation";
 import type { Budget, Reminder } from "@/data/demo-ledger";
 import { demoReminders, demoToday, type RecurringBill } from "@/data/demo-ledger";
@@ -181,7 +182,13 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const [amountsHidden, toggleAmounts] = useAmountsHidden();
   const [chatPrompt, setChatPrompt] = useState<string | null>(null);
   const tourMode: "live" | "demo" = live ? "live" : "demo";
-  const tourPending = useTourPending(tourMode, homeIsUncovered(view));
+  const { onboarding, tourPending, startReplay, finishTour } = useFirstRun({
+    live,
+    email: profile.email,
+    displayName: profile.displayName,
+    homeOpen: homeIsUncovered(view),
+    refreshFinance: sync.refresh,
+  });
   const {
     transactions,
     selectedBudgets,
@@ -603,6 +610,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     },
     replayTour: () => {
       replayTour(tourMode);
+      startReplay();
       navigation.navigate({ screen: "home" });
     },
   };
@@ -630,6 +638,8 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     missing,
     tourPending,
     tourMode,
+    finishTour,
+    onboarding,
     rejectSelected,
     resources,
     sync,

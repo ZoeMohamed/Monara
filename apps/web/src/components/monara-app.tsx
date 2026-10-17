@@ -10,6 +10,8 @@ import { Logo } from "@/components/logo";
 import { ModalDialog } from "@/components/modal-dialog";
 import styles from "@/components/monara-app.module.css";
 import { MonaraMascot } from "@/components/monara-mascot";
+import { OnboardingSheets } from "@/components/onboarding";
+import { OnboardingBanner } from "@/components/onboarding-banner";
 import { ProductTour } from "@/components/product-tour";
 import { RemindersCenter } from "@/components/reminders-center";
 import { SessionToast } from "@/components/session-toast";
@@ -298,7 +300,7 @@ export function MonaraApp({
 }
 
 function AppChrome({ workspace, children }: { workspace: Workspace; children: ReactNode }) {
-  const { session, live, view, mainRef, notice, setNotice, undo, sync } = workspace;
+  const { session, live, view, mainRef, notice, setNotice, undo, sync, onboarding } = workspace;
   const { profile, navigation, today, currentMonth, reminderCount, online, amountsHidden } =
     session;
   return (
@@ -368,6 +370,17 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
                 ) : null}
               </div>
             ) : null}
+            {onboarding.bannerOpen ? (
+              <OnboardingBanner
+                inset={view.screen === "home"}
+                onFinish={onboarding.finish}
+                onOpen={() => {
+                  navigation.navigate({ screen: "home" });
+                  onboarding.reopenImport();
+                }}
+                progress={onboarding.engine.progress}
+              />
+            ) : null}
             {children}
           </main>
         </div>
@@ -400,6 +413,8 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
     missing,
     tourPending,
     tourMode,
+    finishTour,
+    onboarding,
     rejectSelected,
     resources,
     sync,
@@ -460,7 +475,8 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
           onReject={rejectSelected}
         />
       ) : null}
-      {tourPending ? <ProductTour mode={tourMode} /> : null}
+      <OnboardingSheets onboarding={onboarding} />
+      {tourPending ? <ProductTour mode={tourMode} onFinish={finishTour} /> : null}
       {view.remindersOpen ? <RemindersCenter onClose={navigation.closePopup} /> : null}
     </>
   );

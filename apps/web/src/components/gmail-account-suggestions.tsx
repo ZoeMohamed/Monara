@@ -6,6 +6,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
 import { GmailClientError, loadGmailDiscovery, requestGmailDiscovery } from "@/lib/gmail/client";
+import { accountInputFor, choiceFromSuggestion } from "@/lib/onboarding/banks";
 
 /** How often the page checks on a running search. */
 const DISCOVERY_POLL_MS = 3_000;
@@ -178,15 +179,10 @@ export function GmailAccountSuggestions({ connectionId }: { connectionId: string
 
   const add = (suggestion: GmailAccountSuggestion) =>
     act(suggestion.institutionKey, () =>
-      callFinanceOperation("create_financial_account", {
-        name: suggestion.name,
-        institution: suggestion.provider,
-        accountType: suggestion.platform === "E_WALLET" ? "wallet" : "bank",
-        currency: "IDR",
-        lastFour: suggestion.lastFours.length === 1 ? suggestion.lastFours[0] : null,
-        institutionKey: suggestion.institutionKey,
-        clientRequestId: crypto.randomUUID(),
-      }),
+      callFinanceOperation(
+        "create_financial_account",
+        accountInputFor(choiceFromSuggestion(suggestion)),
+      ),
     );
 
   const link = (suggestion: GmailAccountSuggestion, account: FinancialAccount) =>
@@ -220,7 +216,7 @@ export function GmailAccountSuggestions({ connectionId }: { connectionId: string
       )}
       {discovery?.state === "completed" && suggestions.length === 0 && (
         <p className="mt-2 text-sm text-muted">
-          No bank or wallet emails from the last 90 days. Sync imports only emails from banks and
+          No bank or wallet emails from the last 30 days. Sync imports only emails from banks and
           wallets you add.
         </p>
       )}

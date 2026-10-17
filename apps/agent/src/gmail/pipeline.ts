@@ -29,7 +29,7 @@ import { isSenderVerified } from "./sender.ts";
  * its recent mail. Already processed mail is skipped before any extraction job.
  */
 const IMPORT_WINDOW = "newer_than:30d";
-const DISCOVERY_WINDOW = "newer_than:90d";
+const DISCOVERY_WINDOW = IMPORT_WINDOW;
 const PAGE_SIZE = 100;
 /** Enough mail to see every institution a User has, without reading a whole inbox. */
 const MAX_DISCOVERY_MESSAGES = 500;
