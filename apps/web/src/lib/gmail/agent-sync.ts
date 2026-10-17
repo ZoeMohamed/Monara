@@ -1,4 +1,9 @@
-import { type RequestGmailSyncInput, requestGmailSyncInputSchema } from "@monara/contracts";
+import {
+  type RequestGmailIngestInput,
+  type RequestGmailSyncInput,
+  requestGmailIngestInputSchema,
+  requestGmailSyncInputSchema,
+} from "@monara/contracts";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -38,4 +43,12 @@ async function postToAgent(path: string, body: unknown): Promise<void> {
  */
 export async function requestAgentSync(input: RequestGmailSyncInput): Promise<void> {
   await postToAgent("/gmail/sync", requestGmailSyncInputSchema.parse(input));
+}
+
+/**
+ * Asks the agent worker to import a connection's mail. Call it only after checking
+ * that the signed-in User owns the connection and that it is active.
+ */
+export async function requestAgentIngest(input: RequestGmailIngestInput): Promise<void> {
+  await postToAgent("/gmail/ingest", requestGmailIngestInputSchema.parse(input));
 }

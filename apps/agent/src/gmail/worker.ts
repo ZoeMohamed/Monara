@@ -1,8 +1,10 @@
 import {
   type GmailJob,
+  type GmailSyncJob,
   gmailJobSchema,
   type MerchantCategorizeJob,
   merchantCategorizeJobSchema,
+  requestGmailIngestInputSchema,
   requestGmailSyncInputSchema,
 } from "@monara/contracts";
 import {
@@ -135,7 +137,35 @@ async function rejectUnlessBackend(request: Request, env: Env): Promise<Response
   return null;
 }
 
-/** Manual sync. Only the web backend may call this, after checking the User owns the connection. */
+/**
+ * Imports a connection's mail: onboarding, a newly linked account, or a new-mail
+ * trigger. Only the web backend may call this, after checking the User owns the
+ * connection.
+ */
+export async function handleGmailIngestRequest(
+  request: Request,
+  env: Env,
+  context?: Pick<ExecutionContext, "waitUntil">,
+): Promise<Response> {
+  const rejected = await rejectUnlessBackend(request, env);
+  if (rejected) return rejected;
+  const input = requestGmailIngestInputSchema.safeParse(await request.json().catch(() => null));
+  if (!input.success) {
+    return Response.json({ error: "The ingest request is invalid." }, { status: 400 });
+  }
+  return queueSync(env, context, {
+    kind: "gmail.sync",
+    connectionId: input.data.connectionId,
+    since: null,
+    pageToken: null,
+    startedAt: null,
+    institutionKeys: input.data.institutionKeys,
+    messageIds: input.data.messageIds,
+    tracksSync: input.data.tracksSync,
+  });
+}
+
+/** Manual sync, kept while a web backend that predates /gmail/ingest may still call it. */
 export async function handleGmailSyncRequest(
   request: Request,
   env: Env,
@@ -143,19 +173,29 @@ export async function handleGmailSyncRequest(
 ): Promise<Response> {
   const rejected = await rejectUnlessBackend(request, env);
   if (rejected) return rejected;
-  if (!env.GMAIL_JOBS)
-    return Response.json({ error: "Gmail sync is not configured." }, { status: 503 });
   const input = requestGmailSyncInputSchema.safeParse(await request.json().catch(() => null));
   if (!input.success) {
     return Response.json({ error: "connectionId and since are invalid." }, { status: 400 });
   }
-  const job = {
+  return queueSync(env, context, {
     kind: "gmail.sync",
     connectionId: input.data.connectionId,
     since: input.data.since,
     pageToken: null,
     startedAt: null,
-  } as const;
+    institutionKeys: null,
+    messageIds: null,
+    tracksSync: true,
+  });
+}
+
+async function queueSync(
+  env: Env,
+  context: Pick<ExecutionContext, "waitUntil"> | undefined,
+  job: GmailSyncJob,
+): Promise<Response> {
+  if (!env.GMAIL_JOBS)
+    return Response.json({ error: "Gmail sync is not configured." }, { status: 503 });
   try {
     await env.GMAIL_JOBS.send(job);
   } catch (error) {

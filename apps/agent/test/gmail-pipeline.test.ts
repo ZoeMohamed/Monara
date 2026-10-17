@@ -358,6 +358,9 @@ describe("syncConnection", () => {
     since: null,
     pageToken: null,
     startedAt: null,
+    institutionKeys: null,
+    messageIds: null,
+    tracksSync: true,
   };
 
   it("queues a parse job with the claim ids and marks the window start as synced", async () => {
@@ -437,6 +440,40 @@ describe("syncConnection", () => {
     assert.deepEqual(
       calls.enqueued.map((job) => (job.kind === "gmail.parse" ? job.emails.length : 0)),
       [10, 10, 3],
+    );
+  });
+
+  it("reads only the newly linked account's senders for a scoped run", async () => {
+    const { pipeline, calls } = setup({ institutionKeys: ["BCA_CC", "CIMB_Octo"] });
+    await pipeline.runJob({ ...syncJob, institutionKeys: ["CIMB_Octo"] }, notFinal);
+    assert.equal(calls.listed[0]?.query, syncQuery(sendersFor(["CIMB_Octo"])));
+  });
+
+  it("never reads a scoped institution the mailbox has no account for", async () => {
+    const { pipeline, calls } = setup({ institutionKeys: ["BCA_CC"] });
+    await pipeline.runJob({ ...syncJob, institutionKeys: ["Jago_App"] }, notFinal);
+    assert.deepEqual(calls.listed, []);
+  });
+
+  it("leaves the sync status alone for a run that joins another", async () => {
+    const { pipeline, calls } = setup();
+    await pipeline.runJob({ ...syncJob, tracksSync: false }, notFinal);
+    assert.deepEqual(calls.started, []);
+    assert.deepEqual(calls.synced, []);
+    assert.equal(calls.enqueued[0]?.kind, "gmail.parse");
+  });
+
+  it("claims and parses a trigger's messages without listing or touching the sync status", async () => {
+    const { pipeline, calls } = setup();
+    await pipeline.runJob({ ...syncJob, messageIds: ["t1", "t2"] }, notFinal);
+    assert.deepEqual(calls.listed, []);
+    assert.deepEqual(calls.started, []);
+    assert.deepEqual(calls.synced, []);
+    assert.deepEqual(
+      calls.enqueued.flatMap((job) =>
+        job.kind === "gmail.parse" ? job.emails.map((email) => email.gmailMessageId) : [],
+      ),
+      ["t1", "t2"],
     );
   });
 
@@ -693,6 +730,9 @@ describe("lost Gmail access", () => {
       since: null,
       pageToken: null,
       startedAt: null,
+      institutionKeys: null,
+      messageIds: null,
+      tracksSync: true,
     };
     assert.equal(await pipeline.runJob(syncJob, notFinal), "connection_lost");
     assert.deepEqual(calls.synced, []);

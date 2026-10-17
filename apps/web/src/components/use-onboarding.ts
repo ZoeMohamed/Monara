@@ -45,8 +45,8 @@ function useStepAction() {
 }
 
 /**
- * First-run setup: connect Gmail, confirm the banks found there, then import in the
- * background. The sheet shows for the first three phases; "background" leaves a status
+ * First-run setup: connect Gmail, confirm the name while the inbox is searched,
+ * confirm the banks found there, then import in the background. The sheet shows for the first three phases; "background" leaves a status
  * banner behind until the User dismisses it.
  */
 export function useOnboarding({
@@ -121,7 +121,7 @@ export function useOnboarding({
       run(() =>
         engine.connect(() => {
           rememberReturn();
-          go("detect");
+          go("name");
         }),
       ),
     [engine, go, run],
@@ -132,7 +132,7 @@ export function useOnboarding({
       run(async () => {
         await engine.saveBanks(choices);
         await refreshFinance().catch(() => undefined);
-        go("name");
+        go("import");
       }),
     [engine, go, refreshFinance, run],
   );
@@ -141,7 +141,7 @@ export function useOnboarding({
     (fullName: string) =>
       run(async () => {
         await engine.saveName(fullName);
-        go("import");
+        go("detect");
       }),
     [engine, go, run],
   );

@@ -3,6 +3,7 @@ import type { Env } from "./env.ts";
 import {
   consumeGmailJobs,
   consumeMerchantJobs,
+  handleGmailIngestRequest,
   handleGmailSyncRequest,
   scheduleGmailSyncs,
 } from "./gmail/index.ts";
@@ -25,6 +26,9 @@ export default {
     }
     if (request.method === "POST" && path === "/webhooks/kapso") {
       return handleKapsoWebhook(request, env);
+    }
+    if (request.method === "POST" && path === "/gmail/ingest") {
+      return handleGmailIngestRequest(request, env, context);
     }
     if (request.method === "POST" && path === "/gmail/sync") {
       return handleGmailSyncRequest(request, env, context);

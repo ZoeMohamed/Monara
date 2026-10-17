@@ -220,19 +220,42 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
   async function syncConnection(job: GmailSyncJob): Promise<GmailJobOutcome> {
     const startedAt = job.startedAt ?? now().toISOString();
     const connection = await backend.resolveConnection(job.connectionId);
-    if (job.pageToken === null) await backend.startSync(job.connectionId);
-    const senders = sendersFor(connection.institutionKeys);
-    if (senders.length === 0) {
-      await backend.markSynced({ connectionId: job.connectionId, syncedAt: startedAt });
-      return "listed";
+    const tracksSync = job.tracksSync && job.messageIds === null;
+    if (tracksSync && job.pageToken === null) await backend.startSync(job.connectionId);
+    const finish = async () => {
+      if (tracksSync)
+        await backend.markSynced({ connectionId: job.connectionId, syncedAt: startedAt });
+    };
+
+    let page: {
+      messages: { id: string; receivedAt: string | null }[];
+      nextPageToken: string | null;
+    };
+    if (job.messageIds !== null) {
+      // A trigger already named the messages; parsing checks each sender against the accounts.
+      page = {
+        messages: job.messageIds.map((id) => ({ id, receivedAt: null })),
+        nextPageToken: null,
+      };
+    } else {
+      // A run for one newly linked account reads only that account's senders.
+      const keys =
+        job.institutionKeys === null
+          ? connection.institutionKeys
+          : connection.institutionKeys.filter((key) => job.institutionKeys?.includes(key));
+      const senders = sendersFor(keys);
+      if (senders.length === 0) {
+        await finish();
+        return "listed";
+      }
+      page = await read(connection, () =>
+        reader.listMessages(toMailbox(connection), {
+          query: syncQuery(senders),
+          pageToken: job.pageToken,
+          maxResults: PAGE_SIZE,
+        }),
+      );
     }
-    const page = await read(connection, () =>
-      reader.listMessages(toMailbox(connection), {
-        query: syncQuery(senders),
-        pageToken: job.pageToken,
-        maxResults: PAGE_SIZE,
-      }),
-    );
 
     // Claimed before queueing so the sync counts them as in progress until each is
     // parsed. A listing without a timestamp is claimed at the sync's start time; the
@@ -264,9 +287,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       jobs.push({ ...job, pageToken: page.nextPageToken, startedAt });
     }
     if (jobs.length > 0) await enqueue(jobs);
-    if (!page.nextPageToken) {
-      await backend.markSynced({ connectionId: job.connectionId, syncedAt: startedAt });
-    }
+    if (!page.nextPageToken) await finish();
     return "listed";
   }
 
@@ -449,6 +470,9 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
         since: connection.lastSyncedAt,
         pageToken: null,
         startedAt: null,
+        institutionKeys: null,
+        messageIds: null,
+        tracksSync: true,
       }));
       if (jobs.length > 0) await enqueue(jobs);
       return jobs.length;

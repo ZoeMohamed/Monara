@@ -16,6 +16,7 @@ import {
   institutionsToAdd,
   removeChoice,
 } from "@/lib/onboarding/banks";
+import { stepIndex } from "@/lib/onboarding/flow";
 
 function BankBadgeOf({ choice }: { choice: Pick<BankChoice, "provider" | "name" | "platform"> }) {
   return (
@@ -71,7 +72,7 @@ function AddBankPicker({
       }
       scene="found"
       side
-      step={1}
+      step={stepIndex("detect")}
       title="Add a bank"
     >
       <input
@@ -261,7 +262,7 @@ function BankEditor({
       centered={empty}
       scene={empty ? "empty" : "found"}
       side={!empty}
-      step={1}
+      step={stepIndex("detect")}
       title={empty ? emptyTitle(notice) : "We found transactions from these banks"}
     >
       {empty ? <EmptyBanks notice={notice} onRetry={onRetry} /> : null}
@@ -304,7 +305,7 @@ export function DetectStep({
         }
         centered
         scene="scan"
-        step={1}
+        step={stepIndex("detect")}
         title="Checking your inbox"
       >
         <p aria-live="polite" className={styles.text}>

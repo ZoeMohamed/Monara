@@ -44,8 +44,8 @@ describe("onboarding phase", () => {
     assert.equal(resolvePhase("background", false), "connect");
   });
 
-  it("moves a returning connect on to detection and never reopens a finished setup", () => {
-    assert.equal(resolvePhase("connect", true), "detect");
+  it("moves a returning connect on to the name step and never reopens a finished setup", () => {
+    assert.equal(resolvePhase("connect", true), "name");
     assert.equal(resolvePhase("done", false), "done");
     assert.equal(resolvePhase("done", true), "done");
   });
@@ -82,9 +82,9 @@ describe("onboarding phase", () => {
     assert.equal(returnsToOnboarding(null), false);
   });
 
-  it("keeps background import on the fourth step", () => {
+  it("asks for the name before the banks, and keeps background import on the fourth step", () => {
     assert.deepEqual(
-      ["connect", "detect", "name", "import", "background"].map(stepIndex),
+      ["connect", "name", "detect", "import", "background"].map(stepIndex),
       [0, 1, 2, 3, 3],
     );
   });

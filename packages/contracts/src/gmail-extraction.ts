@@ -49,6 +49,15 @@ export const gmailSyncJobSchema = z
     pageToken: z.string().min(1).max(2_000).nullable(),
     /** When the first page of this sync started; recorded as the sync time after the last page. */
     startedAt: isoDateTimeSchema.nullable(),
+    /** Only these registry entries' senders; null reads every entry the mailbox's accounts have. */
+    institutionKeys: z.array(institutionKeySchema).min(1).max(100).nullable().default(null),
+    /** Exactly these messages, e.g. from a new-mail trigger; null lists the import window. */
+    messageIds: z.array(gmailMessageIdSchema).min(1).max(100).nullable().default(null),
+    /**
+     * Whether this run drives the connection's sync status. A run that starts while
+     * another is going adds its messages to that one instead of restarting its status.
+     */
+    tracksSync: z.boolean().default(true),
   })
   .strict();
 
@@ -148,6 +157,26 @@ export const listActiveGmailConnectionsResultSchema = z
 export const resolveGmailConnectionInputSchema = z
   .object({
     connectionId: gmailConnectionIdSchema,
+  })
+  .strict();
+
+export const gmailIngestReasonSchema = z.enum([
+  "onboarding",
+  "account_added",
+  "account_moved",
+  "connection_added",
+  "trigger",
+  "daily",
+]);
+
+/** Asks the agent to import a connection's mail. Only the authenticated web backend sends it. */
+export const requestGmailIngestInputSchema = z
+  .object({
+    connectionId: gmailConnectionIdSchema,
+    reason: gmailIngestReasonSchema,
+    institutionKeys: z.array(institutionKeySchema).min(1).max(100).nullable().default(null),
+    messageIds: z.array(gmailMessageIdSchema).min(1).max(100).nullable().default(null),
+    tracksSync: z.boolean().default(true),
   })
   .strict();
 
@@ -341,6 +370,8 @@ export type ListActiveGmailConnectionsResult = z.infer<
 >;
 export type ResolveGmailConnectionInput = z.input<typeof resolveGmailConnectionInputSchema>;
 export type RequestGmailSyncInput = z.input<typeof requestGmailSyncInputSchema>;
+export type RequestGmailIngestInput = z.input<typeof requestGmailIngestInputSchema>;
+export type GmailIngestReason = z.infer<typeof gmailIngestReasonSchema>;
 export type ResolvedGmailConnection = z.infer<typeof resolvedGmailConnectionSchema>;
 export type StartGmailSyncInput = z.input<typeof startGmailSyncInputSchema>;
 export type ClaimGmailMessagesInput = z.input<typeof claimGmailMessagesInputSchema>;

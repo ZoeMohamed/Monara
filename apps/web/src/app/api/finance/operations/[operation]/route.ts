@@ -1,4 +1,6 @@
+import { financialAccountMutationResultSchema } from "@monara/contracts";
 import { FinanceOperationError } from "@monara/core";
+import { after } from "next/server";
 
 import {
   financeErrorResponse,
@@ -6,6 +8,7 @@ import {
   isFinanceOperation,
   runFinanceOperation,
 } from "@/lib/finance/service";
+import { importAfterAccountCreated } from "@/lib/gmail/import";
 import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
@@ -35,13 +38,22 @@ export async function POST(
   }
   try {
     const input: unknown = await request.json();
-    return financeSuccessResponse(
-      await runFinanceOperation(
-        operation,
-        { userId: identity.id, channel: "web", directSource: "manual_form" },
-        input,
-      ),
+    const result = await runFinanceOperation(
+      operation,
+      { userId: identity.id, channel: "web", directSource: "manual_form" },
+      input,
     );
+    if (operation === "create_financial_account") {
+      // The account's recent mail imports after the response; a failure shows on the mailbox.
+      const created = financialAccountMutationResultSchema.safeParse(result);
+      if (created.success) {
+        const { financialAccount } = created.data;
+        after(() =>
+          importAfterAccountCreated(identity.id, financialAccount).catch(() => undefined),
+        );
+      }
+    }
+    return financeSuccessResponse(result);
   } catch (error) {
     return financeErrorResponse(error);
   }

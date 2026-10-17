@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GmailJob, MerchantCategorizeJob } from "@monara/contracts";
 import type { Env } from "../src/env.ts";
-import { handleGmailSyncRequest } from "../src/gmail/worker.ts";
+import { handleGmailIngestRequest, handleGmailSyncRequest } from "../src/gmail/worker.ts";
 
 const connectionId = "00000000-0000-4000-8000-000000000010";
 const secret = "synthetic-test-secret";
@@ -32,8 +32,62 @@ describe("manual Gmail sync worker boundary", () => {
 
     assert.equal(response.status, 202);
     assert.deepEqual(jobs, [
-      { kind: "gmail.sync", connectionId, since, pageToken: null, startedAt: null },
+      {
+        kind: "gmail.sync",
+        connectionId,
+        since,
+        pageToken: null,
+        startedAt: null,
+        institutionKeys: null,
+        messageIds: null,
+        tracksSync: true,
+      },
     ]);
+  });
+
+  it("queues a scoped ingest for one newly linked account", async () => {
+    const { env, jobs, request } = setup();
+    const response = await handleGmailIngestRequest(
+      request({
+        connectionId,
+        reason: "account_added",
+        institutionKeys: ["BCA_CC"],
+        tracksSync: false,
+      }),
+      env,
+    );
+    assert.equal(response.status, 202);
+    assert.deepEqual(jobs, [
+      {
+        kind: "gmail.sync",
+        connectionId,
+        since: null,
+        pageToken: null,
+        startedAt: null,
+        institutionKeys: ["BCA_CC"],
+        messageIds: null,
+        tracksSync: false,
+      },
+    ]);
+  });
+
+  it("rejects an ingest with an unknown reason or caller-supplied identity", async () => {
+    for (const body of [
+      { connectionId, reason: "because" },
+      { connectionId, reason: "onboarding", userId: "00000000-0000-4000-8000-000000000001" },
+    ]) {
+      const { env, jobs, request } = setup();
+      const response = await handleGmailIngestRequest(request(body), env);
+      assert.equal(response.status, 400);
+      assert.deepEqual(jobs, []);
+    }
+    const { env, jobs, request } = setup();
+    const response = await handleGmailIngestRequest(
+      request({ connectionId, reason: "onboarding" }, "Bearer wrong-secret"),
+      env,
+    );
+    assert.equal(response.status, 401);
+    assert.deepEqual(jobs, []);
   });
 
   it("rejects missing cursors and caller-supplied identity before queueing", async () => {
