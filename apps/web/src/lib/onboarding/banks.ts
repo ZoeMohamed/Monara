@@ -77,9 +77,11 @@ export function institutionsToAdd(choices: readonly BankChoice[], query: string)
  * The account that Gmail imports for this bank go to. Pass the same request id on a retry:
  * the backend then returns the account it already created instead of making a second one.
  */
+/** The account to create for a choice, fed by the mailbox it was found in when there is one. */
 export function accountInputFor(
   choice: BankChoice,
   clientRequestId: string = crypto.randomUUID(),
+  gmailConnectionId: string | null = null,
 ): CreateFinancialAccountInput {
   return {
     name: choice.name,
@@ -88,6 +90,7 @@ export function accountInputFor(
     currency: "IDR",
     lastFour: choice.lastFours.length === 1 ? (choice.lastFours[0] ?? null) : null,
     institutionKey: choice.institutionKey,
+    gmailConnectionId,
     clientRequestId,
   };
 }

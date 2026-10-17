@@ -7,7 +7,7 @@ import { ConnectStep, OnboardingSheet } from "@/components/onboarding-sheet";
 import type { Onboarding } from "@/components/use-onboarding";
 import { stepIndex } from "@/lib/onboarding/flow";
 
-/** The first-run sheet: connect Gmail, confirm the banks found, then watch the import. */
+/** The first-run sheet: connect Gmail, confirm the name, confirm the banks found, then watch the import. */
 export function OnboardingSheets({ onboarding }: { onboarding: Onboarding }) {
   const { phase, sheetOpen, engine, pending, error } = onboarding;
   if (!sheetOpen || phase === null) return null;

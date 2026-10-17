@@ -8,6 +8,7 @@ import { OnboardingAvatar } from "@/components/onboarding-avatar";
 import { ButtonIcon, SheetStep } from "@/components/onboarding-sheet";
 import styles from "@/components/onboarding-sheet.module.css";
 import { useStreamedText } from "@/components/use-streamed-text";
+import { stepIndex } from "@/lib/onboarding/flow";
 
 const explanation =
   "Moving money between your own accounts isn't spending. Your name helps me spot those and leave them out.";
@@ -80,7 +81,7 @@ export function NameStep({
       centered
       illustration={<Explainer />}
       scene="name"
-      step={2}
+      step={stepIndex("name")}
       title="What's your full name?"
     >
       <form className={styles.nameForm} onSubmit={submit}>

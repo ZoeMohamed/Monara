@@ -18,6 +18,7 @@ const account = (id: string, name: string, lastFour: string | null) => ({
   currency: "IDR" as const,
   lastFour,
   institutionKey: null,
+  gmailConnectionId: null,
   isActive: true,
   createdAt: stamp,
   updatedAt: stamp,

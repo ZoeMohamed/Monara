@@ -13,6 +13,7 @@ export function initialDemoAccounts(): FinancialAccount[] {
     currency: "IDR",
     lastFour: null,
     institutionKey: null,
+    gmailConnectionId: null,
     isActive: true,
     createdAt: timestamp,
     updatedAt: timestamp,

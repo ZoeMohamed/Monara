@@ -2,12 +2,20 @@
 
 import { useSyncExternalStore } from "react";
 
-import { type OnboardingPhase, parseOnboardingPhase } from "@/lib/onboarding/flow";
+import {
+  migrateLegacyOnboardingPhase,
+  type OnboardingPhase,
+  parseOnboardingPhase,
+} from "@/lib/onboarding/flow";
 
 const changeEvent = "monara-onboarding";
 const sessionPhase = new Map<string, OnboardingPhase>();
 
 function storageKey(scope: string) {
+  return `monara.onboarding.v2.${scope}`;
+}
+
+function legacyStorageKey(scope: string) {
   return `monara.onboarding.v1.${scope}`;
 }
 
@@ -28,7 +36,11 @@ function readPhase(scope: string): OnboardingPhase | null {
   const remembered = sessionPhase.get(scope);
   if (remembered) return remembered;
   try {
-    return parseOnboardingPhase(window.localStorage.getItem(storageKey(scope)));
+    const current = window.localStorage.getItem(storageKey(scope));
+    if (current !== null) return parseOnboardingPhase(current);
+    return migrateLegacyOnboardingPhase(
+      parseOnboardingPhase(window.localStorage.getItem(legacyStorageKey(scope))),
+    );
   } catch {
     return null;
   }

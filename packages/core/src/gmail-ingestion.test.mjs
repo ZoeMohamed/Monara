@@ -150,6 +150,73 @@ describe("runGmailIngestionOperation", () => {
     assert.equal(called, false);
   });
 
+  it("records a parse job's results in order, following up each new one once", async () => {
+    const second = "00000000-0000-4000-8000-000000000021";
+    const repository = fakeRepository();
+    const outcomes = new Map([
+      [
+        processedMessageId,
+        { transactionIds: [transactionId], confirmedTransactionIds: [transactionId] },
+      ],
+      [second, { alreadyFinished: true, confirmedTransactionIds: ["ignored"] }],
+    ]);
+    repository.recordExtraction = async (input) => {
+      repository.calls.push({ name: "recordExtraction", input: input.processedMessageId });
+      return {
+        transactionIds: [],
+        alreadyFinished: false,
+        uncategorizedTransactionIds: [],
+        userId,
+        confirmedTransactionIds: [],
+        ...outcomes.get(input.processedMessageId),
+      };
+    };
+    const followUps = [];
+    const result = await runGmailIngestionOperation(
+      repository,
+      "record-extractions",
+      {
+        results: [
+          recordInput,
+          {
+            processedMessageId: second,
+            outcome: "skipped",
+            items: [],
+            institutionKey: null,
+            senderVerified: false,
+          },
+        ],
+      },
+      { onTransactionsConfirmed: async (owner, ids) => void followUps.push({ owner, ids }) },
+    );
+    assert.deepEqual(result, {
+      results: [
+        {
+          transactionIds: [transactionId],
+          alreadyFinished: false,
+          uncategorizedTransactionIds: [],
+        },
+        { transactionIds: [], alreadyFinished: true, uncategorizedTransactionIds: [] },
+      ],
+    });
+    assert.deepEqual(
+      repository.calls.map((call) => call.input),
+      [processedMessageId, second],
+    );
+    assert.deepEqual(followUps, [{ owner: userId, ids: [transactionId] }]);
+  });
+
+  it("rejects an empty or oversized parse batch before recording anything", async () => {
+    const repository = fakeRepository();
+    for (const results of [[], Array.from({ length: 11 }, () => recordInput)]) {
+      await assert.rejects(
+        runGmailIngestionOperation(repository, "record-extractions", { results }),
+        { code: "VALIDATION_FAILED" },
+      );
+    }
+    assert.deepEqual(repository.calls, []);
+  });
+
   it("records an agent sync failure only with a known reason", async () => {
     const repository = fakeRepository();
     assert.deepEqual(

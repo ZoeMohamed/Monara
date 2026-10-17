@@ -22,5 +22,17 @@ export function createSupabaseProfileRepository(
       }
       return result.data !== null;
     },
+
+    async fullName(userId) {
+      const result = await client
+        .from("profiles")
+        .select("full_name")
+        .eq("id", userId)
+        .maybeSingle();
+      if (result.error) {
+        throw new FinanceOperationError("INTERNAL", "Your profile could not be read.");
+      }
+      return result.data?.full_name ?? null;
+    },
   };
 }

@@ -3,9 +3,9 @@ import type { Env } from "./env.ts";
 import {
   consumeGmailJobs,
   consumeMerchantJobs,
-  handleGmailDiscoveryRequest,
+  handleGmailIngestRequest,
   handleGmailSyncRequest,
-  scheduleGmailSyncs,
+  scheduleGmailDaily,
 } from "./gmail/index.ts";
 import { healthResponse, notFoundResponse } from "./http.ts";
 import { handleKapsoWebhook } from "./whatsapp/index.ts";
@@ -27,17 +27,17 @@ export default {
     if (request.method === "POST" && path === "/webhooks/kapso") {
       return handleKapsoWebhook(request, env);
     }
+    if (request.method === "POST" && path === "/gmail/ingest") {
+      return handleGmailIngestRequest(request, env, context);
+    }
     if (request.method === "POST" && path === "/gmail/sync") {
       return handleGmailSyncRequest(request, env, context);
-    }
-    if (request.method === "POST" && path === "/gmail/discover") {
-      return handleGmailDiscoveryRequest(request, env);
     }
     return notFoundResponse();
   },
 
   scheduled(_controller, env) {
-    return scheduleGmailSyncs(env);
+    return scheduleGmailDaily(env);
   },
 
   queue(batch, env) {

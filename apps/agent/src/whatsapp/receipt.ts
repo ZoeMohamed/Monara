@@ -13,8 +13,8 @@ import {
 import type { KapsoInboundMedia } from "@monara/integrations";
 import { z } from "zod";
 import type { CallOperation } from "../conversation/backend.ts";
-import { lastFourFromHint, parseRupiahAmount } from "../gmail/extract.ts";
 import type { LlmClient } from "../gmail/llm.ts";
+import { lastFourFromHint, parseRupiahAmount } from "../gmail/parse/extract.ts";
 
 const DAY_MS = 86_400_000;
 const MAX_AGE_DAYS = 400;

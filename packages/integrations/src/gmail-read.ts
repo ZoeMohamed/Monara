@@ -167,7 +167,7 @@ function collectBodies(part: unknown, bodies: { text: string | null; html: strin
 }
 
 /** Requires https, except http for local stubs. */
-function readApiUrl(value: string): string {
+export function readApiUrl(value: string): string {
   const normalized = value.trim().replace(/\/+$/, "");
   if (!normalized) throw new Error("Missing required Composio configuration: COMPOSIO_API_URL.");
   let url: URL;
