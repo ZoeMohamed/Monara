@@ -2,7 +2,7 @@
 
 import { Button, ProgressBar } from "@monara/ui";
 
-import { OnboardingAvatar } from "@/components/onboarding-avatar";
+import { OnboardingMark } from "@/components/onboarding-avatar";
 import styles from "@/components/onboarding-sheet.module.css";
 import type { ImportProgress } from "@/components/use-onboarding-engine";
 
@@ -35,29 +35,35 @@ export function OnboardingBanner({
   onFinish: () => void;
 }) {
   const finished = progress.state === "completed" || progress.state === "failed";
-  const value =
-    progress.emailsRead !== null && progress.totalEmails
-      ? Math.round((progress.emailsRead / progress.totalEmails) * 100)
-      : null;
+  const { transactions, totalTransactions } = progress;
+  const counted = transactions !== null && totalTransactions !== null && totalTransactions > 0;
+  const value = counted ? Math.round((transactions / totalTransactions) * 100) : null;
   return (
     <div className={styles.banner} data-inset={inset} role="status">
       <div aria-hidden className={styles.bannerAvatar}>
-        <OnboardingAvatar scene={progress.state === "completed" ? "done" : "import"} />
+        <OnboardingMark done={progress.state === "completed"} />
       </div>
       <div className={styles.bannerText}>
         <p className="text-sm font-semibold">{summary(progress)}</p>
         {!finished ? (
-          <ProgressBar
-            aria-label="Gmail import progress"
-            className="mt-1.5"
-            isIndeterminate={value === null ? true : undefined}
-            size="sm"
-            value={value ?? 0}
-          >
-            <ProgressBar.Track>
-              <ProgressBar.Fill />
-            </ProgressBar.Track>
-          </ProgressBar>
+          <>
+            <ProgressBar
+              aria-label="Gmail import progress"
+              className="mt-1.5"
+              isIndeterminate={value === null ? true : undefined}
+              size="sm"
+              value={value ?? 0}
+            >
+              <ProgressBar.Track className={styles.bannerTrack}>
+                <ProgressBar.Fill />
+              </ProgressBar.Track>
+            </ProgressBar>
+            {counted ? (
+              <p className={styles.bannerCount}>
+                {transactions} / {totalTransactions} processed
+              </p>
+            ) : null}
+          </>
         ) : null}
       </div>
       {finished ? (

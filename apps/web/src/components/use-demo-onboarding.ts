@@ -64,6 +64,7 @@ export function useDemoOnboarding(
         emailsRead: emails,
         totalEmails: sampleEmails,
         transactions: found,
+        totalTransactions: demoImportFeed.length,
         feed: demoImportFeed.slice(0, found),
       });
       if (emails >= sampleEmails) window.clearInterval(timer);

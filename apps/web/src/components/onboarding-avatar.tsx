@@ -320,3 +320,28 @@ export function OnboardingAvatar({
     </svg>
   );
 }
+
+/**
+ * The plain cat, still, for small spots where motion would only distract. A green check
+ * badge says the work is done.
+ */
+export function OnboardingMark({ done = false }: { done?: boolean }) {
+  return (
+    <svg aria-hidden className={styles.mark} focusable="false" viewBox="0 0 730 704">
+      <path d={avatarHeadPath} fill="var(--brand)" fillRule="evenodd" />
+      {done ? (
+        <g transform="translate(640 96)">
+          <circle fill="var(--success)" r="112" stroke="#fff" strokeWidth="26" />
+          <path
+            d="M-48 4 L-14 40 L50 -34"
+            fill="none"
+            stroke="#fff"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="26"
+          />
+        </g>
+      ) : null}
+    </svg>
+  );
+}

@@ -143,6 +143,7 @@ function useImportProgress(mailboxId: string | null | undefined, enabled: boolea
               emailsRead: null,
               totalEmails: null,
               transactions: sync.transactions,
+              totalTransactions: sync.transactions,
               feed: [],
             });
           } else if (sync.state === "failed") {
@@ -151,6 +152,7 @@ function useImportProgress(mailboxId: string | null | undefined, enabled: boolea
               emailsRead: null,
               totalEmails: null,
               transactions: null,
+              totalTransactions: null,
               feed: [],
               message: sync.message,
             });

@@ -22,13 +22,10 @@ export const onboardingTitleId = "onboarding-title";
 export function OnboardingSheet({
   step,
   onDismiss,
-  chrome,
   children,
 }: {
   step: number;
   onDismiss: () => void;
-  /** Controls drawn over the page beside the sheet, inside the modal so they stay usable. */
-  chrome?: ReactNode;
   children: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -58,7 +55,6 @@ export function OnboardingSheet({
         tabIndex={-1}
         type="button"
       />
-      {chrome}
       <div className={styles.sheet}>
         <div aria-hidden className={styles.tracker}>
           {onboardingSteps.map((name, index) => (

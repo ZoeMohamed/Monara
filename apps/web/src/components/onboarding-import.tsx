@@ -15,13 +15,7 @@ import type {
 } from "@/components/use-onboarding-engine";
 import { formatDay } from "@/data/demo-ledger";
 
-/** How tightly the import step packs its parts; each variant is one setting. */
-export type ImportDensity = {
-  avatar: number;
-  row: number;
-  badge: number;
-  stats: "tiles" | "inline" | "folded";
-};
+const badgeSize = 28;
 
 const kinds: { kind: ImportedKind; label: string }[] = [
   { kind: "expense", label: "Expense" },
@@ -32,15 +26,15 @@ const kinds: { kind: ImportedKind; label: string }[] = [
 const copy: Record<ImportProgress["state"], { title: string; text: string }> = {
   waiting: {
     title: "Getting ready",
-    text: "Lining up your bank emails. This starts in a moment.",
+    text: "Lining up your bank emails.",
   },
   running: {
     title: "Importing your transactions",
-    text: "Reading the last 30 days of bank emails. Tap Next and it keeps running.",
+    text: "Reading the last 30 days of email.",
   },
   completed: {
     title: "All caught up",
-    text: "Anything Monara was unsure about waits for your review.",
+    text: "From the last 30 days of email.",
   },
   failed: {
     title: "The import hit a snag",
@@ -63,51 +57,26 @@ function countsLine(progress: ImportProgress) {
   return `${progress.emailsRead}${of} emails · ${progress.transactions} found`;
 }
 
-function Meter({ progress, thin }: { progress: ImportProgress; thin?: boolean }) {
+function Stats({ progress }: { progress: ImportProgress }) {
+  if (progress.state === "failed") return null;
   const value = percent(progress);
   return (
-    <ProgressBar
-      aria-label="Import progress"
-      isIndeterminate={value === null && progress.state !== "waiting" ? true : undefined}
-      size={thin ? "sm" : "md"}
-      value={value ?? 0}
-    >
-      <ProgressBar.Track>
-        <ProgressBar.Fill />
-      </ProgressBar.Track>
-    </ProgressBar>
-  );
-}
-
-function Stats({ progress, mode }: { progress: ImportProgress; mode: ImportDensity["stats"] }) {
-  if (progress.state === "failed") return null;
-  const counts = hasCounts(progress);
-  return (
     <div className={styles.meter}>
-      <Meter progress={progress} thin={mode !== "tiles"} />
-      {mode === "tiles" && counts ? (
-        <div className={styles.tiles}>
-          <p className={styles.tile}>
-            <span className={styles.tileValue}>
-              {progress.emailsRead}
-              {progress.totalEmails ? ` / ${progress.totalEmails}` : ""}
-            </span>
-            <span className={styles.tileLabel}>emails read</span>
-          </p>
-          <p className={styles.tile}>
-            <span className={styles.tileValue}>{progress.transactions}</span>
-            <span className={styles.tileLabel}>found</span>
-          </p>
-        </div>
-      ) : null}
-      {mode === "inline" && counts ? (
-        <p className={styles.statLine}>{countsLine(progress)}</p>
-      ) : null}
+      <ProgressBar
+        aria-label="Import progress"
+        isIndeterminate={value === null && progress.state !== "waiting" ? true : undefined}
+        size="sm"
+        value={value ?? 0}
+      >
+        <ProgressBar.Track>
+          <ProgressBar.Fill />
+        </ProgressBar.Track>
+      </ProgressBar>
     </div>
   );
 }
 
-function ImportRow({ item, density }: { item: ImportedTransaction; density: ImportDensity }) {
+function ImportRow({ item }: { item: ImportedTransaction }) {
   const { formatRupiah } = useAmountDisplay();
   const sign = item.kind === "income" ? "+" : item.kind === "expense" ? "−" : "";
   return (
@@ -117,7 +86,7 @@ function ImportRow({ item, density }: { item: ImportedTransaction; density: Impo
           name={item.bankName}
           platform="BANKING_APP"
           provider={item.provider}
-          size={density.badge}
+          size={badgeSize}
         />
       </span>
       <span className={styles.rowText}>
@@ -139,7 +108,7 @@ function emptyText(progress: ImportProgress, kind: ImportedKind) {
   return "Transactions appear here as they are found.";
 }
 
-function ImportTable({ progress, density }: { progress: ImportProgress; density: ImportDensity }) {
+function ImportTable({ progress }: { progress: ImportProgress }) {
   const id = useId();
   const [selected, setSelected] = useState<ImportedKind>("expense");
   const tabRefs = useRef<Partial<Record<ImportedKind, HTMLButtonElement | null>>>({});
@@ -203,7 +172,7 @@ function ImportTable({ progress, density }: { progress: ImportProgress; density:
         ) : (
           <ul className={styles.rows}>
             {items.map((item) => (
-              <ImportRow density={density} item={item} key={item.id} />
+              <ImportRow item={item} key={item.id} />
             ))}
           </ul>
         )}
@@ -212,24 +181,10 @@ function ImportTable({ progress, density }: { progress: ImportProgress; density:
   );
 }
 
-export function ImportStep({
-  progress,
-  density,
-  onNext,
-}: {
-  progress: ImportProgress;
-  density: ImportDensity;
-  onNext: () => void;
-}) {
+export function ImportStep({ progress, onNext }: { progress: ImportProgress; onNext: () => void }) {
   const done = progress.state === "completed";
+  const failed = progress.state === "failed";
   const { title, text } = copy[progress.state];
-  const folded = density.stats === "folded" && hasCounts(progress);
-  const subtitle =
-    progress.state === "failed" && progress.message
-      ? progress.message
-      : folded
-        ? countsLine(progress)
-        : text;
   return (
     <StepFrame
       actions={
@@ -240,33 +195,25 @@ export function ImportStep({
       }
       step={3}
     >
-      <div
-        className={styles.import}
-        style={
-          {
-            "--avatar": `${density.avatar}px`,
-            "--row": `${density.row}px`,
-          } as React.CSSProperties
-        }
-      >
+      <div className={styles.import}>
         <div className={styles.top}>
           <div>
             <h2 className={styles.title} id={onboardingTitleId}>
               {title}
             </h2>
             <p aria-live="polite" className={styles.sub}>
-              {subtitle}
+              {failed && progress.message ? progress.message : text}
             </p>
+            {!failed && hasCounts(progress) ? (
+              <p className={styles.counts}>{countsLine(progress)}</p>
+            ) : null}
           </div>
           <div aria-hidden className={styles.avatar}>
-            <OnboardingAvatar
-              scene={done ? "done" : progress.state === "failed" ? "empty" : "import"}
-              tight
-            />
+            <OnboardingAvatar scene={done ? "done" : failed ? "empty" : "import"} tight />
           </div>
         </div>
-        <Stats mode={density.stats} progress={progress} />
-        <ImportTable density={density} progress={progress} />
+        <Stats progress={progress} />
+        <ImportTable progress={progress} />
       </div>
     </StepFrame>
   );

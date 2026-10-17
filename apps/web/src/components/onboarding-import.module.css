@@ -1,4 +1,6 @@
 .import {
+  --avatar: 64px;
+  --row: 42px;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -42,34 +44,11 @@
   gap: 6px;
 }
 
-.statLine {
+.counts {
+  margin-top: 2px;
   color: var(--muted);
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
-}
-
-.tiles {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.tile {
-  padding: 6px 10px;
-  border-radius: 12px;
-  background: var(--surface-secondary);
-}
-
-.tileValue {
-  font-size: 16px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 800;
-}
-
-.tileLabel {
-  margin-left: 6px;
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .tabs {

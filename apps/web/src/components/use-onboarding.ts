@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useVariant } from "@/components/onboarding-variants/use-variant";
 import { useDemoOnboarding } from "@/components/use-demo-onboarding";
 import {
   onboardingErrorMessage,
@@ -67,9 +66,7 @@ export function useOnboarding({
 }) {
   const stored = useStoredPhase(scope);
   const mailboxId = useGmailMailbox(live && stored !== "done");
-  // A variant link opens the demo at the import step, where the variants are.
-  const { requested } = useVariant();
-  const phase = !live && requested ? "import" : setupPhase({ live, stored, mailboxId });
+  const phase = setupPhase({ live, stored, mailboxId });
 
   const gmail = useGmailOnboarding(live ? mailboxId : null, live ? phase : null);
   const demo = useDemoOnboarding(!live, phase);

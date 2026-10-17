@@ -5,6 +5,13 @@
   overflow: visible;
 }
 
+.mark {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
 .catBody,
 .lid,
 .envelope,

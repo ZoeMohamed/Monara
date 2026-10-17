@@ -32,7 +32,10 @@ export type ImportProgress = {
   state: "waiting" | "running" | "completed" | "failed";
   emailsRead: number | null;
   totalEmails: number | null;
+  /** Transactions imported so far. */
   transactions: number | null;
+  /** Transactions the scan has detected in all, which the count above works toward. */
+  totalTransactions: number | null;
   /**
    * What has been imported so far, in the order it was found. Empty when the source cannot
    * list transactions yet; the table then waits instead of inventing rows.
@@ -46,6 +49,7 @@ export const waitingProgress: ImportProgress = {
   emailsRead: null,
   totalEmails: null,
   transactions: null,
+  totalTransactions: null,
   feed: [],
 };
 
