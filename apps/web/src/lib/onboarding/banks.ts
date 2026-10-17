@@ -73,8 +73,14 @@ export function institutionsToAdd(choices: readonly BankChoice[], query: string)
     .toSorted((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name));
 }
 
-/** The account that Gmail imports for this bank go to. */
-export function accountInputFor(choice: BankChoice): CreateFinancialAccountInput {
+/**
+ * The account that Gmail imports for this bank go to. Pass the same request id on a retry:
+ * the backend then returns the account it already created instead of making a second one.
+ */
+export function accountInputFor(
+  choice: BankChoice,
+  clientRequestId: string = crypto.randomUUID(),
+): CreateFinancialAccountInput {
   return {
     name: choice.name,
     institution: choice.provider,
@@ -82,7 +88,7 @@ export function accountInputFor(choice: BankChoice): CreateFinancialAccountInput
     currency: "IDR",
     lastFour: choice.lastFours.length === 1 ? (choice.lastFours[0] ?? null) : null,
     institutionKey: choice.institutionKey,
-    clientRequestId: crypto.randomUUID(),
+    clientRequestId,
   };
 }
 

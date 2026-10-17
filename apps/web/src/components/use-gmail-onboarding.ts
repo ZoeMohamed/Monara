@@ -185,6 +185,9 @@ export function useGmailOnboarding(
   const { detection, retry } = useDetection(mailboxId, phase === "detect");
   const progress = useImportProgress(mailboxId, phase === "import" || phase === "background");
   const created = useRef(new Set<string>());
+  // One request id per bank for the life of the sheet, so a retry after a lost response
+  // reuses it and cannot create the account twice.
+  const requestIds = useRef(new Map<string, string>());
 
   const connect = useCallback(async (onConnected: () => void) => {
     const url = await startGmailConnection();
@@ -199,7 +202,9 @@ export function useGmailOnboarding(
     );
     const results = await Promise.allSettled(
       missing.map(async (choice) => {
-        await callFinanceOperation("create_financial_account", accountInputFor(choice));
+        const requestId = requestIds.current.get(choice.institutionKey) ?? crypto.randomUUID();
+        requestIds.current.set(choice.institutionKey, requestId);
+        await callFinanceOperation("create_financial_account", accountInputFor(choice, requestId));
         created.current.add(choice.institutionKey);
       }),
     );

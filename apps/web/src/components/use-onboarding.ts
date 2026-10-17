@@ -53,13 +53,17 @@ export function useOnboarding({
   live,
   scope,
   onHome,
+  onHomeScreen,
   suggestedName,
   refreshFinance,
 }: {
   live: boolean;
   /** Keys this browser's saved progress, so accounts on one device do not share it. */
   scope: string;
+  /** Home is showing and nothing is open over it. */
   onHome: boolean;
+  /** The Home screen is current, even with a sheet or dialog open over it. */
+  onHomeScreen: boolean;
   /** What the name step starts with: the name Google gave Monara, which the User can change. */
   suggestedName: string;
   refreshFinance: () => Promise<void>;
@@ -73,6 +77,13 @@ export function useOnboarding({
   const engine: OnboardingEngine = live ? gmail : demo;
 
   const [dismissed, setDismissed] = useState(false);
+  // Leaving the Home screen ends a dismissal, so unfinished setup is offered again on return.
+  // Dialogs over Home do not count as leaving, or closing one would bring the sheet back.
+  const [wasOnHomeScreen, setWasOnHomeScreen] = useState(onHomeScreen);
+  if (wasOnHomeScreen !== onHomeScreen) {
+    setWasOnHomeScreen(onHomeScreen);
+    if (!onHomeScreen) setDismissed(false);
+  }
   const { pending, error, run } = useStepAction();
 
   // The callback returns here with the outcome of Gmail consent; a failure shows on the first step.

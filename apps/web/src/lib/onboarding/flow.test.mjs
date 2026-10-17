@@ -115,6 +115,16 @@ describe("onboarding bank choices", () => {
     );
   });
 
+  it("keeps the request id it is given so a retry cannot create the account twice", () => {
+    const choice = choiceFromSuggestion(bca);
+    assert.equal(accountInputFor(choice, "retry-1").clientRequestId, "retry-1");
+    assert.equal(accountInputFor(choice, "retry-1").clientRequestId, "retry-1");
+    assert.notEqual(
+      accountInputFor(choice).clientRequestId,
+      accountInputFor(choice).clientRequestId,
+    );
+  });
+
   it("does not offer a bank that is already listed and matches every search word", () => {
     const detected = [choiceFromSuggestion(bca)];
     assert.ok(!institutionsToAdd(detected, "").some((entry) => entry.key === "BCA_MyBCA"));

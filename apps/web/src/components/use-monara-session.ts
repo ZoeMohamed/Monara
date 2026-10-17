@@ -187,6 +187,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     email: profile.email,
     displayName: profile.displayName,
     homeOpen: homeIsUncovered(view),
+    homeScreen: view.screen === "home",
     refreshFinance: sync.refresh,
   });
   const {

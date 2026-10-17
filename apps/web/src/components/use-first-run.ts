@@ -14,18 +14,21 @@ export function useFirstRun({
   email,
   displayName,
   homeOpen,
+  homeScreen,
   refreshFinance,
 }: {
   live: boolean;
   email: string | null;
   displayName: string;
   homeOpen: boolean;
+  homeScreen: boolean;
   refreshFinance: () => Promise<void>;
 }) {
   const onboarding = useOnboarding({
     live,
     scope: live ? `live.${email ?? "account"}` : "demo",
     onHome: homeOpen,
+    onHomeScreen: homeScreen,
     // The demo guest has no real name to suggest.
     suggestedName: live ? displayName : "",
     refreshFinance,
