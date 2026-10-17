@@ -122,9 +122,6 @@ export function ChatActionResult({
               </li>
             ))}
           </ul>
-          <p className="mt-1 text-xs leading-5 text-muted">
-            Undo for saved changes is not available yet.
-          </p>
         </div>
       ) : null}
       {result.confirmation ? (

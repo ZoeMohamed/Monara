@@ -9,7 +9,7 @@ import {
   type UpdateFinancialAccountInput,
   updateFinancialAccountInputSchema,
 } from "@monara/contracts";
-import { Button } from "@monara/ui";
+import { Button, Input, Label, TextField } from "@monara/ui";
 import { type FormEvent, useId, useRef, useState } from "react";
 
 import { AccountBadge } from "@/components/account-badge";
@@ -144,21 +144,23 @@ function AccountFields({
     onChange({ institution, ...(draft.name.trim() ? {} : { name: institution }) });
   return (
     <>
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor={`${prefix}-name`}>
+      <TextField
+        className={styles.field}
+        isDisabled={disabled}
+        isInvalid={Boolean(errors.name)}
+        name="name"
+        onChange={(name) => onChange({ name })}
+        value={draft.name}
+      >
+        <Label className={styles.label} htmlFor={`${prefix}-name`}>
           Account name
-        </label>
-        <input
+        </Label>
+        <Input
           aria-describedby={errors.name ? `${prefix}-name-error` : `${prefix}-name-hint`}
-          aria-invalid={Boolean(errors.name)}
           className={styles.input}
-          disabled={disabled}
           id={`${prefix}-name`}
           maxLength={100}
-          name="name"
-          onChange={(event) => onChange({ name: event.target.value })}
           placeholder="e.g. BCA, GoPay or Cash"
-          value={draft.name}
         />
         <p className={styles.meta} id={`${prefix}-name-hint`}>
           A name for the bank account, wallet or cash you track.
@@ -168,7 +170,7 @@ function AccountFields({
             {errors.name}
           </p>
         )}
-      </div>
+      </TextField>
       <fieldset className={styles.field} disabled={disabled}>
         <legend className={styles.label}>Type</legend>
         <div className="mt-1 flex gap-2">
@@ -188,20 +190,24 @@ function AccountFields({
       </fieldset>
       {draft.accountType !== "cash" && (
         <div className={styles.field}>
-          <label className={styles.label} htmlFor={`${prefix}-institution`}>
-            Institution <span className="font-normal text-muted">(optional)</span>
-          </label>
-          <input
-            aria-describedby={errors.institution ? `${prefix}-institution-error` : undefined}
-            aria-invalid={Boolean(errors.institution)}
-            className={styles.input}
-            disabled={disabled}
-            id={`${prefix}-institution`}
-            maxLength={150}
+          <TextField
+            className={styles.field}
+            isDisabled={disabled}
+            isInvalid={Boolean(errors.institution)}
             name="institution"
-            onChange={(event) => onChange({ institution: event.target.value })}
+            onChange={(institution) => onChange({ institution })}
             value={draft.institution}
-          />
+          >
+            <Label className={styles.label} htmlFor={`${prefix}-institution`}>
+              Institution <span className="font-normal text-muted">(optional)</span>
+            </Label>
+            <Input
+              aria-describedby={errors.institution ? `${prefix}-institution-error` : undefined}
+              className={styles.input}
+              id={`${prefix}-institution`}
+              maxLength={150}
+            />
+          </TextField>
           <fieldset className="mt-2 flex flex-wrap gap-2">
             <legend className="sr-only">Common institutions</legend>
             {institutionChoices[draft.accountType].map((brand) => {

@@ -1,147 +1,285 @@
 "use client";
 
-import { startWhatsAppLinkResultSchema } from "@monara/contracts";
-import { Button, FieldError, Input, Label, TextField } from "@monara/ui";
-import { type FormEvent, useEffect, useState } from "react";
+import { Button, Input, Label, TextField } from "@monara/ui";
+import Link from "next/link";
+import { useEffect, useId, useRef } from "react";
 
-import { loadWhatsAppLink, sendWhatsAppLink, type WhatsAppLinkView } from "@/lib/whatsapp/client";
+import { ModalDialog } from "@/components/modal-dialog";
+import { useWhatsAppLink } from "@/components/use-whatsapp-link";
 
-/**
- * Settings row for the WhatsApp Link (F12). The User enters their number, gets a
- * six-digit code, and sends it from that number to Monara on WhatsApp.
- */
-export function WhatsAppLinkRow() {
-  const [view, setView] = useState<WhatsAppLinkView>({ step: "loading" });
-  const [form, setForm] = useState({ phone: "", pending: false, error: null as string | null });
+type LinkControls = ReturnType<typeof useWhatsAppLink>;
 
-  const refresh = async () => setView(await loadWhatsAppLink());
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadWhatsAppLink(controller.signal).then((next) => {
-      if (!controller.signal.aborted) setView(next);
-    });
-    return () => controller.abort();
-  }, []);
-
-  const send = async (method: "POST" | "DELETE", body?: unknown) => {
-    setForm((previous) => ({ ...previous, pending: true, error: null }));
-    try {
-      const result = await sendWhatsAppLink(method, body);
-      setForm({ phone: "", pending: false, error: null });
-      return result;
-    } catch (error) {
-      setForm((previous) => ({
-        ...previous,
-        pending: false,
-        error: error instanceof Error ? error.message : "That didn't work. Try again.",
-      }));
-      return null;
-    }
-  };
-
-  const start = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const result = await send("POST", { phone: form.phone });
-    if (result) setView({ step: "code", challenge: startWhatsAppLinkResultSchema.parse(result) });
-  };
-
-  const unlink = async () => {
-    if ((await send("DELETE")) !== null) await refresh();
-  };
-
-  if (view.step === "loading") return <Status detail="Checking your link…" end="…" />;
-  if (view.step === "unavailable") return <Status detail={view.message} end="Unavailable" />;
-
-  if (view.step === "code") {
-    const { challenge } = view;
-    const sendTo = challenge.sendTo;
-    return (
-      <div className="py-3">
-        <p className="text-sm font-medium">WhatsApp</p>
-        <p className="mt-1 text-xs leading-5 text-muted">
-          From the number ending {challenge.phoneLastFour}, send this code to Monara on WhatsApp
-          {sendTo ? ` (${sendTo})` : ""} within 10 minutes.
+function Feedback({ controls }: { controls: LinkControls }) {
+  return (
+    <>
+      {controls.error && (
+        <p className="mt-2 text-xs leading-5 text-danger" role="alert">
+          {controls.error}
         </p>
-        <p className="mt-3 font-mono text-2xl font-semibold tracking-[0.3em]">{challenge.code}</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {sendTo ? (
-            <a
-              className="inline-flex min-h-11 items-center rounded-full bg-accent px-4 text-sm font-semibold text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-              href={`https://wa.me/${sendTo.slice(1)}?text=${challenge.code}`}
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              Open WhatsApp
-            </a>
-          ) : null}
-          <Button className="min-h-11" onPress={() => void refresh()} variant="secondary">
-            I&apos;ve sent it
-          </Button>
-        </div>
-      </div>
-    );
-  }
+      )}
+      {controls.notice && !controls.error && (
+        <p className="mt-2 text-xs leading-5 text-muted" role="status">
+          {controls.notice}
+        </p>
+      )}
+    </>
+  );
+}
 
-  const { link } = view;
-  if (link.status === "verified") {
-    return (
-      <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 py-2.5">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">WhatsApp</p>
-          <p className="mt-1 text-xs leading-5 text-muted">
-            Linked to the number ending {link.phoneLastFour}. Chat with Monara there.
-          </p>
-          {form.error ? <p className="mt-1 text-xs text-danger">{form.error}</p> : null}
-        </div>
+function CheckStatus({ controls }: { controls: LinkControls }) {
+  return controls.requiresSignIn ? (
+    <Link
+      className="inline-flex min-h-11 items-center rounded-full px-4 text-sm font-semibold text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      href="/sign-in?next=/profile"
+    >
+      Sign in again
+    </Link>
+  ) : (
+    <Button
+      className="min-h-11"
+      isDisabled={controls.checking || controls.mutation !== null}
+      onPress={() => void controls.refresh()}
+      variant="secondary"
+    >
+      {controls.checking ? "Checking…" : "Check status"}
+    </Button>
+  );
+}
+
+function Challenge({
+  controls,
+  onChangeNumber,
+}: {
+  controls: LinkControls;
+  onChangeNumber: () => void;
+}) {
+  const challenge = controls.challenge;
+  const codeRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    codeRef.current?.focus({ preventScroll: true });
+  }, []);
+  if (!challenge) return null;
+  return (
+    <>
+      <p className="mt-1 text-xs leading-5 text-muted">
+        Send this code from your number ending {challenge.phoneLastFour} to Monara.
+      </p>
+      <p
+        className="mt-3 select-all rounded-lg font-mono text-2xl font-semibold tracking-[0.3em] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        ref={codeRef}
+        tabIndex={-1}
+      >
+        <span aria-hidden>{challenge.code}</span>
+        <span className="sr-only">Verification code {challenge.code.split("").join(" ")}</span>
+      </p>
+      <p className="mt-1 text-xs leading-5 text-muted">
+        Expires at{" "}
+        <time dateTime={challenge.expiresAt}>
+          {new Date(challenge.expiresAt).toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            timeZone: "UTC",
+          })}
+        </time>
+        {" UTC"}
+      </p>
+      {!challenge.sendTo && (
+        <p className="mt-2 text-xs leading-5 text-warning-soft-foreground" role="status">
+          Monara’s WhatsApp number is unavailable. Try again later.
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {challenge.sendTo && !controls.requiresSignIn && (
+          <a
+            className="inline-flex min-h-11 items-center rounded-full bg-accent px-4 text-sm font-semibold text-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            href={`https://wa.me/${challenge.sendTo.slice(1)}?text=${challenge.code}`}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Open WhatsApp
+          </a>
+        )}
+        <CheckStatus controls={controls} />
         <Button
           className="min-h-11"
-          isDisabled={form.pending}
-          onPress={() => void unlink()}
-          variant="secondary"
+          isDisabled={
+            controls.mutation !== null || controls.recoveryRequired || controls.requiresSignIn
+          }
+          onPress={onChangeNumber}
+          variant="ghost"
         >
-          Unlink
+          Change number
         </Button>
       </div>
-    );
-  }
+    </>
+  );
+}
 
+function LinkForm({ controls, phoneId }: { controls: LinkControls; phoneId: string }) {
+  const disabled =
+    controls.mutation !== null ||
+    controls.recoveryRequired ||
+    controls.requiresSignIn ||
+    controls.link === null;
+  const pending = controls.link?.status === "pending";
   return (
-    <form className="py-3" onSubmit={(event) => void start(event)}>
-      <p className="text-sm font-medium">WhatsApp</p>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void controls.start();
+      }}
+    >
       <p className="mt-1 text-xs leading-5 text-muted">
-        {link.status === "pending"
-          ? `Waiting for the code from the number ending ${link.phoneLastFour}. Get a new code if you lost it.`
-          : "Link your number to log spending and ask questions on WhatsApp."}
+        {pending
+          ? controls.expired
+            ? "Get a new code to finish linking your number."
+            : "A new code replaces the current one."
+          : "Link your number to chat with Monara on WhatsApp."}
       </p>
       <TextField
         className="mt-3"
-        isDisabled={form.pending}
-        isInvalid={Boolean(form.error)}
+        isDisabled={disabled}
+        isInvalid={controls.phoneInvalid}
         name="phone"
-        onChange={(phone) => setForm((previous) => ({ ...previous, phone, error: null }))}
+        onChange={controls.setPhone}
         type="tel"
-        value={form.phone}
+        value={controls.phone}
       >
-        <Label>Number with country code</Label>
-        <Input className="min-h-11 text-base" inputMode="tel" placeholder="+62 812 3456 7890" />
-        <FieldError>{form.error}</FieldError>
+        <Label htmlFor={phoneId}>Number with country code</Label>
+        <Input
+          className="min-h-11 text-base"
+          id={phoneId}
+          inputMode="tel"
+          maxLength={40}
+          placeholder="+62 812 3456 7890"
+        />
       </TextField>
-      <Button className="mt-3 min-h-11" isDisabled={form.pending} type="submit">
-        {link.status === "pending" ? "Get a new code" : "Get a code"}
-      </Button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button className="min-h-11" isDisabled={disabled} type="submit">
+          {controls.mutation === "start"
+            ? "Getting a code…"
+            : pending
+              ? "Get a new code"
+              : "Get a code"}
+        </Button>
+        {(pending || controls.recoveryRequired || controls.requiresSignIn) && (
+          <CheckStatus controls={controls} />
+        )}
+      </div>
     </form>
   );
 }
 
-function Status({ detail, end }: { detail: string; end: string }) {
+function Linked({ controls }: { controls: LinkControls }) {
+  if (controls.link?.status !== "verified") return null;
   return (
-    <div className="flex min-h-16 items-center gap-3 py-2.5">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">WhatsApp</p>
-        <p className="mt-1 text-xs leading-5 text-muted">{detail}</p>
+    <>
+      <p className="mt-1 text-xs leading-5 text-muted">
+        Number ending {controls.link.phoneLastFour}.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          className="min-h-11"
+          isDisabled={
+            controls.mutation !== null || controls.recoveryRequired || controls.requiresSignIn
+          }
+          onPress={controls.requestUnlink}
+          variant="secondary"
+        >
+          Unlink
+        </Button>
+        {(controls.recoveryRequired || controls.requiresSignIn) && (
+          <CheckStatus controls={controls} />
+        )}
       </div>
-      <div className="shrink-0 text-right text-xs font-medium text-muted">{end}</div>
+    </>
+  );
+}
+
+function UnlinkConfirmation({ controls }: { controls: LinkControls }) {
+  const title = useId();
+  if (controls.link?.status !== "verified" || !controls.confirmUnlink) return null;
+  return (
+    <ModalDialog labelledBy={title} onClose={controls.cancelUnlink}>
+      <div aria-busy={controls.mutation === "unlink"} className="p-6">
+        <h2 className="text-xl font-bold" id={title}>
+          Unlink WhatsApp?
+        </h2>
+        <p className="mt-3 text-sm leading-6 text-muted">
+          This number will lose access to your Monara records on WhatsApp.
+        </p>
+        <Feedback controls={controls} />
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button
+            className="min-h-11"
+            isDisabled={controls.mutation !== null}
+            onPress={controls.cancelUnlink}
+            variant="secondary"
+          >
+            Keep linked
+          </Button>
+          {controls.recoveryRequired || controls.requiresSignIn ? (
+            <CheckStatus controls={controls} />
+          ) : (
+            <Button
+              className="min-h-11"
+              isDisabled={controls.mutation !== null}
+              onPress={() => void controls.unlink()}
+              variant="danger"
+            >
+              {controls.mutation === "unlink" ? "Unlinking…" : "Unlink number"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </ModalDialog>
+  );
+}
+
+function LinkContent({
+  controls,
+  phoneId,
+  onChangeNumber,
+}: {
+  controls: LinkControls;
+  phoneId: string;
+  onChangeNumber: () => void;
+}) {
+  if (controls.link === null) {
+    return controls.checking ? (
+      <p className="mt-1 text-xs leading-5 text-muted" role="status">
+        Checking your link…
+      </p>
+    ) : (
+      <div className="mt-3">
+        <CheckStatus controls={controls} />
+      </div>
+    );
+  }
+  if (controls.link.status === "verified") return <Linked controls={controls} />;
+  if (controls.challenge) return <Challenge controls={controls} onChangeNumber={onChangeNumber} />;
+  return <LinkForm controls={controls} phoneId={phoneId} />;
+}
+
+/** One-time linking codes stay in this mounted row; no number or code is persisted. */
+export function WhatsAppLinkRow() {
+  const controls = useWhatsAppLink();
+  const phoneId = useId();
+  const changeNumber = () => {
+    controls.editNumber();
+    requestAnimationFrame(() => document.getElementById(phoneId)?.focus());
+  };
+  return (
+    <div aria-busy={controls.mutation !== null} className="min-w-0 py-3">
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <p className="text-sm font-medium">WhatsApp</p>
+        {controls.link?.status === "verified" && (
+          <span className="text-xs font-medium text-success">Linked</span>
+        )}
+      </div>
+      <LinkContent controls={controls} phoneId={phoneId} onChangeNumber={changeNumber} />
+      {!controls.confirmUnlink && <Feedback controls={controls} />}
+      <UnlinkConfirmation controls={controls} />
     </div>
   );
 }

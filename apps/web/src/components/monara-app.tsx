@@ -428,6 +428,7 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
           onClose={navigation.closePopup}
           onEdit={() => navigation.openEdit(selected.id)}
           onConfirm={() => confirm(selected.id)}
+          onExclude={() => navigation.openReject(selected.id)}
           onDelete={() => deleteTransaction(selected)}
           pending={mutationPending}
           confirmationError={confirmError}

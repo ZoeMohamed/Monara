@@ -5,23 +5,23 @@ import { useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
 
 import { FinancialSummary } from "@/components/financial-summary";
-import { Icon } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
-import { ReviewQueue } from "@/components/review-queue";
 import { TransactionRow } from "@/components/transaction-row";
 import styles from "@/components/transactions-screen.module.css";
 import type { LedgerKind } from "@/data/app-navigation";
-import { demoToday, formatMonth, type Transaction } from "@/data/demo-ledger";
+import { demoToday, formatMonth, type Transaction, transactionErrors } from "@/data/demo-ledger";
 
 import { financialSummaryModel } from "@/data/finance-analytics";
 
 type KindFilter = LedgerKind;
 
-const kindFilters: { id: KindFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "expense", label: "Expenses" },
-  { id: "income", label: "Income" },
-  { id: "exclusion", label: "Exclusions" },
+// With nothing selected the list shows everything, so there is no "All" chip. The icons
+// match the summary card: the arrow for spending, the tray for income.
+const kindFilters: { id: Exclude<KindFilter, "all">; label: string; icon: IconName }[] = [
+  { id: "expense", label: "Expenses", icon: "trend-up" },
+  { id: "income", label: "Income", icon: "income" },
+  { id: "exclusion", label: "Exclusions", icon: "eye-off" },
 ];
 
 const ledgerDayFormatter = new Intl.DateTimeFormat("en-US", {
@@ -31,18 +31,23 @@ const ledgerDayFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+const undatedKey = "undated";
+
+/** Newest day first. Imports with no date have no day to sit under, so they lead the list. */
 function groupByDate(transactions: Transaction[]) {
   const groups = new Map<string, { transactions: Transaction[]; spending: bigint }>();
   for (const transaction of transactions) {
-    if (!transaction.date) continue;
-    const group = groups.get(transaction.date) ?? { transactions: [], spending: BigInt(0) };
+    const key = transaction.date ?? undatedKey;
+    const group = groups.get(key) ?? { transactions: [], spending: BigInt(0) };
     group.transactions.push(transaction);
     if (transaction.status === "confirmed" && transaction.kind === "expense") {
       group.spending += BigInt(transaction.amount ?? 0);
     }
-    groups.set(transaction.date, group);
+    groups.set(key, group);
   }
-  return [...groups].sort(([first], [second]) => second.localeCompare(first));
+  return [...groups].sort(([first], [second]) =>
+    first === undatedKey ? -1 : second === undatedKey ? 1 : second.localeCompare(first),
+  );
 }
 
 function filteredTransactions(transactions: Transaction[], query: string, kind: KindFilter) {
@@ -50,76 +55,40 @@ function filteredTransactions(transactions: Transaction[], query: string, kind: 
   return transactions
     .filter(
       (transaction) =>
-        transaction.status === "confirmed" &&
         (kind === "all" || transaction.kind === kind) &&
         `${transaction.merchant ?? ""} ${transaction.category ?? ""} ${transaction.method ?? ""}`
           .toLowerCase()
           .includes(normalizedQuery),
     )
     .sort((first, second) =>
-      `${second.date} ${second.time ?? ""}`.localeCompare(`${first.date} ${first.time ?? ""}`),
+      `${second.date ?? ""} ${second.time ?? ""}`.localeCompare(
+        `${first.date ?? ""} ${first.time ?? ""}`,
+      ),
     );
-}
-
-function TransactionViewSelector({
-  reviewOpen,
-  pendingCount,
-  onChange,
-}: {
-  reviewOpen: boolean;
-  pendingCount: number;
-  onChange: (review: boolean) => void;
-}) {
-  const tab = (active: boolean) =>
-    `min-h-11 w-full min-w-0 rounded-xl px-3 text-sm font-semibold ${active ? "bg-surface text-foreground shadow-sm" : "text-muted"}`;
-  return (
-    <fieldset
-      aria-label="Transaction view"
-      className="mt-4 grid grid-cols-2 gap-1 rounded-2xl bg-surface-secondary p-1"
-    >
-      <Button
-        aria-pressed={!reviewOpen}
-        className={tab(!reviewOpen)}
-        onPress={() => onChange(false)}
-        variant="ghost"
-      >
-        History
-      </Button>
-      <Button
-        aria-label={`To review, ${pendingCount} waiting`}
-        aria-pressed={reviewOpen}
-        className={tab(reviewOpen)}
-        onPress={() => onChange(true)}
-        variant="ghost"
-      >
-        To review
-        {pendingCount > 0 ? (
-          <span
-            aria-hidden
-            className="grid h-5 min-w-5 place-items-center rounded-full bg-warning px-1.5 text-[11px] font-bold text-warning-foreground tabular-nums"
-          >
-            {pendingCount}
-          </span>
-        ) : null}
-      </Button>
-    </fieldset>
-  );
 }
 
 function LedgerFilters({
   query,
   kindFilter,
+  reviewOpen,
+  pendingCount,
   onQueryChange,
   onKindChange,
+  onReviewChange,
 }: {
   query: string;
   kindFilter: KindFilter;
+  reviewOpen: boolean;
+  pendingCount: number;
   onQueryChange: (query: string) => void;
   onKindChange: (kind: KindFilter) => void;
+  onReviewChange: (open: boolean) => void;
 }) {
+  const chip = (active: boolean) =>
+    `h-9 min-h-9 min-w-0 shrink-0 gap-1.5 rounded-full px-3.5 text-xs font-bold ${active ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`;
   return (
     <>
-      <TextField className="mt-4 min-w-0" onChange={onQueryChange} value={query}>
+      <TextField className="mt-3 min-w-0" onChange={onQueryChange} value={query}>
         <Label className="sr-only">Search</Label>
         <InputGroup className="rounded-2xl">
           <InputGroup.Prefix>
@@ -134,20 +103,42 @@ function LedgerFilters({
         </InputGroup>
       </TextField>
       <fieldset
-        aria-label="Filter by transaction type"
-        className="mt-3 flex min-w-0 gap-2 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
+        aria-label="Filter transactions"
+        className="mt-2 flex min-w-0 gap-2 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
       >
-        {kindFilters.map((filter) => (
-          <Button
-            aria-pressed={kindFilter === filter.id}
-            className={`min-h-11 min-w-0 shrink-0 rounded-full px-4 text-xs font-bold ${kindFilter === filter.id ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`}
-            key={filter.id}
-            onPress={() => onKindChange(filter.id)}
-            variant="ghost"
-          >
-            {filter.label}
-          </Button>
-        ))}
+        <Button
+          aria-label={`To review, ${pendingCount} waiting`}
+          aria-pressed={reviewOpen}
+          className={chip(reviewOpen)}
+          onPress={() => onReviewChange(!reviewOpen)}
+          variant="ghost"
+        >
+          <Icon className="h-4 w-4" name="inbox" />
+          To review
+          {pendingCount > 0 ? (
+            <span
+              aria-hidden
+              className="grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-accent-foreground tabular-nums"
+            >
+              {pendingCount}
+            </span>
+          ) : null}
+        </Button>
+        {kindFilters.map((filter) => {
+          const active = !reviewOpen && kindFilter === filter.id;
+          return (
+            <Button
+              aria-pressed={active}
+              className={chip(active)}
+              key={filter.id}
+              onPress={() => onKindChange(active ? "all" : filter.id)}
+              variant="ghost"
+            >
+              <Icon className="h-4 w-4" name={filter.icon} />
+              {filter.label}
+            </Button>
+          );
+        })}
       </fieldset>
     </>
   );
@@ -164,15 +155,20 @@ function LedgerResultCount({
   filtersActive: boolean;
   onClear: () => void;
 }) {
+  // The count is read out to screen readers always, and shown only while a filter narrows the list.
+  const count = (
+    <p className={filtersActive ? "text-xs text-muted" : "sr-only"} role="status">
+      {visibleCount} {visibleCount === 1 ? "transaction" : "transactions"}
+      {filtersActive ? ` of ${totalCount}` : ""}
+    </p>
+  );
+  if (!filtersActive) return count;
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-      <p className="text-xs text-muted" role="status">
-        {visibleCount} {visibleCount === 1 ? "transaction" : "transactions"}
-        {filtersActive ? ` of ${totalCount}` : ""}
-      </p>
-      {filtersActive && (visibleCount > 0 || totalCount === 0) ? (
+    <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+      {count}
+      {visibleCount > 0 || totalCount === 0 ? (
         <Button
-          className="min-h-11 rounded-full text-xs text-accent"
+          className="h-9 min-h-9 rounded-full text-xs text-accent"
           onPress={onClear}
           size="sm"
           variant="ghost"
@@ -187,20 +183,26 @@ function LedgerResultCount({
 function GroupedLedger({
   transactions,
   openTransaction,
+  onConfirm,
 }: {
   transactions: Transaction[];
   openTransaction: (transaction: Transaction) => void;
+  onConfirm: (id: string) => void;
 }) {
   const { formatRupiah } = useAmountDisplay();
   return (
-    <div className="mt-3 space-y-4">
+    <div className="mt-2 space-y-3">
       {groupByDate(transactions).map(([date, group]) => (
         <section aria-labelledby={`ledger-day-${date}`} key={date}>
-          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-2 lg:px-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-1 lg:px-5">
             <h2 className="min-w-0 text-sm font-semibold" id={`ledger-day-${date}`}>
-              <time dateTime={date}>
-                {ledgerDayFormatter.format(new Date(`${date}T00:00:00Z`))}
-              </time>
+              {date === undatedKey ? (
+                "No date"
+              ) : (
+                <time dateTime={date}>
+                  {ledgerDayFormatter.format(new Date(`${date}T00:00:00Z`))}
+                </time>
+              )}
             </h2>
             {group.spending > BigInt(0) ? (
               <p className="text-xs font-medium text-muted tabular-nums [overflow-wrap:anywhere]">
@@ -213,6 +215,12 @@ function GroupedLedger({
               <TransactionRow
                 key={transaction.id}
                 onClick={() => openTransaction(transaction)}
+                onConfirm={
+                  transaction.status === "pending" &&
+                  Object.keys(transactionErrors(transaction)).length === 0
+                    ? () => onConfirm(transaction.id)
+                    : undefined
+                }
                 transaction={transaction}
               />
             ))}
@@ -225,31 +233,39 @@ function GroupedLedger({
 
 function EmptyLedger({
   month,
-  noConfirmed,
+  reviewing,
+  noTransactions,
   onClear,
   onAdd,
   onReview,
   onConnectGmail,
 }: {
   month: string;
-  noConfirmed: boolean;
+  reviewing: boolean;
+  noTransactions: boolean;
   onClear: () => void;
   onAdd?: () => void;
   onReview?: () => void;
   onConnectGmail?: () => void;
 }) {
+  if (reviewing && noTransactions) {
+    return (
+      <Card className="mt-3 block min-w-0 gap-0 rounded-3xl border border-dashed border-border bg-surface p-5 text-center">
+        <h2 className="text-base font-bold">You’re all caught up.</h2>
+        <p className="mt-1 text-sm text-muted">Imports wait here until you confirm them.</p>
+      </Card>
+    );
+  }
   return (
     <Card className="mt-3 block min-w-0 gap-0 rounded-3xl border border-dashed border-border bg-surface p-5 text-center">
-      <h2 className="text-base font-bold">
-        {noConfirmed ? "No confirmed transactions" : "No matches"}
-      </h2>
+      <h2 className="text-base font-bold">{noTransactions ? "No transactions" : "No matches"}</h2>
       <p className="mt-1 text-sm text-muted">
-        {noConfirmed
+        {noTransactions
           ? `Add a transaction for ${formatMonth(month)}${onReview ? " or review your imports" : ""}.`
           : "Try another search or clear your filters."}
       </p>
       <div className="mt-4 flex flex-wrap justify-center gap-2">
-        {noConfirmed ? (
+        {noTransactions ? (
           <>
             {onAdd ? (
               <Button className="min-h-11" onPress={onAdd}>
@@ -277,48 +293,61 @@ function EmptyLedger({
   );
 }
 
-function ConfirmedLedger({
+function Ledger({
   transactions,
   month,
   today,
+  reviewOpen,
+  pendingCount,
   openTransaction,
   query,
   kindFilter,
   onQueryChange,
   onKindChange,
+  onReviewChange,
+  onConfirm,
   onClearFilters,
   onAdd,
-  onReview,
   onConnectGmail,
 }: {
   transactions: Transaction[];
   month: string;
   today: string;
+  reviewOpen: boolean;
+  pendingCount: number;
   openTransaction: (transaction: Transaction) => void;
   query: string;
   kindFilter: KindFilter;
   onQueryChange: (query: string) => void;
   onKindChange: (kind: KindFilter) => void;
+  onReviewChange: (open: boolean) => void;
+  onConfirm: (id: string) => void;
   onClearFilters: () => void;
   onAdd?: () => void;
-  onReview?: () => void;
   onConnectGmail?: () => void;
 }) {
-  const ledger = transactions.filter(
-    (transaction) =>
-      transaction.date?.startsWith(`${month}-`) && transaction.status === "confirmed",
-  );
-  const visible = filteredTransactions(ledger, query, kindFilter);
-  const filtersActive = query.trim().length > 0 || kindFilter !== "all";
+  // To review lists every import waiting, whatever its month; the other filters stay in the month.
+  const ledger = reviewOpen
+    ? transactions.filter((transaction) => transaction.status === "pending")
+    : transactions.filter(
+        (transaction) => transaction.date === null || transaction.date.startsWith(`${month}-`),
+      );
+  const visible = filteredTransactions(ledger, query, reviewOpen ? "all" : kindFilter);
+  const filtersActive = query.trim().length > 0 || (!reviewOpen && kindFilter !== "all");
 
   return (
     <>
-      <FinancialSummary model={financialSummaryModel(transactions, month, today)} />
+      {reviewOpen ? null : (
+        <FinancialSummary compact model={financialSummaryModel(transactions, month, today)} />
+      )}
       <LedgerFilters
         query={query}
         kindFilter={kindFilter}
+        reviewOpen={reviewOpen}
+        pendingCount={pendingCount}
         onQueryChange={onQueryChange}
         onKindChange={onKindChange}
+        onReviewChange={onReviewChange}
       />
       <LedgerResultCount
         visibleCount={visible.length}
@@ -327,14 +356,19 @@ function ConfirmedLedger({
         onClear={onClearFilters}
       />
       {visible.length > 0 ? (
-        <GroupedLedger transactions={visible} openTransaction={openTransaction} />
+        <GroupedLedger
+          transactions={visible}
+          openTransaction={openTransaction}
+          onConfirm={onConfirm}
+        />
       ) : (
         <EmptyLedger
           month={month}
-          noConfirmed={ledger.length === 0}
+          reviewing={reviewOpen}
+          noTransactions={ledger.length === 0}
           onClear={onClearFilters}
           onAdd={onAdd}
-          onReview={onReview}
+          onReview={pendingCount > 0 ? () => onReviewChange(true) : undefined}
           onConnectGmail={onConnectGmail}
         />
       )}
@@ -347,9 +381,7 @@ export function TransactionsScreen({
   openTransaction,
   reviewOpen,
   setReviewOpen,
-  onEdit,
   onConfirm,
-  onReject,
   month,
   today = demoToday,
   setMonth,
@@ -365,9 +397,7 @@ export function TransactionsScreen({
   openTransaction: (transaction: Transaction) => void;
   reviewOpen: boolean;
   setReviewOpen: (value: boolean) => void;
-  onEdit: (id: string) => void;
   onConfirm: (id: string) => void;
-  onReject: (id: string) => void;
   month: string;
   today?: string;
   setMonth: (month: string) => void;
@@ -392,9 +422,13 @@ export function TransactionsScreen({
     else setFilters((current) => ({ ...current, query: value }));
   }
 
+  // Picking a type leaves To review, so the chips act as one choice.
   function changeKind(value: KindFilter) {
     if (onKindChange) onKindChange(value);
-    else setFilters((current) => ({ ...current, kind: value }));
+    else {
+      setFilters((current) => ({ ...current, kind: value }));
+      setReviewOpen(false);
+    }
   }
 
   function clearFilters() {
@@ -417,34 +451,23 @@ export function TransactionsScreen({
           <MonthSelector month={month} currentMonth={today.slice(0, 7)} onChange={setMonth} />
         ) : null}
       </div>
-      <TransactionViewSelector
+      <Ledger
+        transactions={transactions}
+        month={month}
+        today={today}
         reviewOpen={reviewOpen}
         pendingCount={pendingCount}
-        onChange={setReviewOpen}
+        openTransaction={openTransaction}
+        query={query}
+        kindFilter={kindFilter}
+        onQueryChange={changeQuery}
+        onKindChange={changeKind}
+        onReviewChange={setReviewOpen}
+        onConfirm={onConfirm}
+        onClearFilters={clearFilters}
+        onAdd={onAdd}
+        onConnectGmail={onConnectGmail}
       />
-      {reviewOpen ? (
-        <ReviewQueue
-          transactions={transactions}
-          onEdit={onEdit}
-          onConfirm={onConfirm}
-          onReject={onReject}
-        />
-      ) : (
-        <ConfirmedLedger
-          transactions={transactions}
-          month={month}
-          today={today}
-          openTransaction={openTransaction}
-          query={query}
-          kindFilter={kindFilter}
-          onQueryChange={changeQuery}
-          onKindChange={changeKind}
-          onClearFilters={clearFilters}
-          onAdd={onAdd}
-          onReview={pendingCount > 0 ? () => setReviewOpen(true) : undefined}
-          onConnectGmail={onConnectGmail}
-        />
-      )}
     </div>
   );
 }
