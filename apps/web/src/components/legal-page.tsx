@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { BackButton } from "@/components/back-button";
 import { Logo } from "@/components/logo";
 
 /** A plain public page for the legal text. The wording is still a placeholder. */
@@ -17,9 +18,7 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
         </p>
         {children}
       </div>
-      <Link className="font-bold text-[var(--accent)] text-sm underline" href="/">
-        Back to Monara
-      </Link>
+      <BackButton />
     </main>
   );
 }

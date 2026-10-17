@@ -141,6 +141,19 @@ function ProfileAccount() {
   );
 }
 
+function ProfileLegal() {
+  return (
+    <Group id="legal" title="Legal">
+      <LinkRow detail="The terms for using Monara." href="/terms" title="Terms" />
+      <LinkRow
+        detail="How your email and data are handled."
+        href="/privacy"
+        title="Privacy Policy"
+      />
+    </Group>
+  );
+}
+
 function ProfileReminderSettings() {
   return (
     <Group id="reminders" title="Reminder settings">
@@ -218,6 +231,7 @@ export function ProfileScreen({
       {demo ? null : <ProfileAccount />}
       <ProfileReminderSettings />
       <ProfileAppSettings online={online} onReplayTour={onReplayTour} />
+      <ProfileLegal />
       <p className="mt-4 px-1 text-xs leading-5 text-muted">
         Your records are private to you. Monara never stores Gmail passwords or OAuth tokens, and
         nothing financial is saved for offline use.

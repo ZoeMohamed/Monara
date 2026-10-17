@@ -1,15 +1,7 @@
 "use client";
 
 import { Button } from "@monara/ui";
-import Link from "next/link";
-import {
-  type CSSProperties,
-  type ReactNode,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { type CSSProperties, type ReactNode, useLayoutEffect, useRef } from "react";
 
 import { Icon, type IconName } from "@/components/icon";
 import { type AvatarScene, OnboardingAvatar } from "@/components/onboarding-avatar";
@@ -218,17 +210,15 @@ export function ConnectStep({
   error: string | null;
   onConnect: () => void;
 }) {
-  const [agreed, setAgreed] = useState(false);
-  const agreeId = useId();
   return (
     <SheetStep
       actions={
-        <Button className="min-h-12" isDisabled={!agreed} isPending={pending} onPress={onConnect}>
+        <Button className="min-h-12" isPending={pending} onPress={onConnect}>
           <ButtonIcon name="mail" />
           Connect Gmail
         </Button>
       }
-      avatarHeight={104}
+      avatarHeight={128}
       centered
       scene="connect"
       step={0}
@@ -246,25 +236,6 @@ export function ConnectStep({
           </li>
         ))}
       </ul>
-      <label className={styles.agree} htmlFor={agreeId}>
-        <input
-          checked={agreed}
-          id={agreeId}
-          onChange={(event) => setAgreed(event.target.checked)}
-          type="checkbox"
-        />
-        <span>
-          I agree to the{" "}
-          <Link href="/terms" rel="noopener" target="_blank">
-            Terms
-          </Link>{" "}
-          and{" "}
-          <Link href="/privacy" rel="noopener" target="_blank">
-            Privacy Policy
-          </Link>
-          .
-        </span>
-      </label>
       {error ? (
         <p className={styles.error} role="alert">
           {error}
