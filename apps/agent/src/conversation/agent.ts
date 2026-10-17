@@ -27,6 +27,22 @@ const mutationResultSchema = z.object({ action: reversibleActionReceiptSchema })
 /** PRD 6.2: a destructive action needs an explicit "yes", so nothing looser counts. */
 const isYes = (text: string) => /^yes[.!]?$/i.test(text.trim());
 
+/**
+ * The model sometimes writes em or en dashes despite the prompt, so they are
+ * taken out here: a dash between numbers becomes a hyphen, any other a comma.
+ */
+export function tidyReply(text: string): string {
+  return (
+    text
+      // Lookarounds leave the digits unconsumed, so every dash in 1–2–3 or 2026–10–13 is kept.
+      .replace(/(?<=\d)\s*[–—]\s*(?=\d)/g, "-")
+      .replace(/\s*[–—]+\s*/g, ", ")
+      .replace(/,\s*([.,!?])/g, "$1")
+      .replace(/^,\s*|,\s*$/gm, "")
+      .trim()
+  );
+}
+
 /** Replays earlier turns. Receipts go in as context, so the model never has to repeat them. */
 function toMessages(history: AgentChatTurn[]): ChatMessage[] {
   return history.flatMap((turn, index): ChatMessage[] => {
@@ -104,7 +120,7 @@ export async function runAgent(input: {
     const message = await complete(messages, definitions);
     messages.push(message);
     if (!message.tool_calls?.length) {
-      const reply = message.content?.trim();
+      const reply = tidyReply(message.content ?? "");
       if (!reply) throw new Error("The model returned an empty reply.");
       return { reply, actions, confirmation };
     }

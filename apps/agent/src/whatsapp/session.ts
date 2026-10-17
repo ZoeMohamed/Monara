@@ -1,12 +1,23 @@
 import type { AgentChatTurn, WhatsAppMessage } from "@monara/contracts";
+import type { KapsoInboundMedia } from "@monara/integrations";
 import type { Respond } from "../conversation/respond.ts";
 
-/** One inbound text from a verified WhatsApp Link, plus where the reply goes. */
-export interface QueuedMessage extends WhatsAppMessage {
+/** One inbound message from a verified WhatsApp Link, plus where the reply goes. */
+export interface QueuedMessage extends Omit<WhatsAppMessage, "text"> {
+  /** Empty for a photo sent without a caption. */
+  text: string;
+  /** A receipt photo stored by Kapso. Only its link is kept, never the bytes. */
+  media?: KapsoInboundMedia | null;
   /** The User's number, digits only. Held only until the reply is sent. */
   to: string;
   phoneNumberId: string;
 }
+
+/** Reads a receipt photo, saves it as pending, and returns the reply. */
+export type ReadReceipt = (message: QueuedMessage) => Promise<string>;
+
+/** What a photo turn looks like in the history the Agent sees next. */
+const PHOTO_TURN = "[Sent a receipt photo]";
 
 interface Outbound {
   to: string;
@@ -44,6 +55,9 @@ const MAX_HISTORY_TURNS = 40;
 /** A conversation is forgotten after this long without a message. */
 export const IDLE_MS = 30 * 60 * 1000;
 
+export const RECEIPT_FAILURE_REPLY =
+  "Sorry, I couldn't read that photo and can't confirm anything was saved. Check your Review Queue in the app, or type it instead.";
+
 export const FAILURE_REPLY =
   "Sorry, something went wrong and I can't confirm what was saved. Please check the app before sending that again.";
 
@@ -72,17 +86,20 @@ let sequence = 0;
 export class ConversationSession {
   private readonly storage: SessionStorage;
   private readonly respond: Respond;
+  private readonly readReceipt: ReadReceipt | null;
   private readonly send: (message: Outbound) => Promise<void>;
   private readonly now: () => number;
 
   constructor(dependencies: {
     storage: SessionStorage;
     respond: Respond;
+    readReceipt?: ReadReceipt;
     send: (message: Outbound) => Promise<void>;
     now: () => number;
   }) {
     this.storage = dependencies.storage;
     this.respond = dependencies.respond;
+    this.readReceipt = dependencies.readReceipt ?? null;
     this.send = dependencies.send;
     this.now = dependencies.now;
   }
@@ -134,6 +151,28 @@ export class ConversationSession {
       if (!message) break;
 
       let text = FAILURE_REPLY;
+      if (message.media) {
+        try {
+          if (!this.readReceipt) throw new Error("Receipt reading is not configured.");
+          text = await this.readReceipt(message);
+        } catch {
+          text = RECEIPT_FAILURE_REPLY;
+        }
+        // The reply goes into the history so "confirm" or "it was BCA" can follow it.
+        state.history = [
+          ...state.history,
+          {
+            role: "user" as const,
+            text: message.text ? `${PHOTO_TURN} ${message.text}` : PHOTO_TURN,
+          },
+          { role: "assistant" as const, text },
+        ].slice(-MAX_HISTORY_TURNS);
+        state.inFlight = null;
+        state.outbox.push({ to: message.to, phoneNumberId: message.phoneNumberId, text });
+        state.lastActiveAt = this.now();
+        await this.storage.put(STATE_KEY, state);
+        continue;
+      }
       try {
         const response = await this.respond({
           caller: { userId: message.userId, channel: "whatsapp" },

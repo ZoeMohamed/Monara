@@ -34,11 +34,6 @@ const dateFormatter = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
   timeZone: "UTC",
 });
-const confidenceFormatter = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 });
-
-function validConfidence(confidence: number | null) {
-  return confidence !== null && Number.isFinite(confidence) && confidence >= 0 && confidence <= 100;
-}
 
 // Live records state their source; demo imports are the ones carrying extraction confidence.
 function sourceOf(transaction: Transaction) {
@@ -68,9 +63,6 @@ function detailsOf(
       ["Type", transaction.kind ? typeLabels[transaction.kind] : "Not selected"],
       ["Currency", transaction.currency || "Not provided"],
       ["Status", statusLabels[transaction.status]],
-      ...(validConfidence(transaction.confidence) && sourceOf(transaction).kind !== "manual_form"
-        ? [["Extraction confidence", `${confidenceFormatter.format(transaction.confidence ?? 0)}%`]]
-        : []),
     ],
     merchant: transaction.merchant || "Transaction",
     when: transaction.time ? `${date} · ${transaction.time}` : date,
@@ -166,6 +158,8 @@ type TransactionDetailsProps = {
   onClose: () => void;
   onEdit: () => void;
   onConfirm: () => void | Promise<void>;
+  /** Opens the exclude confirmation for a pending import. */
+  onExclude?: () => void;
   onDelete?: () => void | Promise<void>;
   pending?: boolean;
   confirmationError?: string | null;
@@ -430,8 +424,16 @@ function TransactionActions({
   deletion: Pick<ReturnType<typeof useTransactionDeletion>, "openDelete">;
   deleteButton: RefObject<HTMLButtonElement | null>;
 }) {
-  const { transaction, onClose, onEdit, onConfirm, onDelete, confirmationError, onRefreshRecords } =
-    props;
+  const {
+    transaction,
+    onClose,
+    onEdit,
+    onConfirm,
+    onExclude,
+    onDelete,
+    confirmationError,
+    onRefreshRecords,
+  } = props;
   const pending = Boolean(props.pending);
   const refreshRequired = Boolean(props.refreshRequired);
   const locked = pending || refreshRequired;
@@ -448,42 +450,60 @@ function TransactionActions({
           onRefreshRecords={onRefreshRecords}
         />
       )}
-      <div className="mt-6 flex flex-wrap justify-end gap-3">
-        {onDelete && transaction.status === "confirmed" && details.valid ? (
+      {details.pending ? (
+        // Closing is the X or a tap outside, so the three review actions share the row equally.
+        <div className="mt-6 grid grid-cols-3 gap-3">
           <Button
-            className="mr-auto min-h-11 text-danger"
-            onPress={deletion.openDelete}
-            ref={deleteButton}
-            variant="ghost"
-            isDisabled={locked}
+            className="min-h-11 w-full gap-1.5 text-danger"
+            isDisabled={!onExclude || locked}
+            onPress={onExclude}
+            variant="secondary"
           >
-            Delete
+            <Icon className="h-4 w-4" name="eye-off" />
+            Exclude
           </Button>
-        ) : null}
-        <Button className="min-h-11" variant="secondary" onPress={onClose} isDisabled={pending}>
-          Close
-        </Button>
-        {details.editable && (
           <Button
-            className="min-h-11"
-            variant={details.pending ? "secondary" : "primary"}
-            onPress={onEdit}
+            className="min-h-11 w-full gap-1.5"
             isDisabled={locked}
+            onPress={onEdit}
+            variant="secondary"
           >
+            <Icon className="h-4 w-4" name="pencil" />
             Edit
           </Button>
-        )}
-        {details.pending && (
           <Button
-            className="min-h-11"
-            isDisabled={!details.valid || locked}
             aria-describedby="transaction-review-help"
+            className="min-h-11 w-full gap-1.5"
+            isDisabled={!details.valid || locked}
             onPress={onConfirm}
           >
+            <Icon className="h-4 w-4" name="check" strokeWidth={2.4} />
             {pending ? "Confirming…" : "Confirm"}
           </Button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          {onDelete && transaction.status === "confirmed" && details.valid ? (
+            <Button
+              className="mr-auto min-h-11 text-danger"
+              onPress={deletion.openDelete}
+              ref={deleteButton}
+              variant="ghost"
+              isDisabled={locked}
+            >
+              Delete
+            </Button>
+          ) : null}
+          <Button className="min-h-11" variant="secondary" onPress={onClose} isDisabled={pending}>
+            Close
+          </Button>
+          {details.editable && (
+            <Button className="min-h-11" variant="primary" onPress={onEdit} isDisabled={locked}>
+              Edit
+            </Button>
+          )}
+        </div>
+      )}
     </>
   );
 }

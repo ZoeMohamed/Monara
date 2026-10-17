@@ -11,6 +11,7 @@ import type { FinancialAttention } from "@/data/financial-attention";
 import type { PersonalReminder, PersonalReminderDraft } from "@/data/personal-reminders";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
 import type { FinanceSnapshot } from "@/lib/finance/presentation";
+import { transactionAccount } from "@/lib/finance/transaction-account";
 
 export type AppSession = {
   profile: AuthenticatedProfile;
@@ -83,6 +84,14 @@ export const AppSessionContext = createContext<AppSession | null>(null);
 export function useAmountDisplay() {
   const session = useContext(AppSessionContext);
   return amountDisplay(session?.amountsHidden ?? false);
+}
+
+/** A transaction's Financial Account from the shared session. Standalone previews have none. */
+export function useTransactionAccount(
+  transaction: Pick<Transaction, "financialAccountId" | "method">,
+) {
+  const session = useContext(AppSessionContext);
+  return session ? transactionAccount(transaction, session.financialAccounts) : undefined;
 }
 
 export function useAppSession(): AppSession {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Category } from "@monara/contracts";
+import type { Category, FinancialInsights } from "@monara/contracts";
 import { Button, Card, Chip, ProgressBar } from "@monara/ui";
 import { type ReactNode, useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
@@ -9,6 +9,7 @@ import { BillCalendar } from "@/components/bill-calendar";
 import { BrandMark } from "@/components/brand-mark";
 import { BudgetDetails } from "@/components/budget-details";
 import budgetStyles from "@/components/budgets-screen.module.css";
+import { CategorySpendingGuide } from "@/components/category-spending-guide";
 import { CategoryAvatar } from "@/components/category-symbol";
 import { type CreateDemoBudgetInput, DemoBudgetCreator } from "@/components/demo-budget-creator";
 import { type DemoBudgetChanges, DemoBudgetEditor } from "@/components/demo-budget-editor";
@@ -653,6 +654,7 @@ export function BudgetsScreen({
   month = demoMonth,
   today = demoToday,
   management,
+  insights,
   demo = true,
   setMonth,
   onConfirmBill,
@@ -670,6 +672,7 @@ export function BudgetsScreen({
   month?: string;
   today?: string;
   management?: ReactNode;
+  insights?: FinancialInsights;
   demo?: boolean;
   setMonth?: (month: string) => void;
   onConfirmBill: (id: string) => void;
@@ -739,6 +742,7 @@ export function BudgetsScreen({
             }}
             onCreate={onRequestCreateBudget ?? (() => setCreating(true))}
           />
+          <CategorySpendingGuide insights={insights} month={month} today={today} />
           {management}
         </div>
         {showBills && (

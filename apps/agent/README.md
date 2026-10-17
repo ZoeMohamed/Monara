@@ -46,7 +46,7 @@ A sender's number is only a claim. For each inbound message the webhook calls `P
 
 A linked User's text goes to their `WhatsAppConversation` Durable Object (`src/whatsapp/conversation.ts`, logic in `session.ts`), and the webhook answers Kapso straight away. The object answers messages one at a time, keeps recent turns so follow-up questions work, and deletes them after 30 minutes of silence. Within the Durable Object, a processed message does not replay the Agent turn; only sending the reply is retried. Live transport/idempotency acceptance remains outstanding.
 
-Photos and voice notes get a fixed reply until extraction (F14) can take them. `WhatsAppTransport.fetchMedia` is ready for that handoff, and `sendTemplate` is ready for Reminders.
+A receipt photo from a linked User is read in its conversation (`src/whatsapp/receipt.ts`) and saved as a pending transaction through `add_receipt_transaction`; see `docs/tech/agent.md`. Voice notes get a fixed reply, and `sendTemplate` is ready for Reminders.
 
 ## Backend operations
 
