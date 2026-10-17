@@ -1,4 +1,4 @@
-import type { MerchantCategorizeJob } from "@monara/contracts";
+import { type MerchantCategorizeJob, merchantKey } from "@monara/contracts";
 import type { BraveSearchClient } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "../gmail/backend.ts";
 import type { LlmClient } from "../gmail/llm.ts";
@@ -43,27 +43,64 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
     }
   }
 
+  /**
+   * Categorizes one transaction. Lookups made earlier in the same job are reused, so
+   * a job's transactions at one merchant cost one search and one model call.
+   */
+  async function runTransaction(
+    transactionId: string,
+    lookups: Map<string, Promise<string | null>> = new Map(),
+  ): Promise<MerchantJobOutcome> {
+    let transaction: Awaited<ReturnType<GmailBackend["resolveImportedTransaction"]>>;
+    try {
+      transaction = await backend.resolveImportedTransaction(transactionId);
+    } catch (error) {
+      if (error instanceof BackendOperationError && error.isNotFound) return "not_needed";
+      throw error;
+    }
+    const { merchantName, needsCategory, categoryNames } = transaction;
+    if (!needsCategory || merchantName === null || categoryNames.length === 0) {
+      return "not_needed";
+    }
+    // One job's transactions come from one User, so their Category names are the same.
+    const key = `${merchantKey(merchantName)}\u0000${categoryNames.join("\u0000")}`;
+    let lookup = lookups.get(key);
+    if (!lookup) {
+      lookup = merchantSummary(merchantName).then((summary) =>
+        chooseCategory(llm, { merchantName, summary, categoryNames }),
+      );
+      lookups.set(key, lookup);
+    }
+    const categoryName = await lookup;
+    if (categoryName === null) return "uncategorized";
+    const applied = await backend.setImportedCategory({ transactionId, categoryName });
+    return applied ? "categorized" : "not_needed";
+  }
+
   return {
-    async runJob(job: MerchantCategorizeJob): Promise<MerchantJobOutcome> {
-      let transaction: Awaited<ReturnType<GmailBackend["resolveImportedTransaction"]>>;
-      try {
-        transaction = await backend.resolveImportedTransaction(job.transactionId);
-      } catch (error) {
-        if (error instanceof BackendOperationError && error.isNotFound) return "not_needed";
-        throw error;
+    runTransaction,
+
+    /**
+     * Categorizes each transaction of a job in turn. A failure does not stop the rest;
+     * the job then throws so the queue retries it, and transactions already categorized
+     * come back as not_needed. A busy merchant wins, so the retry comes soon.
+     */
+    async runJob(job: MerchantCategorizeJob): Promise<MerchantJobOutcome[]> {
+      const transactionIds = "transactionIds" in job ? job.transactionIds : [job.transactionId];
+      const outcomes: MerchantJobOutcome[] = [];
+      const failures: unknown[] = [];
+      const lookups = new Map<string, Promise<string | null>>();
+      for (const transactionId of transactionIds) {
+        try {
+          outcomes.push(await runTransaction(transactionId, lookups));
+        } catch (error) {
+          failures.push(error);
+        }
       }
-      const { merchantName, needsCategory, categoryNames } = transaction;
-      if (!needsCategory || merchantName === null || categoryNames.length === 0) {
-        return "not_needed";
+      if (failures.length > 0) {
+        throw failures.find((error) => error instanceof MerchantBusyError) ?? failures[0];
       }
-      const summary = await merchantSummary(merchantName);
-      const categoryName = await chooseCategory(llm, { merchantName, summary, categoryNames });
-      if (categoryName === null) return "uncategorized";
-      const applied = await backend.setImportedCategory({
-        transactionId: job.transactionId,
-        categoryName,
-      });
-      return applied ? "categorized" : "not_needed";
+      return outcomes;
     },
   };
 }

@@ -17,7 +17,7 @@ import {
   startGmailConnection,
 } from "@/lib/gmail/client";
 
-/** How often the page checks on a queued or running sync. */
+/** How often the page checks on an import that is queued or running. */
 const SYNC_POLL_MS = 3_000;
 
 type ClientState = {
@@ -100,7 +100,7 @@ export function GmailConnectionsClient({ callbackError }: { callbackError?: stri
 
   const syncing = state.view.status === "ready" && state.view.mailboxes.some(isSyncInProgress);
 
-  // The sync runs in the background on the server; keep checking until it ends.
+  // Imports run in the background on the server; keep checking until they end.
   useEffect(() => {
     if (!syncing) return;
     const signal = controllerRef.current?.signal;

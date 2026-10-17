@@ -26,10 +26,10 @@ const syncDateFormatter = new Intl.DateTimeFormat("en-GB", {
 });
 
 function lastSyncLabel(value: string | null) {
-  if (!value) return "Not synced yet";
+  if (!value) return "Not imported yet";
   const date = new Date(value);
   return Number.isNaN(date.getTime())
-    ? "Last sync unavailable"
+    ? "Last import unavailable"
     : `${syncDateFormatter.format(date)} WIB`;
 }
 
@@ -44,14 +44,14 @@ function SyncStatus({ sync }: { sync: GmailMailbox["sync"] }) {
   if (sync.state === "completed")
     return (
       <p role="status" className="mt-4 rounded-xl bg-accent-soft p-3 text-sm text-foreground">
-        Last sync: {sync.transactions} {sync.transactions === 1 ? "transaction" : "transactions"}
+        Last import: {sync.transactions} {sync.transactions === 1 ? "transaction" : "transactions"}
         {sync.confirmed > 0 ? ` (${sync.confirmed} confirmed automatically)` : ""} · {sync.skipped}{" "}
         skipped · {sync.failed} failed
       </p>
     );
   return (
     <p role="status" className="mt-4 text-sm text-muted">
-      {sync.state === "queued" ? "Sync queued…" : "Importing transactions…"}
+      {sync.state === "queued" ? "Import queued…" : "Importing transactions…"}
     </p>
   );
 }
@@ -145,9 +145,11 @@ type MailboxCardProps = {
 
 function MailboxActions({ mailbox, actions, pendingAction, onDisconnect }: MailboxCardProps) {
   const busy = pendingAction !== undefined;
+  // Imports start on their own when an account is linked, and new mail arrives by
+  // itself, so an active mailbox needs no sync button.
   return (
     <div className="mt-5 flex flex-wrap gap-3">
-      {mailbox.status === "reconnect-required" && (
+      {mailbox.status === "active" ? null : (
         <Button
           className="min-h-11"
           aria-label={`Reconnect ${mailbox.email}`}
@@ -180,10 +182,7 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
         </Chip>
       </div>
       <p className="mt-3 text-sm text-muted">
-        {mailbox.status === "active"
-          ? "Monara checks this inbox for bank emails every 15 minutes."
-          : "Checks are paused until you reconnect."}{" "}
-        Last check: {lastSyncLabel(mailbox.lastSyncedAt)}
+        Last successful import: {lastSyncLabel(mailbox.lastSyncedAt)}
       </p>
       <SyncStatus sync={mailbox.sync} />
       <MailboxActions

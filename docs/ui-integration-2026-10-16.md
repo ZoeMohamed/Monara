@@ -24,7 +24,7 @@
 | Navigation / offline | Month selection, Profile → Notifications/Escape and Home → Chat passed; worker v7 cached nine public assets and showed generic offline recovery |
 | Account regression | Add, rename, type/institution edit, duplicate-name draft recovery, deactivation cancellation/confirmation and reactivation passed at both widths; history/totals and focus preserved; zero API requests |
 
-The earlier isolated integration passed ten synthetic WhatsApp UI/client cases covering expiry, stale responses, uncertain mutations, session recovery and confirmed unlink. Those cases establish client behavior, not queue revocation or configured-provider acceptance. Current account and production evidence is in `/tmp/monara-demo-accounts-20261016.*` and `/tmp/monara-ui-main-{check,build,mobile}-20261016.*`.
+The earlier isolated integration passed ten synthetic WhatsApp UI/client cases covering expiry, stale responses, uncertain mutations, session recovery and confirmed unlink. Those cases establish client behavior, not queue revocation or configured-provider acceptance. The reproducible repository gates are `pnpm check` and `pnpm build`; the mobile checks above were run against the production build at the stated viewport sizes.
 
 ## Confirmed cross-owner blocker
 

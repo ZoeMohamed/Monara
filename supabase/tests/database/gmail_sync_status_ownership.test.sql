@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(25);
+select plan(30);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001 and the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234). User 2 owns neither.
@@ -29,7 +29,7 @@ reset role;
 set local role service_role;
 
 update public.financial_accounts
-  set institution_key = 'BCA_CC'
+  set institution_key = 'BCA_CC', gmail_connection_id = '12000000-0000-4000-8000-000000000001'
   where id = '11000000-0000-4000-8000-000000000001';
 
 select is(
@@ -80,7 +80,22 @@ select throws_ok(
   'a second request while one is queued is refused'
 );
 
+select ok(
+  public.join_gmail_sync(
+    '10000000-0000-4000-8000-000000000001',
+    '12000000-0000-4000-8000-000000000001'
+  ) is not null,
+  'an account-linked import can join the queued mailbox sync'
+);
+
 select public.start_gmail_sync('12000000-0000-4000-8000-000000000001');
+
+select is(
+  (select sync_pending_runs from public.gmail_connections
+    where id = '12000000-0000-4000-8000-000000000001'),
+  2,
+  'the shared status tracks both listing jobs'
+);
 
 select is(
   public.claim_gmail_messages(
@@ -102,6 +117,18 @@ select public.mark_gmail_connection_synced(
 );
 
 select is(
+  (select row(sync_state, sync_pending_runs)::text from public.gmail_connections
+    where id = '12000000-0000-4000-8000-000000000001'),
+  row('listing', 1)::text,
+  'the first joined job cannot complete the shared listing state'
+);
+
+select public.mark_gmail_connection_synced(
+  '12000000-0000-4000-8000-000000000001',
+  '2026-10-13T10:00:00+07:00'
+);
+
+select is(
   (
     select row(state, in_progress)::text
     from public.gmail_sync_statuses('10000000-0000-4000-8000-000000000001')
@@ -109,6 +136,26 @@ select is(
   ),
   row('running', 4::bigint)::text,
   'a listed sync keeps running while its messages are being extracted'
+);
+
+select ok(
+  public.join_gmail_sync(
+    '10000000-0000-4000-8000-000000000001',
+    '12000000-0000-4000-8000-000000000001'
+  ) is not null,
+  'an account-linked import can join while listed messages are still extracting'
+);
+
+select is(
+  (select row(sync_state, sync_pending_runs)::text from public.gmail_connections
+    where id = '12000000-0000-4000-8000-000000000001'),
+  row('listing', 1)::text,
+  'joining a listed sync starts one new listing run'
+);
+
+select public.mark_gmail_connection_synced(
+  '12000000-0000-4000-8000-000000000001',
+  '2026-10-13T10:00:00+07:00'
 );
 
 -- A confident, complete expense naming one of the owner's accounts.
@@ -126,14 +173,14 @@ select public.record_gmail_extraction(
 
 select is(
   (
-    select row(item.review_status, account.name)::text
+    select row(item.review_status, account.name, item.gmail_auto_confirm_pending)::text
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     left join public.financial_accounts as account on account.id = item.financial_account_id
     where source.gmail_message_id = 'sync-001'
   ),
-  row('confirmed', 'Daily bank')::text,
-  'a confident complete item maps its account and is confirmed without review'
+  row('pending', 'Daily bank', true)::text,
+  'a confident complete item maps its account and confirms once categorization gives it a Category'
 );
 
 -- The same item below the confidence threshold.
@@ -198,6 +245,15 @@ select lives_ok(
       and source.gmail_message_id = 'sync-003'
       and item.transaction_type = 'exclusion'$$::text,
   'a reviewed Gmail exclusion can be confirmed without becoming a financial transaction'
+);
+
+-- Categorization gives the qualifying item its Category, which confirms it.
+select public.set_imported_category(
+  (select item.id
+    from public.transactions as item
+    join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
+    where source.gmail_message_id = 'sync-001'),
+  'Food & Drinks'
 );
 
 select is(

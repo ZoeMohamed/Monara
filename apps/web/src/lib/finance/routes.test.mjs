@@ -40,6 +40,9 @@ const mockCore = `
 `;
 const mockDb = "export const createMonaraServiceRoleClient = () => ({});";
 const mockConfig = "export const publicSupabaseConfig = () => ({});";
+const mockNextServer = "export const after = () => {};";
+const mockGmailImport = "export async function importAfterAccountLinked() {}";
+const mockGmailTrigger = "export async function syncUserTriggers() {}";
 const mockIdentity =
   "export async function getAuthenticatedIdentity() { return globalThis.monaraFinanceRouteTest.identity; }";
 const hooks = registerHooks({
@@ -47,6 +50,9 @@ const hooks = registerHooks({
     const mocks = {
       "@monara/core": mockCore,
       "@monara/db": mockDb,
+      "next/server": mockNextServer,
+      "@/lib/gmail/import": mockGmailImport,
+      "@/lib/gmail/trigger": mockGmailTrigger,
       "@/lib/supabase/config": mockConfig,
       "@/lib/supabase/server": mockIdentity,
     };

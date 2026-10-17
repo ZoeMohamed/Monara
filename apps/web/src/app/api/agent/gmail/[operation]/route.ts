@@ -2,6 +2,7 @@ import { isGmailIngestionOperation, runGmailIngestionOperation } from "@monara/c
 import type { NextRequest } from "next/server";
 import { hasAgentCredential } from "@/lib/agent/credential";
 import { evaluateConfirmedGmailImports } from "@/lib/finance/service";
+import { runDiscovery } from "@/lib/gmail/discovery";
 import {
   errorResponse,
   gmailErrorResponse,
@@ -10,6 +11,8 @@ import {
 } from "@/lib/gmail/service";
 
 export const runtime = "nodejs";
+/** The discover operation reads a few hundred message headers inline. */
+export const maxDuration = 60;
 
 /**
  * Gmail ingestion operations for the agent worker (packages/contracts/src/gmail-extraction.ts).
@@ -40,6 +43,7 @@ export async function POST(
   try {
     const result = await runGmailIngestionOperation(gmailIngestionRepository(), operation, input, {
       onTransactionsConfirmed: evaluateConfirmedGmailImports,
+      discover: runDiscovery,
     });
     return Response.json(result, { headers: noStoreHeaders });
   } catch (error) {

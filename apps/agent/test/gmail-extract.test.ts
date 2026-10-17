@@ -5,13 +5,13 @@ import {
   htmlToText,
   toEmailForExtraction,
 } from "../src/gmail/email-text.ts";
+import type { JsonCompletionRequest, LlmClient } from "../src/gmail/llm.ts";
 import {
   ExtractionOutputError,
   extractTransactions,
   lastFourFromHint,
   parseRupiahAmount,
-} from "../src/gmail/extract.ts";
-import type { JsonCompletionRequest, LlmClient } from "../src/gmail/llm.ts";
+} from "../src/gmail/parse/extract.ts";
 
 // Synthetic emails only. Never add real mail here.
 const receivedAt = "2026-10-12T03:15:00.000Z";

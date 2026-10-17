@@ -13,6 +13,7 @@ import {
   FAILURE_REPLY,
   IDLE_MS,
   type QueuedMessage,
+  RECEIPT_FAILURE_REPLY,
   type SessionStorage,
 } from "../src/whatsapp/session.ts";
 
@@ -118,21 +119,43 @@ test("a linked User's text is queued for the Agent as that User", async () => {
   ]);
 });
 
-test("a linked User's photo or sticker gets a fixed reply instead of reaching the Agent", async () => {
+test("a linked User's photo is queued as a receipt; a voice note or sticker gets a fixed reply", async () => {
   const media = { url: "https://api.kapso.ai/media/abc", content_type: "image/jpeg" };
   const photo = event("wamid.1", "6281200000001", {
     type: "image",
     kapso: { direction: "inbound", media_data: media },
   });
-  const sticker = event("wamid.2", "6281200000001", { type: "sticker" });
-  const { sent, queued } = await deliver({ batch: true, data: [photo, sticker] }, () => ({
+  const voice = event("wamid.2", "6281200000001", {
+    type: "audio",
+    kapso: {
+      direction: "inbound",
+      media_data: { url: "https://api.kapso.ai/media/def", content_type: "audio/ogg" },
+    },
+  });
+  const sticker = event("wamid.3", "6281200000001", { type: "sticker" });
+  const { sent, queued } = await deliver({ batch: true, data: [photo, voice, sticker] }, () => ({
     status: "linked",
     userId,
   }));
 
-  assert.deepEqual(queued, []);
-  assert.match(sent[0]?.text ?? "", /can't read photos or voice notes/);
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0]?.messageId, "wamid.1");
+  assert.equal(queued[0]?.media?.url, media.url);
+  assert.match(sent[0]?.text ?? "", /can't listen to voice notes/);
   assert.match(sent[1]?.text ?? "", /only read text messages/);
+});
+
+test("an unlinked sender's photo is never queued", async () => {
+  const photo = event("wamid.1", "6281200000001", {
+    type: "image",
+    kapso: {
+      direction: "inbound",
+      media_data: { url: "https://api.kapso.ai/media/abc", content_type: "image/jpeg" },
+    },
+  });
+  const { sent, queued } = await deliver(photo, () => ({ status: "unlinked" }));
+  assert.deepEqual(queued, []);
+  assert.match(sent[0]?.text ?? "", /isn't linked/);
 });
 
 test("a delivery with a bad signature is rejected before anything is looked up", async () => {
@@ -158,7 +181,10 @@ test("a failed reply answers Kapso with an error so the delivery is retried", as
 
 // ---------------------------------------------------------------- session
 
-function harness(reply: (text: string, history: AgentChatTurn[]) => Promise<AgentChatResponse>) {
+function harness(
+  reply: (text: string, history: AgentChatTurn[]) => Promise<AgentChatResponse>,
+  readReceipt?: (message: QueuedMessage) => Promise<string>,
+) {
   const stored = new Map<string, unknown>();
   const sent: string[] = [];
   const asked: { text: string; history: AgentChatTurn[]; channel: string }[] = [];
@@ -185,6 +211,7 @@ function harness(reply: (text: string, history: AgentChatTurn[]) => Promise<Agen
     new ConversationSession({
       storage,
       now: () => clock.now,
+      ...(readReceipt ? { readReceipt } : {}),
       respond: async ({ caller, history, text }) => {
         asked.push({ text, history: [...history], channel: caller.channel });
         return reply(text, history);
@@ -341,4 +368,43 @@ test("a message that arrives while the Agent is replying is not lost", async () 
     { role: "user", text: "lunch 20k" },
     { role: "assistant", text: "Which account?" },
   ]);
+});
+
+const photo = (messageId: string): QueuedMessage => ({
+  ...message(messageId, ""),
+  media: {
+    url: "https://api.kapso.ai/media/abc",
+    contentType: "image/jpeg",
+    byteSize: 1000,
+    caption: null,
+  },
+});
+
+test("a receipt photo is read once and its reply joins the history for a follow-up", async () => {
+  const read: string[] = [];
+  const { session, sent, asked } = harness(echo, async (queued) => {
+    read.push(queued.messageId);
+    return "Got your receipt: Rp 37.000 at Indomaret.";
+  });
+  await session().receive(photo("wamid.1"));
+  await session().receive(photo("wamid.1"));
+  await session().receive(message("wamid.2", "confirm"));
+  await session().drain();
+
+  assert.deepEqual(read, ["wamid.1"]);
+  assert.equal(sent[0], "Got your receipt: Rp 37.000 at Indomaret.");
+  assert.equal(asked.length, 1, "the photo itself reached the Agent");
+  assert.deepEqual(
+    asked[0]?.history.map((turn) => turn.text),
+    ["[Sent a receipt photo]", "Got your receipt: Rp 37.000 at Indomaret."],
+  );
+});
+
+test("a receipt that fails to read says nothing can be confirmed", async () => {
+  const { session, sent } = harness(echo, async () => {
+    throw new Error("model down");
+  });
+  await session().receive(photo("wamid.1"));
+  await session().drain();
+  assert.equal(sent[0], RECEIPT_FAILURE_REPLY);
 });

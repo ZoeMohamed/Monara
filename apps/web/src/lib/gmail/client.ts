@@ -1,10 +1,10 @@
 import {
   disconnectGmailConnectionInputSchema,
+  dismissGmailDiscoveryInputSchema,
   type GmailDiscovery,
   type GmailSyncStatus,
   gmailConnectionListSchema,
   gmailDiscoverySchema,
-  gmailSyncResultSchema,
   operationErrorSchema,
   startGmailConnectionResultSchema,
 } from "@monara/contracts";
@@ -14,6 +14,8 @@ export type GmailMailbox = {
   email: string;
   status: "active" | "reconnect-required";
   lastSyncedAt: string | null;
+  /** Banks found after the first scan with no account yet. */
+  newAccounts: number;
   sync:
     | { state: "idle" | "queued" | "running" }
     | {
@@ -32,10 +34,11 @@ export function isSyncInProgress(mailbox: GmailMailbox) {
 }
 
 const SYNC_ERROR_MESSAGES: Record<NonNullable<GmailSyncStatus["error"]>, string> = {
-  agent_unavailable: "Gmail sync is unavailable right now. Try again later.",
-  gmail_unavailable: "Gmail could not be read. Try again, or reconnect this mailbox.",
-  sync_failed: "The sync did not finish. Try again.",
-  stalled: "The sync stopped making progress. Try again.",
+  agent_unavailable: "The import could not start. Monara tries again tonight.",
+  gmail_unavailable:
+    "Gmail could not be read. Monara tries again tonight, or reconnect this mailbox.",
+  sync_failed: "The import did not finish. Monara tries again tonight.",
+  stalled: "The import stopped making progress. Monara tries again tonight.",
 };
 
 function toMailboxSync(sync: GmailSyncStatus): GmailMailbox["sync"] {
@@ -109,8 +112,16 @@ export function gmailCallbackError(result: unknown): string | undefined {
   }
 }
 
-async function request(path: string, method: "GET" | "POST" | "DELETE", options: RequestOptions) {
-  const timeout = AbortSignal.timeout(method === "DELETE" ? 45_000 : 20_000);
+/** Discovery can search the inbox inline before answering. */
+const DISCOVERY_TIMEOUT_MS = 65_000;
+
+async function request(
+  path: string,
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  options: RequestOptions,
+  timeoutMs = method === "DELETE" ? 45_000 : 20_000,
+) {
+  const timeout = AbortSignal.timeout(timeoutMs);
   let response: Response;
   try {
     response = await (options.fetcher ?? fetch)(path, {
@@ -165,6 +176,7 @@ export async function loadGmailConnections(options: RequestOptions = {}): Promis
       email: connection.gmailAddress,
       status: connection.status === "active" ? "active" : "reconnect-required",
       lastSyncedAt: connection.lastSyncedAt,
+      newAccounts: connection.newAccounts,
       // Stored on the server, so a reload or another tab shows the same sync.
       sync: toMailboxSync(connection.sync),
     }));
@@ -204,23 +216,6 @@ export async function disconnectGmailConnection(id: string, options: RequestOpti
   }
 }
 
-/** Queues an owned mailbox sync. Completion is asynchronous and is never fabricated here. */
-export async function requestGmailSync(id: string, options: RequestOptions = {}) {
-  const input = disconnectGmailConnectionInputSchema.safeParse({ connectionId: id });
-  if (!input.success) throw new GmailClientError("error", "Invalid Gmail connection id.");
-  const response = await request(
-    `${CONNECTIONS_URL}/${encodeURIComponent(input.data.connectionId)}/sync`,
-    "POST",
-    options,
-  );
-  const payload: unknown = await response.json().catch(() => null);
-  const result = gmailSyncResultSchema.safeParse(payload);
-  if (!result.success) {
-    throw new GmailClientError("error", "Gmail did not confirm that the sync was queued.");
-  }
-  return result.data;
-}
-
 function connectionPath(id: string, suffix: string) {
   const input = disconnectGmailConnectionInputSchema.safeParse({ connectionId: id });
   if (!input.success) throw new GmailClientError("error", "Invalid Gmail connection id.");
@@ -232,7 +227,12 @@ export async function loadGmailDiscovery(
   id: string,
   options: RequestOptions = {},
 ): Promise<GmailDiscovery> {
-  const response = await request(connectionPath(id, "discovery"), "GET", options);
+  const response = await request(
+    connectionPath(id, "discovery"),
+    "GET",
+    options,
+    DISCOVERY_TIMEOUT_MS,
+  );
   const payload: unknown = await response.json().catch(() => null);
   const result = gmailDiscoverySchema.safeParse(payload);
   if (!result.success) {
@@ -241,10 +241,42 @@ export async function loadGmailDiscovery(
   return result.data;
 }
 
-/** Looks for the User's banks, cards, and wallets in a mailbox again. */
-export async function requestGmailDiscovery(id: string, options: RequestOptions = {}) {
-  const response = await request(connectionPath(id, "discovery"), "POST", options);
-  if (response.status !== 202) {
-    throw new GmailClientError("error", "Gmail did not confirm that the search started.");
+/** Looks for the User's banks, cards, and wallets in a mailbox again, and returns what it found. */
+export async function requestGmailDiscovery(
+  id: string,
+  options: RequestOptions = {},
+): Promise<GmailDiscovery> {
+  const response = await request(
+    connectionPath(id, "discovery"),
+    "POST",
+    options,
+    DISCOVERY_TIMEOUT_MS,
+  );
+  const payload: unknown = await response.json().catch(() => null);
+  const result = gmailDiscoverySchema.safeParse(payload);
+  if (!result.success) {
+    throw new GmailClientError("error", "Gmail returned invalid account suggestions. Try again.");
+  }
+  return result.data;
+}
+
+/** Hides a newly found bank, card, or wallet from the new-account notice. */
+export async function dismissGmailDiscovery(
+  id: string,
+  institutionKey: string,
+  options: RequestOptions = {},
+) {
+  const input = dismissGmailDiscoveryInputSchema.safeParse({ connectionId: id, institutionKey });
+  if (!input.success) throw new GmailClientError("error", "Invalid account suggestion.");
+  const response = await request(
+    connectionPath(
+      input.data.connectionId,
+      `discovery/${encodeURIComponent(input.data.institutionKey)}`,
+    ),
+    "PATCH",
+    options,
+  );
+  if (response.status !== 204) {
+    throw new GmailClientError("error", "Gmail did not confirm that the suggestion was dismissed.");
   }
 }

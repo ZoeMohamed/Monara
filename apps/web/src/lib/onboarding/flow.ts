@@ -3,8 +3,8 @@ export type OnboardingPhase = "connect" | "detect" | "name" | "import" | "backgr
 
 const phases: readonly OnboardingPhase[] = [
   "connect",
-  "detect",
   "name",
+  "detect",
   "import",
   "background",
   "done",
@@ -12,6 +12,13 @@ const phases: readonly OnboardingPhase[] = [
 
 export function parseOnboardingPhase(value: unknown): OnboardingPhase | null {
   return phases.find((phase) => phase === value) ?? null;
+}
+
+/** The old flow used detect before name; move only that legacy checkpoint forward. */
+export function migrateLegacyOnboardingPhase(
+  stored: OnboardingPhase | null,
+): OnboardingPhase | null {
+  return stored === "detect" ? "name" : stored;
 }
 
 /**
@@ -23,7 +30,7 @@ export function resolvePhase(stored: OnboardingPhase | null, hasMailbox: boolean
   if (stored === "done") return "done";
   if (stored === null) return hasMailbox ? "done" : "connect";
   if (!hasMailbox) return "connect";
-  return stored === "connect" ? "detect" : stored;
+  return stored === "connect" ? "name" : stored;
 }
 
 /**
@@ -48,15 +55,15 @@ export function showsSheet(phase: OnboardingPhase | null): boolean {
 }
 
 /** Steps shown as the progress tracker. Background import is still the third step. */
-export const onboardingSteps = ["connect", "detect", "name", "import"] as const;
+export const onboardingSteps = ["connect", "name", "detect", "import"] as const;
 
 export function stepIndex(phase: OnboardingPhase): number {
   switch (phase) {
     case "connect":
       return 0;
-    case "detect":
-      return 1;
     case "name":
+      return 1;
+    case "detect":
       return 2;
     default:
       return 3;

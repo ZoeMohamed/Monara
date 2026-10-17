@@ -703,8 +703,12 @@ describe("financial HTTP boundary", () => {
       input,
       async (path, options) => {
         assert.equal(path, "/api/finance/operations/create_financial_account");
-        // The client fills the optional Gmail institution with its default, none.
-        assert.deepEqual(JSON.parse(options.body), { ...input, institutionKey: null });
+        // The client fills the optional Gmail institution and mailbox with their default, none.
+        assert.deepEqual(JSON.parse(options.body), {
+          ...input,
+          institutionKey: null,
+          gmailConnectionId: null,
+        });
         return Response.json({
           financialAccount: saved,
           action: action("financial_account", accountId),

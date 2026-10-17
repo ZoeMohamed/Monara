@@ -1,5 +1,5 @@
 import { disconnectGmailConnectionInputSchema } from "@monara/contracts";
-import type { NextRequest } from "next/server";
+import { after, type NextRequest } from "next/server";
 import {
   errorResponse,
   gmailConnectionService,
@@ -7,6 +7,7 @@ import {
   noStoreHeaders,
   unauthenticated,
 } from "@/lib/gmail/service";
+import { removeMailboxTrigger } from "@/lib/gmail/trigger";
 import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
@@ -26,6 +27,9 @@ export async function DELETE(
 
   try {
     await gmailConnectionService().disconnect(identity.id, input.data.connectionId);
+    const { connectionId } = input.data;
+    // Disconnecting already unlinked its accounts; its trigger has nothing left to watch.
+    after(() => removeMailboxTrigger(connectionId).catch(() => undefined));
     return new Response(null, { headers: noStoreHeaders, status: 204 });
   } catch (error) {
     return gmailErrorResponse(error);

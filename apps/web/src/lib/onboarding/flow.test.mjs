@@ -10,6 +10,7 @@ import {
   removeChoice,
 } from "./banks.ts";
 import {
+  migrateLegacyOnboardingPhase,
   parseOnboardingPhase,
   resolvePhase,
   returnsToOnboarding,
@@ -29,6 +30,12 @@ const bca = {
 };
 
 describe("onboarding phase", () => {
+  it("moves only the legacy detect checkpoint back to the new name step", () => {
+    assert.equal(migrateLegacyOnboardingPhase("detect"), "name");
+    assert.equal(migrateLegacyOnboardingPhase("name"), "name");
+    assert.equal(migrateLegacyOnboardingPhase("done"), "done");
+    assert.equal(migrateLegacyOnboardingPhase(null), null);
+  });
   it("starts a new User at connect and treats an existing mailbox as already set up", () => {
     assert.equal(resolvePhase(null, false), "connect");
     assert.equal(resolvePhase(null, true), "done");
@@ -44,8 +51,8 @@ describe("onboarding phase", () => {
     assert.equal(resolvePhase("background", false), "connect");
   });
 
-  it("moves a returning connect on to detection and never reopens a finished setup", () => {
-    assert.equal(resolvePhase("connect", true), "detect");
+  it("moves a returning connect on to the name step and never reopens a finished setup", () => {
+    assert.equal(resolvePhase("connect", true), "name");
     assert.equal(resolvePhase("done", false), "done");
     assert.equal(resolvePhase("done", true), "done");
   });
@@ -82,9 +89,9 @@ describe("onboarding phase", () => {
     assert.equal(returnsToOnboarding(null), false);
   });
 
-  it("keeps background import on the fourth step", () => {
+  it("asks for the name before the banks, and keeps background import on the fourth step", () => {
     assert.deepEqual(
-      ["connect", "detect", "name", "import", "background"].map(stepIndex),
+      ["connect", "name", "detect", "import", "background"].map(stepIndex),
       [0, 1, 2, 3, 3],
     );
   });
@@ -113,6 +120,13 @@ describe("onboarding bank choices", () => {
       removeChoice(added, "BCA_MyBCA").map((choice) => choice.institutionKey),
       ["Mandiri_Livin"],
     );
+  });
+
+  it("links the account to the mailbox it was found in", () => {
+    const choice = choiceFromSuggestion(bca);
+    const mailbox = "00000000-0000-4000-8000-000000000010";
+    assert.equal(accountInputFor(choice, "r", mailbox).gmailConnectionId, mailbox);
+    assert.equal(accountInputFor(choice, "r").gmailConnectionId, null);
   });
 
   it("keeps the request id it is given so a retry cannot create the account twice", () => {

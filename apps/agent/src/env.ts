@@ -21,4 +21,8 @@ export interface Env {
   LLM_MODEL?: string;
   /** Web search for merchant categorization. Only merchant names are sent. */
   BRAVE_SEARCH_API_KEY?: string;
+  /** Emails per parse job, 1–10 (default 10). Lower it if invocations hit their request limit. */
+  GMAIL_PARSE_BATCH_SIZE?: string;
+  /** Emails one parse job works on at once, 1–10 (default 5). Bounded by the model's rate limit. */
+  GMAIL_PARSE_CONCURRENCY?: string;
 }
