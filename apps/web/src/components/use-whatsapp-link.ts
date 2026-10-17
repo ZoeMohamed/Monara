@@ -76,13 +76,14 @@ export function useWhatsAppLink() {
         } else if (link.status === "none" && previous.link?.status === "verified") {
           notice = "WhatsApp unlinked.";
         }
+        const clearError = manual || previous.recoveryRequired || previous.requiresSignIn;
         return {
           ...previous,
           link,
           challenge: keepCode ? previous.challenge : null,
           checking: false,
-          error: null,
-          phoneInvalid: false,
+          error: clearError ? null : previous.error,
+          phoneInvalid: clearError ? false : previous.phoneInvalid,
           requiresSignIn: false,
           recoveryRequired: false,
           confirmUnlink: link.status === "verified" && previous.confirmUnlink,
