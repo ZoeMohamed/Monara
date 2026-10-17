@@ -259,7 +259,7 @@ select public.record_gmail_extraction(
   $$[{"kind": "expense", "merchantName": "Boundary Low",
       "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
-      "accountHint": "****4242", "accountLastFour": "4242", "confidence": 0.949}]$$::jsonb,
+      "accountHint": "****4242", "accountLastFour": "4242", "confidence": 0.9495}]$$::jsonb,
   p_sender_verified => true,
   p_institution_key => 'BCA_CC'
 );

@@ -20,7 +20,7 @@ The rules require technical documentation covering system architecture, core alg
 | --- | --- | --- | --- |
 | [architecture.md](architecture.md) | Abhip | 16 Oct | Draft |
 | [data-and-security.md](data-and-security.md) | Zoe | 16 Oct | Not started |
-| [extraction.md](extraction.md) | Adlyn | 16 Oct | Implemented for Gmail |
+| [extraction.md](extraction.md) | Adlyn | 16 Oct | Draft |
 | [agent.md](agent.md) | Argya | 16 Oct | Draft |
 | [ui.md](ui.md) | Erdafa | 16 Oct | Draft |
 | [reminders.md](reminders.md) | Abhip | 16 Oct | Not started |
@@ -31,7 +31,7 @@ Status values: Not started, Draft, Reviewed, Final.
 
 The UI section was reconciled with current code and public PRD/tracker text exports on 14 October. The external tracker snapshot lists ER12 In progress; the repository places ER12 In review in [PR #29](https://github.com/ZoeMohamed/Monara/pull/29), due 16 October. The technical section remains Draft pending owner review. Normal documentation checks do not constitute review or final submission acceptance. External statuses were read without editing them; other owners' sections retain their existing status.
 
-Architecture and Agent drafts were also reconciled against current source without changing their owners or review status. Data/security, extraction, Reminders, evaluation and the security self-assessment remain Not started with owner TODOs. The normal structure check can pass while these submission sections are unfinished; final acceptance requires completed content, measured evidence and owner review.
+Architecture, Agent, and Gmail extraction drafts were reconciled against current source without changing their owners or review status. Receipt and voice extraction remain planned. Data/security, Reminders, evaluation and the security self-assessment remain Not started with owner TODOs. The normal structure check can pass while these submission sections are unfinished; final acceptance requires completed content, measured evidence and owner review.
 
 ## How to write a section
 

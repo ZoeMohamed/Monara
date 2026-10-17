@@ -1,6 +1,6 @@
 # Import and extraction
 
-Owner: Adlyn. Features: F2, F3, F8, F14. Status: Implemented for Gmail transaction import.
+Owner: Adlyn. Features: F2, F3, F8, F14. Status: Draft.
 
 ## Purpose
 The pipeline turns supported, authenticated institution emails into expense, income, or exclusion records. It preserves uncertain data for User review instead of inventing values. Receipt, voice-note, and WhatsApp ingestion remain separate work.
@@ -21,7 +21,7 @@ flowchart LR
 ```
 
 ## Key decisions
-The auto-confirm boundary is `0.95`. A score at or above that value is necessary but not sufficient. The sender must also pass Gmail authentication, the transaction must be an expense or income, amount and date must be present, currency must be IDR, merchant or description must be present, and the institution plus last four digits must resolve to exactly one active Financial Account owned by the User. Missing or ambiguous fields, unverified senders, exclusions, and scores below `0.95` stay pending.
+The auto-confirm boundary is `0.95`. A score at or above that value is necessary but not sufficient. The sender must also pass Gmail authentication, the transaction must be an expense or income, amount and date must be present, currency must be IDR, merchant or description must be present, and the institution must resolve to exactly one active Financial Account owned by the User. A sole account for that institution may resolve without a last-four hint; when several accounts match the institution, the last four digits must identify exactly one. Missing or ambiguous fields, unverified senders, exclusions, and scores below `0.95` stay pending.
 
 This conservative boundary is appropriate while confidence is model-reported rather than calibrated against a labeled production dataset. `0.90` would reduce review work but carries more silent-ledger risk. Requiring every item to be reviewed is safer but removes the product's main automation benefit. The threshold should only be lowered after measuring field-level precision and false-confirm rates on synthetic and consented labeled emails.
 
