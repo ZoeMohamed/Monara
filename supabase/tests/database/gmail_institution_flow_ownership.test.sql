@@ -88,9 +88,9 @@ select throws_ok(
   'only four-digit endings are stored'
 );
 
--- Account mapping from the sender's institution.
+-- Account mapping from the sender's institution, for accounts fed by this mailbox.
 update public.financial_accounts
-  set institution_key = 'BCA_CC'
+  set institution_key = 'BCA_CC', gmail_connection_id = '12000000-0000-4000-8000-000000000001'
   where id = '11000000-0000-4000-8000-000000000001';
 update public.financial_accounts
   set institution_key = 'BCA_CC'
@@ -175,10 +175,12 @@ select is(
 
 -- A second BCA_CC account: only the stated ending tells them apart.
 insert into public.financial_accounts (
-  id, user_id, client_request_id, name, institution, account_type, last_four, institution_key
+  id, user_id, client_request_id, name, institution, account_type, last_four, institution_key,
+  gmail_connection_id
 ) values (
   '11000000-0000-4000-8000-000000000009', '10000000-0000-4000-8000-000000000001',
-  'inst-second-card', 'Second card', 'BCA', 'bank', '5555', 'BCA_CC'
+  'inst-second-card', 'Second card', 'BCA', 'bank', '5555', 'BCA_CC',
+  '12000000-0000-4000-8000-000000000001'
 );
 
 select public.record_gmail_extraction(

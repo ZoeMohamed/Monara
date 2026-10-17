@@ -96,10 +96,12 @@ export function createSupabaseGmailIngestionRepository(
           .eq("is_archived", false)
           .order("name", { ascending: true })
           .limit(200),
+        // Only the accounts fed by this mailbox; another mailbox imports its own.
         client
           .from("financial_accounts")
           .select("institution_key")
           .eq("user_id", connection.data.user_id)
+          .eq("gmail_connection_id", connectionId)
           .eq("is_active", true)
           .not("institution_key", "is", null)
           .limit(100),

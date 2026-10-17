@@ -29,7 +29,7 @@ reset role;
 set local role service_role;
 
 update public.financial_accounts
-  set institution_key = 'BCA_CC'
+  set institution_key = 'BCA_CC', gmail_connection_id = '12000000-0000-4000-8000-000000000001'
   where id = '11000000-0000-4000-8000-000000000001';
 
 select is(

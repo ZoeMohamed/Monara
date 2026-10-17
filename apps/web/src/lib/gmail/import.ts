@@ -32,31 +32,27 @@ async function startImport(
   }
 }
 
-async function activeConnectionIds(userId: string): Promise<string[]> {
-  return (await gmailConnectionService().list(userId))
-    .filter((connection) => connection.status === "active")
-    .map((connection) => connection.id);
-}
-
 /**
- * Imports a newly created account's recent mail. Runs only once the User has saved
- * their name, so onboarding's bank step imports right away while transfers between
- * the User's own accounts are still recognized.
+ * Imports a newly linked account's recent mail from the mailbox it is linked to: a new
+ * account, or an account moved to another mailbox. Runs only once the User has saved
+ * their name, so transfers between the User's own accounts are still recognized.
  */
-export async function importAfterAccountCreated(
+export async function importAfterAccountLinked(
   userId: string,
-  account: { institutionKey: string | null },
+  account: { institutionKey: string | null; gmailConnectionId: string | null; isActive: boolean },
+  reason: "account_added" | "account_moved",
 ): Promise<void> {
   const key = account.institutionKey;
-  if (!key || (findInstitution(key)?.senderEmails.length ?? 0) === 0) return;
+  const connectionId = account.gmailConnectionId;
+  if (!account.isActive || !key || !connectionId) return;
+  if ((findInstitution(key)?.senderEmails.length ?? 0) === 0) return;
   if (!(await profileService().fullName(userId))) return;
-  const results = await Promise.allSettled(
-    (await activeConnectionIds(userId)).map((connectionId) =>
-      startImport(userId, connectionId, { reason: "account_added", institutionKeys: [key] }),
-    ),
+  // The link itself was checked by the database; this also requires it to be active now.
+  const active = (await gmailConnectionService().list(userId)).some(
+    (connection) => connection.id === connectionId && connection.status === "active",
   );
-  const failure = results.find((result) => result.status === "rejected");
-  if (failure) throw failure.reason;
+  if (!active) return;
+  await startImport(userId, connectionId, { reason, institutionKeys: [key] });
 }
 
 /**

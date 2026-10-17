@@ -169,19 +169,17 @@ export function GmailAccountSuggestions({ connectionId }: { connectionId: string
 
   const search = () =>
     act("search", async () => {
-      await requestGmailDiscovery(connectionId);
-      setView((previous) =>
-        previous.discovery
-          ? { ...previous, discovery: { ...previous.discovery, state: "running" } }
-          : previous,
-      );
+      // The search runs before this answers, so its result shows at once.
+      const discovery = await requestGmailDiscovery(connectionId);
+      setView((previous) => ({ ...previous, discovery }));
     });
 
   const add = (suggestion: GmailAccountSuggestion) =>
     act(suggestion.institutionKey, () =>
       callFinanceOperation(
         "create_financial_account",
-        accountInputFor(choiceFromSuggestion(suggestion)),
+        // The account is fed by the mailbox it was found in.
+        accountInputFor(choiceFromSuggestion(suggestion), crypto.randomUUID(), connectionId),
       ),
     );
 
@@ -190,7 +188,7 @@ export function GmailAccountSuggestions({ connectionId }: { connectionId: string
       callFinanceOperation("update_financial_account", {
         financialAccountId: account.id,
         expectedUpdatedAt: account.updatedAt,
-        changes: { institutionKey: suggestion.institutionKey },
+        changes: { institutionKey: suggestion.institutionKey, gmailConnectionId: connectionId },
       }),
     );
 

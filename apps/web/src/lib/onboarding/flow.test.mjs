@@ -115,6 +115,13 @@ describe("onboarding bank choices", () => {
     );
   });
 
+  it("links the account to the mailbox it was found in", () => {
+    const choice = choiceFromSuggestion(bca);
+    const mailbox = "00000000-0000-4000-8000-000000000010";
+    assert.equal(accountInputFor(choice, "r", mailbox).gmailConnectionId, mailbox);
+    assert.equal(accountInputFor(choice, "r").gmailConnectionId, null);
+  });
+
   it("keeps the request id it is given so a retry cannot create the account twice", () => {
     const choice = choiceFromSuggestion(bca);
     assert.equal(accountInputFor(choice, "retry-1").clientRequestId, "retry-1");

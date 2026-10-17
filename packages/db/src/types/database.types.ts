@@ -99,17 +99,23 @@ isOneToOne: false
                   ]
                 },"financial_accounts": {
                   Row: {
-                    "account_type": string,"client_request_id": string,"created_at": string,"currency": string,"id": string,"institution": string | null,"institution_key": string | null,"is_active": boolean,"last_four": string | null,"name": string,"updated_at": string,"user_id": string
+                    "account_type": string,"client_request_id": string,"created_at": string,"currency": string,"gmail_connection_id": string | null,"id": string,"institution": string | null,"institution_key": string | null,"is_active": boolean,"last_four": string | null,"name": string,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_type": string,"client_request_id": string,"created_at"?: string,"currency"?: string,"id"?: string,"institution"?: string | null,"institution_key"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name": string,"updated_at"?: string,"user_id": string
+                    "account_type": string,"client_request_id": string,"created_at"?: string,"currency"?: string,"gmail_connection_id"?: string | null,"id"?: string,"institution"?: string | null,"institution_key"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name": string,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "account_type"?: string,"client_request_id"?: string,"created_at"?: string,"currency"?: string,"id"?: string,"institution"?: string | null,"institution_key"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name"?: string,"updated_at"?: string,"user_id"?: string
+                    "account_type"?: string,"client_request_id"?: string,"created_at"?: string,"currency"?: string,"gmail_connection_id"?: string | null,"id"?: string,"institution"?: string | null,"institution_key"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name"?: string,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
-
+                    {
+      foreignKeyName: "financial_accounts_gmail_connection_fkey"
+      columns: ["gmail_connection_id","user_id"]
+isOneToOne: false
+      referencedRelation: "gmail_connections"
+      referencedColumns: ["id","user_id"]
+    }
                   ]
                 },"gmail_connections": {
                   Row: {
@@ -359,7 +365,7 @@ isOneToOne: false
             }[]
                            },
 "gmail_item_account":
-{ Args: { "p_institution_key": string,"p_kind": string,"p_last_four": string,"p_user_id": string }; Returns: string
+{ Args: { "p_connection_id": string,"p_institution_key": string,"p_kind": string,"p_last_four": string,"p_user_id": string }; Returns: string
                            },
 "gmail_sync_stall_interval":
 { Args: Record<PropertyKey, never>; Returns: string

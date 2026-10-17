@@ -23,6 +23,7 @@ type AccountRow = Pick<
   | "currency"
   | "last_four"
   | "institution_key"
+  | "gmail_connection_id"
   | "is_active"
   | "created_at"
   | "updated_at"
@@ -61,7 +62,7 @@ type ReminderRow = Pick<
 const TRANSACTION_COLUMNS =
   "id, financial_account_id, category_id, source_type, transaction_type, merchant_name, amount::text, currency, occurred_on, occurred_time, description, location, account_hint, ai_confidence, review_status, deleted_at, created_at, updated_at";
 const ACCOUNT_COLUMNS =
-  "id, name, institution, account_type, currency, last_four, institution_key, is_active, created_at, updated_at";
+  "id, name, institution, account_type, currency, last_four, institution_key, gmail_connection_id, is_active, created_at, updated_at";
 const CATEGORY_COLUMNS =
   "id, name, slug, icon, color, is_default, is_archived, created_at, updated_at";
 const BUDGET_COLUMNS =
@@ -171,6 +172,7 @@ function toAccount(row: AccountRow): FinancialAccount {
     currency: row.currency,
     lastFour: row.last_four,
     institutionKey: row.institution_key,
+    gmailConnectionId: row.gmail_connection_id,
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -458,6 +460,7 @@ export function createSupabaseFinanceRepository(
           currency: input.currency,
           last_four: input.lastFour,
           institution_key: input.institutionKey,
+          gmail_connection_id: input.gmailConnectionId,
         })
         .select(ACCOUNT_COLUMNS)
         .single();
@@ -479,7 +482,8 @@ export function createSupabaseFinanceRepository(
         financialAccount.accountType !== input.accountType ||
         financialAccount.currency !== input.currency ||
         financialAccount.lastFour !== input.lastFour ||
-        financialAccount.institutionKey !== input.institutionKey
+        financialAccount.institutionKey !== input.institutionKey ||
+        financialAccount.gmailConnectionId !== input.gmailConnectionId
       ) {
         throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
       }
@@ -500,6 +504,9 @@ export function createSupabaseFinanceRepository(
         ...(input.changes.institutionKey === undefined
           ? {}
           : { institution_key: input.changes.institutionKey }),
+        ...(input.changes.gmailConnectionId === undefined
+          ? {}
+          : { gmail_connection_id: input.changes.gmailConnectionId }),
         ...(input.changes.isActive === undefined ? {} : { is_active: input.changes.isActive }),
       };
       const result = await client

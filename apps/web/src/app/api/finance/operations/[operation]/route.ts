@@ -8,11 +8,22 @@ import {
   isFinanceOperation,
   runFinanceOperation,
 } from "@/lib/finance/service";
-import { importAfterAccountCreated } from "@/lib/gmail/import";
+import { importAfterAccountLinked } from "@/lib/gmail/import";
 import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
+
+/** Whether an operation linked an account to a mailbox, and how. */
+function linkReason(operation: string, input: unknown): "account_added" | "account_moved" | null {
+  if (operation === "create_financial_account") return "account_added";
+  if (operation !== "update_financial_account") return null;
+  const changes =
+    typeof input === "object" && input !== null && "changes" in input ? input.changes : null;
+  return typeof changes === "object" && changes !== null && "gmailConnectionId" in changes
+    ? "account_moved"
+    : null;
+}
 
 export async function POST(
   request: Request,
@@ -43,13 +54,14 @@ export async function POST(
       { userId: identity.id, channel: "web", directSource: "manual_form" },
       input,
     );
-    if (operation === "create_financial_account") {
+    const reason = linkReason(operation, input);
+    if (reason) {
       // The account's recent mail imports after the response; a failure shows on the mailbox.
-      const created = financialAccountMutationResultSchema.safeParse(result);
-      if (created.success) {
-        const { financialAccount } = created.data;
+      const changed = financialAccountMutationResultSchema.safeParse(result);
+      if (changed.success) {
+        const { financialAccount } = changed.data;
         after(() =>
-          importAfterAccountCreated(identity.id, financialAccount).catch(() => undefined),
+          importAfterAccountLinked(identity.id, financialAccount, reason).catch(() => undefined),
         );
       }
     }

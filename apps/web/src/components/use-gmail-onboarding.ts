@@ -195,22 +195,29 @@ export function useGmailOnboarding(
     window.location.assign(url);
   }, []);
 
-  const saveBanks = useCallback(async (choices: Parameters<OnboardingEngine["saveBanks"]>[0]) => {
-    // A retry after a partial failure must not create the same account twice.
-    const missing = choicesToCreate(choices).filter(
-      (choice) => !created.current.has(choice.institutionKey),
-    );
-    const results = await Promise.allSettled(
-      missing.map(async (choice) => {
-        const requestId = requestIds.current.get(choice.institutionKey) ?? crypto.randomUUID();
-        requestIds.current.set(choice.institutionKey, requestId);
-        await callFinanceOperation("create_financial_account", accountInputFor(choice, requestId));
-        created.current.add(choice.institutionKey);
-      }),
-    );
-    const failure = results.find((result) => result.status === "rejected");
-    if (failure) throw failure.reason;
-  }, []);
+  const saveBanks = useCallback(
+    async (choices: Parameters<OnboardingEngine["saveBanks"]>[0]) => {
+      // A retry after a partial failure must not create the same account twice.
+      const missing = choicesToCreate(choices).filter(
+        (choice) => !created.current.has(choice.institutionKey),
+      );
+      const results = await Promise.allSettled(
+        missing.map(async (choice) => {
+          const requestId = requestIds.current.get(choice.institutionKey) ?? crypto.randomUUID();
+          requestIds.current.set(choice.institutionKey, requestId);
+          // Each account is fed by the mailbox it was found in.
+          await callFinanceOperation(
+            "create_financial_account",
+            accountInputFor(choice, requestId, mailboxId ?? null),
+          );
+          created.current.add(choice.institutionKey);
+        }),
+      );
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure) throw failure.reason;
+    },
+    [mailboxId],
+  );
 
   const saveName = useCallback(async (fullName: string) => {
     await saveFullName(fullName);

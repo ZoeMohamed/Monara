@@ -78,14 +78,19 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
 });
-const { importAfterAccountCreated, importAfterNameSaved } = await import("./import.ts");
+const { importAfterAccountLinked, importAfterNameSaved } = await import("./import.ts");
 hooks.deregister();
 
-describe("importing after an account is created", () => {
+/** An active account at an institution, fed by the first mailbox unless told otherwise. */
+function account(institutionKey, overrides = {}) {
+  return { institutionKey, gmailConnectionId: first, isActive: true, ...overrides };
+}
+
+describe("importing after an account is linked to a mailbox", () => {
   beforeEach(reset);
 
   it("imports only the new account's institution once the User has a name", async () => {
-    await importAfterAccountCreated(userId, { institutionKey: "BCA_CC" });
+    await importAfterAccountLinked(userId, account("BCA_CC"), "account_added");
     assert.deepEqual(state.ingests, [
       {
         connectionId: first,
@@ -98,21 +103,21 @@ describe("importing after an account is created", () => {
 
   it("waits for the name, so onboarding's own transfers are recognized", async () => {
     state.fullName = null;
-    await importAfterAccountCreated(userId, { institutionKey: "BCA_CC" });
+    await importAfterAccountLinked(userId, account("BCA_CC"), "account_added");
     assert.deepEqual(state.requests, []);
     assert.deepEqual(state.ingests, []);
   });
 
   it("does nothing for an account Gmail cannot feed", async () => {
     for (const institutionKey of [null, "Cash", "Not_A_Key"]) {
-      await importAfterAccountCreated(userId, { institutionKey });
+      await importAfterAccountLinked(userId, account(institutionKey), "account_added");
     }
     assert.deepEqual(state.ingests, []);
   });
 
   it("joins a running import without taking over its status", async () => {
-    await importAfterAccountCreated(userId, { institutionKey: "BCA_CC" });
-    await importAfterAccountCreated(userId, { institutionKey: "CIMB_Octo" });
+    await importAfterAccountLinked(userId, account("BCA_CC"), "account_added");
+    await importAfterAccountLinked(userId, account("CIMB_Octo"), "account_added");
     assert.deepEqual(
       state.ingests.map((ingest) => [ingest.institutionKeys[0], ingest.tracksSync]),
       [
@@ -124,15 +129,42 @@ describe("importing after an account is created", () => {
 
   it("marks the import failed when the agent cannot be reached", async () => {
     state.agentFails = true;
-    await assert.rejects(importAfterAccountCreated(userId, { institutionKey: "BCA_CC" }));
+    await assert.rejects(importAfterAccountLinked(userId, account("BCA_CC"), "account_added"));
     assert.deepEqual(state.failures, [
       { connectionId: first, error: "agent_unavailable", requestedAt: "2026-10-17T08:00:00.000Z" },
     ]);
   });
 
+  it("imports only from the account's own mailbox", async () => {
+    state.connections.push({ id: second, status: "active", lastSyncedAt: null });
+    await importAfterAccountLinked(
+      userId,
+      account("BCA_CC", { gmailConnectionId: second }),
+      "account_moved",
+    );
+    assert.deepEqual(state.ingests, [
+      {
+        connectionId: second,
+        reason: "account_moved",
+        institutionKeys: ["BCA_CC"],
+        tracksSync: true,
+      },
+    ]);
+  });
+
+  it("does nothing for a manual-only or inactive account", async () => {
+    await importAfterAccountLinked(
+      userId,
+      account("BCA_CC", { gmailConnectionId: null }),
+      "account_added",
+    );
+    await importAfterAccountLinked(userId, account("BCA_CC", { isActive: false }), "account_added");
+    assert.deepEqual(state.requests, []);
+  });
+
   it("skips disconnected or errored mailboxes", async () => {
     state.connections = [{ id: first, status: "error", lastSyncedAt: null }];
-    await importAfterAccountCreated(userId, { institutionKey: "BCA_CC" });
+    await importAfterAccountLinked(userId, account("BCA_CC"), "account_added");
     assert.deepEqual(state.ingests, []);
   });
 });
