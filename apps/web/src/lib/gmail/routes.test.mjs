@@ -11,6 +11,9 @@ const state = {
   requested: [],
   failures: [],
   discoveries: [],
+  inlineDiscoveries: [],
+  discoveryState: "completed",
+  discoveryFails: false,
   agentFails: false,
 };
 globalThis.monaraGmailRouteTest = state;
@@ -37,17 +40,35 @@ export function gmailIngestionRepository() { return {
     return "2026-10-16T07:30:00.000Z";
   },
   async failSync(input) { globalThis.monaraGmailRouteTest.failures.push(input); },
+  async discoveryFor(userId, connectionId) {
+    if (userId !== globalThis.monaraGmailRouteTest.user.id || connectionId !== "${connectionId}") {
+      throw Object.assign(new Error("not found"), { code: "NOT_FOUND" });
+    }
+    return { state: globalThis.monaraGmailRouteTest.discoveryState, suggestions: [] };
+  },
 }; }
+`;
+const discovery = `
+export function startDiscoveryAfterResponse(connectionId) {
+  globalThis.monaraGmailRouteTest.discoveries.push(connectionId);
+}
+export async function runDiscovery(connectionId) {
+  globalThis.monaraGmailRouteTest.inlineDiscoveries.push(connectionId);
+  if (globalThis.monaraGmailRouteTest.discoveryFails) throw new Error("gmail down");
+  globalThis.monaraGmailRouteTest.discoveryState = "completed";
+}
+export async function rerunDiscoveryIfNeeded(connectionId) {
+  const state = globalThis.monaraGmailRouteTest.discoveryState;
+  if (state !== "idle" && state !== "failed") return false;
+  await runDiscovery(connectionId).catch(() => undefined);
+  return true;
+}
 `;
 const agentSync = `
 export class AgentSyncError extends Error {}
 export async function requestAgentSync(input) {
   if (globalThis.monaraGmailRouteTest.agentFails) throw new AgentSyncError();
   globalThis.monaraGmailRouteTest.queued.push(input);
-}
-export async function requestAgentDiscovery(connectionId) {
-  if (globalThis.monaraGmailRouteTest.agentFails) throw new AgentSyncError();
-  globalThis.monaraGmailRouteTest.discoveries.push(connectionId);
 }
 `;
 const hooks = registerHooks({
@@ -61,6 +82,8 @@ const hooks = registerHooks({
       };
     if (specifier === "@/lib/gmail/agent-sync")
       return { url: `data:text/javascript,${encodeURIComponent(agentSync)}`, shortCircuit: true };
+    if (specifier === "@/lib/gmail/discovery")
+      return { url: `data:text/javascript,${encodeURIComponent(discovery)}`, shortCircuit: true };
     if (specifier === "@/lib/http/origin")
       return nextResolve(new URL("../http/origin.ts", import.meta.url).href, context);
     if (specifier === "@/lib/onboarding/flow")
@@ -73,6 +96,9 @@ const hooks = registerHooks({
 const { POST } = await import("../../app/api/gmail/connections/route.ts");
 const { GET: callback } = await import("../../app/api/gmail/connections/callback/route.ts");
 const { POST: sync } = await import("../../app/api/gmail/connections/[connectionId]/sync/route.ts");
+const discoveryRoute = await import(
+  "../../app/api/gmail/connections/[connectionId]/discovery/route.ts"
+);
 hooks.deregister();
 
 function withTunnel(run) {
@@ -206,22 +232,68 @@ describe("Gmail route callback origin and session boundary", () => {
       assert.match(profile.headers.get("location"), /\/connections\/gmail\?result=connected$/);
       assert.equal(profile.headers.get("set-cookie"), null);
     }));
+});
 
-  it("still connects when the agent cannot start account discovery", () =>
-    withTunnel(async () => {
-      state.agentFails = true;
-      try {
-        const request = new Request(
-          "http://localhost:3005/api/gmail/connections/callback?session_uri=synthetic-twice",
-          { headers: { host: "example.ngrok-free.dev" } },
-        );
-        request.nextUrl = new URL(request.url);
-        const response = await callback(request);
-        assert.match(response.headers.get("location"), /result=connected$/);
-      } finally {
-        state.agentFails = false;
-      }
-    }));
+describe("Gmail account discovery in the web backend", () => {
+  const context = { params: Promise.resolve({ connectionId }) };
+  const sameOrigin = () =>
+    new Request(`http://localhost:3005/api/gmail/connections/${connectionId}/discovery`, {
+      method: "POST",
+      headers: { host: "localhost:3005", origin: "http://localhost:3005" },
+    });
+
+  it("reruns a discovery that never ran or failed before answering", async () => {
+    for (const before of ["idle", "failed"]) {
+      state.discoveryState = before;
+      state.inlineDiscoveries = [];
+      const response = await discoveryRoute.GET(new Request("http://localhost/x"), context);
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).state, "completed");
+      assert.deepEqual(state.inlineDiscoveries, [connectionId]);
+    }
+  });
+
+  it("answers a finished or running discovery without searching again", async () => {
+    for (const current of ["completed", "running"]) {
+      state.discoveryState = current;
+      state.inlineDiscoveries = [];
+      const response = await discoveryRoute.GET(new Request("http://localhost/x"), context);
+      assert.equal((await response.json()).state, current);
+      assert.deepEqual(state.inlineDiscoveries, []);
+    }
+  });
+
+  it("searches only the signed-in User's own connection", async () => {
+    state.discoveryState = "idle";
+    state.inlineDiscoveries = [];
+    const other = {
+      params: Promise.resolve({ connectionId: "00000000-0000-4000-8000-000000000099" }),
+    };
+    const response = await discoveryRoute.GET(new Request("http://localhost/x"), other);
+    assert.notEqual(response.status, 200);
+    assert.deepEqual(state.inlineDiscoveries, []);
+    state.discoveryState = "completed";
+  });
+
+  it("searches again on request and answers with the result", async () => {
+    state.discoveryState = "failed";
+    state.inlineDiscoveries = [];
+    const response = await discoveryRoute.POST(sameOrigin(), context);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).state, "completed");
+    assert.deepEqual(state.inlineDiscoveries, [connectionId]);
+  });
+
+  it("reports an unavailable inbox when the requested search fails", async () => {
+    state.discoveryFails = true;
+    try {
+      const response = await discoveryRoute.POST(sameOrigin(), context);
+      assert.equal((await response.json()).code, "DEPENDENCY_UNAVAILABLE");
+    } finally {
+      state.discoveryFails = false;
+      state.discoveryState = "completed";
+    }
+  });
 });
 
 describe("Gmail Sync Now origin and cursor boundary", () => {

@@ -12,6 +12,11 @@ export {
   type StoredGmailConnection,
 } from "./gmail-connections.ts";
 export {
+  type DiscoveryMailboxReader,
+  discoveryNeedsRun,
+  runGmailDiscovery,
+} from "./gmail-discovery.ts";
+export {
   GmailIngestionError,
   type GmailIngestionOperation,
   type GmailIngestionRepository,

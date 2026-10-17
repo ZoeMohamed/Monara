@@ -1,12 +1,15 @@
 import { GmailConnectionError } from "@monara/core";
 import type { NextRequest } from "next/server";
-import { requestAgentDiscovery } from "@/lib/gmail/agent-sync";
+import { startDiscoveryAfterResponse } from "@/lib/gmail/discovery";
 import { gmailConnectionService } from "@/lib/gmail/service";
 import { browserOrigin } from "@/lib/http/origin";
 import { ONBOARDING_RETURN_COOKIE, returnsToOnboarding } from "@/lib/onboarding/flow";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 const RESULT_PAGE = "/connections/gmail";
+
+/** Discovery runs after the redirect, inside this route's time limit. */
+export const maxDuration = 60;
 
 /**
  * Composio's callback identity verifier. Composio redirects here with a
@@ -39,8 +42,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const connection = await gmailConnectionService().complete(identity.id, sessionUri);
-    // Best effort: the Gmail page can start discovery again if the agent is unavailable.
-    await requestAgentDiscovery(connection.id).catch(() => undefined);
+    // Runs after the redirect; the detect step starts it again if it fails or stalls.
+    startDiscoveryAfterResponse(connection.id);
     return finish("connected");
   } catch (error) {
     return finish(error instanceof GmailConnectionError ? error.code : "DEPENDENCY_UNAVAILABLE");

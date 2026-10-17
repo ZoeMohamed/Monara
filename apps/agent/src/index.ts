@@ -3,7 +3,6 @@ import type { Env } from "./env.ts";
 import {
   consumeGmailJobs,
   consumeMerchantJobs,
-  handleGmailDiscoveryRequest,
   handleGmailSyncRequest,
   scheduleGmailSyncs,
 } from "./gmail/index.ts";
@@ -29,9 +28,6 @@ export default {
     }
     if (request.method === "POST" && path === "/gmail/sync") {
       return handleGmailSyncRequest(request, env, context);
-    }
-    if (request.method === "POST" && path === "/gmail/discover") {
-      return handleGmailDiscoveryRequest(request, env);
     }
     return notFoundResponse();
   },

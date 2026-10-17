@@ -227,6 +227,21 @@ export function createSupabaseGmailIngestionRepository(
       if (error) fail(error);
     },
 
+    async discoveryStatus(connectionId) {
+      const { data, error } = await client
+        .from("gmail_connections")
+        .select("discovery_state, discovery_updated_at")
+        .eq("id", connectionId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (error) fail(error);
+      if (!data) throw connectionNotActive();
+      return {
+        state: gmailDiscoverySchema.shape.state.parse(data.discovery_state),
+        updatedAt: data.discovery_updated_at,
+      };
+    },
+
     async recordDiscovery(input) {
       const { error } = await client.rpc("record_gmail_discovery", {
         p_connection_id: input.connectionId,

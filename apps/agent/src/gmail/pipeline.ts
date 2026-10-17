@@ -1,9 +1,7 @@
 import {
-  emailInstitutions,
   findInstitution,
   findInstitutionBySender,
   GMAIL_PARSE_JOB_MAX_EMAILS,
-  type GmailDiscoveryFinding,
   type GmailDiscoveryJob,
   type GmailExtractionJob,
   type GmailJob,
@@ -18,8 +16,6 @@ import {
   type ComposioGmailReader,
   type GmailMailbox,
   type GmailMessageContent,
-  type GmailMessagePage,
-  type GmailMessageSummary,
   GmailReadError,
 } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "./backend.ts";
@@ -33,13 +29,7 @@ import { isSenderVerified } from "./sender.ts";
  * its recent mail. Already processed mail is skipped before any extraction job.
  */
 const IMPORT_WINDOW = "newer_than:30d";
-const DISCOVERY_WINDOW = IMPORT_WINDOW;
 const PAGE_SIZE = 100;
-/** Enough mail to see every institution a User has, without reading a whole inbox. */
-const MAX_DISCOVERY_MESSAGES = 500;
-const MAX_LAST_FOURS = 10;
-/** Card or account endings as banks write them in subjects: "****1234", "xx1234", "ending 1234". */
-const SUBJECT_LAST_FOUR = /(?:\*{2,}|x{2,}|ending\s+|akhiran\s+)(\d{4})\b/gi;
 
 export interface GmailPipelineDependencies {
   backend: GmailBackend;
@@ -148,38 +138,6 @@ export function sendersFor(institutionKeys: readonly string[]): string[] {
 /** Only mail from the given senders over the import window. */
 export function syncQuery(senders: readonly string[]): string {
   return `${IMPORT_WINDOW} ${fromClause(senders)}`;
-}
-
-function lastFoursIn(subject: string | null): string[] {
-  return subject ? [...subject.matchAll(SUBJECT_LAST_FOUR)].map((match) => match[1]) : [];
-}
-
-/** Tallies listed messages by the registry entry of their sender. */
-function tally(messages: readonly GmailMessageSummary[]): GmailDiscoveryFinding[] {
-  const found = new Map<string, GmailDiscoveryFinding>();
-  for (const message of messages) {
-    const institution = message.senderAddress
-      ? findInstitutionBySender(message.senderAddress)
-      : null;
-    if (!institution) continue;
-    const finding = found.get(institution.key) ?? {
-      institutionKey: institution.key,
-      emailCount: 0,
-      lastFours: [],
-      lastSeenAt: null,
-    };
-    finding.emailCount += 1;
-    for (const lastFour of lastFoursIn(message.subject)) {
-      if (!finding.lastFours.includes(lastFour) && finding.lastFours.length < MAX_LAST_FOURS) {
-        finding.lastFours.push(lastFour);
-      }
-    }
-    if (message.receivedAt && (!finding.lastSeenAt || message.receivedAt > finding.lastSeenAt)) {
-      finding.lastSeenAt = message.receivedAt;
-    }
-    found.set(institution.key, finding);
-  }
-  return [...found.values()];
 }
 
 export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
@@ -434,54 +392,11 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
   }
 
   /**
-   * Finds which registry entries have emailed the mailbox recently, from message
-   * metadata only: no bodies are read and nothing is sent to the model.
+   * Account discovery runs in the web backend, which reads message metadata itself.
+   * The queued job only asks it to run for this connection.
    */
   async function discover(job: GmailDiscoveryJob): Promise<GmailJobOutcome> {
-    const connection = await backend.resolveConnection(job.connectionId);
-    await backend.startDiscovery(job.connectionId);
-    const mailbox = toMailbox(connection);
-    const allSenders = emailInstitutions.flatMap((entry) => entry.senderEmails);
-
-    const messages: GmailMessageSummary[] = [];
-    let pageToken: string | null = null;
-    do {
-      const token: string | null = pageToken;
-      const page: GmailMessagePage = await read(connection, () =>
-        reader.listMessages(mailbox, {
-          query: `${DISCOVERY_WINDOW} ${fromClause(allSenders)}`,
-          pageToken: token,
-          maxResults: PAGE_SIZE,
-        }),
-      );
-      messages.push(...page.messages);
-      pageToken = page.nextPageToken;
-    } while (pageToken && messages.length < MAX_DISCOVERY_MESSAGES);
-
-    let findings = tally(messages);
-    // When the listing leaves out senders, ask Gmail once per entry instead.
-    if (messages.some((message) => message.senderAddress === null)) {
-      findings = [];
-      for (const entry of emailInstitutions) {
-        const page = await read(connection, () =>
-          reader.listMessages(mailbox, {
-            query: `${DISCOVERY_WINDOW} ${fromClause(entry.senderEmails)}`,
-            pageToken: null,
-            maxResults: PAGE_SIZE,
-          }),
-        );
-        if (page.messages.length === 0) continue;
-        const lastFours = [...new Set(page.messages.flatMap((m) => lastFoursIn(m.subject)))];
-        const seen = page.messages.flatMap((m) => (m.receivedAt ? [m.receivedAt] : [])).sort();
-        findings.push({
-          institutionKey: entry.key,
-          emailCount: page.messages.length,
-          lastFours: lastFours.slice(0, MAX_LAST_FOURS),
-          lastSeenAt: seen.at(-1) ?? null,
-        });
-      }
-    }
-    await backend.recordDiscovery({ connectionId: job.connectionId, findings });
+    await backend.discover(job.connectionId);
     return "discovered";
   }
 
@@ -553,9 +468,6 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
               reason: error instanceof GmailReadError ? "gmail_unavailable" : "sync_failed",
             })
             .catch(() => undefined);
-        }
-        if (job.kind === "gmail.discover" && options.isFinalAttempt) {
-          await backend.reportDiscoveryFailure(job.connectionId).catch(() => undefined);
         }
         throw error;
       }

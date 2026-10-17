@@ -1,8 +1,4 @@
-import {
-  type RequestGmailSyncInput,
-  requestGmailSyncInputSchema,
-  startGmailDiscoveryInputSchema,
-} from "@monara/contracts";
+import { type RequestGmailSyncInput, requestGmailSyncInputSchema } from "@monara/contracts";
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -42,12 +38,4 @@ async function postToAgent(path: string, body: unknown): Promise<void> {
  */
 export async function requestAgentSync(input: RequestGmailSyncInput): Promise<void> {
   await postToAgent("/gmail/sync", requestGmailSyncInputSchema.parse(input));
-}
-
-/**
- * Asks the agent worker to find which banks, cards, and wallets email this mailbox.
- * Call it only after checking that the signed-in User owns the active connection.
- */
-export async function requestAgentDiscovery(connectionId: string): Promise<void> {
-  await postToAgent("/gmail/discover", startGmailDiscoveryInputSchema.parse({ connectionId }));
 }

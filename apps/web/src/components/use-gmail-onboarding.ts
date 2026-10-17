@@ -21,7 +21,7 @@ import type { OnboardingPhase } from "@/lib/onboarding/flow";
 import { saveFullName } from "@/lib/profile/client";
 
 const POLL_MS = 3_000;
-/** Detection reads a few hundred headers; past this the agent is probably not running. */
+/** Detection reads a few hundred headers; past this Gmail is probably not answering. */
 const DETECTION_TIMEOUT_MS = 90_000;
 
 export function onboardingErrorMessage(error: unknown) {
@@ -100,8 +100,8 @@ function useDetection(mailboxId: string | null | undefined, enabled: boolean) {
       forceRequest.current = false;
       requested = true;
       requestGmailDiscovery(connection, { signal })
-        // Give the agent a moment to mark the search as running before looking again.
-        .then(() => later(check, 1_500))
+        // The search already finished by the time this answers; read its result.
+        .then(() => check())
         .catch((error: unknown) => fail(onboardingErrorMessage(error)));
     } else {
       check();

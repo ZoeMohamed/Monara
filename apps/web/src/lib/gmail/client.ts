@@ -109,8 +109,16 @@ export function gmailCallbackError(result: unknown): string | undefined {
   }
 }
 
-async function request(path: string, method: "GET" | "POST" | "DELETE", options: RequestOptions) {
-  const timeout = AbortSignal.timeout(method === "DELETE" ? 45_000 : 20_000);
+/** Discovery can search the inbox inline before answering. */
+const DISCOVERY_TIMEOUT_MS = 65_000;
+
+async function request(
+  path: string,
+  method: "GET" | "POST" | "DELETE",
+  options: RequestOptions,
+  timeoutMs = method === "DELETE" ? 45_000 : 20_000,
+) {
+  const timeout = AbortSignal.timeout(timeoutMs);
   let response: Response;
   try {
     response = await (options.fetcher ?? fetch)(path, {
@@ -232,7 +240,12 @@ export async function loadGmailDiscovery(
   id: string,
   options: RequestOptions = {},
 ): Promise<GmailDiscovery> {
-  const response = await request(connectionPath(id, "discovery"), "GET", options);
+  const response = await request(
+    connectionPath(id, "discovery"),
+    "GET",
+    options,
+    DISCOVERY_TIMEOUT_MS,
+  );
   const payload: unknown = await response.json().catch(() => null);
   const result = gmailDiscoverySchema.safeParse(payload);
   if (!result.success) {
@@ -241,10 +254,21 @@ export async function loadGmailDiscovery(
   return result.data;
 }
 
-/** Looks for the User's banks, cards, and wallets in a mailbox again. */
-export async function requestGmailDiscovery(id: string, options: RequestOptions = {}) {
-  const response = await request(connectionPath(id, "discovery"), "POST", options);
-  if (response.status !== 202) {
-    throw new GmailClientError("error", "Gmail did not confirm that the search started.");
+/** Looks for the User's banks, cards, and wallets in a mailbox again, and returns what it found. */
+export async function requestGmailDiscovery(
+  id: string,
+  options: RequestOptions = {},
+): Promise<GmailDiscovery> {
+  const response = await request(
+    connectionPath(id, "discovery"),
+    "POST",
+    options,
+    DISCOVERY_TIMEOUT_MS,
+  );
+  const payload: unknown = await response.json().catch(() => null);
+  const result = gmailDiscoverySchema.safeParse(payload);
+  if (!result.success) {
+    throw new GmailClientError("error", "Gmail returned invalid account suggestions. Try again.");
   }
+  return result.data;
 }

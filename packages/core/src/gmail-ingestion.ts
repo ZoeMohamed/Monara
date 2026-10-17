@@ -58,7 +58,7 @@ interface RecordedGmailExtraction extends RecordGmailExtractionResult {
 }
 
 /** Runs after an extraction confirmed Transactions without review, e.g. to check budgets. */
-export type ConfirmedTransactionsHook = (
+type ConfirmedTransactionsHook = (
   userId: UserId,
   transactionIds: readonly string[],
 ) => Promise<void>;
@@ -92,6 +92,11 @@ export interface GmailIngestionRepository {
    */
   requestSync(userId: UserId, connectionId: GmailConnectionId): Promise<string>;
   startDiscovery(connectionId: GmailConnectionId): Promise<void>;
+  /** Where an active connection's discovery stands; NOT_FOUND unless it is active. */
+  discoveryStatus(connectionId: GmailConnectionId): Promise<{
+    state: GmailDiscovery["state"];
+    updatedAt: string | null;
+  }>;
   recordDiscovery(input: Parsed<typeof recordGmailDiscoveryInputSchema>): Promise<void>;
   failDiscovery(connectionId: GmailConnectionId): Promise<void>;
   /** The User's own discovery view for one connection; NOT_FOUND if it is not theirs. */
@@ -124,6 +129,7 @@ const GMAIL_INGESTION_OPERATIONS = [
   "mark-synced",
   "report-sync-failure",
   "report-connection-error",
+  "discover",
   "start-discovery",
   "record-discovery",
   "report-discovery-failure",
@@ -151,7 +157,7 @@ function parse<T extends z.ZodType>(schema: T, input: unknown): z.output<T> {
 async function recordOne(
   repository: GmailIngestionRepository,
   input: Parsed<typeof recordGmailExtractionInputSchema>,
-  hooks: { onTransactionsConfirmed?: ConfirmedTransactionsHook },
+  hooks: GmailIngestionHooks,
 ): Promise<RecordGmailExtractionResult> {
   const { userId, confirmedTransactionIds, ...result } = await repository.recordExtraction(input);
   // A retried record returns alreadyFinished; its follow-up already ran the first time.
@@ -161,12 +167,18 @@ async function recordOne(
   return result;
 }
 
+export interface GmailIngestionHooks {
+  onTransactionsConfirmed?: ConfirmedTransactionsHook;
+  /** Runs account discovery for one connection; the backend wires the Gmail reader. */
+  discover?: (connectionId: GmailConnectionId) => Promise<void>;
+}
+
 /** Validates one operation's input and runs it. Results match the contract schemas. */
 export async function runGmailIngestionOperation(
   repository: GmailIngestionRepository,
   operation: GmailIngestionOperation,
   input: unknown,
-  hooks: { onTransactionsConfirmed?: ConfirmedTransactionsHook } = {},
+  hooks: GmailIngestionHooks = {},
 ): Promise<unknown> {
   switch (operation) {
     case "list-active-connections":
@@ -196,6 +208,15 @@ export async function runGmailIngestionOperation(
       await repository.failSync({ connectionId: failure.connectionId, error: failure.reason });
       return {};
     }
+    case "discover": {
+      const { connectionId } = parse(startGmailDiscoveryInputSchema, input);
+      if (!hooks.discover) {
+        throw new GmailIngestionError("INTERNAL", "Account discovery is not configured.");
+      }
+      await hooks.discover(connectionId);
+      return {};
+    }
+    // Kept while a worker deployed before discovery moved to the web backend may still call them.
     case "start-discovery":
       await repository.startDiscovery(parse(startGmailDiscoveryInputSchema, input).connectionId);
       return {};

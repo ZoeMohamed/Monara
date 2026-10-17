@@ -9,7 +9,6 @@ import type {
   GmailSyncJob,
   MarkGmailConnectionSyncedInput,
   MerchantCategorizeJob,
-  RecordGmailDiscoveryInput,
   RecordGmailExtractionInput,
   RecordGmailExtractionsInput,
   ReportGmailConnectionErrorInput,
@@ -108,9 +107,7 @@ function setup(overrides: Overrides = {}) {
     claimedPages: [] as ClaimGmailMessagesInput[],
     syncFailures: [] as ReportGmailSyncFailureInput[],
     merchantJobs: [] as MerchantCategorizeJob[],
-    discoveries: [] as RecordGmailDiscoveryInput[],
-    discoveryStarted: [] as string[],
-    discoveryFailures: [] as string[],
+    discovered: [] as string[],
     modelCalls: 0,
   };
   const backend: GmailBackend = {
@@ -130,14 +127,8 @@ function setup(overrides: Overrides = {}) {
         institutionKeys: overrides.institutionKeys ?? ["BCA_CC"],
       };
     },
-    async startDiscovery(id) {
-      calls.discoveryStarted.push(id);
-    },
-    async recordDiscovery(input) {
-      calls.discoveries.push(input);
-    },
-    async reportDiscoveryFailure(id) {
-      calls.discoveryFailures.push(id);
+    async discover(id) {
+      calls.discovered.push(id);
     },
     async resolveImportedTransaction() {
       throw new Error("not used by the Gmail pipeline");
@@ -653,60 +644,13 @@ describe("processBatch", () => {
 });
 
 describe("discover", () => {
-  const discoverJob = { kind: "gmail.discover", connectionId } as const;
-
-  it("tallies registry senders from metadata, with card endings from subjects", async () => {
-    const { pipeline, calls } = setup({
-      page: {
-        messages: [
-          summary("m1", { subject: "Transaksi kartu ****4242" }),
-          summary("m2", { subject: "Tagihan xx9876", receivedAt: "2026-10-12T05:00:00.000Z" }),
-          summary("m3", { senderAddress: "noreply@jago.com", subject: "Transfer masuk" }),
-          summary("m4", { senderAddress: "promo@shop.example" }),
-        ],
-        nextPageToken: null,
-      },
-    });
-    assert.equal(await pipeline.runJob(discoverJob, notFinal), "discovered");
-    assert.deepEqual(calls.discoveryStarted, [connectionId]);
-    assert.match(calls.listed[0]?.query ?? "", /^newer_than:30d from:\(/);
+  it("asks the web backend to run discovery and reads no mail itself", async () => {
+    const { pipeline, calls } = setup();
+    const job = { kind: "gmail.discover", connectionId } as const;
+    assert.equal(await pipeline.runJob(job, notFinal), "discovered");
+    assert.deepEqual(calls.discovered, [connectionId]);
+    assert.deepEqual(calls.listed, []);
     assert.equal(calls.modelCalls, 0);
-    assert.deepEqual(calls.fetched, [], "message bodies are never read");
-    assert.deepEqual(calls.discoveries, [
-      {
-        connectionId,
-        findings: [
-          {
-            institutionKey: "BCA_CC",
-            emailCount: 2,
-            lastFours: ["4242", "9876"],
-            lastSeenAt: "2026-10-12T05:00:00.000Z",
-          },
-          {
-            institutionKey: "Jago_App",
-            emailCount: 1,
-            lastFours: [],
-            lastSeenAt: receivedAt,
-          },
-        ],
-      },
-    ]);
-  });
-
-  it("asks per institution when the listing leaves out senders", async () => {
-    const { pipeline, calls } = setup({
-      page: { messages: [summary("m1", { senderAddress: null })], nextPageToken: null },
-    });
-    await pipeline.runJob(discoverJob, notFinal);
-    // One combined listing, then one per registry entry with senders.
-    assert.ok(calls.listed.length > 2);
-    assert.equal(calls.discoveries[0]?.findings.length, calls.listed.length - 1);
-  });
-
-  it("reports a discovery that failed its final attempt", async () => {
-    const { pipeline, calls } = setup({ readStatus: 500 });
-    await assert.rejects(pipeline.runJob(discoverJob, { isFinalAttempt: true }));
-    assert.deepEqual(calls.discoveryFailures, [connectionId]);
   });
 });
 

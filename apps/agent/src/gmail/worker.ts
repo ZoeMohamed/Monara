@@ -4,7 +4,6 @@ import {
   type MerchantCategorizeJob,
   merchantCategorizeJobSchema,
   requestGmailSyncInputSchema,
-  startGmailDiscoveryInputSchema,
 } from "@monara/contracts";
 import {
   BraveSearchError,
@@ -134,21 +133,6 @@ async function rejectUnlessBackend(request: Request, env: Env): Promise<Response
     return Response.json({ error: "Unauthorized." }, { status: 401 });
   }
   return null;
-}
-
-/**
- * Account discovery after a Gmail connection. Only the web backend may call this,
- * after checking the User owns the connection.
- */
-export async function handleGmailDiscoveryRequest(request: Request, env: Env): Promise<Response> {
-  const rejected = await rejectUnlessBackend(request, env);
-  if (rejected) return rejected;
-  const input = startGmailDiscoveryInputSchema.safeParse(await request.json().catch(() => null));
-  if (!input.success || !env.GMAIL_JOBS) {
-    return Response.json({ error: "connectionId is invalid." }, { status: 400 });
-  }
-  await env.GMAIL_JOBS.send({ kind: "gmail.discover", connectionId: input.data.connectionId });
-  return Response.json({ status: "queued" }, { status: 202 });
 }
 
 /** Manual sync. Only the web backend may call this, after checking the User owns the connection. */

@@ -17,7 +17,6 @@ import {
   markGmailConnectionSyncedInputSchema,
   markGmailConnectionSyncedResultSchema,
   operationErrorSchema,
-  type RecordGmailDiscoveryInput,
   type RecordGmailExtractionInput,
   type RecordGmailExtractionResult,
   type RecordGmailExtractionsInput,
@@ -26,7 +25,6 @@ import {
   type ReportGmailSyncFailureInput,
   type ResolvedGmailConnection,
   type ResolvedImportedTransaction,
-  recordGmailDiscoveryInputSchema,
   recordGmailExtractionInputSchema,
   recordGmailExtractionResultSchema,
   recordGmailExtractionsInputSchema,
@@ -34,7 +32,6 @@ import {
   releaseMerchantProfileInputSchema,
   reportGmailConnectionErrorInputSchema,
   reportGmailConnectionErrorResultSchema,
-  reportGmailDiscoveryFailureInputSchema,
   reportGmailSyncFailureInputSchema,
   reportGmailSyncFailureResultSchema,
   resolvedGmailConnectionSchema,
@@ -197,26 +194,11 @@ export function createGmailBackend(config: BackendConfig) {
       );
     },
 
-    async startDiscovery(connectionId: string): Promise<void> {
+    /** Runs account discovery for one connection in the web backend. */
+    async discover(connectionId: string): Promise<void> {
       await call(
-        "gmail.start-discovery",
+        "gmail.discover",
         startGmailDiscoveryInputSchema.parse({ connectionId }),
-        emptyResultSchema,
-      );
-    },
-
-    async recordDiscovery(input: RecordGmailDiscoveryInput): Promise<void> {
-      await call(
-        "gmail.record-discovery",
-        recordGmailDiscoveryInputSchema.parse(input),
-        emptyResultSchema,
-      );
-    },
-
-    async reportDiscoveryFailure(connectionId: string): Promise<void> {
-      await call(
-        "gmail.report-discovery-failure",
-        reportGmailDiscoveryFailureInputSchema.parse({ connectionId }),
         emptyResultSchema,
       );
     },
