@@ -1,4 +1,4 @@
-import type { MerchantCategorizeJob } from "@monara/contracts";
+import { type MerchantCategorizeJob, merchantKey } from "@monara/contracts";
 import type { BraveSearchClient } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "../gmail/backend.ts";
 import type { LlmClient } from "../gmail/llm.ts";
@@ -43,7 +43,14 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
     }
   }
 
-  async function runTransaction(transactionId: string): Promise<MerchantJobOutcome> {
+  /**
+   * Categorizes one transaction. Lookups made earlier in the same job are reused, so
+   * a job's transactions at one merchant cost one search and one model call.
+   */
+  async function runTransaction(
+    transactionId: string,
+    lookups: Map<string, Promise<string | null>> = new Map(),
+  ): Promise<MerchantJobOutcome> {
     let transaction: Awaited<ReturnType<GmailBackend["resolveImportedTransaction"]>>;
     try {
       transaction = await backend.resolveImportedTransaction(transactionId);
@@ -55,8 +62,16 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
     if (!needsCategory || merchantName === null || categoryNames.length === 0) {
       return "not_needed";
     }
-    const summary = await merchantSummary(merchantName);
-    const categoryName = await chooseCategory(llm, { merchantName, summary, categoryNames });
+    // One job's transactions come from one User, so their Category names are the same.
+    const key = `${merchantKey(merchantName)}\u0000${categoryNames.join("\u0000")}`;
+    let lookup = lookups.get(key);
+    if (!lookup) {
+      lookup = merchantSummary(merchantName).then((summary) =>
+        chooseCategory(llm, { merchantName, summary, categoryNames }),
+      );
+      lookups.set(key, lookup);
+    }
+    const categoryName = await lookup;
     if (categoryName === null) return "uncategorized";
     const applied = await backend.setImportedCategory({ transactionId, categoryName });
     return applied ? "categorized" : "not_needed";
@@ -74,9 +89,10 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
       const transactionIds = "transactionIds" in job ? job.transactionIds : [job.transactionId];
       const outcomes: MerchantJobOutcome[] = [];
       const failures: unknown[] = [];
+      const lookups = new Map<string, Promise<string | null>>();
       for (const transactionId of transactionIds) {
         try {
-          outcomes.push(await runTransaction(transactionId));
+          outcomes.push(await runTransaction(transactionId, lookups));
         } catch (error) {
           failures.push(error);
         }

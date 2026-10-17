@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(29);
+select plan(31);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001, the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234), and default Categories.
@@ -122,12 +122,12 @@ create temporary table recorded_001 on commit drop as
   );
 
 select is(
-  (select row(item.review_status, account.name)::text
+  (select row(item.review_status, account.name, item.gmail_auto_confirm_pending)::text
     from public.transactions as item
     left join public.financial_accounts as account on account.id = item.financial_account_id
     where item.id = (select transaction_ids[1] from recorded_001)),
-  row('confirmed', 'Daily bank')::text,
-  'a verified sender maps to the owner''s account of that institution and auto-confirms'
+  row('pending', 'Daily bank', true)::text,
+  'a verified sender maps to the owner''s account and qualifies, but waits for a Category'
 );
 select is(
   (select uncategorized_transaction_ids from recorded_001),
@@ -284,17 +284,18 @@ select public.record_gmail_extraction(
   p_institution_key => 'BCA_CC'
 );
 select is(
-  (select array_agg(row(source.gmail_message_id, item.review_status)::text
+  (select array_agg(
+      row(source.gmail_message_id, item.review_status, item.gmail_auto_confirm_pending)::text
       order by source.gmail_message_id)
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     where source.gmail_message_id in ('inst-007', 'inst-008', 'inst-009')),
   array[
-    row('inst-007', 'pending')::text,
-    row('inst-008', 'confirmed')::text,
-    row('inst-009', 'pending')::text
+    row('inst-007', 'pending', false)::text,
+    row('inst-008', 'pending', true)::text,
+    row('inst-009', 'pending', false)::text
   ],
-  'below 95 percent stays pending, exactly 95 percent confirms, and incomplete data stays pending'
+  'below 95 percent never qualifies, exactly 95 percent qualifies, and incomplete data never does'
 );
 
 -- Categorization write-back.
@@ -305,12 +306,12 @@ select is(
   'categorization fills an empty category with the owner''s own Category'
 );
 select is(
-  (select category.slug
+  (select row(category.slug, item.gmail_auto_confirm_pending)::text
     from public.transactions as item
     join public.categories as category on category.id = item.category_id
     where item.id = (select transaction_ids[1] from recorded_001)),
-  'food-drinks',
-  'the Category matched by name ignoring case'
+  row('food-drinks', false)::text,
+  'the Category matched by name ignoring case, and the transaction stopped waiting'
 );
 select is(
   (select applied from public.set_imported_category((select transaction_ids[1] from recorded_001), 'Transport')),
@@ -340,6 +341,26 @@ select is(
   'a name that is not one of the owner''s Categories changes nothing'
 );
 
+create temporary table qualified on commit drop as
+  select item.id
+    from public.transactions as item
+    join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
+    where source.gmail_message_id = 'inst-008';
+select is(
+  (select row(applied, review_status)::text
+    from public.set_imported_category((select id from qualified), 'Not a category')),
+  row(false, 'pending')::text,
+  'a qualifying transaction without a confident Category stays pending review'
+);
+update public.transactions set description = 'Edited by the User'
+  where id = (select id from qualified);
+select is(
+  (select row(applied, review_status)::text
+    from public.set_imported_category((select id from qualified), 'Food & Drinks')),
+  row(false, 'pending')::text,
+  'a qualifying transaction the User edited is never confirmed by categorization'
+);
+
 -- The owner's own history comes first.
 select public.record_gmail_extraction(
   (select id from public.processed_gmail_messages where gmail_message_id = 'inst-006'),
@@ -352,13 +373,13 @@ select public.record_gmail_extraction(
   p_institution_key => 'BCA_CC'
 );
 select is(
-  (select category.slug
+  (select row(category.slug, item.review_status, item.gmail_auto_confirm_pending)::text
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     join public.categories as category on category.id = item.category_id
     where source.gmail_message_id = 'inst-006'),
-  'food-drinks',
-  'a merchant the owner confirmed before gets the same Category on import'
+  row('food-drinks', 'confirmed', false)::text,
+  'a merchant the owner confirmed before gets the same Category and confirms on import'
 );
 select is(
   (select cardinality(uncategorized_transaction_ids) from public.record_gmail_extraction(

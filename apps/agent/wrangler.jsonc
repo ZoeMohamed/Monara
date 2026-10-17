@@ -34,7 +34,9 @@
       },
       {
         // Web searches are rate limited, so merchant jobs run in small batches on one
-        // consumer at a time; extraction never waits on them.
+        // consumer at a time; extraction never waits on them. Every imported transaction
+        // without a history Category comes through here, and its auto-confirm waits for
+        // the result, so raise max_concurrency to what the Brave plan allows.
         "queue": "monara-merchant-jobs",
         "max_batch_size": 5,
         "max_batch_timeout": 5,

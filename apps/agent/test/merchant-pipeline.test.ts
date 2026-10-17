@@ -151,6 +151,15 @@ describe("merchant categorization", () => {
     );
   });
 
+  it("looks a merchant up once per job, however many of its transactions it carries", async () => {
+    const other = "00000000-0000-4000-8000-000000000031";
+    const { pipeline, calls } = setup();
+    await pipeline.runJob({ kind: "merchant.categorize", transactionIds: [transactionId, other] });
+    assert.deepEqual(calls.searches, ["Kopi Kenangan"]);
+    assert.equal(calls.prompts.length, 1);
+    assert.equal(calls.set.length, 2);
+  });
+
   it("keeps search summaries short and free of markup", () => {
     const summary = summarizeSearchResults([
       { title: "<script>Kopi</script>", description: "x".repeat(3_000), url: "" },

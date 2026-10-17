@@ -126,14 +126,14 @@ select public.record_gmail_extraction(
 
 select is(
   (
-    select row(item.review_status, account.name)::text
+    select row(item.review_status, account.name, item.gmail_auto_confirm_pending)::text
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     left join public.financial_accounts as account on account.id = item.financial_account_id
     where source.gmail_message_id = 'sync-001'
   ),
-  row('confirmed', 'Daily bank')::text,
-  'a confident complete item maps its account and is confirmed without review'
+  row('pending', 'Daily bank', true)::text,
+  'a confident complete item maps its account and confirms once categorization gives it a Category'
 );
 
 -- The same item below the confidence threshold.
@@ -198,6 +198,15 @@ select lives_ok(
       and source.gmail_message_id = 'sync-003'
       and item.transaction_type = 'exclusion'$$::text,
   'a reviewed Gmail exclusion can be confirmed without becoming a financial transaction'
+);
+
+-- Categorization gives the qualifying item its Category, which confirms it.
+select public.set_imported_category(
+  (select item.id
+    from public.transactions as item
+    join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
+    where source.gmail_message_id = 'sync-001'),
+  'Food & Drinks'
 );
 
 select is(
