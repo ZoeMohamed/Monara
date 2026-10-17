@@ -29,7 +29,7 @@ export const RECEIPT_REPLIES = {
   noAmount:
     "I couldn't read the total on that receipt, so I didn't save anything. Try a sharper photo, or type it, like: Indomaret 37k from BCA.",
   unsupported:
-    "I can only read receipt photos (JPG or PNG). Or type it, like: lunch 20k from GoPay.",
+    "I can only read receipt photos (JPG, PNG or WebP). Or type it, like: lunch 20k from GoPay.",
   failed:
     "Sorry, I couldn't read that photo just now and nothing was saved. Try again in a bit, or type it instead.",
 } as const;
@@ -115,6 +115,8 @@ const clean = (value: string | null, max: number) => {
 export function parseReceiptAmount(amountText: string, currency: string | null): string | null {
   if (currency !== null && currency.trim().toUpperCase() !== "IDR") return null;
   const text = amountText.trim();
+  // Anything left besides digits and separators, such as CHF or a symbol, is another currency.
+  if (/[^\d.,\s]/.test(text.replace(/\bIDR\b|\bRp\.?/gi, ""))) return null;
   const marked = /\bIDR\b|\bRp/i.test(text) ? text : `Rp ${text}`;
   return parseRupiahAmount(marked);
 }

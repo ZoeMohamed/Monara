@@ -88,6 +88,10 @@ test("receipt totals are read as Rupiah, with or without Rp, and never another c
   assert.equal(parseReceiptAmount("12.50", "USD"), null);
   assert.equal(parseReceiptAmount("$12", null), null);
   assert.equal(parseReceiptAmount("37,5", null), null);
+  assert.equal(parseReceiptAmount("CHF 12.00", null), null);
+  assert.equal(parseReceiptAmount("12.000 SGD", null), null);
+  assert.equal(parseReceiptAmount("Rp. 25.000", null), "25000");
+  assert.equal(parseReceiptAmount("IDR 25,000", null), "25000");
 });
 
 test("an account is matched only when exactly one fits the hint", () => {

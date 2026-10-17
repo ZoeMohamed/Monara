@@ -866,6 +866,16 @@ export function createFinanceService(
         values: parsed.values,
         confidence: parsed.confidence,
       });
+      // A repeat of the same message must describe what was saved, so a
+      // different reading or another kind of record under this id is refused.
+      const saved = transactionValuesSchema.parse(transactionValues(transaction));
+      if (
+        transaction.source !== "whatsapp_receipt" ||
+        transaction.reviewStatus !== "pending" ||
+        JSON.stringify(saved) !== JSON.stringify(transactionValuesSchema.parse(parsed.values))
+      ) {
+        throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
+      }
       return { transaction };
     },
 

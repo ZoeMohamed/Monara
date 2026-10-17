@@ -1527,6 +1527,14 @@ describe("receipt photos", () => {
     assert.equal(transaction.confidence, 0.92);
     const again = await service.addReceiptTransaction(whatsApp, receipt);
     assert.equal(again.transaction.id, transaction.id, "a redelivered photo saved twice");
+    await assert.rejects(
+      service.addReceiptTransaction(whatsApp, {
+        ...receipt,
+        values: { ...receipt.values, money: { amountMinor: "38000", currency: "IDR" } },
+      }),
+      (error) => error instanceof FinanceOperationError && error.code === "CONFLICT",
+      "a different reading of the same message was described as saved",
+    );
 
     const summary = await service.getDashboard(whatsApp, { month: "2026-10" });
     assert.equal(summary.spending.amountMinor, "0");
