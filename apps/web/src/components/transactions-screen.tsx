@@ -1,6 +1,5 @@
 "use client";
 
-import type { FinancialAccount } from "@monara/contracts";
 import { Button, Card, InputGroup, Label, TextField } from "@monara/ui";
 import { useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
@@ -181,22 +180,12 @@ function LedgerResultCount({
   );
 }
 
-/** The Financial Account a transaction was paid from, by id and then by the name it carries. */
-function accountOf(transaction: Transaction, accounts: FinancialAccount[]) {
-  return (
-    accounts.find((account) => account.id === transaction.financialAccountId) ??
-    accounts.find((account) => account.name === transaction.method)
-  );
-}
-
 function GroupedLedger({
   transactions,
-  accounts,
   openTransaction,
   onConfirm,
 }: {
   transactions: Transaction[];
-  accounts: FinancialAccount[];
   openTransaction: (transaction: Transaction) => void;
   onConfirm: (id: string) => void;
 }) {
@@ -224,7 +213,6 @@ function GroupedLedger({
           <div className={styles.ledgerGroup}>
             {group.transactions.map((transaction) => (
               <TransactionRow
-                account={accountOf(transaction, accounts)}
                 key={transaction.id}
                 onClick={() => openTransaction(transaction)}
                 onConfirm={
@@ -309,7 +297,6 @@ function Ledger({
   transactions,
   month,
   today,
-  accounts,
   reviewOpen,
   pendingCount,
   openTransaction,
@@ -326,7 +313,6 @@ function Ledger({
   transactions: Transaction[];
   month: string;
   today: string;
-  accounts: FinancialAccount[];
   reviewOpen: boolean;
   pendingCount: number;
   openTransaction: (transaction: Transaction) => void;
@@ -343,7 +329,9 @@ function Ledger({
   // To review lists every import waiting, whatever its month; the other filters stay in the month.
   const ledger = reviewOpen
     ? transactions.filter((transaction) => transaction.status === "pending")
-    : transactions.filter((transaction) => transaction.date?.startsWith(`${month}-`));
+    : transactions.filter(
+        (transaction) => transaction.date === null || transaction.date.startsWith(`${month}-`),
+      );
   const visible = filteredTransactions(ledger, query, reviewOpen ? "all" : kindFilter);
   const filtersActive = query.trim().length > 0 || (!reviewOpen && kindFilter !== "all");
 
@@ -369,7 +357,6 @@ function Ledger({
       />
       {visible.length > 0 ? (
         <GroupedLedger
-          accounts={accounts}
           transactions={visible}
           openTransaction={openTransaction}
           onConfirm={onConfirm}
@@ -394,7 +381,6 @@ export function TransactionsScreen({
   openTransaction,
   reviewOpen,
   setReviewOpen,
-  financialAccounts = [],
   onConfirm,
   month,
   today = demoToday,
@@ -411,7 +397,6 @@ export function TransactionsScreen({
   openTransaction: (transaction: Transaction) => void;
   reviewOpen: boolean;
   setReviewOpen: (value: boolean) => void;
-  financialAccounts?: FinancialAccount[];
   onConfirm: (id: string) => void;
   month: string;
   today?: string;
@@ -470,7 +455,6 @@ export function TransactionsScreen({
         transactions={transactions}
         month={month}
         today={today}
-        accounts={financialAccounts}
         reviewOpen={reviewOpen}
         pendingCount={pendingCount}
         openTransaction={openTransaction}

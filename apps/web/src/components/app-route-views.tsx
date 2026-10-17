@@ -75,7 +75,6 @@ export function TransactionsRoute() {
       setReviewOpen={(reviewOpen) =>
         navigation.navigate(reviewOpen ? { reviewOpen, kindFilter: "all" } : { reviewOpen })
       }
-      financialAccounts={session.financialAccounts}
       openTransaction={(transaction) => navigation.openTransaction(transaction.id)}
       onConfirm={session.confirm}
       query={session.query}

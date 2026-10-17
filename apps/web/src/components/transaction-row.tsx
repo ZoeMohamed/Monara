@@ -1,9 +1,8 @@
 "use client";
 
-import type { FinancialAccount } from "@monara/contracts";
 import { Button } from "@monara/ui";
 import { AccountBadge } from "@/components/account-badge";
-import { useAmountDisplay } from "@/components/app-session-context";
+import { useAmountDisplay, useTransactionAccount } from "@/components/app-session-context";
 import { Icon } from "@/components/icon";
 import styles from "@/components/transaction-row.module.css";
 import { formatDay, type Transaction } from "@/data/demo-ledger";
@@ -45,19 +44,18 @@ function transactionRowModel(
 /** The leading mark is the Financial Account the money moved through, not the merchant. */
 export function TransactionRow({
   transaction,
-  account,
   onClick,
   onConfirm,
   showDate = false,
 }: {
   transaction: Transaction;
-  account?: FinancialAccount;
   onClick?: () => void;
   /** Adds a one-tap confirm beside a pending row, so a clean import needs no detour. */
   onConfirm?: () => void;
   showDate?: boolean;
 }) {
   const { formatRupiah } = useAmountDisplay();
+  const account = useTransactionAccount(transaction);
   const model = transactionRowModel(transaction, showDate, formatRupiah);
   const content = (
     <>
