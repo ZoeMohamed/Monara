@@ -19,6 +19,7 @@ import {
   type ResolvedImportedTransaction,
   recordGmailDiscoveryInputSchema,
   recordGmailExtractionInputSchema,
+  recordGmailExtractionsInputSchema,
   releaseMerchantProfileInputSchema,
   reportGmailConnectionErrorInputSchema,
   reportGmailDiscoveryFailureInputSchema,
@@ -117,6 +118,7 @@ const GMAIL_INGESTION_OPERATIONS = [
   "resolve-connection",
   "claim-message",
   "record-extraction",
+  "record-extractions",
   "start-sync",
   "claim-messages",
   "mark-synced",
@@ -146,6 +148,19 @@ function parse<T extends z.ZodType>(schema: T, input: unknown): z.output<T> {
   return result.data;
 }
 
+async function recordOne(
+  repository: GmailIngestionRepository,
+  input: Parsed<typeof recordGmailExtractionInputSchema>,
+  hooks: { onTransactionsConfirmed?: ConfirmedTransactionsHook },
+): Promise<RecordGmailExtractionResult> {
+  const { userId, confirmedTransactionIds, ...result } = await repository.recordExtraction(input);
+  // A retried record returns alreadyFinished; its follow-up already ran the first time.
+  if (!result.alreadyFinished && confirmedTransactionIds.length > 0) {
+    await hooks.onTransactionsConfirmed?.(userId, confirmedTransactionIds);
+  }
+  return result;
+}
+
 /** Validates one operation's input and runs it. Results match the contract schemas. */
 export async function runGmailIngestionOperation(
   repository: GmailIngestionRepository,
@@ -162,15 +177,14 @@ export async function runGmailIngestionOperation(
       );
     case "claim-message":
       return repository.claimMessage(parse(claimGmailMessageInputSchema, input));
-    case "record-extraction": {
-      const { userId, confirmedTransactionIds, ...result } = await repository.recordExtraction(
-        parse(recordGmailExtractionInputSchema, input),
-      );
-      // A retried record returns alreadyFinished; its follow-up already ran the first time.
-      if (!result.alreadyFinished && confirmedTransactionIds.length > 0) {
-        await hooks.onTransactionsConfirmed?.(userId, confirmedTransactionIds);
-      }
-      return result;
+    case "record-extraction":
+      return recordOne(repository, parse(recordGmailExtractionInputSchema, input), hooks);
+    case "record-extractions": {
+      // One locked transaction per message, in order, so a retried batch finishes each once.
+      const { results } = parse(recordGmailExtractionsInputSchema, input);
+      const recorded = [];
+      for (const result of results) recorded.push(await recordOne(repository, result, hooks));
+      return { results: recorded };
     }
     case "start-sync":
       await repository.startSync(parse(startGmailSyncInputSchema, input).connectionId);

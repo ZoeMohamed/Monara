@@ -62,6 +62,33 @@ export const gmailExtractionJobSchema = z
   })
   .strict();
 
+/** The most emails one parse job carries. Keeps a job inside one consumer invocation's request budget. */
+export const GMAIL_PARSE_JOB_MAX_EMAILS = 10;
+
+/**
+ * Parses up to ten claimed messages of one connection. Ingest claims them first and
+ * passes the claim ids along, so parsing needs no claim call of its own.
+ */
+export const gmailParseJobSchema = z
+  .object({
+    kind: z.literal("gmail.parse"),
+    connectionId: gmailConnectionIdSchema,
+    emails: z
+      .array(
+        z
+          .object({
+            processedMessageId: processedGmailMessageIdSchema,
+            gmailMessageId: gmailMessageIdSchema,
+            /** As claimed; the real time is read from the message itself. */
+            receivedAt: isoDateTimeSchema,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(GMAIL_PARSE_JOB_MAX_EMAILS),
+  })
+  .strict();
+
 /** After a connection, finds which registry entries have emailed the mailbox. Reads metadata only. */
 export const gmailDiscoveryJobSchema = z
   .object({
@@ -72,20 +99,33 @@ export const gmailDiscoveryJobSchema = z
 
 export const gmailJobSchema = z.discriminatedUnion("kind", [
   gmailSyncJobSchema,
+  gmailParseJobSchema,
+  // Single-message jobs queued before parse jobs existed; still run until they drain.
   gmailExtractionJobSchema,
   gmailDiscoveryJobSchema,
 ]);
 
+export const MERCHANT_JOB_MAX_TRANSACTIONS = 10;
+
 /**
- * Categorizes one imported transaction by its merchant. Runs on its own queue so
- * web searches never hold up extraction and can be throttled separately.
+ * Categorizes imported transactions by their merchants. Runs on its own queue so
+ * web searches never hold up extraction and can be throttled separately. The
+ * single transactionId form was queued before batching and still runs until it drains.
  */
-export const merchantCategorizeJobSchema = z
-  .object({
-    kind: z.literal("merchant.categorize"),
-    transactionId: transactionIdSchema,
-  })
-  .strict();
+export const merchantCategorizeJobSchema = z.union([
+  z
+    .object({
+      kind: z.literal("merchant.categorize"),
+      transactionIds: z.array(transactionIdSchema).min(1).max(MERCHANT_JOB_MAX_TRANSACTIONS),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal("merchant.categorize"),
+      transactionId: transactionIdSchema,
+    })
+    .strict(),
+]);
 
 // Gmail ingestion operations: POST /api/agent/gmail/<name without "gmail.">, authenticated
 // with the agent backend credential. The backend derives the User from its own
@@ -168,6 +208,17 @@ export const claimGmailMessagesResultSchema = z
   .object({
     /** Listed messages that still need extraction; finished ones are left out. */
     pendingGmailMessageIds: z.array(gmailMessageIdSchema).max(100),
+    /** The same messages with their claim ids, which parse jobs carry. */
+    pending: z
+      .array(
+        z
+          .object({
+            gmailMessageId: gmailMessageIdSchema,
+            processedMessageId: processedGmailMessageIdSchema,
+          })
+          .strict(),
+      )
+      .max(100),
   })
   .strict();
 
@@ -237,6 +288,20 @@ export const recordGmailExtractionResultSchema = z
   })
   .strict();
 
+/** One parse job's outcomes, recorded together. Each message is still finished once, under its own lock. */
+export const recordGmailExtractionsInputSchema = z
+  .object({
+    results: z.array(recordGmailExtractionInputSchema).min(1).max(GMAIL_PARSE_JOB_MAX_EMAILS),
+  })
+  .strict();
+
+/** In the same order as the input. */
+export const recordGmailExtractionsResultSchema = z
+  .object({
+    results: z.array(recordGmailExtractionResultSchema).max(GMAIL_PARSE_JOB_MAX_EMAILS),
+  })
+  .strict();
+
 export const markGmailConnectionSyncedInputSchema = z
   .object({
     connectionId: gmailConnectionIdSchema,
@@ -262,6 +327,7 @@ export const reportGmailConnectionErrorResultSchema = z.object({}).strict();
 export type ExtractedTransaction = z.infer<typeof extractedTransactionSchema>;
 export type GmailSyncJob = z.infer<typeof gmailSyncJobSchema>;
 export type GmailExtractionJob = z.infer<typeof gmailExtractionJobSchema>;
+export type GmailParseJob = z.infer<typeof gmailParseJobSchema>;
 export type GmailJob = z.infer<typeof gmailJobSchema>;
 export type GmailDiscoveryJob = z.infer<typeof gmailDiscoveryJobSchema>;
 export type MerchantCategorizeJob = z.infer<typeof merchantCategorizeJobSchema>;
@@ -280,6 +346,8 @@ export type ClaimGmailMessageResult = z.infer<typeof claimGmailMessageResultSche
 export type GmailExtractionOutcome = z.infer<typeof gmailExtractionOutcomeSchema>;
 export type RecordGmailExtractionInput = z.input<typeof recordGmailExtractionInputSchema>;
 export type RecordGmailExtractionResult = z.infer<typeof recordGmailExtractionResultSchema>;
+export type RecordGmailExtractionsInput = z.input<typeof recordGmailExtractionsInputSchema>;
+export type RecordGmailExtractionsResult = z.infer<typeof recordGmailExtractionsResultSchema>;
 export type MarkGmailConnectionSyncedInput = z.input<typeof markGmailConnectionSyncedInputSchema>;
 export type ReportGmailConnectionErrorInput = z.input<typeof reportGmailConnectionErrorInputSchema>;
 

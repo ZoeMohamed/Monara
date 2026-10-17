@@ -5,11 +5,13 @@ import type {
   ClaimGmailMessagesInput,
   GmailExtractionJob,
   GmailJob,
+  GmailParseJob,
   GmailSyncJob,
   MarkGmailConnectionSyncedInput,
   MerchantCategorizeJob,
   RecordGmailDiscoveryInput,
   RecordGmailExtractionInput,
+  RecordGmailExtractionsInput,
   ReportGmailConnectionErrorInput,
   ReportGmailSyncFailureInput,
 } from "@monara/contracts";
@@ -31,6 +33,12 @@ const now = new Date("2026-10-13T00:00:00.000Z");
 const bcaCardSender = "kartukreditbca@klikbca.com";
 const gmailPass = "mx.google.com; dkim=pass header.i=@klikbca.com";
 const transactionId = "00000000-0000-4000-8000-000000000030";
+
+/** A stable claim id per listed message, as claim-messages would return it. */
+function claimId(gmailMessageId: string): string {
+  const digits = [...gmailMessageId].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return `00000000-0000-4000-8000-${String(digits).padStart(12, "0")}`;
+}
 
 function summary(id: string, overrides: Partial<GmailMessageSummary> = {}): GmailMessageSummary {
   return {
@@ -78,6 +86,10 @@ interface Overrides {
   uncategorized?: string[];
   /** Listed messages an earlier sync already finished. */
   finished?: string[];
+  /** Messages whose read fails, for partial batch failures. */
+  failIds?: string[];
+  /** Messages a claim reports as finished, for retried parse jobs. */
+  finishedOnClaim?: string[];
 }
 
 /** Fake backend, reader and model that record every call the pipeline makes. */
@@ -85,6 +97,8 @@ function setup(overrides: Overrides = {}) {
   const calls = {
     claim: [] as ClaimGmailMessageInput[],
     record: [] as RecordGmailExtractionInput[],
+    recordCalls: [] as RecordGmailExtractionsInput[],
+    resolved: 0,
     synced: [] as MarkGmailConnectionSyncedInput[],
     enqueued: [] as GmailJob[],
     fetched: [] as string[],
@@ -104,6 +118,7 @@ function setup(overrides: Overrides = {}) {
       return { connections: [{ connectionId, lastSyncedAt: "2026-10-12T00:00:00.000Z" }] };
     },
     async resolveConnection(id) {
+      calls.resolved += 1;
       if (overrides.inactive) {
         throw new BackendOperationError("gmail.resolve-connection", 404, "NOT_FOUND");
       }
@@ -140,10 +155,12 @@ function setup(overrides: Overrides = {}) {
     },
     async claimMessages(input) {
       calls.claimedPages.push(input);
+      const pending = input.messages
+        .map((message) => message.gmailMessageId)
+        .filter((id) => !(overrides.finished ?? []).includes(id));
       return {
-        pendingGmailMessageIds: input.messages
-          .map((message) => message.gmailMessageId)
-          .filter((id) => !(overrides.finished ?? []).includes(id)),
+        pendingGmailMessageIds: pending,
+        pending: pending.map((id) => ({ gmailMessageId: id, processedMessageId: claimId(id) })),
       };
     },
     async reportSyncFailure(input) {
@@ -151,7 +168,24 @@ function setup(overrides: Overrides = {}) {
     },
     async claimMessage(input) {
       calls.claim.push(input);
-      return { processedMessageId, alreadyFinished: overrides.alreadyFinished ?? false };
+      return {
+        processedMessageId,
+        alreadyFinished:
+          overrides.alreadyFinished ??
+          (overrides.finishedOnClaim ?? []).includes(input.gmailMessageId),
+      };
+    },
+    async recordExtractions(input) {
+      calls.recordCalls.push(input);
+      calls.record.push(...input.results);
+      const uncategorized = overrides.uncategorized ?? [];
+      return {
+        results: input.results.map((result) => ({
+          transactionIds: result.outcome === "transactions" ? uncategorized : [],
+          alreadyFinished: false,
+          uncategorizedTransactionIds: result.outcome === "transactions" ? uncategorized : [],
+        })),
+      };
     },
     async recordExtraction(input) {
       calls.record.push(input);
@@ -182,7 +216,9 @@ function setup(overrides: Overrides = {}) {
     async getMessage(_mailbox, id) {
       calls.fetched.push(id);
       if (overrides.readStatus) throw new GmailReadError("read failed", overrides.readStatus);
-      if (overrides.readFails) throw new Error("read failed");
+      if (overrides.readFails || (overrides.failIds ?? []).includes(id)) {
+        throw new Error("read failed");
+      }
       const fromAddress =
         overrides.fromAddress === undefined ? bcaCardSender : overrides.fromAddress;
       return {
@@ -263,7 +299,9 @@ describe("processMessage", () => {
   it("queues categorization for items the User's history could not categorize", async () => {
     const { pipeline, calls } = setup({ uncategorized: [transactionId] });
     await pipeline.runJob(extractJob, notFinal);
-    assert.deepEqual(calls.merchantJobs, [{ kind: "merchant.categorize", transactionId }]);
+    assert.deepEqual(calls.merchantJobs, [
+      { kind: "merchant.categorize", transactionIds: [transactionId] },
+    ]);
   });
 
   it("stops before reading a message that is already finished", async () => {
@@ -328,11 +366,17 @@ describe("syncConnection", () => {
     startedAt: null,
   };
 
-  it("queues one extraction per message and marks the window start as synced", async () => {
+  it("queues a parse job with the claim ids and marks the window start as synced", async () => {
     const { pipeline, calls } = setup();
     assert.equal(await pipeline.runJob(syncJob, notFinal), "listed");
     assert.equal(calls.listed[0]?.query, syncQuery(sendersFor(["BCA_CC"])));
-    assert.deepEqual(calls.enqueued, [extractJob]);
+    assert.deepEqual(calls.enqueued, [
+      {
+        kind: "gmail.parse",
+        connectionId,
+        emails: [{ processedMessageId: claimId("m1"), gmailMessageId: "m1", receivedAt }],
+      },
+    ]);
     assert.deepEqual(calls.synced, [{ connectionId, syncedAt: now.toISOString() }]);
   });
 
@@ -383,8 +427,22 @@ describe("syncConnection", () => {
     });
     await pipeline.runJob(syncJob, notFinal);
     assert.deepEqual(
-      calls.enqueued.map((job) => (job.kind === "gmail.extract" ? job.gmailMessageId : job.kind)),
+      calls.enqueued.flatMap((job) =>
+        job.kind === "gmail.parse" ? job.emails.map((email) => email.gmailMessageId) : [job.kind],
+      ),
       ["m2"],
+    );
+  });
+
+  it("splits a listed page into parse jobs of at most ten emails", async () => {
+    const ids = Array.from({ length: 23 }, (_, index) => `m${index + 1}`);
+    const { pipeline, calls } = setup({
+      page: { messages: ids.map((id) => summary(id)), nextPageToken: null },
+    });
+    await pipeline.runJob(syncJob, notFinal);
+    assert.deepEqual(
+      calls.enqueued.map((job) => (job.kind === "gmail.parse" ? job.emails.length : 0)),
+      [10, 10, 3],
     );
   });
 
@@ -435,6 +493,162 @@ describe("syncConnection", () => {
     const { pipeline, calls } = setup();
     assert.equal(await pipeline.scheduleSyncs(), 1);
     assert.deepEqual(calls.enqueued, [{ ...syncJob, since: "2026-10-12T00:00:00.000Z" }]);
+  });
+});
+
+describe("processBatch", () => {
+  function parseJob(ids: string[]): GmailParseJob {
+    return {
+      kind: "gmail.parse",
+      connectionId,
+      emails: ids.map((id) => ({
+        processedMessageId: claimId(id),
+        gmailMessageId: id,
+        receivedAt,
+      })),
+    };
+  }
+
+  it("resolves once, parses every email, and records them in one call", async () => {
+    const { pipeline, calls } = setup({ uncategorized: [transactionId] });
+    assert.equal(await pipeline.runJob(parseJob(["m1", "m2", "m3"]), notFinal), "transactions");
+    assert.equal(calls.resolved, 1);
+    assert.deepEqual(calls.claim, [], "the first delivery needs no claim call");
+    assert.equal(calls.modelCalls, 3);
+    assert.equal(calls.recordCalls.length, 1);
+    assert.deepEqual(
+      calls.record.map((result) => result.processedMessageId),
+      [claimId("m1"), claimId("m2"), claimId("m3")],
+    );
+    // Categorization is queued in batches, not one job per transaction.
+    assert.deepEqual(calls.merchantJobs, [
+      {
+        kind: "merchant.categorize",
+        transactionIds: [transactionId, transactionId, transactionId],
+      },
+    ]);
+  });
+
+  it("records the emails that worked, then throws so the job retries", async () => {
+    const { pipeline, calls } = setup({ failIds: ["m2"] });
+    await assert.rejects(pipeline.runJob(parseJob(["m1", "m2", "m3"]), notFinal), /read failed/);
+    assert.deepEqual(
+      calls.record.map((result) => result.processedMessageId),
+      [claimId("m1"), claimId("m3")],
+    );
+  });
+
+  it("records a still-failing email as failed on the final attempt", async () => {
+    const { pipeline, calls } = setup({ failIds: ["m2"] });
+    const outcome = await pipeline.runJob(parseJob(["m1", "m2"]), {
+      isFinalAttempt: true,
+      isRetry: true,
+    });
+    assert.equal(outcome, "transactions");
+    assert.deepEqual(
+      calls.record.map((result) => [result.processedMessageId, result.outcome]),
+      [
+        [claimId("m1"), "transactions"],
+        [claimId("m2"), "failed"],
+      ],
+    );
+  });
+
+  it("drops emails an earlier delivery finished before reading anything on a retry", async () => {
+    const { pipeline, calls } = setup({ finishedOnClaim: ["m1"] });
+    await pipeline.runJob(parseJob(["m1", "m2"]), { isFinalAttempt: false, isRetry: true });
+    assert.deepEqual(calls.fetched, ["m2"]);
+    assert.deepEqual(
+      calls.record.map((result) => result.processedMessageId),
+      [claimId("m2")],
+    );
+
+    const done = setup({ finishedOnClaim: ["m1"] });
+    assert.equal(
+      await done.pipeline.runJob(parseJob(["m1"]), { isFinalAttempt: false, isRetry: true }),
+      "already_finished",
+    );
+    assert.deepEqual(done.calls.fetched, []);
+  });
+
+  it("skips mail from senders the User has no account for, without the model", async () => {
+    const { pipeline, calls } = setup({ fromAddress: "promo@shop.example" });
+    assert.equal(await pipeline.runJob(parseJob(["m1"]), notFinal), "skipped");
+    assert.equal(calls.modelCalls, 0);
+    assert.equal(calls.record[0]?.outcome, "skipped");
+  });
+
+  it("works on at most the configured number of emails at once", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const recordCalls: RecordGmailExtractionsInput[] = [];
+    const pipeline = createGmailPipeline({
+      backend: {
+        async resolveConnection() {
+          return {
+            connectionId,
+            userId: "00000000-0000-4000-8000-000000000001",
+            composioConnectedAccountId: "ca_1",
+            categoryNames: [],
+            institutionKeys: ["BCA_CC"],
+          };
+        },
+        async recordExtractions(input: RecordGmailExtractionsInput) {
+          recordCalls.push(input);
+          return {
+            results: input.results.map(() => ({
+              transactionIds: [],
+              alreadyFinished: false,
+              uncategorizedTransactionIds: [],
+            })),
+          };
+        },
+      } as unknown as GmailBackend,
+      reader: {
+        async isConnectionUsable() {
+          return true;
+        },
+        async listMessages() {
+          return { messages: [], nextPageToken: null };
+        },
+        async getMessage(_mailbox, id) {
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          inFlight -= 1;
+          return {
+            id,
+            receivedAt,
+            from: "promo@shop.example",
+            fromAddress: "promo@shop.example",
+            subject: "Promo",
+            text: "x",
+            html: null,
+            authenticationResults: [],
+          };
+        },
+      },
+      llm: {
+        async completeJson() {
+          return receipt;
+        },
+      },
+      enqueue: async () => {},
+      enqueueMerchant: async () => {},
+      parseConcurrency: 2,
+    });
+    await pipeline.runJob(parseJob(["a", "b", "c", "d", "e"]), notFinal);
+    assert.equal(peak, 2);
+    assert.equal(recordCalls[0]?.results.length, 5);
+  });
+
+  it("stops without recording when the connection is lost", async () => {
+    const { pipeline, calls } = setup({ readStatus: 403, accountUsable: false });
+    assert.equal(
+      await pipeline.runJob(parseJob(["m1", "m2"]), { isFinalAttempt: true }),
+      "connection_lost",
+    );
+    assert.deepEqual(calls.record, []);
   });
 });
 

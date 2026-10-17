@@ -2,12 +2,16 @@ import {
   emailInstitutions,
   findInstitution,
   findInstitutionBySender,
+  GMAIL_PARSE_JOB_MAX_EMAILS,
   type GmailDiscoveryFinding,
   type GmailDiscoveryJob,
   type GmailExtractionJob,
   type GmailJob,
+  type GmailParseJob,
   type GmailSyncJob,
+  MERCHANT_JOB_MAX_TRANSACTIONS,
   type MerchantCategorizeJob,
+  type RecordGmailExtractionInput,
   type ResolvedGmailConnection,
 } from "@monara/contracts";
 import {
@@ -44,7 +48,21 @@ export interface GmailPipelineDependencies {
   enqueue: (jobs: GmailJob[]) => Promise<void>;
   /** Queues categorization, which runs apart from extraction. */
   enqueueMerchant: (jobs: MerchantCategorizeJob[]) => Promise<void>;
+  /** Emails per parse job, at most GMAIL_PARSE_JOB_MAX_EMAILS. */
+  parseBatchSize?: number;
+  /** Emails a parse job works on at once. */
+  parseConcurrency?: number;
   now?: () => Date;
+}
+
+const DEFAULT_PARSE_CONCURRENCY = 5;
+
+/** Options for one run of a queued job. */
+export interface JobRunOptions {
+  /** The queue will not deliver this job again. */
+  isFinalAttempt: boolean;
+  /** An earlier delivery of this job may have recorded some of its emails already. */
+  isRetry?: boolean;
 }
 
 export type GmailJobOutcome =
@@ -85,6 +103,37 @@ class ConnectionLostError extends Error {
     super("The Gmail connection can no longer be used.");
     this.name = "ConnectionLostError";
   }
+}
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let start = 0; start < items.length; start += size) {
+    chunks.push(items.slice(start, start + size));
+  }
+  return chunks;
+}
+
+/** Runs fn over items with at most `limit` in flight, keeping each outcome in input order. */
+async function settleWithLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      try {
+        results[index] = { status: "fulfilled", value: await fn(items[index]) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 function fromClause(senders: readonly string[]): string {
@@ -136,6 +185,52 @@ function tally(messages: readonly GmailMessageSummary[]): GmailDiscoveryFinding[
 export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
   const { backend, reader, llm, enqueue, enqueueMerchant } = dependencies;
   const now = dependencies.now ?? (() => new Date());
+  const parseBatchSize = Math.min(
+    Math.max(1, dependencies.parseBatchSize ?? GMAIL_PARSE_JOB_MAX_EMAILS),
+    GMAIL_PARSE_JOB_MAX_EMAILS,
+  );
+  const parseConcurrency = Math.max(1, dependencies.parseConcurrency ?? DEFAULT_PARSE_CONCURRENCY);
+
+  /** Queues categorization in batches; the merchant queue never holds up extraction. */
+  async function queueCategorization(transactionIds: readonly string[]): Promise<void> {
+    if (transactionIds.length === 0) return;
+    await enqueueMerchant(
+      chunk(transactionIds, MERCHANT_JOB_MAX_TRANSACTIONS).map((ids) => ({
+        kind: "merchant.categorize",
+        transactionIds: ids,
+      })),
+    );
+  }
+
+  /**
+   * Reads and extracts one claimed message into what record-extraction takes. Only
+   * mail whose sender belongs to one of the User's accounts reaches the model.
+   */
+  async function extractOne(
+    connection: ResolvedGmailConnection,
+    processedMessageId: string,
+    gmailMessageId: string,
+    prefetched: GmailMessageContent | null = null,
+  ): Promise<RecordGmailExtractionInput> {
+    const message =
+      prefetched ??
+      (await read(connection, () => reader.getMessage(toMailbox(connection), gmailMessageId)));
+    const institution = message.fromAddress ? findInstitutionBySender(message.fromAddress) : null;
+    const owned =
+      institution !== null && connection.institutionKeys.includes(institution.key)
+        ? institution
+        : null;
+    const email = owned ? toEmailForExtraction(message) : null;
+    const extraction = email ? await extractTransactions(llm, email) : null;
+    const outcome = extraction && extraction.items.length > 0 ? "transactions" : "skipped";
+    return {
+      processedMessageId,
+      outcome,
+      items: outcome === "transactions" && extraction ? extraction.items : [],
+      institutionKey: owned?.key ?? null,
+      senderVerified: isSenderVerified(message.fromAddress, message.authenticationResults),
+    };
+  }
 
   /**
    * Runs a Composio read. When it fails in a way that could mean revoked access, asks
@@ -178,32 +273,31 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
     );
 
     // Claimed before queueing so the sync counts them as in progress until each is
-    // extracted. A listing without a timestamp is claimed at the sync's start time;
-    // its extraction job still reads the real time from the message.
+    // parsed. A listing without a timestamp is claimed at the sync's start time; the
+    // parse job reads the real time from the message.
+    const claimed = page.messages.map((message) => ({
+      gmailMessageId: message.id,
+      receivedAt: message.receivedAt ?? startedAt,
+    }));
     const pending =
-      page.messages.length > 0
-        ? new Set(
+      claimed.length > 0
+        ? new Map(
             (
-              await backend.claimMessages({
-                connectionId: job.connectionId,
-                messages: page.messages.map((message) => ({
-                  gmailMessageId: message.id,
-                  receivedAt: message.receivedAt ?? startedAt,
-                })),
-              })
-            ).pendingGmailMessageIds,
+              await backend.claimMessages({ connectionId: job.connectionId, messages: claimed })
+            ).pending.map((entry) => [entry.gmailMessageId, entry.processedMessageId]),
           )
-        : new Set<string>();
+        : new Map<string, string>();
 
     // Mail an earlier sync finished is listed again but never queued again.
-    const jobs: GmailJob[] = page.messages
-      .filter((message) => pending.has(message.id))
-      .map((message) => ({
-        kind: "gmail.extract",
-        connectionId: job.connectionId,
-        gmailMessageId: message.id,
-        receivedAt: message.receivedAt,
-      }));
+    const emails = claimed.flatMap((message) => {
+      const processedMessageId = pending.get(message.gmailMessageId);
+      return processedMessageId ? [{ processedMessageId, ...message }] : [];
+    });
+    const jobs: GmailJob[] = chunk(emails, parseBatchSize).map((batch) => ({
+      kind: "gmail.parse",
+      connectionId: job.connectionId,
+      emails: batch,
+    }));
     if (page.nextPageToken) {
       jobs.push({ ...job, pageToken: page.nextPageToken, startedAt });
     }
@@ -221,7 +315,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
    */
   async function processMessage(
     job: GmailExtractionJob,
-    options: { isFinalAttempt: boolean },
+    options: JobRunOptions,
   ): Promise<GmailJobOutcome> {
     const connection = await backend.resolveConnection(job.connectionId);
     const mailbox = toMailbox(connection);
@@ -241,31 +335,17 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
     if (claim.alreadyFinished) return "already_finished";
 
     try {
-      message ??= await read(connection, () => reader.getMessage(mailbox, job.gmailMessageId));
-      const institution = message.fromAddress ? findInstitutionBySender(message.fromAddress) : null;
-      const owned =
-        institution !== null && connection.institutionKeys.includes(institution.key)
-          ? institution
-          : null;
-      const email = owned ? toEmailForExtraction(message) : null;
-      const extraction = email ? await extractTransactions(llm, email) : null;
-      const outcome = extraction && extraction.items.length > 0 ? "transactions" : "skipped";
-      const recorded = await backend.recordExtraction({
-        processedMessageId: claim.processedMessageId,
-        outcome,
-        items: outcome === "transactions" && extraction ? extraction.items : [],
-        institutionKey: owned?.key ?? null,
-        senderVerified: isSenderVerified(message.fromAddress, message.authenticationResults),
-      });
-      if (!recorded.alreadyFinished && recorded.uncategorizedTransactionIds.length > 0) {
-        await enqueueMerchant(
-          recorded.uncategorizedTransactionIds.map((transactionId) => ({
-            kind: "merchant.categorize",
-            transactionId,
-          })),
-        );
+      const result = await extractOne(
+        connection,
+        claim.processedMessageId,
+        job.gmailMessageId,
+        message,
+      );
+      const recorded = await backend.recordExtraction(result);
+      if (!recorded.alreadyFinished) {
+        await queueCategorization(recorded.uncategorizedTransactionIds);
       }
-      return outcome;
+      return result.outcome;
     } catch (error) {
       // A lost connection leaves the message claimed but unfinished, so it is read again after reconnecting.
       if (!options.isFinalAttempt || isNotFound(error) || error instanceof ConnectionLostError) {
@@ -280,6 +360,77 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       });
       return "failed";
     }
+  }
+
+  /**
+   * Parses one job's claimed emails a few at a time and records them in one call.
+   * Failed emails make the job retry; a retry first drops emails an earlier delivery
+   * finished. On the final attempt they are recorded as failed instead.
+   */
+  async function processBatch(
+    job: GmailParseJob,
+    options: JobRunOptions,
+  ): Promise<GmailJobOutcome> {
+    const connection = await backend.resolveConnection(job.connectionId);
+
+    let emails = job.emails;
+    if (options.isRetry) {
+      const claims = await Promise.all(
+        emails.map((email) =>
+          backend.claimMessage({
+            connectionId: job.connectionId,
+            gmailMessageId: email.gmailMessageId,
+            receivedAt: email.receivedAt,
+          }),
+        ),
+      );
+      emails = emails.filter((_email, index) => !claims[index]?.alreadyFinished);
+      if (emails.length === 0) return "already_finished";
+    }
+
+    const settled = await settleWithLimit(emails, parseConcurrency, (email) =>
+      extractOne(connection, email.processedMessageId, email.gmailMessageId),
+    );
+    const results: RecordGmailExtractionInput[] = [];
+    const failures: unknown[] = [];
+    settled.forEach((outcome, index) => {
+      if (outcome.status === "fulfilled") {
+        results.push(outcome.value);
+        return;
+      }
+      failures.push(outcome.reason);
+      // A lost connection or an inactive one leaves the message claimed but unfinished.
+      const recoverable =
+        !isNotFound(outcome.reason) && !(outcome.reason instanceof ConnectionLostError);
+      const email = emails[index];
+      if (options.isFinalAttempt && recoverable && email) {
+        results.push({
+          processedMessageId: email.processedMessageId,
+          outcome: "failed",
+          items: [],
+          institutionKey: null,
+          senderVerified: false,
+        });
+      }
+    });
+
+    if (results.length > 0) {
+      const recorded = await backend.recordExtractions({ results });
+      await queueCategorization(
+        recorded.results.flatMap((entry) =>
+          entry.alreadyFinished ? [] : entry.uncategorizedTransactionIds,
+        ),
+      );
+    }
+
+    const lost = failures.find(
+      (reason) => reason instanceof ConnectionLostError || isNotFound(reason),
+    );
+    if (lost) throw lost;
+    if (failures.length > 0 && !options.isFinalAttempt) throw failures[0];
+    if (results.some((result) => result.outcome === "transactions")) return "transactions";
+    if (results.some((result) => result.outcome === "failed")) return "failed";
+    return "skipped";
   }
 
   /**
@@ -337,6 +488,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
   return {
     syncConnection,
     processMessage,
+    processBatch,
     discover,
 
     /**
@@ -384,9 +536,10 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
     },
 
     /** Runs one queued job. A connection that is no longer active ends the job without retrying. */
-    async runJob(job: GmailJob, options: { isFinalAttempt: boolean }): Promise<GmailJobOutcome> {
+    async runJob(job: GmailJob, options: JobRunOptions): Promise<GmailJobOutcome> {
       try {
         if (job.kind === "gmail.sync") return await syncConnection(job);
+        if (job.kind === "gmail.parse") return await processBatch(job, options);
         if (job.kind === "gmail.discover") return await discover(job);
         return await processMessage(job, options);
       } catch (error) {

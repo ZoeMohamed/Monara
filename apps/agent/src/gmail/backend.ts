@@ -20,6 +20,8 @@ import {
   type RecordGmailDiscoveryInput,
   type RecordGmailExtractionInput,
   type RecordGmailExtractionResult,
+  type RecordGmailExtractionsInput,
+  type RecordGmailExtractionsResult,
   type ReportGmailConnectionErrorInput,
   type ReportGmailSyncFailureInput,
   type ResolvedGmailConnection,
@@ -27,6 +29,8 @@ import {
   recordGmailDiscoveryInputSchema,
   recordGmailExtractionInputSchema,
   recordGmailExtractionResultSchema,
+  recordGmailExtractionsInputSchema,
+  recordGmailExtractionsResultSchema,
   releaseMerchantProfileInputSchema,
   reportGmailConnectionErrorInputSchema,
   reportGmailConnectionErrorResultSchema,
@@ -157,6 +161,15 @@ export function createGmailBackend(config: BackendConfig) {
         "gmail.record-extraction",
         recordGmailExtractionInputSchema.parse(input),
         recordGmailExtractionResultSchema,
+      );
+    },
+
+    /** One parse job's outcomes in one call; results come back in the same order. */
+    recordExtractions(input: RecordGmailExtractionsInput): Promise<RecordGmailExtractionsResult> {
+      return call(
+        "gmail.record-extractions",
+        recordGmailExtractionsInputSchema.parse(input),
+        recordGmailExtractionsResultSchema,
       );
     },
 

@@ -71,6 +71,12 @@ function createLlm(env: Env) {
   });
 }
 
+/** A whole number from 1 to 10 from an optional setting; undefined when unset or invalid. */
+function smallCount(value: string | undefined): number | undefined {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 10 ? parsed : undefined;
+}
+
 async function sendInBatches<T>(queue: Queue<T>, jobs: readonly T[]): Promise<void> {
   for (let start = 0; start < jobs.length; start += QUEUE_SEND_BATCH_LIMIT) {
     const batch = jobs.slice(start, start + QUEUE_SEND_BATCH_LIMIT);
@@ -95,6 +101,8 @@ function createPipeline(env: Env) {
     llm: createLlm(env),
     enqueue: (jobs) => sendInBatches(queue, jobs),
     enqueueMerchant: (jobs) => sendInBatches(merchantQueue, jobs),
+    parseBatchSize: smallCount(env.GMAIL_PARSE_BATCH_SIZE),
+    parseConcurrency: smallCount(env.GMAIL_PARSE_CONCURRENCY),
   });
 }
 
@@ -219,6 +227,7 @@ export async function consumeGmailJobs(batch: MessageBatch<unknown>, env: Env): 
       try {
         const outcome = await pipeline.runJob(job.data, {
           isFinalAttempt: message.attempts > GMAIL_QUEUE_MAX_RETRIES,
+          isRetry: message.attempts > 1,
         });
         logEvent("info", { event: "gmail.job_done", ...ids, outcome });
         message.ack();

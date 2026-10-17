@@ -77,7 +77,7 @@ function setup(overrides: Overrides = {}) {
 describe("merchant categorization", () => {
   it("searches only the merchant name, caches it, and sets the User's own category", async () => {
     const { pipeline, calls } = setup();
-    assert.equal(await pipeline.runJob(job), "categorized");
+    assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
     assert.deepEqual(calls.searches, ["Kopi Kenangan"]);
     assert.deepEqual(calls.saved, [
       { merchantName: "Kopi Kenangan", summary: "Kopi Kenangan: Coffee shop chain" },
@@ -92,7 +92,7 @@ describe("merchant categorization", () => {
 
   it("uses a cached profile without searching", async () => {
     const { pipeline, calls } = setup({ claim: { status: "ready", summary: "Coffee shop" } });
-    assert.equal(await pipeline.runJob(job), "categorized");
+    assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
     assert.deepEqual(calls.searches, []);
   });
 
@@ -116,7 +116,7 @@ describe("merchant categorization", () => {
       { categoryName: null, confidence: 0.9 },
     ]) {
       const { pipeline, calls } = setup({ model });
-      assert.equal(await pipeline.runJob(job), "uncategorized");
+      assert.deepEqual(await pipeline.runJob(job), ["uncategorized"]);
       assert.deepEqual(calls.set, []);
     }
   });
@@ -124,9 +124,31 @@ describe("merchant categorization", () => {
   it("does nothing once the User or history already decided", async () => {
     for (const overrides of [{ needsCategory: false }, { merchantName: null }, { missing: true }]) {
       const { pipeline, calls } = setup(overrides);
-      assert.equal(await pipeline.runJob(job), "not_needed");
+      assert.deepEqual(await pipeline.runJob(job), ["not_needed"]);
       assert.deepEqual(calls.searches, []);
     }
+  });
+
+  it("categorizes every transaction of a batched job, then retries if any failed", async () => {
+    const other = "00000000-0000-4000-8000-000000000031";
+    const done = setup();
+    assert.deepEqual(
+      await done.pipeline.runJob({
+        kind: "merchant.categorize",
+        transactionIds: [transactionId, other],
+      }),
+      ["categorized", "categorized"],
+    );
+    assert.deepEqual(
+      done.calls.set.map((entry) => entry.transactionId),
+      [transactionId, other],
+    );
+
+    const busy = setup({ claim: { status: "busy" } });
+    await assert.rejects(
+      busy.pipeline.runJob({ kind: "merchant.categorize", transactionIds: [transactionId, other] }),
+      MerchantBusyError,
+    );
   });
 
   it("keeps search summaries short and free of markup", () => {

@@ -169,13 +169,17 @@ export function createSupabaseGmailIngestionRepository(
           ? { data: [], error: null }
           : await client
               .from("processed_gmail_messages")
-              .select("gmail_message_id")
+              .select("id, gmail_message_id")
               .eq("gmail_connection_id", input.connectionId)
               .in("gmail_message_id", ids)
               .in("processing_status", ["processing", "failed"]);
       if (pending.error) fail(pending.error);
       return claimGmailMessagesResultSchema.parse({
         pendingGmailMessageIds: pending.data.map((row) => row.gmail_message_id),
+        pending: pending.data.map((row) => ({
+          gmailMessageId: row.gmail_message_id,
+          processedMessageId: row.id,
+        })),
       });
     },
 
