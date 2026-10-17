@@ -167,10 +167,7 @@ export function createWhatsAppLinkService(input: {
       let reason: WhatsAppCodeRejection | null = null;
       for (const found of links) {
         const outcome = await tryCode(found, verificationCode, key, at, phoneE164);
-        if (outcome === "verified") {
-          await repository.enableWhatsAppReminders(found.userId);
-          return { status: "verified", userId: found.userId };
-        }
+        if (outcome === "verified") return { status: "verified", userId: found.userId };
         reason = outcome ?? reason;
       }
       return reason ? { status: "code_rejected", reason } : { status: "unlinked" };
@@ -218,6 +215,10 @@ export function createWhatsAppLinkService(input: {
       });
       if (claimed) {
         if (outcome.verified) {
+          // Opt in first: if that fails the link stays pending and the User resends
+          // the code, so a verified link never misses its opt-in. Opting in alone
+          // sends nothing, since alerts also need a verified link.
+          await repository.enableWhatsAppReminders(link.userId);
           const verified = await repository.markVerified({
             id: link.id,
             codeDigest,

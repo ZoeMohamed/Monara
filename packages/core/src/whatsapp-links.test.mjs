@@ -214,6 +214,27 @@ describe("WhatsApp Link service", () => {
     assert.equal(memory.rows[0].status, "pending");
   });
 
+  it("leaves the link pending when opting in fails, so resending the code completes both", async () => {
+    const { service, memory } = setup();
+    const started = await service.start(userA, { phone });
+    const { repository } = memory;
+    const enable = repository.enableWhatsAppReminders;
+    repository.enableWhatsAppReminders = async () => {
+      throw new Error("database down");
+    };
+    await assert.rejects(
+      service.resolveSender({ phoneE164: sender, verificationCode: started.code }),
+    );
+    assert.equal(memory.rows[0].status, "pending");
+
+    repository.enableWhatsAppReminders = enable;
+    assert.deepEqual(
+      await service.resolveSender({ phoneE164: sender, verificationCode: started.code }),
+      { status: "verified", userId: userA },
+    );
+    assert.ok(memory.optedIn.has(userA));
+  });
+
   it("keeps one verified owner per number and fails closed without a secret", async () => {
     const { service } = setup();
     const started = await service.start(userA, { phone });
