@@ -158,10 +158,23 @@ function ProfileLegal() {
   );
 }
 
-function ProfileReminderSettings() {
+function ProfileReminderSettings({ onOpenReminders }: { onOpenReminders: () => void }) {
   return (
     <Group id="reminders" title="Reminder settings">
-      <Row detail="Reminder preferences are not available yet." end="Unavailable" title="In-app" />
+      <Button
+        className="-mx-5 flex h-auto min-h-16 w-[calc(100%+2.5rem)] justify-start gap-3 rounded-none px-5 py-2.5 text-left hover:bg-surface-secondary focus-visible:-outline-offset-2 active:bg-surface-secondary"
+        onPress={onOpenReminders}
+        variant="ghost"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">In-app reminders</span>
+          <span className="mt-1 block text-xs font-normal leading-5 text-muted">
+            Open Notifications
+          </span>
+        </span>
+        <span className="shrink-0 text-xs font-medium text-muted">Always on</span>
+        <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+      </Button>
       <Row
         detail="Requires a verified WhatsApp link."
         end="Unavailable"
@@ -215,6 +228,7 @@ export function ProfileScreen({
   demo = false,
   financialAccounts,
   financialCategories,
+  onOpenReminders,
   onReplayTour,
 }: {
   online: boolean;
@@ -222,6 +236,7 @@ export function ProfileScreen({
   demo?: boolean;
   financialAccounts?: ReactNode;
   financialCategories?: ReactNode;
+  onOpenReminders: () => void;
   onReplayTour?: () => void;
 }) {
   return (
@@ -233,7 +248,7 @@ export function ProfileScreen({
       {financialCategories}
       <ProfileConnections demo={demo} />
       {demo ? null : <ProfileAccount />}
-      <ProfileReminderSettings />
+      <ProfileReminderSettings onOpenReminders={onOpenReminders} />
       <ProfileAppSettings online={online} onReplayTour={onReplayTour} />
       <ProfileLegal />
       <p className="mt-4 px-1 text-xs leading-5 text-muted">
