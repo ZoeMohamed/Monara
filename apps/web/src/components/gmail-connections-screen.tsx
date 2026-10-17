@@ -12,10 +12,9 @@ export type GmailConnectionsProps = {
   actions?: {
     connect: () => void;
     reconnect: (id: string) => void;
-    sync?: (id: string) => void;
     disconnect: (id: string) => void;
   };
-  pendingAction?: { id: string; kind: "disconnect" | "reconnect" | "sync" } | { kind: "connect" };
+  pendingAction?: { id: string; kind: "disconnect" | "reconnect" } | { kind: "connect" };
   actionError?: string;
   onRetry?: () => void;
 };
@@ -146,26 +145,9 @@ type MailboxCardProps = {
 
 function MailboxActions({ mailbox, actions, pendingAction, onDisconnect }: MailboxCardProps) {
   const busy = pendingAction !== undefined;
-  const syncing =
-    mailbox.sync.state === "queued" ||
-    mailbox.sync.state === "running" ||
-    (pendingAction?.kind === "sync" && pendingAction.id === mailbox.id);
   return (
     <div className="mt-5 flex flex-wrap gap-3">
-      {mailbox.status === "active" ? (
-        <Button
-          className="min-h-11"
-          aria-label={`Sync ${mailbox.email} now`}
-          isDisabled={!actions?.sync || busy || syncing}
-          onPress={() => actions?.sync?.(mailbox.id)}
-        >
-          {mailbox.sync.state === "queued"
-            ? "Sync queued"
-            : syncing
-              ? "Sync in progress…"
-              : "Sync now"}
-        </Button>
-      ) : (
+      {mailbox.status === "reconnect-required" && (
         <Button
           className="min-h-11"
           aria-label={`Reconnect ${mailbox.email}`}
@@ -198,7 +180,10 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
         </Chip>
       </div>
       <p className="mt-3 text-sm text-muted">
-        Last successful sync: {lastSyncLabel(mailbox.lastSyncedAt)}
+        {mailbox.status === "active"
+          ? "Monara checks this inbox for bank emails every 15 minutes."
+          : "Checks are paused until you reconnect."}{" "}
+        Last check: {lastSyncLabel(mailbox.lastSyncedAt)}
       </p>
       <SyncStatus sync={mailbox.sync} />
       <MailboxActions
@@ -207,19 +192,12 @@ function MailboxCard({ mailbox, actions, pendingAction, onDisconnect }: MailboxC
         pendingAction={pendingAction}
         onDisconnect={onDisconnect}
       />
-      {mailbox.status === "active" && !actions?.sync && (
-        <p className="mt-3 text-sm text-muted">Manual sync is not available yet.</p>
-      )}
       {mailbox.status === "active" && actions && (
         <GmailAccountSuggestions connectionId={mailbox.id} />
       )}
       {pendingAction && "id" in pendingAction && pendingAction.id === mailbox.id && (
         <p role="status" className="mt-3 text-sm text-muted">
-          {pendingAction.kind === "disconnect"
-            ? "Disconnecting…"
-            : pendingAction.kind === "reconnect"
-              ? "Reconnecting…"
-              : "Queueing sync…"}
+          {pendingAction.kind === "disconnect" ? "Disconnecting…" : "Reconnecting…"}
         </p>
       )}
     </Card>

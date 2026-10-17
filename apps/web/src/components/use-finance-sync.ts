@@ -82,7 +82,11 @@ export function useFinanceSync(initial: FinanceSnapshot | undefined, month: stri
     options?: MutationOptions<Result>,
   ): Promise<Result> => {
     if (mutating.current)
-      throw new FinanceClientError("CONFLICT", "Another change is being saved.", null);
+      throw new FinanceClientError(
+        "CONFLICT",
+        "Your previous change is still saving. Give it a moment, then try again.",
+        null,
+      );
     if (loading.current || recovery.current || snapshot?.month !== month) {
       throw new FinanceClientError(
         "CONFLICT",
@@ -120,7 +124,7 @@ export function useFinanceSync(initial: FinanceSnapshot | undefined, month: stri
       return result;
     } catch (failure) {
       const uncertain =
-        saved || (failure instanceof FinanceClientError && failure.actionMayHaveCompleted);
+        saved || !(failure instanceof FinanceClientError) || failure.actionMayHaveCompleted;
       if (uncertain) {
         // Reads begun before an uncertain write cannot establish its outcome.
         // Invalidate them and require a new read, even in a previously seen month.
@@ -131,9 +135,9 @@ export function useFinanceSync(initial: FinanceSnapshot | undefined, month: stri
         const message = saved
           ? (options?.refreshFailureMessage ??
             "Your change was saved. Refresh to load the updated records before making another change.")
-          : failure instanceof Error
+          : failure instanceof FinanceClientError
             ? failure.message
-            : "The save result is uncertain. Refresh your records before trying again.";
+            : "We couldn't verify whether your change was saved. Refresh your records to check before trying again.";
         setError(message);
         throw new FinanceClientError("DEPENDENCY_UNAVAILABLE", message, null, true);
       }

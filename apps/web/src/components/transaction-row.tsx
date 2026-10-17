@@ -18,22 +18,25 @@ function transactionRowModel(
 ) {
   const date = showDate && transaction.date ? formatDay(transaction.date) : null;
   const metadata = [
-    transaction.status === "pending" ? "Needs review" : null,
-    transaction.kind === "exclusion" ? "Excluded" : null,
+    transaction.status === "pending" ? "To review" : null,
     date,
     transaction.time,
+    transaction.kind === "exclusion" && transaction.status !== "pending" ? "Excluded" : null,
   ]
     .filter(Boolean)
     .join(" · ");
   const category =
-    transaction.category ?? (transaction.kind === "income" ? "Income" : "Uncategorized");
+    transaction.category ??
+    (transaction.kind === "income"
+      ? "Income"
+      : transaction.kind === "exclusion"
+        ? "Exclusion"
+        : "Uncategorized");
   const sign = transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : "";
   const icon: IconName =
-    transaction.kind === "exclusion"
-      ? "close"
-      : transaction.kind === "income"
-        ? "income"
-        : chosenCategoryIcon(category, transaction.categoryIcon);
+    transaction.kind === "income"
+      ? "income"
+      : chosenCategoryIcon(category, transaction.categoryIcon);
 
   return {
     merchant: transaction.merchant ?? "Merchant or source missing",
@@ -42,16 +45,16 @@ function transactionRowModel(
     amount:
       transaction.amount === null ? "Amount missing" : `${sign}${formatRupiah(transaction.amount)}`,
     amountColor:
-      transaction.kind === "exclusion"
-        ? "text-muted"
-        : transaction.kind === "income"
-          ? "text-success"
+      transaction.kind === "income"
+        ? "text-success"
+        : transaction.kind === "exclusion"
+          ? "text-muted"
           : "text-foreground",
     tint:
-      transaction.kind === "exclusion"
-        ? "var(--muted)"
-        : transaction.kind === "income"
-          ? "var(--success)"
+      transaction.kind === "income"
+        ? "var(--success)"
+        : transaction.kind === "exclusion"
+          ? "var(--muted)"
           : categoryColor(category),
     icon,
     metadata,
@@ -110,6 +113,7 @@ export function TransactionRow({
     <Button
       className={styles.row}
       data-kind={transaction.kind ?? "unknown"}
+      data-review={transaction.status === "pending" || undefined}
       onPress={onClick}
       type="button"
       variant="ghost"
@@ -117,7 +121,11 @@ export function TransactionRow({
       {content}
     </Button>
   ) : (
-    <div className={styles.row} data-kind={transaction.kind ?? "unknown"}>
+    <div
+      className={styles.row}
+      data-kind={transaction.kind ?? "unknown"}
+      data-review={transaction.status === "pending" || undefined}
+    >
       {content}
     </div>
   );

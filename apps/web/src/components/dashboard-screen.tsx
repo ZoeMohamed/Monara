@@ -1,6 +1,6 @@
 "use client";
 
-import type { FinancialInsights } from "@monara/contracts";
+import type { Budget as BackendBudget, FinancialInsights } from "@monara/contracts";
 import type { ReactNode } from "react";
 
 import { MobileOverview } from "@/components/mobile-overview";
@@ -15,6 +15,7 @@ export function DashboardScreen({
   setMonth,
   transactions,
   budgets,
+  weeklyBudgets,
   today = demoToday,
   bills = noBills,
   insights,
@@ -35,6 +36,7 @@ export function DashboardScreen({
   setMonth: (month: string) => void;
   transactions: Transaction[];
   budgets: Budget[];
+  weeklyBudgets?: BackendBudget[];
   today?: string;
   bills?: RecurringBill[];
   insights?: FinancialInsights;
@@ -50,7 +52,14 @@ export function DashboardScreen({
   openConnectGmail?: () => void;
   openAccounts?: () => void;
 }) {
-  const presentationModel = overviewModel(transactions, budgets, bills, month, today);
+  const presentationModel = overviewModel(
+    transactions,
+    budgets,
+    bills,
+    month,
+    today,
+    weeklyBudgets,
+  );
   const safeBasis = insights?.safeToSpend.overall;
   const model = insights
     ? {

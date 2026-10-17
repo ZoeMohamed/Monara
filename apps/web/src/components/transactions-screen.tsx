@@ -3,123 +3,51 @@
 import { Button, Card, InputGroup, Label, TextField } from "@monara/ui";
 import { useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
-
 import { FinancialSummary } from "@/components/financial-summary";
 import { Icon } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
-import { ReviewQueue } from "@/components/review-queue";
+import { ReviewRow } from "@/components/review-queue";
 import { TransactionRow } from "@/components/transaction-row";
 import styles from "@/components/transactions-screen.module.css";
 import type { LedgerKind } from "@/data/app-navigation";
 import { demoToday, formatMonth, type Transaction } from "@/data/demo-ledger";
-
 import { financialSummaryModel } from "@/data/finance-analytics";
+import { filterHistory, groupHistory, historyForMonth } from "@/data/ledger-history";
 
-type KindFilter = LedgerKind;
-
-const kindFilters: { id: KindFilter; label: string }[] = [
+const kindFilters: { id: LedgerKind; label: string }[] = [
   { id: "all", label: "All" },
   { id: "expense", label: "Expenses" },
   { id: "income", label: "Income" },
   { id: "exclusion", label: "Exclusions" },
 ];
 
-const ledgerDayFormatter = new Intl.DateTimeFormat("en-US", {
+const dayFormatter = new Intl.DateTimeFormat("en-US", {
   weekday: "long",
   day: "numeric",
   month: "short",
   timeZone: "UTC",
 });
 
-function groupByDate(transactions: Transaction[]) {
-  const groups = new Map<string, { transactions: Transaction[]; spending: bigint }>();
-  for (const transaction of transactions) {
-    if (!transaction.date) continue;
-    const group = groups.get(transaction.date) ?? { transactions: [], spending: BigInt(0) };
-    group.transactions.push(transaction);
-    if (transaction.status === "confirmed" && transaction.kind === "expense") {
-      group.spending += BigInt(transaction.amount ?? 0);
-    }
-    groups.set(transaction.date, group);
-  }
-  return [...groups].sort(([first], [second]) => second.localeCompare(first));
-}
-
-function filteredTransactions(transactions: Transaction[], query: string, kind: KindFilter) {
-  const normalizedQuery = query.trim().toLowerCase();
-  return transactions
-    .filter(
-      (transaction) =>
-        transaction.status === "confirmed" &&
-        (kind === "all" || transaction.kind === kind) &&
-        `${transaction.merchant ?? ""} ${transaction.category ?? ""} ${transaction.method ?? ""}`
-          .toLowerCase()
-          .includes(normalizedQuery),
-    )
-    .sort((first, second) =>
-      `${second.date} ${second.time ?? ""}`.localeCompare(`${first.date} ${first.time ?? ""}`),
-    );
-}
-
-function TransactionViewSelector({
-  reviewOpen,
-  pendingCount,
-  onChange,
-}: {
-  reviewOpen: boolean;
-  pendingCount: number;
-  onChange: (review: boolean) => void;
-}) {
-  const tab = (active: boolean) =>
-    `min-h-11 w-full min-w-0 rounded-xl px-3 text-sm font-semibold ${active ? "bg-surface text-foreground shadow-sm" : "text-muted"}`;
-  return (
-    <fieldset
-      aria-label="Transaction view"
-      className="mt-4 grid grid-cols-2 gap-1 rounded-2xl bg-surface-secondary p-1"
-    >
-      <Button
-        aria-pressed={!reviewOpen}
-        className={tab(!reviewOpen)}
-        onPress={() => onChange(false)}
-        variant="ghost"
-      >
-        History
-      </Button>
-      <Button
-        aria-label={`To review, ${pendingCount} waiting`}
-        aria-pressed={reviewOpen}
-        className={tab(reviewOpen)}
-        onPress={() => onChange(true)}
-        variant="ghost"
-      >
-        To review
-        {pendingCount > 0 ? (
-          <span
-            aria-hidden
-            className="grid h-5 min-w-5 place-items-center rounded-full bg-warning px-1.5 text-[11px] font-bold text-warning-foreground tabular-nums"
-          >
-            {pendingCount}
-          </span>
-        ) : null}
-      </Button>
-    </fieldset>
-  );
-}
-
-function LedgerFilters({
+function HistoryFilters({
   query,
-  kindFilter,
-  onQueryChange,
-  onKindChange,
+  kind,
+  reviewOnly,
+  pendingCount,
+  onQuery,
+  onFilter,
 }: {
   query: string;
-  kindFilter: KindFilter;
-  onQueryChange: (query: string) => void;
-  onKindChange: (kind: KindFilter) => void;
+  kind: LedgerKind;
+  reviewOnly: boolean;
+  pendingCount: number;
+  onQuery: (value: string) => void;
+  onFilter: (kind: LedgerKind, review: boolean) => void;
 }) {
+  const buttonClass = (active: boolean) =>
+    `min-h-11 min-w-0 shrink-0 gap-1 rounded-full px-2.5 text-[11px] font-bold ${active ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`;
   return (
     <>
-      <TextField className="mt-4 min-w-0" onChange={onQueryChange} value={query}>
+      <TextField className="mt-4 min-w-0" onChange={onQuery} value={query}>
         <Label className="sr-only">Search</Label>
         <InputGroup className="rounded-2xl">
           <InputGroup.Prefix>
@@ -134,88 +62,82 @@ function LedgerFilters({
         </InputGroup>
       </TextField>
       <fieldset
-        aria-label="Filter by transaction type"
-        className="mt-3 flex min-w-0 gap-2 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
+        aria-label="Filter transactions"
+        className="mt-3 flex min-w-0 gap-1 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
       >
         {kindFilters.map((filter) => (
           <Button
-            aria-pressed={kindFilter === filter.id}
-            className={`min-h-11 min-w-0 shrink-0 rounded-full px-4 text-xs font-bold ${kindFilter === filter.id ? "bg-foreground text-white" : "bg-surface-secondary text-foreground"}`}
+            aria-pressed={!reviewOnly && kind === filter.id}
+            className={buttonClass(!reviewOnly && kind === filter.id)}
             key={filter.id}
-            onPress={() => onKindChange(filter.id)}
+            onPress={() => onFilter(filter.id, false)}
             variant="ghost"
           >
             {filter.label}
           </Button>
         ))}
-      </fieldset>
-    </>
-  );
-}
-
-function LedgerResultCount({
-  visibleCount,
-  totalCount,
-  filtersActive,
-  onClear,
-}: {
-  visibleCount: number;
-  totalCount: number;
-  filtersActive: boolean;
-  onClear: () => void;
-}) {
-  return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-      <p className="text-xs text-muted" role="status">
-        {visibleCount} {visibleCount === 1 ? "transaction" : "transactions"}
-        {filtersActive ? ` of ${totalCount}` : ""}
-      </p>
-      {filtersActive && (visibleCount > 0 || totalCount === 0) ? (
         <Button
-          className="min-h-11 rounded-full text-xs text-accent"
-          onPress={onClear}
-          size="sm"
+          aria-pressed={reviewOnly}
+          className={buttonClass(reviewOnly)}
+          onPress={() => onFilter("all", true)}
           variant="ghost"
         >
-          Clear filters
+          To review
+          {pendingCount > 0 ? <span className={styles.reviewCount}>{pendingCount}</span> : null}
         </Button>
-      ) : null}
-    </div>
+      </fieldset>
+    </>
   );
 }
 
 function GroupedLedger({
   transactions,
   openTransaction,
+  onEdit,
+  onConfirm,
 }: {
   transactions: Transaction[];
   openTransaction: (transaction: Transaction) => void;
+  onEdit: (id: string) => void;
+  onConfirm: (id: string) => void;
 }) {
   const { formatRupiah } = useAmountDisplay();
   return (
     <div className="mt-3 space-y-4">
-      {groupByDate(transactions).map(([date, group]) => (
+      {groupHistory(transactions).map(([date, group]) => (
         <section aria-labelledby={`ledger-day-${date}`} key={date}>
           <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-2 lg:px-5">
-            <h2 className="min-w-0 text-sm font-semibold" id={`ledger-day-${date}`}>
-              <time dateTime={date}>
-                {ledgerDayFormatter.format(new Date(`${date}T00:00:00Z`))}
-              </time>
+            <h2 className="text-xs font-semibold text-muted" id={`ledger-day-${date}`}>
+              {date === "undated" ? (
+                "Date needed"
+              ) : (
+                <time dateTime={date}>{dayFormatter.format(new Date(`${date}T00:00:00Z`))}</time>
+              )}
             </h2>
             {group.spending > BigInt(0) ? (
-              <p className="text-xs font-medium text-muted tabular-nums [overflow-wrap:anywhere]">
+              <p className="text-xs font-medium text-muted tabular-nums">
                 −{formatRupiah(group.spending)}
               </p>
             ) : null}
           </div>
           <div className={styles.ledgerGroup}>
-            {group.transactions.map((transaction) => (
-              <TransactionRow
-                key={transaction.id}
-                onClick={() => openTransaction(transaction)}
-                transaction={transaction}
-              />
-            ))}
+            {group.transactions.map((transaction) =>
+              transaction.status === "pending" ? (
+                <ReviewRow
+                  key={transaction.id}
+                  transaction={transaction}
+                  onOpen={() => openTransaction(transaction)}
+                  onEdit={() => onEdit(transaction.id)}
+                  onConfirm={() => onConfirm(transaction.id)}
+                />
+              ) : (
+                <TransactionRow
+                  key={transaction.id}
+                  onClick={() => openTransaction(transaction)}
+                  transaction={transaction}
+                />
+              ),
+            )}
           </div>
         </section>
       ))}
@@ -223,122 +145,71 @@ function GroupedLedger({
   );
 }
 
-function EmptyLedger({
-  month,
-  noConfirmed,
-  onClear,
-  onAdd,
-  onReview,
-  onConnectGmail,
-}: {
+type EmptyHistoryProps = {
   month: string;
-  noConfirmed: boolean;
+  empty: boolean;
+  reviewOnly: boolean;
+  pendingCount: number;
   onClear: () => void;
   onAdd?: () => void;
-  onReview?: () => void;
   onConnectGmail?: () => void;
-}) {
+};
+
+function emptyHistoryContent({ month, empty, reviewOnly, pendingCount }: EmptyHistoryProps) {
+  if (reviewOnly && pendingCount === 0)
+    return {
+      title: "You’re all caught up",
+      body: "No transactions need review in this month.",
+      button: "See all transactions",
+    };
+  if (empty)
+    return {
+      title: "No transactions yet",
+      body: `Your transactions for ${formatMonth(month)} will show up here.`,
+      button: "Clear filters",
+    };
+  return {
+    title: "No matches",
+    body: "Try another search or clear your filters.",
+    button: "Clear filters",
+  };
+}
+
+function EmptyHistoryActions({ props, button }: { props: EmptyHistoryProps; button: string }) {
+  const { empty, reviewOnly, onAdd, onConnectGmail, onClear } = props;
+  if (!empty || reviewOnly)
+    return (
+      <Button className="min-h-11" onPress={onClear} variant="secondary">
+        {button}
+      </Button>
+    );
   return (
-    <Card className="mt-3 block min-w-0 gap-0 rounded-3xl border border-dashed border-border bg-surface p-5 text-center">
-      <h2 className="text-base font-bold">
-        {noConfirmed ? "No confirmed transactions" : "No matches"}
-      </h2>
-      <p className="mt-1 text-sm text-muted">
-        {noConfirmed
-          ? `Add a transaction for ${formatMonth(month)}${onReview ? " or review your imports" : ""}.`
-          : "Try another search or clear your filters."}
-      </p>
-      <div className="mt-4 flex flex-wrap justify-center gap-2">
-        {noConfirmed ? (
-          <>
-            {onAdd ? (
-              <Button className="min-h-11" onPress={onAdd}>
-                <Icon name="plus" />
-                Add transaction
-              </Button>
-            ) : null}
-            {onReview ? (
-              <Button className="min-h-11" onPress={onReview} variant="secondary">
-                Review imports
-              </Button>
-            ) : onConnectGmail ? (
-              <Button className="min-h-11" onPress={onConnectGmail} variant="secondary">
-                Connect Gmail
-              </Button>
-            ) : null}
-          </>
-        ) : (
-          <Button className="min-h-11" onPress={onClear} variant="secondary">
-            Clear filters
-          </Button>
-        )}
-      </div>
-    </Card>
+    <>
+      {onAdd ? (
+        <Button className="min-h-11" onPress={onAdd}>
+          <Icon name="plus" />
+          Add transaction
+        </Button>
+      ) : null}
+      {onConnectGmail ? (
+        <Button className="min-h-11" onPress={onConnectGmail} variant="secondary">
+          Connect Gmail
+        </Button>
+      ) : null}
+    </>
   );
 }
 
-function ConfirmedLedger({
-  transactions,
-  month,
-  today,
-  openTransaction,
-  query,
-  kindFilter,
-  onQueryChange,
-  onKindChange,
-  onClearFilters,
-  onAdd,
-  onReview,
-  onConnectGmail,
-}: {
-  transactions: Transaction[];
-  month: string;
-  today: string;
-  openTransaction: (transaction: Transaction) => void;
-  query: string;
-  kindFilter: KindFilter;
-  onQueryChange: (query: string) => void;
-  onKindChange: (kind: KindFilter) => void;
-  onClearFilters: () => void;
-  onAdd?: () => void;
-  onReview?: () => void;
-  onConnectGmail?: () => void;
-}) {
-  const ledger = transactions.filter(
-    (transaction) =>
-      transaction.date?.startsWith(`${month}-`) && transaction.status === "confirmed",
-  );
-  const visible = filteredTransactions(ledger, query, kindFilter);
-  const filtersActive = query.trim().length > 0 || kindFilter !== "all";
-
+function EmptyHistory(props: EmptyHistoryProps) {
+  const content = emptyHistoryContent(props);
   return (
-    <>
-      <FinancialSummary model={financialSummaryModel(transactions, month, today)} />
-      <LedgerFilters
-        query={query}
-        kindFilter={kindFilter}
-        onQueryChange={onQueryChange}
-        onKindChange={onKindChange}
-      />
-      <LedgerResultCount
-        visibleCount={visible.length}
-        totalCount={ledger.length}
-        filtersActive={filtersActive}
-        onClear={onClearFilters}
-      />
-      {visible.length > 0 ? (
-        <GroupedLedger transactions={visible} openTransaction={openTransaction} />
-      ) : (
-        <EmptyLedger
-          month={month}
-          noConfirmed={ledger.length === 0}
-          onClear={onClearFilters}
-          onAdd={onAdd}
-          onReview={onReview}
-          onConnectGmail={onConnectGmail}
-        />
-      )}
-    </>
+    <Card className="mt-3 block gap-0 rounded-3xl border border-dashed border-border bg-surface p-5 text-center">
+      <h2 className="text-base font-bold">{content.title}</h2>
+      <p className="mt-1 text-sm text-muted">{content.body}</p>
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
+        <EmptyHistoryActions props={props} button={content.button} />
+      </div>
+    </Card>
   );
 }
 
@@ -346,17 +217,15 @@ export function TransactionsScreen({
   transactions,
   openTransaction,
   reviewOpen,
-  setReviewOpen,
+  onFilterChange,
   onEdit,
   onConfirm,
-  onReject,
   month,
   today = demoToday,
   setMonth,
   query: controlledQuery,
-  kindFilter: controlledKindFilter,
+  kindFilter: controlledKind,
   onQueryChange,
-  onKindChange,
   onClearFilters,
   onAdd,
   onConnectGmail,
@@ -364,48 +233,42 @@ export function TransactionsScreen({
   transactions: Transaction[];
   openTransaction: (transaction: Transaction) => void;
   reviewOpen: boolean;
-  setReviewOpen: (value: boolean) => void;
+  onFilterChange: (kind: LedgerKind, review: boolean) => void;
   onEdit: (id: string) => void;
   onConfirm: (id: string) => void;
-  onReject: (id: string) => void;
   month: string;
   today?: string;
   setMonth: (month: string) => void;
   query?: string;
-  kindFilter?: KindFilter;
+  kindFilter?: LedgerKind;
   onQueryChange?: (query: string) => void;
-  onKindChange?: (kind: KindFilter) => void;
   onClearFilters?: () => void;
   onAdd?: () => void;
   onConnectGmail?: () => void;
 }) {
-  const [filters, setFilters] = useState<{ query: string; kind: KindFilter }>({
+  const [filters, setFilters] = useState<{ query: string; kind: LedgerKind }>({
     query: "",
     kind: "all",
   });
   const query = controlledQuery ?? filters.query;
-  const kindFilter = controlledKindFilter ?? filters.kind;
-  const pendingCount = transactions.filter((item) => item.status === "pending").length;
-
-  function changeQuery(value: string) {
-    if (onQueryChange) onQueryChange(value);
-    else setFilters((current) => ({ ...current, query: value }));
-  }
-
-  function changeKind(value: KindFilter) {
-    if (onKindChange) onKindChange(value);
-    else setFilters((current) => ({ ...current, kind: value }));
-  }
-
-  function clearFilters() {
+  const kind = controlledKind ?? filters.kind;
+  const records = historyForMonth(transactions, month);
+  const visible = filterHistory(records, query, kind, reviewOpen);
+  const pendingCount = records.filter((item) => item.status === "pending").length;
+  const active = !!query.trim() || kind !== "all" || reviewOpen;
+  const changeQuery = (value: string) =>
+    onQueryChange ? onQueryChange(value) : setFilters((current) => ({ ...current, query: value }));
+  const changeFilter = (value: LedgerKind, review: boolean) => {
+    onFilterChange(value, review);
+    if (controlledKind === undefined) setFilters((current) => ({ ...current, kind: value }));
+  };
+  const clear = () => {
     if (onClearFilters) onClearFilters();
     else {
-      onQueryChange?.("");
-      onKindChange?.("all");
-      setFilters({ query: "", kind: "all" });
+      changeQuery("");
+      changeFilter("all", false);
     }
-  }
-
+  };
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -413,35 +276,58 @@ export function TransactionsScreen({
           <span className="lg:hidden">History</span>
           <span className="max-lg:hidden">Transactions</span>
         </h1>
-        {!reviewOpen ? (
-          <MonthSelector month={month} currentMonth={today.slice(0, 7)} onChange={setMonth} />
+        <MonthSelector month={month} currentMonth={today.slice(0, 7)} onChange={setMonth} />
+      </div>
+      <FinancialSummary compact model={financialSummaryModel(transactions, month, today)} />
+      <HistoryFilters
+        query={query}
+        kind={kind}
+        reviewOnly={reviewOpen}
+        pendingCount={pendingCount}
+        onQuery={changeQuery}
+        onFilter={changeFilter}
+      />
+      <div className="mt-2 flex min-h-8 items-center justify-between gap-2">
+        <p className="text-xs text-muted" role="status">
+          {visible.length} {visible.length === 1 ? "transaction" : "transactions"}
+          {reviewOpen ? " to review" : ""}
+        </p>
+        {active ? (
+          <Button
+            className="min-h-11 rounded-full text-xs text-accent"
+            onPress={clear}
+            size="sm"
+            variant="ghost"
+          >
+            Clear filters
+          </Button>
         ) : null}
       </div>
-      <TransactionViewSelector
-        reviewOpen={reviewOpen}
-        pendingCount={pendingCount}
-        onChange={setReviewOpen}
-      />
-      {reviewOpen ? (
-        <ReviewQueue
-          transactions={transactions}
+      {pendingCount > 0 && kind !== "exclusion" ? (
+        <p className="text-[11px] text-muted">
+          Highlighted transactions need review before they count toward totals.
+        </p>
+      ) : null}
+      {kind === "exclusion" ? (
+        <p className="text-[11px] text-muted">
+          Kept in your history, left out of spending and budgets.
+        </p>
+      ) : null}
+      {visible.length ? (
+        <GroupedLedger
+          transactions={visible}
+          openTransaction={openTransaction}
           onEdit={onEdit}
           onConfirm={onConfirm}
-          onReject={onReject}
         />
       ) : (
-        <ConfirmedLedger
-          transactions={transactions}
+        <EmptyHistory
           month={month}
-          today={today}
-          openTransaction={openTransaction}
-          query={query}
-          kindFilter={kindFilter}
-          onQueryChange={changeQuery}
-          onKindChange={changeKind}
-          onClearFilters={clearFilters}
+          empty={records.length === 0}
+          reviewOnly={reviewOpen}
+          pendingCount={pendingCount}
+          onClear={clear}
           onAdd={onAdd}
-          onReview={pendingCount > 0 ? () => setReviewOpen(true) : undefined}
           onConnectGmail={onConnectGmail}
         />
       )}

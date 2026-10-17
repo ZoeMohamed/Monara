@@ -2,9 +2,11 @@
 
 import {
   type Budget,
+  type BudgetMutationResult,
   type BudgetUsage,
   type CreateBudgetInput,
   createBudgetInputSchema,
+  isExclusionCategoryName,
   type UpdateBudgetInput,
   updateBudgetInputSchema,
 } from "@monara/contracts";
@@ -29,6 +31,12 @@ import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import { formatDay } from "@/data/demo-ledger";
+import {
+  budgetCategoryError,
+  type BudgetDraft as Draft,
+  budgetDraftOf as draftOf,
+  rebaseBudgetDraft,
+} from "@/lib/finance/budget-draft";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
 import {
   FinancePresentationError,
@@ -43,15 +51,6 @@ export type FinanceManagerProps = {
   onRefreshRecords?: () => Promise<void>;
 };
 
-type Draft = {
-  name: string;
-  categoryId: string;
-  cadence: "weekly" | "monthly";
-  amount: string;
-  startsOn: string;
-  warningPercent: string;
-  isActive: boolean;
-};
 type FormErrors = Partial<Record<keyof Draft, string>>;
 type BudgetRequest = {
   operation: "create_budget" | "edit_budget";
@@ -60,24 +59,20 @@ type BudgetRequest = {
   priorIds: Set<string>;
 };
 
-function draftOf(budget: Budget | undefined, today: string): Draft {
-  return {
-    name: budget?.name ?? "",
-    categoryId: budget?.categoryId ?? "",
-    cadence: budget?.cadence ?? "monthly",
-    amount: budget?.limit.amountMinor ?? "",
-    startsOn: budget?.startsOn ?? today,
-    warningPercent: String(budget?.warningPercent ?? 80),
-    isActive: budget?.isActive ?? true,
-  };
-}
-
 function formErrors(issues: { path: readonly PropertyKey[]; message: string }[]): FormErrors {
   const errors: FormErrors = {};
+  const messages: FormErrors = {
+    name: "Add a budget name, up to 100 characters.",
+    amount: "Enter a positive whole amount of rupiah.",
+    startsOn: "Choose a valid start date.",
+    warningPercent: "Enter a warning percentage from 1 to 100.",
+    cadence: "Choose a weekly or monthly period.",
+  };
   for (const issue of issues) {
     const key = issue.path[0] === "changes" ? issue.path[1] : issue.path[0];
     const field = key === "limit" ? "amount" : key;
-    if (typeof field === "string") errors[field as keyof Draft] ??= issue.message;
+    if (typeof field === "string")
+      errors[field as keyof Draft] ??= messages[field as keyof Draft] ?? issue.message;
   }
   return errors;
 }
@@ -176,7 +171,11 @@ function BudgetFields({
         <Select.Popover>
           <ListBox>
             {categories
-              .filter((category) => !category.isArchived || category.id === draft.categoryId)
+              .filter(
+                (category) =>
+                  (!category.isArchived || category.id === draft.categoryId) &&
+                  !isExclusionCategoryName(category.name),
+              )
               .map((category) => (
                 <ListBox.Item
                   id={category.id}
@@ -297,6 +296,8 @@ function prepareBudgetRequest(
   budget: Budget | undefined,
   snapshot: FinanceSnapshot,
 ): { request: BudgetRequest } | { errors: FormErrors } {
+  const categoryError = budgetCategoryError(snapshot.categories, draft.categoryId);
+  if (categoryError) return { errors: { categoryId: categoryError } };
   let amount: number | null;
   try {
     amount = parseDraftAmount(draft.amount);
@@ -351,45 +352,66 @@ function findSubmittedBudget(
   );
 }
 
-type BudgetEditorProps = FinanceManagerProps & { budget?: Budget; onClose: () => void };
+type BudgetEditorProps = FinanceManagerProps & {
+  budget?: Budget;
+  onClose: () => void;
+  onSaved?: (result: BudgetMutationResult) => void;
+};
 
-function useBudgetEditorState({ budget, onClose, ...props }: BudgetEditorProps) {
-  const original = useRef(budget);
+function useBudgetEditorState({ budget, onClose, onSaved, ...props }: BudgetEditorProps) {
+  const [original, setOriginal] = useState(budget);
   const [state, setState] = useState(() => ({
     draft: draftOf(budget, props.snapshot.today),
     errors: {} as FormErrors,
     pending: false,
     error: null as string | null,
     uncertain: false,
+    conflict: false,
     discard: false,
   }));
-  const initial = useRef(state.draft);
+  const [initial, setInitial] = useState(state.draft);
   const request = useRef<BudgetRequest | null>(null);
+  const [conflictSnapshot, setConflictSnapshot] = useState<FinanceSnapshot | null>(null);
   const inFlight = useRef(false);
-  const locked = state.pending || state.uncertain || Boolean(props.refreshRequired);
+  const latest = original
+    ? props.snapshot.allBudgets.find((item) => item.id === original.id && item.deletedAt === null)
+    : undefined;
+  const unavailable = Boolean(original && !latest);
+  const changed = Boolean(latest && latest.updatedAt !== original?.updatedAt);
+  const needsReview = state.conflict || changed;
+  const locked =
+    state.pending ||
+    state.uncertain ||
+    Boolean(props.refreshRequired) ||
+    needsReview ||
+    unavailable;
   const draft = state.draft;
   const dirty = Object.keys(draft).some(
-    (key) => draft[key as keyof Draft] !== initial.current[key as keyof Draft],
+    (key) => draft[key as keyof Draft] !== initial[key as keyof Draft],
   );
   const close = () => {
     if (inFlight.current) return;
-    if (dirty && !state.discard && !state.uncertain)
-      setState((previous) => ({ ...previous, discard: true }));
+    if (state.discard) setState((previous) => ({ ...previous, discard: false }));
+    else if (dirty && !state.uncertain) setState((previous) => ({ ...previous, discard: true }));
     else onClose();
   };
   const change = (patch: Partial<Draft>) =>
     setState((previous) => ({ ...previous, draft: { ...previous.draft, ...patch }, errors: {} }));
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (inFlight.current || props.refreshRequired) return;
+    if (inFlight.current || props.refreshRequired || needsReview || unavailable) return;
     if (!request.current) {
-      const prepared = prepareBudgetRequest(draft, original.current, props.snapshot);
+      const prepared = prepareBudgetRequest(draft, original, props.snapshot);
       if ("errors" in prepared) {
         setState((previous) => ({
           ...previous,
           errors: prepared.errors,
           error: "Check the marked fields.",
         }));
+        const form = event.currentTarget;
+        requestAnimationFrame(() =>
+          form.querySelector<HTMLInputElement>('input[aria-invalid="true"]')?.focus(),
+        );
         return;
       }
       request.current = prepared.request;
@@ -398,15 +420,22 @@ function useBudgetEditorState({ budget, onClose, ...props }: BudgetEditorProps) 
     inFlight.current = true;
     setState((previous) => ({ ...previous, pending: true, error: null, errors: {} }));
     try {
-      await props.runMutation(() => callFinanceOperation(submitted.operation, submitted.input));
+      const result = await props.runMutation(() =>
+        callFinanceOperation(submitted.operation, submitted.input),
+      );
+      onSaved?.(result);
       onClose();
     } catch (error) {
       const uncertain = error instanceof FinanceClientError && error.actionMayHaveCompleted;
+      const conflict =
+        error instanceof FinanceClientError && error.code === "CONFLICT" && Boolean(original);
+      if (conflict) setConflictSnapshot(props.snapshot);
       if (!uncertain && !state.uncertain) request.current = null;
       setState((previous) => ({
         ...previous,
         pending: false,
         uncertain: previous.uncertain || uncertain,
+        conflict,
         error:
           error instanceof FinanceClientError
             ? error.message
@@ -419,8 +448,24 @@ function useBudgetEditorState({ budget, onClose, ...props }: BudgetEditorProps) 
   const submitted = request.current;
   const found =
     state.uncertain && submitted
-      ? findSubmittedBudget(props.snapshot, submitted, original.current)
+      ? findSubmittedBudget(props.snapshot, submitted, original)
       : undefined;
+  const reviewLatest = () => {
+    if (!latest || inFlight.current) return;
+    const latestDraft = draftOf(latest, props.snapshot.today);
+    setOriginal(latest);
+    request.current = null;
+    const merged = rebaseBudgetDraft(draft, initial, latestDraft);
+    setInitial(latestDraft);
+    setState((previous) => ({
+      ...previous,
+      draft: merged,
+      errors: {},
+      error: null,
+      uncertain: false,
+      conflict: false,
+    }));
+  };
   return {
     state,
     draft,
@@ -429,9 +474,71 @@ function useBudgetEditorState({ budget, onClose, ...props }: BudgetEditorProps) 
     submit,
     locked,
     found,
-    editing: Boolean(original.current),
+    latest,
+    unavailable,
+    needsReview,
+    canReview: Boolean(latest && (changed || props.snapshot !== conflictSnapshot)),
+    reviewLatest,
+    useDraftForNewBudget: () => {
+      setOriginal(undefined);
+      setInitial(draftOf(undefined, props.snapshot.today));
+      request.current = null;
+      setState((previous) => ({ ...previous, error: null, uncertain: false, conflict: false }));
+    },
+    editing: Boolean(original),
     keepEditing: () => setState((previous) => ({ ...previous, discard: false })),
   };
+}
+
+function BudgetVersionRecovery({
+  editor,
+  onRefreshRecords,
+}: {
+  editor: ReturnType<typeof useBudgetEditorState>;
+  onRefreshRecords?: () => Promise<void>;
+}) {
+  const { formatRupiah } = useAmountDisplay();
+  if (editor.unavailable)
+    return (
+      <div className={styles.recovery} role="status">
+        <p className="text-sm leading-6">
+          This budget was removed. Your draft is still here. You can use it to start a new budget.
+        </p>
+        <Button className="min-h-11" onPress={editor.useDraftForNewBudget} variant="secondary">
+          Use draft for a new budget
+        </Button>
+      </div>
+    );
+  if (!editor.needsReview) return null;
+  return (
+    <div className={styles.recovery} role="status">
+      <p className="text-sm leading-6">
+        This budget changed while you were editing. Your draft is safe. Review the latest version
+        before saving.
+      </p>
+      {editor.canReview && editor.latest ? (
+        <>
+          <p className="text-sm leading-6">
+            Latest saved: {editor.latest.name} ·{" "}
+            {formatRupiah(BigInt(editor.latest.limit.amountMinor))} · {editor.latest.cadence} ·{" "}
+            {editor.latest.isActive ? "Active" : "Paused"}
+          </p>
+          <Button className="min-h-11" onPress={editor.reviewLatest} variant="secondary">
+            Keep my edits and review
+          </Button>
+          <p className={styles.meta}>
+            Your edited fields stay. Untouched fields use the latest values. Nothing saves until you
+            choose Save budget.
+          </p>
+        </>
+      ) : (
+        <FinanceRecovery
+          message="Refresh your records to see what changed."
+          onRefreshRecords={onRefreshRecords}
+        />
+      )}
+    </div>
+  );
 }
 
 function BudgetEditorFields({
@@ -471,9 +578,10 @@ function BudgetEditorFields({
           {state.error}
         </p>
       )}
-      {(props.refreshRequired || state.uncertain) && (
+      <BudgetVersionRecovery editor={editor} onRefreshRecords={props.onRefreshRecords} />
+      {!editor.needsReview && !editor.unavailable && (props.refreshRequired || state.uncertain) && (
         <FinanceRecovery
-          message="Check your records before retrying. A retry will use the same submitted values."
+          message="We couldn’t confirm whether this saved. Your draft is safe. Refresh your records first; any retry uses the same submitted change."
           onRefreshRecords={props.onRefreshRecords}
         />
       )}
@@ -483,7 +591,12 @@ function BudgetEditorFields({
         </Button>
         <Button
           className="min-h-11"
-          isDisabled={state.pending || Boolean(props.refreshRequired)}
+          isDisabled={
+            state.pending ||
+            Boolean(props.refreshRequired) ||
+            editor.needsReview ||
+            editor.unavailable
+          }
           type="submit"
         >
           {state.pending ? "Saving…" : state.uncertain ? "Retry same change" : "Save budget"}
@@ -549,24 +662,37 @@ function BudgetDelete({
   ...props
 }: FinanceManagerProps & { budget: Budget; onClose: () => void }) {
   const { formatRupiah } = useAmountDisplay();
-  const original = useRef(budget);
+  const [original, setOriginal] = useState(budget);
   const inFlight = useRef(false);
-  const [state, setState] = useState({ pending: false, error: null as string | null });
+  const [state, setState] = useState({
+    pending: false,
+    conflict: false,
+    error: null as string | null,
+  });
+  const [failedSnapshot, setFailedSnapshot] = useState<FinanceSnapshot | null>(null);
+  const latest = props.snapshot.allBudgets.find(
+    (item) => item.id === original.id && item.deletedAt === null,
+  );
+  const changed = Boolean(latest && latest.updatedAt !== original.updatedAt);
+  const needsReview = changed || state.conflict;
   const remove = async () => {
-    if (inFlight.current || props.refreshRequired) return;
+    if (inFlight.current || props.refreshRequired || needsReview || !latest) return;
     inFlight.current = true;
-    setState({ pending: true, error: null });
+    setState({ pending: true, conflict: false, error: null });
     try {
       await props.runMutation(() =>
         callFinanceOperation("delete_budget", {
-          budgetId: original.current.id,
-          expectedUpdatedAt: original.current.updatedAt,
+          budgetId: original.id,
+          expectedUpdatedAt: original.updatedAt,
         }),
       );
       onClose();
     } catch (error) {
+      const conflict = error instanceof FinanceClientError && error.code === "CONFLICT";
+      if (conflict) setFailedSnapshot(props.snapshot);
       setState({
         pending: false,
+        conflict,
         error:
           error instanceof FinanceClientError
             ? error.message
@@ -576,6 +702,22 @@ function BudgetDelete({
       inFlight.current = false;
     }
   };
+  if (!latest)
+    return (
+      <ModalDialog labelledBy="budget-delete-title" onClose={onClose}>
+        <div className={styles.form}>
+          <h2 className="text-xl font-bold" id="budget-delete-title">
+            Budget already removed
+          </h2>
+          <p className="text-sm leading-6 text-muted">
+            This spending limit is no longer active. Your transactions are still in your history.
+          </p>
+          <Button className="min-h-11" onPress={onClose}>
+            Back to budgets
+          </Button>
+        </div>
+      </ModalDialog>
+    );
   return (
     <ModalDialog
       labelledBy="budget-delete-title"
@@ -588,10 +730,12 @@ function BudgetDelete({
           Delete budget?
         </h2>
         <p className="break-words font-semibold">
-          {budget.name} · {formatRupiah(BigInt(budget.limit.amountMinor))}
+          {original.name} · {formatRupiah(BigInt(original.limit.amountMinor))}
         </p>
         <p className="text-sm leading-6 text-muted">
-          This removes its spending limit. Your transactions stay in your ledger.
+          This permanently removes the spending limit and its budget progress. Your transactions
+          stay in your history. To take a break instead, edit this budget and turn off Active
+          budget.
         </p>
         {state.error && (
           <p className={styles.error} role="alert">
@@ -604,12 +748,42 @@ function BudgetDelete({
             onRefreshRecords={props.onRefreshRecords}
           />
         )}
+        {needsReview && (
+          <div className={styles.recovery} role="status">
+            <p className="text-sm leading-6">
+              This budget changed. Review its latest settings before deleting it.
+            </p>
+            {changed || props.snapshot !== failedSnapshot ? (
+              <>
+                <p className="text-sm leading-6">
+                  Latest saved: {latest.name} · {formatRupiah(BigInt(latest.limit.amountMinor))} ·{" "}
+                  {latest.cadence}
+                </p>
+                <Button
+                  className="min-h-11"
+                  variant="secondary"
+                  onPress={() => {
+                    setOriginal(latest);
+                    setState({ pending: false, conflict: false, error: null });
+                  }}
+                >
+                  Review this version
+                </Button>
+              </>
+            ) : (
+              <FinanceRecovery
+                message="Refresh to see the latest budget."
+                onRefreshRecords={props.onRefreshRecords}
+              />
+            )}
+          </div>
+        )}
         <div className={styles.footer}>
           <Button autoFocus isDisabled={state.pending} onPress={onClose} variant="secondary">
             Keep budget
           </Button>
           <Button
-            isDisabled={state.pending || Boolean(props.refreshRequired)}
+            isDisabled={state.pending || Boolean(props.refreshRequired) || needsReview}
             onPress={remove}
             variant="danger"
           >
@@ -841,48 +1015,161 @@ function BudgetManagerDialog({
   budget,
   onClose,
   ...props
-}: FinanceManagerProps & { panel: BudgetManagerPanel; budget?: Budget; onClose: () => void }) {
+}: FinanceManagerProps & {
+  panel: BudgetManagerPanel;
+  budget?: Budget;
+  onClose: () => void;
+  onSaved?: (result: BudgetMutationResult) => void;
+}) {
+  const [openedBudget] = useState(budget);
   if (!panel) return null;
   if (panel.kind === "create") return <BudgetEditor {...props} onClose={onClose} />;
-  if (!budget)
+  if (!openedBudget)
     return (
       <ModalDialog labelledBy="budget-unavailable-title" onClose={onClose}>
         <div className={styles.form}>
           <h2 className="text-xl font-bold" id="budget-unavailable-title">
             Budget unavailable
           </h2>
-          <p className="text-sm text-muted">This budget is no longer in your current records.</p>
-          <Button onPress={onClose}>Close</Button>
+          <p className="text-sm text-muted">
+            This budget may have been removed elsewhere. Your transactions are safe. Return to
+            Budgets to choose another limit.
+          </p>
+          <Button onPress={onClose}>Back to budgets</Button>
         </div>
       </ModalDialog>
     );
   if (panel.kind === "edit")
-    return <BudgetEditor {...props} budget={budget} key={budget.id} onClose={onClose} />;
-  return <BudgetDelete {...props} budget={budget} key={budget.id} onClose={onClose} />;
+    return (
+      <BudgetEditor {...props} budget={openedBudget} key={openedBudget.id} onClose={onClose} />
+    );
+  return <BudgetDelete {...props} budget={openedBudget} key={openedBudget.id} onClose={onClose} />;
 }
 
-export function BudgetManager(props: BudgetManagerProps) {
-  const [localPanel, setLocalPanel] = useState<BudgetManagerPanel>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const panel = props.onPanelChange ? (props.panel ?? null) : localPanel;
-  const setPanel = props.onPanelChange ?? setLocalPanel;
-  const usage = useBudgetUsage(props.snapshot);
-  const budgets = props.snapshot.allBudgets.filter((budget) => budget.deletedAt === null);
-  const hiddenBudgetIds = new Set(props.hiddenBudgetIds);
-  const listedBudgets = budgets.filter((budget) => !hiddenBudgetIds.has(budget.id));
-  const detail = budgets.find((budget) => budget.id === detailId);
-  const detailCategory =
-    props.snapshot.categories.find((category) => category.id === detail?.categoryId)?.name ??
-    "Category unavailable";
-  const detailProgress = usage.items.find(
-    (item) => item.budget.id === detail?.id && item.budget.updatedAt === detail?.updatedAt,
-  );
-  const selected =
-    panel && panel.kind !== "create" ? budgets.find((budget) => budget.id === panel.id) : undefined;
-  const close = () => setPanel(null);
+function BudgetSavedNotice({
+  result,
+  finance,
+  onDismiss,
+  onView,
+}: {
+  result: BudgetMutationResult;
+  finance: FinanceManagerProps;
+  onDismiss: () => void;
+  onView?: () => void;
+}) {
+  const [state, setState] = useState({
+    pending: false,
+    undone: false,
+    unavailable: false,
+    error: null as string | null,
+  });
+  const noticeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    noticeRef.current?.scrollIntoView({ block: "center" });
+    noticeRef.current?.focus({ preventScroll: true });
+  }, []);
+  const inFlight = useRef(false);
+  const undo = async () => {
+    if (inFlight.current || finance.refreshRequired || state.undone || state.unavailable) return;
+    if (Date.parse(result.action.undoExpiresAt) <= Date.now()) {
+      setState((previous) => ({
+        ...previous,
+        unavailable: true,
+        error: "The undo window has ended. Open this budget to make a new change.",
+      }));
+      return;
+    }
+    inFlight.current = true;
+    setState((previous) => ({ ...previous, pending: true, error: null }));
+    try {
+      await finance.runMutation(() =>
+        callFinanceOperation("undo_action", { actionId: result.action.actionId }),
+      );
+      setState({ pending: false, undone: true, unavailable: false, error: null });
+    } catch (error) {
+      setState({
+        pending: false,
+        undone: false,
+        unavailable: error instanceof FinanceClientError && error.code === "CONFLICT",
+        error:
+          error instanceof FinanceClientError && error.code === "CONFLICT"
+            ? "This budget changed again or its undo window ended. Refresh your records and review its latest details."
+            : "We couldn’t confirm the undo. Refresh your records before trying again.",
+      });
+    } finally {
+      inFlight.current = false;
+    }
+  };
   return (
-    <section aria-labelledby="manage-budgets-title" className={styles.manager}>
-      {listedBudgets.length > 0 ? (
+    <div
+      className={`${styles.recovery} mb-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`}
+      ref={noticeRef}
+      role="status"
+      tabIndex={-1}
+    >
+      <p className="text-sm leading-6">
+        {state.undone
+          ? "Budget change undone. Your transactions haven’t changed."
+          : `${result.budget.name} saved. Its progress now uses these settings.`}
+      </p>
+      {!state.undone && !state.unavailable && (
+        <p className={styles.meta}>
+          Undo is available for a short time, unless this budget changes again.
+        </p>
+      )}
+      {state.error && (
+        <p className={styles.error} role="alert">
+          {state.error}
+        </p>
+      )}
+      {(finance.refreshRequired || state.error) && (
+        <FinanceRecovery
+          message="Refresh to check your latest budget settings."
+          onRefreshRecords={finance.onRefreshRecords}
+        />
+      )}
+      <div className="flex flex-wrap gap-2">
+        {!state.undone && (
+          <Button
+            className="min-h-11"
+            isDisabled={state.pending || state.unavailable || Boolean(finance.refreshRequired)}
+            onPress={undo}
+            variant="secondary"
+          >
+            {state.pending ? "Undoing…" : "Undo change"}
+          </Button>
+        )}
+        {onView && (
+          <Button className="min-h-11" isDisabled={state.pending} onPress={onView} variant="ghost">
+            View budget
+          </Button>
+        )}
+        <Button className="min-h-11" isDisabled={state.pending} onPress={onDismiss} variant="ghost">
+          Dismiss
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ManagedBudgetList({
+  budgets,
+  categories,
+  usage,
+  collapsed,
+  today,
+  onOpen,
+}: {
+  budgets: Budget[];
+  categories: FinanceSnapshot["categories"];
+  usage: ReturnType<typeof useBudgetUsage>;
+  collapsed?: boolean;
+  today: string;
+  onOpen: (budgetId: string) => void;
+}) {
+  return (
+    <>
+      {budgets.length > 0 ? (
         <div className={styles.header}>
           <h2 className="text-base font-bold" id="manage-budgets-title">
             Manage budgets
@@ -904,17 +1191,15 @@ export function BudgetManager(props: BudgetManagerProps) {
           </Button>
         </div>
       )}
-      {listedBudgets.length > 0 && (
-        <BudgetListContainer collapsed={props.collapseList} count={listedBudgets.length}>
+      {budgets.length > 0 && (
+        <BudgetListContainer collapsed={collapsed} count={budgets.length}>
           <ul className={styles.list}>
-            {listedBudgets.map((budget) => {
+            {budgets.map((budget) => {
               const progress = usage.items.find(
                 (item) =>
                   item.budget.id === budget.id && item.budget.updatedAt === budget.updatedAt,
               );
-              const category = props.snapshot.categories.find(
-                (item) => item.id === budget.categoryId,
-              );
+              const category = categories.find((item) => item.id === budget.categoryId);
               return (
                 <ManagedBudgetRow
                   budget={budget}
@@ -922,35 +1207,111 @@ export function BudgetManager(props: BudgetManagerProps) {
                   icon={category?.icon}
                   key={budget.id}
                   progress={progress}
-                  today={props.snapshot.today}
-                  onOpen={() => setDetailId(budget.id)}
+                  today={today}
+                  onOpen={() => onOpen(budget.id)}
                 />
               );
             })}
           </ul>
         </BudgetListContainer>
       )}
-      {detail && (
-        <BudgetDetails
-          record={ownedBudgetDetails(
-            detail,
-            detailCategory,
-            detailProgress,
-            props.snapshot.today,
-            props.snapshot.categories.find((category) => category.id === detail.categoryId)?.icon,
-          )}
-          onClose={() => setDetailId(null)}
-          onEdit={() => {
-            setDetailId(null);
-            setPanel({ kind: "edit", id: detail.id });
-          }}
-          onDelete={() => {
-            setDetailId(null);
-            setPanel({ kind: "delete", id: detail.id });
-          }}
+    </>
+  );
+}
+
+function ManagedBudgetDetails({
+  budget,
+  snapshot,
+  usage,
+  onClose,
+  onPanelChange,
+}: {
+  budget: Budget;
+  snapshot: FinanceSnapshot;
+  usage: ReturnType<typeof useBudgetUsage>;
+  onClose: () => void;
+  onPanelChange: (panel: BudgetManagerPanel) => void;
+}) {
+  const category = snapshot.categories.find((item) => item.id === budget.categoryId);
+  const progress = usage.items.find(
+    (item) => item.budget.id === budget.id && item.budget.updatedAt === budget.updatedAt,
+  );
+  return (
+    <BudgetDetails
+      record={ownedBudgetDetails(
+        budget,
+        category?.name ?? "Category unavailable",
+        progress,
+        snapshot.today,
+        category?.icon,
+      )}
+      onClose={onClose}
+      onEdit={() => {
+        onClose();
+        onPanelChange({ kind: "edit", id: budget.id });
+      }}
+      onDelete={() => {
+        onClose();
+        onPanelChange({ kind: "delete", id: budget.id });
+      }}
+    />
+  );
+}
+
+export function BudgetManager(props: BudgetManagerProps) {
+  const [localPanel, setLocalPanel] = useState<BudgetManagerPanel>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [saved, setSaved] = useState<BudgetMutationResult | null>(null);
+  const panel = props.onPanelChange ? (props.panel ?? null) : localPanel;
+  const setPanel = props.onPanelChange ?? setLocalPanel;
+  const usage = useBudgetUsage(props.snapshot);
+  const budgets = props.snapshot.allBudgets.filter((budget) => budget.deletedAt === null);
+  const hiddenBudgetIds = new Set(props.hiddenBudgetIds);
+  const listedBudgets = budgets.filter((budget) => !hiddenBudgetIds.has(budget.id));
+  const detail = budgets.find((budget) => budget.id === detailId);
+  const selected =
+    panel && panel.kind !== "create" ? budgets.find((budget) => budget.id === panel.id) : undefined;
+  const close = () => setPanel(null);
+  return (
+    <section aria-labelledby="manage-budgets-title" className={styles.manager}>
+      {saved && (
+        <BudgetSavedNotice
+          key={saved.action.actionId}
+          result={saved}
+          finance={props}
+          onDismiss={() => setSaved(null)}
+          onView={
+            budgets.some((budget) => budget.id === saved.budget.id)
+              ? () => setDetailId(saved.budget.id)
+              : undefined
+          }
         />
       )}
-      <BudgetManagerDialog {...props} panel={panel} budget={selected} onClose={close} />
+      <ManagedBudgetList
+        budgets={listedBudgets}
+        categories={props.snapshot.categories}
+        usage={usage}
+        collapsed={props.collapseList}
+        today={props.snapshot.today}
+        onOpen={setDetailId}
+      />
+      {detail && (
+        <ManagedBudgetDetails
+          budget={detail}
+          snapshot={props.snapshot}
+          usage={usage}
+          onClose={() => setDetailId(null)}
+          onPanelChange={setPanel}
+        />
+      )}
+      <BudgetManagerDialog
+        {...props}
+        key={panel?.kind === "create" ? "create" : panel ? `${panel.kind}:${panel.id}` : "closed"}
+        panel={panel}
+        budget={selected}
+        onClose={close}
+        onSaved={setSaved}
+      />
     </section>
   );
 }

@@ -21,7 +21,30 @@
 }
 
 .row[data-kind="exclusion"] {
-  opacity: 0.82;
+  background: color-mix(in srgb, var(--surface-secondary) 40%, transparent);
+}
+
+.row[data-kind="exclusion"] > span:first-child {
+  opacity: 0.65;
+}
+
+.row[data-kind="exclusion"] > :where(span:nth-child(2) > span:first-child) {
+  color: var(--muted);
+}
+
+/* The review wrapper paints the highlight so the row and its confirm button read as one. */
+.row[data-review="true"] {
+  background: transparent;
+}
+
+.row[data-review="true"] > span:first-child {
+  width: 32px;
+  height: 32px;
+}
+
+.row[data-review="true"] {
+  gap: 8px;
+  padding-inline: 8px;
 }
 
 @media (hover: hover) {

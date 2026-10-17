@@ -1,14 +1,16 @@
 "use client";
 
-import type { Category, FinancialAccount } from "@monara/contracts";
+import { type Category, type FinancialAccount, isExclusionCategoryName } from "@monara/contracts";
 import { Button, FieldError, Form, Input, Label, ListBox, Select, TextField } from "@monara/ui";
-import { type FormEvent, useReducer, useRef } from "react";
+import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { BrandLogoField } from "@/components/brand-logo-field";
 import { FinanceRecovery } from "@/components/budget-manager";
+import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import {
   demoCategoryNames,
+  demoExclusionNames,
   demoMethods,
   demoToday,
   type Transaction,
@@ -27,6 +29,7 @@ type TransactionEditorResources = {
 };
 
 export type TransactionDraft = {
+  reviewedUpdatedAt?: string;
   merchant: string;
   amount: string;
   date: string;
@@ -45,8 +48,13 @@ type TransactionEditorProps = {
   resources?: TransactionEditorResources;
   today?: string;
   onDraftChange?: (draft: TransactionDraft) => void;
-  onClose: () => void;
-  onSave: (values: TransactionValues, action: EditorAction) => void | Promise<void>;
+  onClose: (preserveDraft?: boolean) => void;
+  initialUncertain?: boolean;
+  onSave: (
+    values: TransactionValues,
+    action: EditorAction,
+    expectedUpdatedAt?: string,
+  ) => void | Promise<void>;
   refreshRequired?: boolean;
   onRefreshRecords?: () => Promise<void>;
 };
@@ -56,18 +64,27 @@ type EditorState = {
   phase: "editing" | "saving" | "discard";
   saveError: string | null;
   uncertain: boolean;
+  needsLatest: boolean;
 };
 type StateAction =
   | { type: "change"; draft: TransactionDraft }
   | { type: "validate"; errors: TransactionErrors }
   | { type: "phase"; phase: EditorState["phase"] }
-  | { type: "failed"; message: string; errors?: TransactionErrors; uncertain?: boolean };
+  | {
+      type: "failed";
+      message: string;
+      errors?: TransactionErrors;
+      uncertain?: boolean;
+      needsLatest?: boolean;
+    }
+  | { type: "reviewed"; draft: TransactionDraft };
 
 function editorReducer(state: EditorState, action: StateAction): EditorState {
   switch (action.type) {
     case "change": {
       const errors = { ...state.errors };
       for (const key of Object.keys(action.draft) as (keyof TransactionDraft)[]) {
+        if (key === "reviewedUpdatedAt") continue;
         if (action.draft[key] !== state.draft[key]) {
           delete errors[key];
         }
@@ -78,6 +95,15 @@ function editorReducer(state: EditorState, action: StateAction): EditorState {
       return { ...state, errors: action.errors, saveError: null };
     case "phase":
       return { ...state, phase: action.phase };
+    case "reviewed":
+      return {
+        draft: action.draft,
+        errors: {},
+        phase: "editing",
+        saveError: null,
+        uncertain: false,
+        needsLatest: false,
+      };
     case "failed":
       return {
         ...state,
@@ -85,6 +111,7 @@ function editorReducer(state: EditorState, action: StateAction): EditorState {
         saveError: action.message,
         errors: action.errors ?? state.errors,
         uncertain: state.uncertain || Boolean(action.uncertain),
+        needsLatest: Boolean(action.needsLatest),
       };
   }
 }
@@ -95,6 +122,7 @@ function draftOf(
   today = demoToday,
 ): TransactionDraft {
   return {
+    reviewedUpdatedAt: transaction?.backend?.updatedAt,
     merchant: transaction?.backend
       ? (transaction.backend.merchantName ?? "")
       : (transaction?.merchant ?? ""),
@@ -103,13 +131,16 @@ function draftOf(
     time: transaction?.time ?? "",
     kind: transaction?.kind ?? null,
     currency: transaction ? transaction.currency : "IDR",
-    category: resources
-      ? (transaction?.backend?.categoryId ??
-        (resources.demo
-          ? resources.categories.find((category) => category.name === transaction?.category)?.id
-          : null) ??
-        null)
-      : (transaction?.category ?? null),
+    category:
+      transaction?.kind === "exclusion" && !resources?.demo
+        ? transaction.category
+        : resources
+          ? (transaction?.backend?.categoryId ??
+            (resources.demo
+              ? resources.categories.find((category) => category.name === transaction?.category)?.id
+              : null) ??
+            null)
+          : (transaction?.category ?? null),
     method: resources
       ? (transaction?.backend?.financialAccountId ??
         transaction?.financialAccountId ??
@@ -135,7 +166,7 @@ function ChoiceField({
 }: {
   name: string;
   label: string;
-  options: (string | { id: string; label: string; disabled?: boolean })[];
+  options: (string | { id: string; label: string; disabled?: boolean; icon?: string })[];
   value: string | null;
   error?: string;
   disabled: boolean;
@@ -169,6 +200,15 @@ function ChoiceField({
                 textValue={choice.label}
                 isDisabled={choice.disabled}
               >
+                {"icon" in choice ? (
+                  <CategoryAvatar
+                    name={choice.label}
+                    icon={choice.icon}
+                    size={24}
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-surface-secondary"
+                    iconClassName="h-4 w-4"
+                  />
+                ) : null}
                 {choice.label}
                 <ListBox.ItemIndicator />
               </ListBox.Item>
@@ -219,7 +259,12 @@ function TransactionFields({
         isDisabled={disabled}
       >
         <Label>Amount in rupiah</Label>
-        <Input className="min-h-11 text-base" inputMode="numeric" min="1" step="1" />
+        <Input
+          className="min-h-11 text-base"
+          inputMode="numeric"
+          min={draft.kind === "exclusion" ? "0" : "1"}
+          step="1"
+        />
         <FieldError>{errors.amount}</FieldError>
       </TextField>
       <TextField
@@ -280,6 +325,8 @@ function validateDraft(
     throw error;
   }
   const validation = transactionErrors(values);
+  if (action !== "edit" && !values.method)
+    validation.method = "Choose the account used for this transaction.";
   if (action === "edit") {
     for (const field of ["kind", "amount", "currency", "date", "method"] as const) {
       if (values[field] === null) delete validation[field];
@@ -293,8 +340,21 @@ function validateDraft(
       validation.merchant =
         values.kind === "income" ? "Enter an income source." : "Enter a merchant.";
     }
-    if (!values.method) validation.method = "Choose an account / payment method.";
+    if (!values.method) validation.method = "Choose an account.";
   }
+  if (
+    resources &&
+    draft.method &&
+    !resources.financialAccounts.some((account) => account.id === draft.method && account.isActive)
+  )
+    validation.method = "This account is no longer active. Choose an active account.";
+  if (
+    resources &&
+    draft.category &&
+    draft.kind !== "exclusion" &&
+    !resources.categories.some((category) => category.id === draft.category && !category.isArchived)
+  )
+    validation.category = "This category was archived or removed. Choose another category.";
   return validation;
 }
 
@@ -336,17 +396,14 @@ function kindChange(
         : label === "Exclusion"
           ? "exclusion"
           : null;
-  return {
-    kind,
-    ...(resources
-      ? {
-          method: null,
-        }
-      : {}),
-    ...(!resources
-      ? { method: draft.method && !demoMethods.includes(draft.method) ? null : draft.method }
-      : {}),
-  };
+  const categoryName =
+    resources?.categories.find((category) => category.id === draft.category)?.name ??
+    draft.category;
+  const compatibleCategory =
+    kind === "exclusion"
+      ? isExclusionCategoryName(categoryName)
+      : !isExclusionCategoryName(categoryName);
+  return { kind, category: compatibleCategory ? draft.category : null };
 }
 
 function editorLabels(transaction: Transaction | undefined, isSaving: boolean) {
@@ -388,7 +445,7 @@ function TransactionAccountChoices({
   return (
     <ChoiceField
       name="method"
-      label="Account / payment method"
+      label="Account"
       options={accounts ?? demoMethods}
       value={draft.method}
       error={errors.method}
@@ -400,23 +457,33 @@ function TransactionAccountChoices({
 
 function TransactionCategoryChoice({
   draft,
+  errors,
   disabled,
   onChange,
   resources,
-}: Omit<TransactionChoiceProps, "errors">) {
+}: TransactionChoiceProps) {
+  const exclusion = draft.kind === "exclusion";
+  // Exclusion reasons and spending categories never mix, so a type change cannot leave a mismatch.
   const options = resources
-    ? resources.categories.map((category) => ({
-        id: category.id,
-        label: category.name,
-        disabled: category.isArchived,
-      }))
-    : demoCategoryNames;
+    ? resources.categories
+        .filter((category) => exclusion === isExclusionCategoryName(category.name))
+        .map((category) => ({
+          id: category.id,
+          label: category.name,
+          icon: category.icon,
+          disabled: category.isArchived,
+        }))
+    : exclusion
+      ? demoExclusionNames
+      : demoCategoryNames;
+  if (options.length === 0) return null;
   return (
     <ChoiceField
       name="category"
-      label="Category (optional)"
+      label={exclusion ? "Reason (optional)" : "Category (optional)"}
       options={options}
       value={draft.category}
+      error={errors.category}
       disabled={disabled}
       onChange={(category) => onChange({ category })}
     />
@@ -430,6 +497,7 @@ function TransactionChoices({
   onChange,
   resources,
 }: TransactionChoiceProps) {
+  const exclusion = draft.kind === "exclusion";
   return (
     <>
       <ChoiceField
@@ -459,10 +527,16 @@ function TransactionChoices({
       />
       <TransactionCategoryChoice
         draft={draft}
+        errors={errors}
         disabled={disabled}
         onChange={onChange}
         resources={resources}
       />
+      {exclusion ? (
+        <p className="rounded-xl bg-surface-secondary px-3 py-2 text-xs leading-5 text-muted">
+          Kept in your history. This amount stays out of spending, income, and budgets.
+        </p>
+      ) : null}
     </>
   );
 }
@@ -477,6 +551,7 @@ function useTransactionEditorState({
   resources,
   today,
   refreshRequired,
+  initialUncertain = false,
 }: TransactionEditorProps) {
   const [state, dispatch] = useReducer(
     editorReducer,
@@ -486,16 +561,37 @@ function useTransactionEditorState({
       errors: {},
       phase: "editing",
       saveError: null,
-      uncertain: false,
+      uncertain: initialUncertain,
+      needsLatest: false,
     }),
   );
   const saving = useRef(false);
-  const submitted = useRef<{ values: TransactionValues; action: EditorAction } | null>(null);
+  const submitted = useRef<{
+    values: TransactionValues;
+    action: EditorAction;
+    expectedUpdatedAt?: string;
+  } | null>(null);
+  const [reviewed, setReviewed] = useState(() => ({
+    version: initialDraft?.reviewedUpdatedAt ?? transaction?.backend?.updatedAt,
+    draft: pristineDraft ?? draftOf(transaction, resources, today),
+  }));
+  const changedElsewhere =
+    transaction?.backend !== undefined && transaction.backend.updatedAt !== reviewed.version;
   const { draft } = state;
-  const original = pristineDraft ?? draftOf(transaction, resources, today);
+  const original = reviewed.draft;
   const dirty = Object.keys(original).some(
-    (key) => draft[key as keyof TransactionDraft] !== original[key as keyof TransactionDraft],
+    (key) =>
+      key !== "reviewedUpdatedAt" &&
+      draft[key as keyof TransactionDraft] !== original[key as keyof TransactionDraft],
   );
+  useEffect(() => {
+    if (!dirty && !state.uncertain && state.phase !== "saving") return;
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", protectDraft);
+    return () => window.removeEventListener("beforeunload", protectDraft);
+  }, [dirty, state.uncertain, state.phase]);
 
   const changeDraft = (patch: Partial<TransactionDraft>) => {
     if (state.uncertain || refreshRequired) return;
@@ -505,14 +601,14 @@ function useTransactionEditorState({
   };
   const requestClose = () => {
     if (saving.current) return;
-    if (state.uncertain) return onClose();
+    if (state.uncertain) return onClose(true);
     if (state.phase === "discard") dispatch({ type: "phase", phase: "editing" });
     else if (dirty) dispatch({ type: "phase", phase: "discard" });
     else onClose();
   };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (saving.current || refreshRequired) return;
+    if (saving.current || refreshRequired || changedElsewhere) return;
     const action = saveActionOf(transaction, event.nativeEvent);
     const validation = validateDraft(draft, action, transaction, resources);
     dispatch({ type: "validate", errors: validation });
@@ -526,10 +622,18 @@ function useTransactionEditorState({
       return;
     }
     saving.current = true;
-    submitted.current ??= { values: valuesOf(draft, resources), action };
+    submitted.current ??= {
+      values: valuesOf(draft, resources),
+      action,
+      expectedUpdatedAt: reviewed.version,
+    };
     dispatch({ type: "phase", phase: "saving" });
     try {
-      await onSave(submitted.current.values, submitted.current.action);
+      await onSave(
+        submitted.current.values,
+        submitted.current.action,
+        submitted.current.expectedUpdatedAt,
+      );
       // Successful saves close through the parent. Keep submissions blocked during navigation.
     } catch (error) {
       saving.current = false;
@@ -559,6 +663,9 @@ function useTransactionEditorState({
             : "Your entries are kept. Check your records and try again.",
         errors,
         uncertain,
+        needsLatest:
+          error instanceof FinanceClientError &&
+          (error.code === "CONFLICT" || error.code === "NOT_FOUND"),
       });
     }
   };
@@ -569,21 +676,35 @@ function useTransactionEditorState({
     requestClose,
     submit,
     keepEditing: () => dispatch({ type: "phase", phase: "editing" }),
+    changedElsewhere,
+    reviewLatest: (useCurrent: boolean) => {
+      if (!transaction || refreshRequired) return;
+      const latest = draftOf(transaction, resources, today);
+      const nextDraft = useCurrent
+        ? latest
+        : { ...draft, reviewedUpdatedAt: transaction.backend?.updatedAt };
+      submitted.current = null;
+      setReviewed({ version: transaction.backend?.updatedAt, draft: latest });
+      dispatch({ type: "reviewed", draft: nextDraft });
+      onDraftChange?.(nextDraft);
+    },
   };
 }
 
 export function TransactionEditor(props: TransactionEditorProps) {
-  const { state, changeDraft, requestClose, submit, keepEditing } =
+  const { state, changeDraft, requestClose, submit, keepEditing, changedElsewhere, reviewLatest } =
     useTransactionEditorState(props);
   const { draft, errors } = state;
   const isSaving = state.phase === "saving";
-  const locked = isSaving || state.uncertain || Boolean(props.refreshRequired);
+  const locked = isSaving || state.uncertain || changedElsewhere || Boolean(props.refreshRequired);
   const labels = editorLabels(props.transaction, isSaving);
+  const unsupportedExclusion =
+    draft.kind === "exclusion" && Boolean(props.resources && !props.resources.demo);
 
   return (
     <ModalDialog labelledBy="transaction-editor-title" onClose={requestClose}>
       {state.phase === "discard" ? (
-        <DiscardChanges onKeep={keepEditing} onDiscard={props.onClose} />
+        <DiscardChanges onKeep={keepEditing} onDiscard={() => props.onClose()} />
       ) : (
         <Form
           className="space-y-4 p-4 sm:p-6"
@@ -616,6 +737,14 @@ export function TransactionEditor(props: TransactionEditorProps) {
             disabled={locked}
             onChange={changeDraft}
           />
+          {changedElsewhere && props.transaction ? (
+            <LatestTransaction
+              transaction={props.transaction}
+              onUseLatest={() => reviewLatest(true)}
+              onKeepDraft={() => reviewLatest(false)}
+              disabled={Boolean(props.refreshRequired)}
+            />
+          ) : null}
           <TransactionChoices
             draft={draft}
             errors={errors}
@@ -623,53 +752,153 @@ export function TransactionEditor(props: TransactionEditorProps) {
             onChange={changeDraft}
             resources={props.resources}
           />
-          {Object.keys(errors).length > 0 && (
-            <p role="alert" className="text-sm text-danger">
-              Check the marked fields.
-            </p>
-          )}
-          {state.saveError && (
-            <p role="alert" className="text-sm text-danger">
-              {state.saveError}
-            </p>
-          )}
-          {(props.refreshRequired || state.uncertain) && (
-            <FinanceRecovery
-              message="Refresh your records before retrying. A retry will use the same submitted values."
-              onRefreshRecords={props.onRefreshRecords}
-            />
-          )}
-          <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-5">
-            <Button
-              className="min-h-11"
-              variant="secondary"
-              onPress={requestClose}
-              isDisabled={isSaving}
-            >
-              Cancel
-            </Button>
-            {labels.pending && (
-              <Button
-                className="min-h-11"
-                variant="secondary"
-                type="submit"
-                name="action"
-                value="edit"
-                isDisabled={locked}
-              >
-                Save changes
-              </Button>
-            )}
-            <Button
-              className="min-h-11"
-              type="submit"
-              isDisabled={isSaving || Boolean(props.refreshRequired)}
-            >
-              {state.uncertain && !isSaving ? "Retry same change" : labels.save}
-            </Button>
-          </div>
+          <EditorFeedback
+            state={state}
+            changedElsewhere={changedElsewhere}
+            refreshRequired={props.refreshRequired}
+            onRefreshRecords={props.onRefreshRecords}
+          />
+          <EditorFooter
+            labels={labels}
+            state={state}
+            onClose={requestClose}
+            locked={locked}
+            reviewRequired={changedElsewhere || Boolean(props.refreshRequired)}
+            unsupportedExclusion={unsupportedExclusion}
+          />
         </Form>
       )}
     </ModalDialog>
+  );
+}
+
+function EditorFooter({
+  labels,
+  state,
+  onClose,
+  locked,
+  reviewRequired,
+  unsupportedExclusion,
+}: {
+  labels: ReturnType<typeof editorLabels>;
+  state: EditorState;
+  onClose: () => void;
+  locked: boolean;
+  reviewRequired: boolean;
+  unsupportedExclusion: boolean;
+}) {
+  const isSaving = state.phase === "saving";
+  return (
+    <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-5">
+      <Button className="min-h-11" variant="secondary" onPress={onClose} isDisabled={isSaving}>
+        Cancel
+      </Button>
+      {labels.pending ? (
+        <Button
+          className="min-h-11"
+          variant="secondary"
+          type="submit"
+          name="action"
+          value="edit"
+          isDisabled={locked || unsupportedExclusion}
+        >
+          Save changes
+        </Button>
+      ) : null}
+      <Button
+        className="min-h-11"
+        type="submit"
+        isDisabled={isSaving || reviewRequired || unsupportedExclusion}
+      >
+        {state.uncertain && !isSaving ? "Retry same change" : labels.save}
+      </Button>
+    </div>
+  );
+}
+
+function EditorFeedback({
+  state,
+  changedElsewhere,
+  refreshRequired,
+  onRefreshRecords,
+}: {
+  state: EditorState;
+  changedElsewhere: boolean;
+  refreshRequired?: boolean;
+  onRefreshRecords?: () => Promise<void>;
+}) {
+  return (
+    <>
+      {Object.keys(state.errors).length > 0 ? (
+        <p role="alert" className="text-sm text-danger">
+          Check the marked fields. Your entries are still here.
+        </p>
+      ) : null}
+      {state.saveError ? (
+        <p role="alert" className="text-sm text-danger">
+          {state.saveError}
+        </p>
+      ) : null}
+      {(refreshRequired || state.uncertain || state.needsLatest) && !changedElsewhere ? (
+        <FinanceRecovery
+          message={
+            state.uncertain
+              ? "The save may have completed. Your submitted details are kept. Refresh to check the result before retrying."
+              : "Your entries are kept. Refresh to check the latest record before saving again."
+          }
+          onRefreshRecords={onRefreshRecords}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function LatestTransaction({
+  transaction,
+  onUseLatest,
+  onKeepDraft,
+  disabled,
+}: {
+  transaction: Transaction;
+  onUseLatest: () => void;
+  onKeepDraft: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <section
+      aria-label="Updated transaction"
+      className="space-y-3 rounded-2xl border border-warning/40 bg-warning/10 p-4"
+    >
+      <h3 className="font-bold">This transaction changed elsewhere</h3>
+      <p className="text-sm leading-6 text-muted">
+        Your entries are kept above. Compare them with the latest saved details before choosing what
+        to save.
+      </p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt>Merchant</dt>
+        <dd className="break-words font-semibold">{transaction.merchant ?? "Not provided"}</dd>
+        <dt>Amount</dt>
+        <dd data-amount>
+          {transaction.amount?.toLocaleString("en-US") ?? "Not provided"}{" "}
+          {transaction.currency ?? ""}
+        </dd>
+        <dt>Date</dt>
+        <dd>{transaction.date ?? "Not provided"}</dd>
+        <dt>Type</dt>
+        <dd>{transaction.kind ?? "Not selected"}</dd>
+        <dt>Category</dt>
+        <dd>{transaction.category ?? "Not selected"}</dd>
+        <dt>Account</dt>
+        <dd>{transaction.method ?? "Not selected"}</dd>
+      </dl>
+      <div className="flex flex-wrap gap-2">
+        <Button isDisabled={disabled} onPress={onUseLatest} variant="secondary">
+          Use latest details
+        </Button>
+        <Button isDisabled={disabled} onPress={onKeepDraft}>
+          Keep my entries
+        </Button>
+      </div>
+    </section>
   );
 }

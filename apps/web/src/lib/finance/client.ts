@@ -34,6 +34,8 @@ import {
   transactionMutationResultSchema,
   transactionPageSchema,
   transactionSchema,
+  undoActionInputSchema,
+  undoActionResultSchema,
   updateBudgetInputSchema,
   updateCategoryInputSchema,
   updateFinancialAccountInputSchema,
@@ -86,6 +88,7 @@ const operations = {
     output: transactionMutationResultSchema,
   },
   delete_transaction: { input: deleteTransactionInputSchema, output: transactionSchema },
+  undo_action: { input: undoActionInputSchema, output: undoActionResultSchema },
 } as const;
 
 export type FinanceClientOperation = keyof typeof operations;
@@ -144,6 +147,18 @@ export async function callFinanceOperation<Operation extends FinanceClientOperat
     !operation.startsWith("list_") &&
     operation !== "get_dashboard" &&
     operation !== "suggest_budget";
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    throw new FinanceClientError(
+      "DEPENDENCY_UNAVAILABLE",
+      mutation
+        ? "You're offline. Your change hasn't been sent. Reconnect, then try again."
+        : "You're offline. Reconnect, then refresh your records.",
+      null,
+    );
+  }
+  const unverifiedMessage = mutation
+    ? "We couldn't verify whether your change was saved. Refresh your records before trying again."
+    : "Your records could not be loaded. Refresh your records to try again.";
   let response: Response;
   try {
     response = await fetcher(`/api/finance/operations/${operation}`, {
@@ -155,14 +170,7 @@ export async function callFinanceOperation<Operation extends FinanceClientOperat
       signal: AbortSignal.timeout(20_000),
     });
   } catch {
-    throw new FinanceClientError(
-      "DEPENDENCY_UNAVAILABLE",
-      mutation
-        ? "The result could not be verified. Refresh your records before trying again."
-        : "Your records could not be loaded. Please try again.",
-      null,
-      mutation,
-    );
+    throw new FinanceClientError("DEPENDENCY_UNAVAILABLE", unverifiedMessage, null, mutation);
   }
 
   let body: unknown;
@@ -171,7 +179,7 @@ export async function callFinanceOperation<Operation extends FinanceClientOperat
   } catch {
     throw new FinanceClientError(
       "DEPENDENCY_UNAVAILABLE",
-      "The result could not be verified. Refresh your records before trying again.",
+      unverifiedMessage,
       response.status,
       mutation,
     );
@@ -179,17 +187,18 @@ export async function callFinanceOperation<Operation extends FinanceClientOperat
   if (!response.ok) {
     const error = operationErrorSchema.safeParse(body);
     if (error.success) {
+      const uncertain = mutation && response.status >= 500;
       throw new FinanceClientError(
         error.data.code,
-        error.data.message,
+        uncertain ? unverifiedMessage : error.data.message,
         response.status,
-        mutation && response.status >= 500,
+        uncertain,
         error.data.fieldErrors,
       );
     }
     throw new FinanceClientError(
       "DEPENDENCY_UNAVAILABLE",
-      "The operation could not be verified. Refresh your records before trying again.",
+      unverifiedMessage,
       response.status,
       mutation,
     );
@@ -199,7 +208,7 @@ export async function callFinanceOperation<Operation extends FinanceClientOperat
   if (!result.success) {
     throw new FinanceClientError(
       "DEPENDENCY_UNAVAILABLE",
-      "The result could not be verified. Refresh your records before trying again.",
+      unverifiedMessage,
       response.status,
       mutation,
     );

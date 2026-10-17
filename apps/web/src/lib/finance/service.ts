@@ -16,6 +16,7 @@ const FINANCE_OPERATIONS = [
   "confirm_pending",
   "exclude_pending",
   "delete_transaction",
+  "undo_action",
   "list_financial_accounts",
   "create_financial_account",
   "update_financial_account",
@@ -46,7 +47,6 @@ type AgentFinanceOperation = Exclude<
 const AGENT_CONFIRMATION_OPERATIONS = [
   "request_destructive_action",
   "confirm_destructive_action",
-  "undo_action",
 ] as const;
 type AgentConfirmationOperation = (typeof AGENT_CONFIRMATION_OPERATIONS)[number];
 export type AgentOperation = AgentFinanceOperation | AgentConfirmationOperation;
@@ -106,6 +106,8 @@ export async function runFinanceOperation(
       return service.excludePending(caller, input);
     case "delete_transaction":
       return service.deleteTransaction(caller, input);
+    case "undo_action":
+      return service.undoAction(caller, input);
     case "list_financial_accounts":
       return service.listFinancialAccounts(caller, input);
     case "create_financial_account":
@@ -151,9 +153,6 @@ export async function runAgentOperation(
   }
   if (operation === "confirm_destructive_action") {
     return financeService().confirmDestructiveAction(caller, input);
-  }
-  if (operation === "undo_action") {
-    return financeService().undoAction(caller, input);
   }
   return runFinanceOperation(operation, caller, input);
 }

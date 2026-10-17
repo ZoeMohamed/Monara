@@ -24,6 +24,7 @@
   color: var(--success);
 }
 
+.amount[data-kind="exclusion"],
 .amount[data-kind="unknown"] {
   color: var(--muted);
 }

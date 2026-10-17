@@ -4,6 +4,8 @@ import { Alert, Button } from "@monara/ui";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AppSessionContext } from "@/components/app-session-context";
+import { FinanceRecovery } from "@/components/budget-manager";
+import { ChatSessionProvider } from "@/components/chat-session-context";
 import { DemoIndicator } from "@/components/demo-indicator";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
@@ -210,12 +212,16 @@ function RejectDialog({
   onReject,
   pending,
   error,
+  refreshRequired,
+  onRefreshRecords,
 }: {
   transaction: Transaction;
   onCancel: () => void;
   onReject: () => void;
   pending: boolean;
   error: string | null;
+  refreshRequired: boolean;
+  onRefreshRecords: () => Promise<void>;
 }) {
   return (
     <ModalDialog
@@ -230,13 +236,21 @@ function RejectDialog({
         </h2>
         <p className="mt-3 break-words text-sm leading-6 text-muted">
           {transaction.merchant ?? "This transaction"} will leave the Review Queue and stay out of
-          totals. {transaction.backend ? "The imported record stays available for audit." : ""}
+          totals.{" "}
+          {transaction.backend
+            ? "The imported record stays in Exclusions for audit."
+            : "You can undo this from the confirmation message."}
         </p>
         <div className="mt-4 flex flex-wrap justify-end gap-2 sm:mt-6 sm:gap-3">
           <Button variant="secondary" className="min-h-11" onPress={onCancel} isDisabled={pending}>
             Keep pending
           </Button>
-          <Button variant="danger" className="min-h-11" onPress={onReject} isDisabled={pending}>
+          <Button
+            variant="danger"
+            className="min-h-11"
+            onPress={onReject}
+            isDisabled={pending || refreshRequired}
+          >
             {pending ? "Excluding…" : "Exclude transaction"}
           </Button>
         </div>
@@ -245,21 +259,43 @@ function RejectDialog({
             {error}
           </p>
         ) : null}
+        {refreshRequired ? (
+          <FinanceRecovery
+            message="The result may have been saved. Refresh to check before trying again."
+            onRefreshRecords={onRefreshRecords}
+          />
+        ) : null}
       </div>
     </ModalDialog>
   );
 }
 
-function MissingTransaction({ onClose }: { onClose: () => void }) {
+function MissingTransaction({
+  onClose,
+  onRefreshRecords,
+  hasDraft,
+}: {
+  onClose: () => void;
+  onRefreshRecords: () => Promise<void>;
+  hasDraft: boolean;
+}) {
   return (
     <ModalDialog labelledBy="missing-transaction" onClose={onClose}>
       <div className="p-5">
         <h2 id="missing-transaction" className="text-xl font-bold">
           Transaction unavailable
         </h2>
-        <p className="mt-2 text-sm text-muted">This record may have changed or been removed.</p>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          This record may have been removed or your access changed. Refresh to check, or return to
+          History to choose another transaction.
+          {hasDraft ? " Your unsaved entries are kept for this visit." : ""}
+        </p>
+        <FinanceRecovery
+          message="Checking again won’t repeat a save or delete."
+          onRefreshRecords={onRefreshRecords}
+        />
         <Button className="mt-4 w-full" onPress={onClose}>
-          Close
+          Back to History
         </Button>
       </div>
     </ModalDialog>
@@ -293,7 +329,9 @@ export function MonaraApp({
   const workspace = useMonaraSession(profile, initialFinance);
   return (
     <AppSessionContext value={workspace.session}>
-      <AppChrome workspace={workspace}>{children}</AppChrome>
+      <ChatSessionProvider>
+        <AppChrome workspace={workspace}>{children}</AppChrome>
+      </ChatSessionProvider>
     </AppSessionContext>
   );
 }
@@ -337,7 +375,7 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
             <Alert className="rounded-none px-4 py-2" role="status" status="warning">
               <Alert.Content>
                 <Alert.Title className="text-center text-xs">
-                  Offline. Reconnect for sign-in and sync.
+                  You’re offline. Reconnect before saving changes.
                 </Alert.Title>
               </Alert.Content>
             </Alert>
@@ -385,7 +423,28 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
         </div>
       </div>
       <BottomNav activeTab={view.screen} onAdd={navigation.openAdd} hrefFor={navigation.hrefFor} />
-      <SessionToast notice={notice} onUndo={undo} onDismiss={() => setNotice(null)} />
+      <SessionToast
+        notice={notice}
+        onUndo={undo}
+        onDismiss={() => setNotice(null)}
+        onRecover={async (action) => {
+          if (action === "history") {
+            navigation.navigate({ screen: "transactions", reviewOpen: false, kindFilter: "all" });
+            setNotice(null);
+            return;
+          }
+          try {
+            await sync.refresh();
+            setNotice({ message: "Records refreshed. You can review the latest details." });
+          } catch {
+            setNotice({
+              message: "Still couldn’t load your records. Check your connection and refresh again.",
+              tone: "warning",
+              recovery: "refresh",
+            });
+          }
+        }}
+      />
       <AppSheets workspace={workspace} />
     </div>
   );
@@ -402,6 +461,7 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
     setDrafts,
     editorKey,
     closeEditor,
+    lockedCreate,
     save,
     add,
     deleteTransaction,
@@ -428,6 +488,7 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
           onClose={navigation.closePopup}
           onEdit={() => navigation.openEdit(selected.id)}
           onConfirm={() => confirm(selected.id)}
+          onReject={() => session.reject(selected.id)}
           onDelete={() => deleteTransaction(selected)}
           pending={mutationPending}
           confirmationError={confirmError}
@@ -452,6 +513,7 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
       {view.adding ? (
         <TransactionEditor
           key={editorKey}
+          initialUncertain={lockedCreate}
           initialDraft={drafts[editorKey] ?? draftForMonth(view.month, today)}
           pristineDraft={draftForMonth(view.month, today)}
           onDraftChange={(draft) => setDrafts((items) => ({ ...items, [editorKey]: draft }))}
@@ -463,7 +525,18 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
           onRefreshRecords={sync.refresh}
         />
       ) : null}
-      {missing ? <MissingTransaction onClose={navigation.closePopup} /> : null}
+      {missing ? (
+        <MissingTransaction
+          onClose={() =>
+            navigation.navigate(
+              { screen: "transactions", editId: null, transactionId: null, rejectId: null },
+              "replace",
+            )
+          }
+          onRefreshRecords={sync.refresh}
+          hasDraft={Boolean(drafts[editorKey])}
+        />
+      ) : null}
       {rejecting ? (
         <RejectDialog
           transaction={rejecting}
@@ -471,6 +544,8 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
           pending={mutationPending}
           error={rejectError}
           onReject={rejectSelected}
+          refreshRequired={sync.needsRecovery}
+          onRefreshRecords={sync.refresh}
         />
       ) : null}
       <OnboardingSheets onboarding={onboarding} />

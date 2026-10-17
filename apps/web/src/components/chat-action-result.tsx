@@ -1,15 +1,16 @@
 "use client";
 
 import type {
-  AgentChatResponse,
   DestructiveActionConfirmation,
+  ReversibleActionReceipt,
   ReversibleResourceType,
+  WebChatResponse,
 } from "@monara/contracts";
 import { Button } from "@monara/ui";
 import { useEffect, useId, useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
 
-export type ChatReply = AgentChatResponse & { refreshWarning?: string };
+export type ChatReply = WebChatResponse & { refreshWarning?: string };
 
 const resourceLabels: Record<ReversibleResourceType, string> = {
   transaction: "Transaction",
@@ -19,6 +20,52 @@ const resourceLabels: Record<ReversibleResourceType, string> = {
   category: "Category",
   reminder_preferences: "Reminder preferences",
 };
+
+function useExpired(expiresAt: string) {
+  const [expired, setExpired] = useState(() => Date.parse(expiresAt) <= Date.now());
+  useEffect(() => {
+    let timer: number;
+    const check = () => {
+      const remaining = Date.parse(expiresAt) - Date.now();
+      if (remaining <= 0) setExpired(true);
+      else timer = window.setTimeout(check, Math.min(2_147_483_647, remaining));
+    };
+    check();
+    return () => window.clearTimeout(timer);
+  }, [expiresAt]);
+  return { expired, markExpired: () => setExpired(true) };
+}
+
+function UndoLastChange({
+  receipt,
+  sending,
+  onUndo,
+}: {
+  receipt: ReversibleActionReceipt;
+  sending: boolean;
+  onUndo: () => void;
+}) {
+  const { expired, markExpired } = useExpired(receipt.undoExpiresAt);
+  if (expired)
+    return (
+      <p className="mt-2 text-xs leading-5 text-muted">
+        The undo window has closed. Open the record to make a correction.
+      </p>
+    );
+  return (
+    <Button
+      className="mt-2 min-h-11 text-xs"
+      isDisabled={sending}
+      onPress={() => {
+        if (Date.parse(receipt.undoExpiresAt) <= Date.now()) markExpired();
+        else onUndo();
+      }}
+      variant="secondary"
+    >
+      Undo last change
+    </Button>
+  );
+}
 
 function ActionConfirmation({
   confirmation,
@@ -33,20 +80,12 @@ function ActionConfirmation({
 }) {
   const { maskAmountText } = useAmountDisplay();
   const titleId = useId();
-  const [expired, setExpired] = useState(() => Date.parse(confirmation.expiresAt) <= Date.now());
-
-  useEffect(() => {
-    const timeout = window.setTimeout(
-      () => setExpired(true),
-      Math.max(0, Date.parse(confirmation.expiresAt) - Date.now()),
-    );
-    return () => window.clearTimeout(timeout);
-  }, [confirmation.expiresAt]);
+  const { expired, markExpired } = useExpired(confirmation.expiresAt);
 
   const answer = (value: "yes" | "no") => {
     if (!active || sending || expired) return;
     if (Date.parse(confirmation.expiresAt) <= Date.now()) {
-      setExpired(true);
+      markExpired();
       return;
     }
     onAnswer(value);
@@ -90,13 +129,16 @@ export function ChatActionResult({
   sending,
   onAnswer,
   onOpenResource,
+  onUndoLastChange,
 }: {
   result: ChatReply;
   activeConfirmationId: string | null;
   sending: boolean;
   onAnswer: (answer: "yes" | "no") => void;
   onOpenResource?: (type: ReversibleResourceType, id: string) => void;
+  onUndoLastChange?: () => void;
 }) {
+  const lastAction = result.actions.at(-1);
   return (
     <>
       {result.actions.length > 0 ? (
@@ -122,6 +164,14 @@ export function ChatActionResult({
               </li>
             ))}
           </ul>
+          {lastAction && onUndoLastChange ? (
+            <UndoLastChange
+              key={lastAction.actionId}
+              onUndo={onUndoLastChange}
+              receipt={lastAction}
+              sending={sending}
+            />
+          ) : null}
         </div>
       ) : null}
       {result.confirmation ? (

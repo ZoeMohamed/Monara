@@ -18,7 +18,7 @@ type SignInScreenProps = {
 
 const benefits: { icon: IconName; text: string }[] = [
   { icon: "mail", text: "Gmail receipts, ready for review" },
-  { icon: "check", text: "Nothing counts until you confirm it" },
+  { icon: "check", text: "Review the details that need a second look" },
   { icon: "chat", text: "Ask “can I afford it?” any time" },
 ];
 

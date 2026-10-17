@@ -2,8 +2,10 @@ import {
   type AgentChatResponse,
   type AgentChatTurn,
   agentChatRequestSchema,
-  agentChatResponseSchema,
+  type OperationErrorCode,
   operationErrorSchema,
+  type WebChatResponse,
+  webChatResponseSchema,
 } from "@monara/contracts";
 
 type ChatFetch = (input: string, init: RequestInit) => Promise<Response>;
@@ -13,11 +15,20 @@ const unverifiableAnswer =
 
 export class ChatClientError extends Error {
   readonly actionMayHaveCompleted: boolean;
+  readonly code: OperationErrorCode;
+  readonly status: number | null;
 
-  constructor(message: string, actionMayHaveCompleted = false) {
+  constructor(
+    message: string,
+    actionMayHaveCompleted = false,
+    code: OperationErrorCode = "DEPENDENCY_UNAVAILABLE",
+    status: number | null = null,
+  ) {
     super(message);
     this.name = "ChatClientError";
     this.actionMayHaveCompleted = actionMayHaveCompleted;
+    this.code = code;
+    this.status = status;
   }
 }
 
@@ -26,13 +37,15 @@ export async function sendChatMessage(
   text: string,
   history: AgentChatTurn[],
   fetcher: ChatFetch = fetch,
-): Promise<AgentChatResponse> {
+): Promise<WebChatResponse> {
   const request = browserChatSchema.safeParse({ text, history });
   if (!request.success) {
     throw new ChatClientError(
       request.error.issues.some((issue) => issue.path[0] === "text")
         ? "Write a message of 1 to 4,000 characters."
         : "This conversation could not be verified. Start a new chat.",
+      false,
+      "VALIDATION_FAILED",
     );
   }
   let response: Response;
@@ -57,9 +70,11 @@ export async function sendChatMessage(
     throw new ChatClientError(
       error.success ? error.data.message : unverifiableAnswer,
       !error.success || response.status >= 500,
+      error.success ? error.data.code : "DEPENDENCY_UNAVAILABLE",
+      response.status,
     );
   }
-  const result = agentChatResponseSchema.safeParse(body);
+  const result = webChatResponseSchema.safeParse(body);
   if (!result.success || !result.data.reply.trim())
     throw new ChatClientError(unverifiableAnswer, true);
   return result.data;

@@ -33,6 +33,7 @@ export type AppSession = {
     limit: number;
     startsOn: string;
     warningPercent: number;
+    cadence: "monthly" | "weekly";
   }) => void;
   today: string;
   currentMonth: string;

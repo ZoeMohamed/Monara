@@ -299,7 +299,7 @@ function AccountFields({
           )}
         </div>
       )}
-      <p className={styles.meta}>Use this account for payments and transfers · IDR.</p>
+      <p className={styles.meta}>Use this account for your transactions · IDR.</p>
     </>
   );
 }
@@ -578,8 +578,8 @@ function AccountStatusFields({ editor }: { editor: LiveAccountEditor }) {
     <>
       <p className="text-sm leading-6 text-muted">
         {active
-          ? "This account will no longer be available for new payments or transfers. Existing transaction history stays linked to it."
-          : "This account will become available for new payments and transfers again."}
+          ? "This account will no longer be available for new transactions. Existing transaction history stays linked to it."
+          : "This account will become available for new transactions again."}
       </p>
       {state.error ? (
         <p className={styles.error} role="alert">
@@ -639,7 +639,7 @@ function AccountEditFields({ editor }: { editor: LiveAccountEditor }) {
         <p className="text-sm font-semibold">Account status</p>
         <p className="mt-1 text-xs leading-5 text-muted">
           {active
-            ? "Active accounts are available for new payments and transfers."
+            ? "Active accounts are available for new transactions."
             : "Inactive accounts stay in your history but cannot be used for new transactions."}
         </p>
         <Button
@@ -870,8 +870,8 @@ function DemoAccountStatusFields({ editor }: { editor: DemoAccountEditorState })
     <>
       <p className="text-sm leading-6 text-muted">
         {account.isActive
-          ? "This account will no longer be available for new payments or transfers. Existing transaction history stays linked to it."
-          : "This account will become available for new payments and transfers again."}
+          ? "This account will no longer be available for new transactions. Existing transaction history stays linked to it."
+          : "This account will become available for new transactions again."}
       </p>
       {state.error ? (
         <p className={styles.error} role="alert">
@@ -904,7 +904,7 @@ function DemoAccountEditFields({ editor }: { editor: DemoAccountEditorState }) {
         <p className="text-sm font-semibold">Account status</p>
         <p className="mt-1 text-xs leading-5 text-muted">
           {account.isActive
-            ? "Active accounts are available for new payments and transfers."
+            ? "Active accounts are available for new transactions."
             : "Inactive accounts stay in your history but cannot be used for new transactions."}
         </p>
         <Button

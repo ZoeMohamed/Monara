@@ -4,6 +4,9 @@ import {
   type Reminder as BackendReminder,
   type Transaction as BackendTransaction,
   budgetPeriodForDate,
+  exclusionCategoryPresets,
+  expenseCategoryPresets,
+  isExclusionCategoryName,
 } from "@monara/contracts";
 
 // Presentation models support both explicit demo data and validated owned backend records.
@@ -46,7 +49,8 @@ export type TransactionErrors = Partial<Record<keyof TransactionValues, string>>
 
 export const demoToday = "2026-10-11";
 export const demoMethods = ["BCA", "GoPay", "Jago", "Mandiri", "Cash"];
-export const demoCategoryNames = ["Food & Drinks", "Transport", "Shopping", "Digital", "Other"];
+export const demoCategoryNames = expenseCategoryPresets.map((category) => category.name);
+export const demoExclusionNames = exclusionCategoryPresets.map((category) => category.name);
 
 export function isCalendarDate(value: string | null): boolean {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -59,38 +63,24 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
   if (!values.kind || !["expense", "income", "exclusion"].includes(values.kind)) {
     errors.kind = "Choose the transaction type.";
   }
+  // Exclusions may omit an amount or date; anything that is entered must still be valid.
+  const isExclusion = values.kind === "exclusion";
   if (
-    values.kind !== "exclusion" &&
+    (!isExclusion || values.amount !== null) &&
     (values.amount === null || !Number.isSafeInteger(values.amount) || values.amount <= 0)
   ) {
     errors.amount = "Enter a positive whole amount of rupiah within the supported range.";
   }
-  if (values.kind !== "exclusion" && values.currency !== "IDR") {
+  if (!isExclusion && values.currency !== "IDR") {
     errors.currency = "Choose IDR. Monara supports rupiah only.";
   }
-  if (values.kind !== "exclusion" && !isCalendarDate(values.date)) {
+  if ((!isExclusion || values.date) && !isCalendarDate(values.date)) {
     errors.date = "Enter a valid transaction date.";
   }
+  // An exclusion may keep the category it was imported with; only reasons are kept off spending.
+  if (!isExclusion && isExclusionCategoryName(values.category))
+    errors.category = "Choose a category for this transaction type.";
   return errors;
-}
-
-export function reviewFlags(transaction: Transaction): string[] {
-  const flags = Object.keys(transactionErrors(transaction)).map(
-    (key) =>
-      ({
-        kind: "Type missing",
-        amount: "Amount missing or invalid",
-        currency: "Currency missing",
-        date: "Date missing or invalid",
-        method: "Financial account missing",
-      })[key as "kind" | "amount" | "currency" | "date" | "method"],
-  );
-  if (transaction.kind !== "exclusion" && !transaction.method) {
-    flags.push("Financial account not assigned");
-  }
-  if (transaction.confidence === null) flags.push("Confidence unavailable");
-  else if (transaction.confidence < 95) flags.push("Low confidence");
-  return flags;
 }
 
 export function updatePendingTransaction(
@@ -267,7 +257,7 @@ export type Budget = {
   id: string;
   category: string;
   emoji: string;
-  cadence: "monthly";
+  cadence: "monthly" | "weekly";
   limit: number;
   warningPercent: number;
   icon?: string;
@@ -349,7 +339,9 @@ export function safeToSpendToday(
 ) {
   const month = today.slice(0, 7);
   const daysLeft = daysInMonth(month) - Number(today.slice(8, 10)) + 1;
-  const activeBudgets = budgets.filter((budget) => !budget.startsOn || budget.startsOn <= today);
+  const activeBudgets = budgets.filter(
+    (budget) => budget.cadence === "monthly" && (!budget.startsOn || budget.startsOn <= today),
+  );
   const limit = activeBudgets.reduce((sum, budget) => sum + BigInt(budget.limit), BigInt(0));
   const spending = demoSummary(transactions, month).spending;
   const rawRemaining = limit - spending;
@@ -365,7 +357,8 @@ export function safeToSpendToday(
       budgets.length > 0 &&
       budgets.every(
         (budget) =>
-          !budget.startsOn || (budget.startsOn.endsWith("-01") && budget.startsOn <= today),
+          budget.cadence === "monthly" &&
+          (!budget.startsOn || (budget.startsOn.endsWith("-01") && budget.startsOn <= today)),
       ),
     limit,
     spending,

@@ -7,7 +7,7 @@ import {
   type TransactionMutationResult,
   transactionValuesSchema,
 } from "@monara/contracts";
-import { type Dispatch, type SetStateAction, useRef } from "react";
+import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import type { TransactionDraft } from "@/components/transaction-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
 import type { SaveNotice } from "@/components/use-monara-session";
@@ -50,6 +50,8 @@ type ActionContext = {
 /** Coordinates presentation actions through verified backend operations, or explicit demo memory. */
 export function useTransactionActions(context: ActionContext) {
   const createRequests = useRef<Record<string, CreateRequest>>({});
+  const [lockedCreates, setLockedCreates] = useState<Record<string, boolean>>({});
+  const undoing = useRef(false);
   const {
     live,
     resources,
@@ -73,6 +75,13 @@ export function useTransactionActions(context: ActionContext) {
     values: TransactionValues,
     existing?: Transaction,
   ): BackendTransactionValues => {
+    if (values.kind === "exclusion") {
+      throw new FinanceClientError(
+        "DEPENDENCY_UNAVAILABLE",
+        "Exclusions are ready in the demo. Saving them to your private ledger is not connected yet.",
+        null,
+      );
+    }
     const previous = existing?.backend;
     const categoryId =
       values.categoryId === undefined ? (previous?.categoryId ?? null) : values.categoryId;
@@ -117,16 +126,26 @@ export function useTransactionActions(context: ActionContext) {
     );
     if (!item) return;
     if (live && !item.backend) {
-      setNotice({ message: "This record could not be verified. Refresh your records." });
+      setNotice({
+        message: "This record couldn’t be checked. Refresh to load its latest details.",
+        tone: "warning",
+        recovery: "refresh",
+      });
       return;
     }
-    if (Object.keys(transactionErrors(item)).length > 0) {
+    if (live && item.kind === "exclusion") {
+      const message = "Saving exclusions to your private ledger is not connected yet.";
+      setConfirmError(message);
+      setNotice({ message, tone: "warning" });
+      return;
+    }
+    if (Object.keys(transactionErrors(item)).length > 0 || !item.method) {
       navigation.openEdit(id);
       return;
     }
     if (live && item.backend) {
       try {
-        await mutate(() =>
+        const result = await mutate(() =>
           callFinanceOperation("confirm_pending", {
             transactionId: item.id,
             expectedUpdatedAt: item.backend?.updatedAt,
@@ -144,7 +163,10 @@ export function useTransactionActions(context: ActionContext) {
             }),
           }),
         );
-        setNotice({ message: "Transaction confirmed." });
+        setNotice({
+          message: confirmationMessage(item),
+          undo: { kind: "backend", receipt: result.action },
+        });
         if (view.transactionId) navigation.closePopup();
       } catch (error) {
         const message =
@@ -152,16 +174,25 @@ export function useTransactionActions(context: ActionContext) {
             ? error.message
             : "The result could not be verified. Refresh your records.";
         setConfirmError(message);
-        setNotice({ message });
+        setNotice({ message, tone: "warning", recovery: "refresh" });
       }
       return;
     }
-    setTransactions((items) => updatePendingTransaction(items, id, item, "confirm"));
-    setNotice({ message: "Transaction confirmed." });
+    const next = updatePendingTransaction(transactions, id, item, "confirm");
+    const expected = next.find((transaction) => transaction.id === id);
+    setTransactions(next);
+    setNotice({
+      message: confirmationMessage(item),
+      ...(expected ? { undo: { kind: "update" as const, before: item, expected } } : {}),
+    });
     if (view.transactionId) navigation.closePopup();
   };
 
-  const save = async (values: TransactionValues, action: "edit" | "confirm" | "correct") => {
+  const save = async (
+    values: TransactionValues,
+    action: "edit" | "confirm" | "correct",
+    expectedUpdatedAt?: string,
+  ) => {
     if (!editing) throw new Error("This transaction is unavailable.");
     if (live && !editing.backend)
       throw new FinanceClientError(
@@ -181,10 +212,10 @@ export function useTransactionActions(context: ActionContext) {
             : "confirm_pending";
       const input = {
         transactionId: editing.id,
-        expectedUpdatedAt: editing.backend.updatedAt,
+        expectedUpdatedAt: expectedUpdatedAt ?? editing.backend.updatedAt,
         ...(action === "confirm" ? { values: valuesToSave } : { changes: valuesToSave }),
       };
-      await mutate(() => callFinanceOperation(operation, input));
+      const result = await mutate(() => callFinanceOperation(operation, input));
       setDrafts((items) => {
         const next = { ...items };
         delete next[editorKey];
@@ -193,10 +224,11 @@ export function useTransactionActions(context: ActionContext) {
       setNotice({
         message:
           action === "confirm"
-            ? "Transaction confirmed."
+            ? confirmationMessage(values)
             : action === "edit"
               ? "Changes saved. Still pending review."
-              : "Transaction updated.",
+              : "Changes saved. Your totals are up to date.",
+        undo: { kind: "backend", receipt: result.action },
       });
       navigation.navigate({ editId: null, transactionId: editing.id, adding: false }, "replace");
       return;
@@ -214,9 +246,14 @@ export function useTransactionActions(context: ActionContext) {
       delete next[editorKey];
       return next;
     });
-    if (action === "correct" && expected)
+    if (expected)
       setNotice({
-        message: "Transaction updated.",
+        message:
+          action === "confirm"
+            ? confirmationMessage(values)
+            : action === "edit"
+              ? "Changes saved. Still waiting for your review."
+              : "Changes saved. Your totals are up to date.",
         undo: { kind: "update", before: editing, expected },
       });
     else
@@ -252,17 +289,23 @@ export function useTransactionActions(context: ActionContext) {
           }),
         );
       } catch (error) {
-        if (error instanceof FinanceClientError && error.actionMayHaveCompleted)
+        if (error instanceof FinanceClientError && error.actionMayHaveCompleted) {
           request.locked = true;
+          setLockedCreates((current) => ({ ...current, [editorKey]: true }));
+        }
         throw error;
       }
       delete createRequests.current[editorKey];
+      setLockedCreates((current) => ({ ...current, [editorKey]: false }));
       setDrafts((items) => {
         const next = { ...items };
         delete next[editorKey];
         return next;
       });
-      setNotice({ message: "Transaction added." });
+      setNotice({
+        message: "Transaction added. You can edit its details anytime.",
+        undo: { kind: "backend", receipt: result.action },
+      });
       navigation.navigate({ adding: false, transactionId: result.transaction.id }, "replace");
       return;
     }
@@ -279,23 +322,67 @@ export function useTransactionActions(context: ActionContext) {
       delete next[editorKey];
       return next;
     });
-    setNotice({ message: "Transaction added." });
+    setNotice({
+      message: "Transaction added. You can edit its details anytime.",
+      undo: { kind: "create", transaction: record },
+    });
     navigation.navigate({ adding: false, transactionId: record.id }, "replace");
   };
 
-  const undo = () => {
-    if (live) return;
+  const undo = async () => {
+    if (undoing.current) return;
     if (!notice?.undo) return;
+    if (notice.undo.kind === "backend") {
+      const receipt = notice.undo.receipt;
+      if (Date.parse(receipt.undoExpiresAt) <= Date.now()) {
+        setNotice({
+          message: "Undo has expired. Open the record to make another change.",
+          tone: "warning",
+          recovery: "history",
+        });
+        return;
+      }
+      undoing.current = true;
+      try {
+        await mutate(() => callFinanceOperation("undo_action", { actionId: receipt.actionId }));
+        setNotice({ message: "Change undone. Your totals are up to date." });
+      } catch (error) {
+        setNotice({
+          message:
+            error instanceof FinanceClientError && error.actionMayHaveCompleted
+              ? "Undo may have completed. Refresh to check before trying again."
+              : error instanceof FinanceClientError && error.code === "CONFLICT"
+                ? "This record changed or its Undo expired. Open History to review it."
+                : "Undo couldn’t be completed. Refresh to check the latest record.",
+          tone: "warning",
+          recovery:
+            error instanceof FinanceClientError && error.code === "CONFLICT"
+              ? "history"
+              : "refresh",
+        });
+      } finally {
+        undoing.current = false;
+      }
+      return;
+    }
+    if (live) return;
     const restored =
       notice.undo.kind === "delete"
         ? undoTransactionDeletion(transactions, notice.undo.transaction, notice.undo.index)
-        : undoTransactionUpdate(transactions, notice.undo.before, notice.undo.expected);
+        : notice.undo.kind === "create"
+          ? deleteConfirmedTransaction(transactions, notice.undo.transaction)
+          : undoTransactionUpdate(transactions, notice.undo.before, notice.undo.expected);
     if (restored === transactions) {
-      setNotice({ message: "This transaction changed. Undo is unavailable." });
+      setNotice({
+        message: "This transaction changed since then. Open History to review its latest details.",
+        tone: "warning",
+        recovery: "history",
+      });
       return;
     }
     setTransactions(restored);
-    setNotice({ message: "Change undone." });
+    setRemovedId(null);
+    setNotice({ message: "Change undone. Your totals are up to date." });
   };
 
   const deleteTransaction = async (transaction: Transaction) => {
@@ -344,7 +431,16 @@ export function useTransactionActions(context: ActionContext) {
     setBills((items) => items.filter((bill) => bill.id !== id));
     setNotice({ message: "Suggestion dismissed." });
   };
-  const closeEditor = () => {
+  const closeEditor = (preserveDraft = false) => {
+    if (preserveDraft === true || createRequests.current[editorKey]?.locked) {
+      setNotice({
+        message: "Your submitted details are kept for this visit. Check History before retrying.",
+        tone: "warning",
+        recovery: "history",
+      });
+      navigation.closePopup();
+      return;
+    }
     delete createRequests.current[editorKey];
     setDrafts((items) => {
       const next = { ...items };
@@ -379,12 +475,20 @@ export function useTransactionActions(context: ActionContext) {
       }
     }
     setRemovedId(rejecting.id);
-    if (!live) setTransactions((items) => excludePendingTransaction(items, rejecting.id));
+    const next = live ? transactions : excludePendingTransaction(transactions, rejecting.id);
+    const expected = next.find((transaction) => transaction.id === rejecting.id);
+    if (!live) setTransactions(next);
     navigation.closePopup();
-    setNotice({ message: "Transaction excluded." });
+    setNotice({
+      message: "Moved to Exclusions. It won’t count toward your totals.",
+      ...(!live && expected
+        ? { undo: { kind: "update" as const, before: rejecting, expected } }
+        : {}),
+    });
   };
 
   return {
+    lockedCreate: Boolean(lockedCreates[editorKey]),
     confirm,
     save,
     add,
@@ -395,4 +499,12 @@ export function useTransactionActions(context: ActionContext) {
     closeEditor,
     rejectSelected,
   };
+}
+
+function confirmationMessage(transaction: Pick<TransactionValues, "kind">) {
+  if (transaction.kind === "exclusion")
+    return "Confirmed as an exclusion. Kept in History, with totals unchanged.";
+  return transaction.kind === "income"
+    ? "Confirmed. Included in your income totals."
+    : "Confirmed. Included in spending and budgets.";
 }
