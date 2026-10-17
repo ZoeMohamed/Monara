@@ -181,14 +181,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "created_at": string,"currency": string,"display_name": string,"id": string,"timezone": string,"updated_at": string
+                    "created_at": string,"currency": string,"display_name": string,"full_name": string | null,"id": string,"timezone": string,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"currency"?: string,"display_name": string,"id": string,"timezone"?: string,"updated_at"?: string
+                    "created_at"?: string,"currency"?: string,"display_name": string,"full_name"?: string | null,"id": string,"timezone"?: string,"updated_at"?: string
                   }
                   Update: {
-                    "created_at"?: string,"currency"?: string,"display_name"?: string,"id"?: string,"timezone"?: string,"updated_at"?: string
+                    "created_at"?: string,"currency"?: string,"display_name"?: string,"full_name"?: string | null,"id"?: string,"timezone"?: string,"updated_at"?: string
                   }
                   Relationships: [
 

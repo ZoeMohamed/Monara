@@ -455,7 +455,7 @@ describe("discover", () => {
     });
     assert.equal(await pipeline.runJob(discoverJob, notFinal), "discovered");
     assert.deepEqual(calls.discoveryStarted, [connectionId]);
-    assert.match(calls.listed[0]?.query ?? "", /^newer_than:90d from:\(/);
+    assert.match(calls.listed[0]?.query ?? "", /^newer_than:30d from:\(/);
     assert.equal(calls.modelCalls, 0);
     assert.deepEqual(calls.fetched, [], "message bodies are never read");
     assert.deepEqual(calls.discoveries, [

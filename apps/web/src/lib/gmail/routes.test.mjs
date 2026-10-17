@@ -63,6 +63,8 @@ const hooks = registerHooks({
       return { url: `data:text/javascript,${encodeURIComponent(agentSync)}`, shortCircuit: true };
     if (specifier === "@/lib/http/origin")
       return nextResolve(new URL("../http/origin.ts", import.meta.url).href, context);
+    if (specifier === "@/lib/onboarding/flow")
+      return nextResolve(new URL("../onboarding/flow.ts", import.meta.url).href, context);
     if (specifier === "@/lib/gmail/callback")
       return nextResolve(new URL("./callback.ts", import.meta.url).href, context);
     return nextResolve(specifier, context);
@@ -180,6 +182,29 @@ describe("Gmail route callback origin and session boundary", () => {
       assert.equal(response.headers.get("cache-control"), "private, no-store");
       // Account discovery starts for the connection the server just confirmed.
       assert.deepEqual(state.discoveries, [connectionId]);
+    }));
+
+  it("returns to Home when first-run setup started the connection, then clears the marker", () =>
+    withTunnel(async () => {
+      const request = new Request(
+        "http://localhost:3005/api/gmail/connections/callback?session_uri=synthetic-setup",
+        { headers: { host: "example.ngrok-free.dev", cookie: "a=b; monara-onboarding=1" } },
+      );
+      request.nextUrl = new URL(request.url);
+      const response = await callback(request);
+      assert.equal(
+        response.headers.get("location"),
+        "https://example.ngrok-free.dev/?gmail=connected",
+      );
+      assert.match(response.headers.get("set-cookie"), /^monara-onboarding=; .*Max-Age=0/);
+      const other = new Request(
+        "http://localhost:3005/api/gmail/connections/callback?session_uri=synthetic-profile",
+        { headers: { host: "example.ngrok-free.dev", cookie: "monara-onboarding=0" } },
+      );
+      other.nextUrl = new URL(other.url);
+      const profile = await callback(other);
+      assert.match(profile.headers.get("location"), /\/connections\/gmail\?result=connected$/);
+      assert.equal(profile.headers.get("set-cookie"), null);
     }));
 
   it("still connects when the agent cannot start account discovery", () =>

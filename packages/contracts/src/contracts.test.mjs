@@ -16,6 +16,7 @@ import {
   extractedTransactionSchema,
   findInstitution,
   findInstitutionBySender,
+  fullNameSchema,
   gmailJobSchema,
   institutions,
   listTransactionsInputSchema,
@@ -651,5 +652,15 @@ describe("institution registry", () => {
       createFinancialAccountInputSchema.safeParse({ ...account, institutionKey: "BCA" }).success,
       false,
     );
+  });
+});
+
+describe("full name", () => {
+  it("tidies spacing and enforces the stored length limits", () => {
+    assert.equal(fullNameSchema.parse("  Daffa   Abhipraya "), "Daffa Abhipraya");
+    assert.equal(fullNameSchema.safeParse(" ").success, false);
+    assert.equal(fullNameSchema.safeParse("A").success, false);
+    assert.equal(fullNameSchema.safeParse("x".repeat(151)).success, false);
+    assert.equal(fullNameSchema.safeParse("x".repeat(150)).success, true);
   });
 });
