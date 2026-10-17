@@ -384,10 +384,6 @@ isOneToOne: false
 { Args: { "p_connection_id": string,"p_found": Json }; Returns: undefined
                            },
 "record_gmail_extraction":
-{ Args: { "p_items": Json,"p_outcome": string,"p_processed_message_id": string }; Returns: {
-              "already_finished": boolean,"transaction_ids": (string)[]
-            }[]
-                           } |
 { Args: { "p_institution_key"?: string,"p_items": Json,"p_outcome": string,"p_processed_message_id": string,"p_sender_verified": boolean }; Returns: {
               "already_finished": boolean,"transaction_ids": (string)[],"uncategorized_transaction_ids": (string)[]
             }[]

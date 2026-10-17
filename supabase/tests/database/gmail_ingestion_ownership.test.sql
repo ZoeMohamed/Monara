@@ -22,7 +22,8 @@ reset role;
 set local role anon;
 select throws_ok(
   $$select * from public.record_gmail_extraction(
-      '13000000-0000-4000-8000-000000000001', 'skipped', '[]'::jsonb)$$,
+      '13000000-0000-4000-8000-000000000001', 'skipped', '[]'::jsonb,
+      false, null)$$,
   '42501',
   null,
   'anonymous callers cannot record extractions'
@@ -70,7 +71,9 @@ create temporary table recorded on commit drop as
       {"kind": null, "merchantName": null, "money": null, "occurredOn": null, "occurredTime": null,
        "description": null, "location": null, "accountHint": null, "categoryName": "Not a category",
        "confidence": null}
-    ]$$::jsonb
+    ]$$::jsonb,
+    p_sender_verified => false,
+    p_institution_key => null
   );
 
 select is(
@@ -106,14 +109,13 @@ select ok(
 
 select is(
   (
-    select category.slug
-    from public.transactions as item
-    join public.categories as category on category.id = item.category_id
-    where item.processed_gmail_message_id = (select processed_message_id from claimed)
-      and item.source_item_index = 0
+    select category_id
+    from public.transactions
+    where processed_gmail_message_id = (select processed_message_id from claimed)
+      and source_item_index = 0
   ),
-  'food-drinks',
-  'a category name maps to the owner''s Category regardless of case'
+  null,
+  'untrusted model category names are not written directly'
 );
 
 select is(
@@ -133,7 +135,9 @@ select is(
     from public.record_gmail_extraction(
       (select processed_message_id from claimed),
       'skipped',
-      '[]'::jsonb
+      '[]'::jsonb,
+      p_sender_verified => false,
+      p_institution_key => null
     )
   ),
   (select row(true, transaction_ids)::text from recorded),
@@ -184,7 +188,8 @@ select is_empty(
 
 select throws_ok(
   $$select * from public.record_gmail_extraction(
-      (select processed_message_id from claimed), 'transactions', '[]'::jsonb)$$,
+      (select processed_message_id from claimed), 'transactions', '[]'::jsonb,
+      false, null)$$,
   '22023',
   null,
   'a transactions outcome needs items'
@@ -222,7 +227,8 @@ select throws_ok(
 
 select throws_ok(
   $$select * from public.record_gmail_extraction(
-      (select processed_message_id from claimed), 'skipped', '[]'::jsonb)$$,
+      (select processed_message_id from claimed), 'skipped', '[]'::jsonb,
+      false, null)$$,
   'P0002',
   null,
   'an inactive connection cannot record extractions'

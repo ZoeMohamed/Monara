@@ -20,7 +20,7 @@ The rules require technical documentation covering system architecture, core alg
 | --- | --- | --- | --- |
 | [architecture.md](architecture.md) | Abhip | 16 Oct | Draft |
 | [data-and-security.md](data-and-security.md) | Zoe | 16 Oct | Not started |
-| [extraction.md](extraction.md) | Adlyn | 16 Oct | Not started |
+| [extraction.md](extraction.md) | Adlyn | 16 Oct | Implemented for Gmail |
 | [agent.md](agent.md) | Argya | 16 Oct | Draft |
 | [ui.md](ui.md) | Erdafa | 16 Oct | Draft |
 | [reminders.md](reminders.md) | Abhip | 16 Oct | Not started |

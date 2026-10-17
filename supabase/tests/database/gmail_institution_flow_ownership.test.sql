@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(27);
+select plan(29);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001, the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234), and default Categories.
@@ -40,6 +40,12 @@ select throws_ok(
 reset role;
 
 set local role service_role;
+
+select is(
+  public.gmail_auto_confirm_confidence(),
+  0.95::numeric,
+  'Gmail auto-confirm uses the conservative 95 percent confidence boundary'
+);
 
 -- Discovery.
 select public.start_gmail_discovery('12000000-0000-4000-8000-000000000001');
@@ -97,7 +103,10 @@ select public.claim_gmail_messages(
      {"gmailMessageId": "inst-003", "receivedAt": "2026-10-13T09:00:00+07:00"},
      {"gmailMessageId": "inst-004", "receivedAt": "2026-10-13T09:00:00+07:00"},
      {"gmailMessageId": "inst-005", "receivedAt": "2026-10-13T09:00:00+07:00"},
-     {"gmailMessageId": "inst-006", "receivedAt": "2026-10-13T09:00:00+07:00"}]$$::jsonb
+     {"gmailMessageId": "inst-006", "receivedAt": "2026-10-13T09:00:00+07:00"},
+     {"gmailMessageId": "inst-007", "receivedAt": "2026-10-13T09:00:00+07:00"},
+     {"gmailMessageId": "inst-008", "receivedAt": "2026-10-13T09:00:00+07:00"},
+     {"gmailMessageId": "inst-009", "receivedAt": "2026-10-13T09:00:00+07:00"}]$$::jsonb
 );
 
 create temporary table recorded_001 on commit drop as
@@ -242,6 +251,50 @@ select is(
     where source.gmail_message_id = 'inst-005'),
   row('pending', null::uuid)::text,
   'an institution the owner has no account for maps to nothing and is never confirmed'
+);
+
+select public.record_gmail_extraction(
+  (select id from public.processed_gmail_messages where gmail_message_id = 'inst-007'),
+  'transactions',
+  $$[{"kind": "expense", "merchantName": "Boundary Low",
+      "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": "2026-10-13",
+      "occurredTime": null, "description": null, "location": null,
+      "accountHint": "****4242", "accountLastFour": "4242", "confidence": 0.949}]$$::jsonb,
+  p_sender_verified => true,
+  p_institution_key => 'BCA_CC'
+);
+select public.record_gmail_extraction(
+  (select id from public.processed_gmail_messages where gmail_message_id = 'inst-008'),
+  'transactions',
+  $$[{"kind": "income", "merchantName": "Boundary Exact",
+      "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": "2026-10-13",
+      "occurredTime": null, "description": null, "location": null,
+      "accountHint": "****4242", "accountLastFour": "4242", "confidence": 0.95}]$$::jsonb,
+  p_sender_verified => true,
+  p_institution_key => 'BCA_CC'
+);
+select public.record_gmail_extraction(
+  (select id from public.processed_gmail_messages where gmail_message_id = 'inst-009'),
+  'transactions',
+  $$[{"kind": "expense", "merchantName": "Incomplete High",
+      "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": null,
+      "occurredTime": null, "description": null, "location": null,
+      "accountHint": "****4242", "accountLastFour": "4242", "confidence": 0.999}]$$::jsonb,
+  p_sender_verified => true,
+  p_institution_key => 'BCA_CC'
+);
+select is(
+  (select array_agg(row(source.gmail_message_id, item.review_status)::text
+      order by source.gmail_message_id)
+    from public.transactions as item
+    join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
+    where source.gmail_message_id in ('inst-007', 'inst-008', 'inst-009')),
+  array[
+    row('inst-007', 'pending')::text,
+    row('inst-008', 'confirmed')::text,
+    row('inst-009', 'pending')::text
+  ],
+  'below 95 percent stays pending, exactly 95 percent confirms, and incomplete data stays pending'
 );
 
 -- Categorization write-back.
