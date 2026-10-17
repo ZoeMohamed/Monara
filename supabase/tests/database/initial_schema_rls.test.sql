@@ -139,15 +139,16 @@ select ok(
   )
   and not has_function_privilege(
     'authenticated',
-    'public.record_gmail_extraction(uuid,text,jsonb)',
+    'public.record_gmail_extraction(uuid,text,jsonb,boolean,text)',
     'execute'
   )
+  and to_regprocedure('public.record_gmail_extraction(uuid,text,jsonb)') is null
   and not has_function_privilege(
     'authenticated',
     'public.mark_gmail_connection_synced(uuid,timestamp with time zone)',
     'execute'
   ),
-  'authenticated clients cannot execute Gmail ingestion operations'
+  'authenticated clients cannot execute Gmail ingestion operations and the unverified overload is absent'
 );
 
 insert into auth.users (id, email, raw_user_meta_data)

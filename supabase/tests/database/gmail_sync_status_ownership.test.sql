@@ -28,6 +28,10 @@ reset role;
 
 set local role service_role;
 
+update public.financial_accounts
+  set institution_key = 'BCA_CC'
+  where id = '11000000-0000-4000-8000-000000000001';
+
 select is(
   (
     select state
@@ -114,8 +118,10 @@ select public.record_gmail_extraction(
   $$[{"kind": "expense", "merchantName": "Synthetic Kopi",
       "money": {"amountMinor": "25000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
-      "accountHint": "Demo Bank ****4242", "financialAccountName": "daily BANK",
-      "categoryName": null, "confidence": 0.95}]$$::jsonb
+      "accountHint": "Demo Bank ****4242", "accountLastFour": "4242",
+      "categoryName": null, "confidence": 0.95}]$$::jsonb,
+  p_sender_verified => true,
+  p_institution_key => 'BCA_CC'
 );
 
 select is(
@@ -137,8 +143,10 @@ select public.record_gmail_extraction(
   $$[{"kind": "expense", "merchantName": "Synthetic Kopi",
       "money": {"amountMinor": "25000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
-      "accountHint": null, "financialAccountName": "Daily bank",
-      "categoryName": null, "confidence": 0.89}]$$::jsonb
+      "accountHint": "Demo Bank ****4242", "accountLastFour": "4242",
+      "categoryName": null, "confidence": 0.89}]$$::jsonb,
+  p_sender_verified => true,
+  p_institution_key => 'BCA_CC'
 );
 
 select is(
@@ -159,13 +167,15 @@ select public.record_gmail_extraction(
   $$[{"kind": "expense", "merchantName": "Synthetic Kopi",
       "money": {"amountMinor": "25000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
-      "accountHint": null, "financialAccountName": "Other user account",
+      "accountHint": null, "accountLastFour": null,
       "categoryName": null, "confidence": 0.99},
      {"kind": "exclusion", "merchantName": null,
       "money": {"amountMinor": "50000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": "Top up", "location": null,
-      "accountHint": null, "financialAccountName": "Daily wallet",
-      "categoryName": null, "confidence": 0.99}]$$::jsonb
+      "accountHint": null, "accountLastFour": null,
+      "categoryName": null, "confidence": 0.99}]$$::jsonb,
+  p_sender_verified => true,
+  p_institution_key => 'UNKNOWN_BANK'
 );
 
 select is(
@@ -203,7 +213,9 @@ select is(
 select public.record_gmail_extraction(
   (select id from public.processed_gmail_messages where gmail_message_id = 'sync-004'),
   'skipped',
-  '[]'::jsonb
+  '[]'::jsonb,
+  p_sender_verified => false,
+  p_institution_key => null
 );
 
 select is(
