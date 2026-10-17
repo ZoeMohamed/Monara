@@ -38,6 +38,10 @@ Bigger requests
 const NOT_CONNECTED =
   "You are not connected to the User's records yet, so you cannot view, add, change, or delete anything. If the User asks you to, say plainly that this is not available yet. Never make up a transaction, total, budget, or bill, and never say that something was recorded.";
 
+/**
+ * The Agent's instructions for one turn: its rules and voice, plus the User's
+ * current time and the tool guidance when it can reach the User's records.
+ */
 export function systemPrompt(input: { hasTools: boolean; now: Date }): string {
   const now = new Intl.DateTimeFormat("sv-SE", {
     timeZone: DEFAULT_TIMEZONE,

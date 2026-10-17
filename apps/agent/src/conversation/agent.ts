@@ -32,12 +32,15 @@ const isYes = (text: string) => /^yes[.!]?$/i.test(text.trim());
  * taken out here: a dash between numbers becomes a hyphen, any other a comma.
  */
 export function tidyReply(text: string): string {
-  return text
-    .replace(/(\d)\s*[–—]\s*(\d)/g, "$1-$2")
-    .replace(/\s*[–—]+\s*/g, ", ")
-    .replace(/,\s*([.,!?])/g, "$1")
-    .replace(/^,\s*|,\s*$/gm, "")
-    .trim();
+  return (
+    text
+      // Lookarounds leave the digits unconsumed, so every dash in 1–2–3 or 2026–10–13 is kept.
+      .replace(/(?<=\d)\s*[–—]\s*(?=\d)/g, "-")
+      .replace(/\s*[–—]+\s*/g, ", ")
+      .replace(/,\s*([.,!?])/g, "$1")
+      .replace(/^,\s*|,\s*$/gm, "")
+      .trim()
+  );
 }
 
 /** Replays earlier turns. Receipts go in as context, so the model never has to repeat them. */

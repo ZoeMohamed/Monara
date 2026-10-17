@@ -138,6 +138,8 @@ test("replies never carry em or en dashes", async () => {
     "Done, Rp 25.000 at Kopi Kenangan.",
   );
   assert.equal(tidyReply("Spent between 1–5 Oct"), "Spent between 1-5 Oct");
+  assert.equal(tidyReply("On 2026–10–13 and 1–2–3"), "On 2026-10-13 and 1-2-3");
+  assert.equal(tidyReply("Rp 20.000 — 30.000"), "Rp 20.000-30.000");
   assert.equal(tidyReply("Saved — "), "Saved");
   assert.equal(tidyReply("— heads up"), "heads up");
   const reply = await runAgent({
