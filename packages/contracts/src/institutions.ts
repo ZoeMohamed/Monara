@@ -16,6 +16,31 @@ const registryEntrySchema = z
     provider: z.string().trim().min(1).max(100),
     platform: institutionPlatformSchema,
     senderEmails: z.array(senderEmailSchema).max(20),
+    /**
+     * Case-insensitive subject patterns of this sender's mail that is never a
+     * transaction, such as promotions. Matching mail skips the model. Add a pattern
+     * only after seeing that sender's real subjects.
+     */
+    skipSubjects: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(200)
+          .refine(
+            (pattern) => {
+              try {
+                new RegExp(pattern, "i");
+                return true;
+              } catch {
+                return false;
+              }
+            },
+            { message: "skipSubjects entries must be valid regular expressions." },
+          ),
+      )
+      .max(20)
+      .optional(),
   })
   .strict();
 

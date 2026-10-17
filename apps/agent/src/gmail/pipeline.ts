@@ -20,8 +20,8 @@ import {
 } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "./backend.ts";
 import { toEmailForExtraction } from "./email-text.ts";
-import { extractTransactions } from "./extract.ts";
 import type { LlmClient } from "./llm.ts";
+import { parseEmail, shouldParse } from "./parse/index.ts";
 import { isSenderVerified } from "./sender.ts";
 
 /**
@@ -179,7 +179,11 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
         ? institution
         : null;
     const email = owned ? toEmailForExtraction(message) : null;
-    const extraction = email ? await extractTransactions(llm, email) : null;
+    // One-time codes and the institution's known non-transaction subjects skip the model.
+    const extraction =
+      owned && email && shouldParse(email, owned)
+        ? await parseEmail(llm, email, { holderName: connection.holderName, institution: owned })
+        : null;
     const outcome = extraction && extraction.items.length > 0 ? "transactions" : "skipped";
     return {
       processedMessageId,

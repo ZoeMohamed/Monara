@@ -168,6 +168,11 @@ export const resolvedGmailConnectionSchema = z
     /** The owner's unarchived Category names, offered to categorization. */
     categoryNames: z.array(categoryNameSchema).max(200),
     /**
+     * The owner's name, to tell transfers between their own accounts apart: the
+     * profile's full name, else the Google account name. Null when neither is known.
+     */
+    holderName: z.string().trim().min(1).max(100).nullable().default(null),
+    /**
      * Registry entries the owner has as active Financial Accounts. Sync reads mail
      * only from these entries' senders.
      */

@@ -33,6 +33,32 @@ function fail(error: { code?: string }): never {
   throw new GmailIngestionError("INTERNAL", "The Gmail operation could not be completed.");
 }
 
+const MAX_HOLDER_NAME = 100;
+
+function usableName(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.replace(/\s+/g, " ").trim().slice(0, MAX_HOLDER_NAME).trim();
+  return name.length > 0 ? name : null;
+}
+
+/**
+ * The name to recognize the owner's own transfers by: the full name they saved, else
+ * the name Google gave at sign-in. Null when neither is known; the name is a hint, so
+ * a failed lookup never fails the sync.
+ */
+async function holderNameOf(
+  client: MonaraServiceRoleClient,
+  userId: string,
+): Promise<string | null> {
+  const profile = await client.from("profiles").select("full_name").eq("id", userId).maybeSingle();
+  const saved = profile.error ? null : usableName(profile.data?.full_name);
+  if (saved) return saved;
+  const { data, error } = await client.auth.admin.getUserById(userId);
+  if (error || !data.user) return null;
+  const metadata = data.user.user_metadata;
+  return usableName(metadata.full_name) ?? usableName(metadata.name);
+}
+
 export function createSupabaseGmailIngestionRepository(
   client: MonaraServiceRoleClient,
 ): GmailIngestionRepository {
@@ -62,7 +88,7 @@ export function createSupabaseGmailIngestionRepository(
       if (connection.error) fail(connection.error);
       if (!connection.data) throw connectionNotActive();
 
-      const [categories, accounts] = await Promise.all([
+      const [categories, accounts, holderName] = await Promise.all([
         client
           .from("categories")
           .select("name")
@@ -77,6 +103,7 @@ export function createSupabaseGmailIngestionRepository(
           .eq("is_active", true)
           .not("institution_key", "is", null)
           .limit(100),
+        holderNameOf(client, connection.data.user_id),
       ]);
       if (categories.error) fail(categories.error);
       if (accounts.error) fail(accounts.error);
@@ -86,6 +113,7 @@ export function createSupabaseGmailIngestionRepository(
         userId: connection.data.user_id,
         composioConnectedAccountId: connection.data.composio_connected_account_id,
         categoryNames: categories.data.map((category) => category.name),
+        holderName,
         // Keys no longer in the registry are ignored rather than failing the sync.
         institutionKeys: [
           ...new Set(

@@ -89,6 +89,8 @@ interface Overrides {
   failIds?: string[];
   /** Messages a claim reports as finished, for retried parse jobs. */
   finishedOnClaim?: string[];
+  holderName?: string | null;
+  subject?: string;
 }
 
 /** Fake backend, reader and model that record every call the pipeline makes. */
@@ -124,6 +126,7 @@ function setup(overrides: Overrides = {}) {
         userId: "00000000-0000-4000-8000-000000000001",
         composioConnectedAccountId: "ca_1",
         categoryNames: ["Food & Drink", "Transport"],
+        holderName: overrides.holderName ?? null,
         institutionKeys: overrides.institutionKeys ?? ["BCA_CC"],
       };
     },
@@ -217,7 +220,7 @@ function setup(overrides: Overrides = {}) {
         receivedAt,
         from: fromAddress,
         fromAddress,
-        subject: "Struk",
+        subject: overrides.subject ?? "Struk",
         text: "Total Rp 25.000 dibayar dengan BCA ****4242",
         html: null,
         authenticationResults: overrides.authenticationResults ?? [gmailPass],
@@ -631,6 +634,25 @@ describe("processBatch", () => {
     await pipeline.runJob(parseJob(["a", "b", "c", "d", "e"]), notFinal);
     assert.equal(peak, 2);
     assert.equal(recordCalls[0]?.results.length, 5);
+  });
+
+  it("records a one-time code email as skipped without the model", async () => {
+    const { pipeline, calls } = setup({ subject: "Kode OTP transaksi Anda" });
+    assert.equal(await pipeline.runJob(parseJob(["m1"]), notFinal), "skipped");
+    assert.equal(calls.modelCalls, 0);
+    assert.equal(calls.record[0]?.institutionKey, "BCA_CC");
+  });
+
+  it("turns a transfer to the holder's own name into an exclusion", async () => {
+    const { pipeline, calls } = setup({
+      holderName: "Adlyn Fakhreyz",
+      llmOutput: {
+        isTransactionEmail: true,
+        items: [{ ...receipt.items[0], counterpartyName: "ADLYN FAKHREY" }],
+      },
+    });
+    await pipeline.runJob(parseJob(["m1"]), notFinal);
+    assert.equal(calls.record[0]?.items[0]?.kind, "exclusion");
   });
 
   it("stops without recording when the connection is lost", async () => {
