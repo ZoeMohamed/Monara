@@ -1536,6 +1536,16 @@ describe("receipt photos", () => {
       "a different reading of the same message was described as saved",
     );
 
+    await service.deleteTransaction(whatsApp, {
+      transactionId: transaction.id,
+      expectedUpdatedAt: transaction.updatedAt,
+    });
+    await assert.rejects(
+      service.addReceiptTransaction(whatsApp, receipt),
+      (error) => error instanceof FinanceOperationError && error.code === "CONFLICT",
+      "a deleted receipt transaction was returned as a successful duplicate",
+    );
+
     const summary = await service.getDashboard(whatsApp, { month: "2026-10" });
     assert.equal(summary.spending.amountMinor, "0");
   });

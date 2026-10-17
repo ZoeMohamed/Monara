@@ -870,6 +870,7 @@ export function createFinanceService(
       // different reading or another kind of record under this id is refused.
       const saved = transactionValuesSchema.parse(transactionValues(transaction));
       if (
+        transaction.deletedAt !== null ||
         transaction.source !== "whatsapp_receipt" ||
         transaction.reviewStatus !== "pending" ||
         JSON.stringify(saved) !== JSON.stringify(transactionValuesSchema.parse(parsed.values))
