@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@monara/ui";
-import { type ReactNode, useLayoutEffect, useRef } from "react";
+import { type CSSProperties, type ReactNode, useLayoutEffect, useRef } from "react";
 
 import { Icon, type IconName } from "@/components/icon";
 import { type AvatarScene, OnboardingAvatar } from "@/components/onboarding-avatar";
@@ -113,6 +113,7 @@ export function SheetStep({
   step,
   scene,
   compact = false,
+  avatarHeight,
   centered = false,
   side = false,
   illustration,
@@ -125,6 +126,8 @@ export function SheetStep({
   step: number;
   scene: AvatarScene;
   compact?: boolean;
+  /** Shrinks the avatar to this many pixels tall, to leave room for more content. */
+  avatarHeight?: number;
   /** Centers the content in the sheet instead of leaving the space below it empty. */
   centered?: boolean;
   /** Puts the avatar beside the heading instead of above it, to leave room for a list. */
@@ -159,7 +162,15 @@ export function SheetStep({
           </div>
         ) : (
           <div className={styles.head} data-centered={centered}>
-            <div className={styles.avatar} data-compact={compact}>
+            <div
+              className={styles.avatar}
+              data-compact={compact}
+              style={
+                avatarHeight
+                  ? ({ "--avatar-height": `${avatarHeight}px` } as CSSProperties)
+                  : undefined
+              }
+            >
               {illustration ?? <OnboardingAvatar compact={compact} scene={scene} />}
             </div>
             <h2 className={styles.title} data-compact={compact} id={onboardingTitleId}>
@@ -174,6 +185,21 @@ export function SheetStep({
     </StepFrame>
   );
 }
+
+/** What Monara does and does not do with the mailbox, said before Google asks. */
+const consentPoints: { icon: IconName; lead: string; rest: string }[] = [
+  { icon: "eye", lead: "Read only.", rest: "Monara never sends, deletes or changes your email." },
+  {
+    icon: "bank",
+    lead: "Banks and e-wallets only.",
+    rest: "Emails from other senders are never opened.",
+  },
+  {
+    icon: "calendar",
+    lead: "Starts with the last 30 days.",
+    rest: "You can disconnect Gmail whenever you like.",
+  },
+];
 
 export function ConnectStep({
   pending,
@@ -192,15 +218,24 @@ export function ConnectStep({
           Connect Gmail
         </Button>
       }
+      avatarHeight={128}
       centered
       scene="connect"
       step={0}
       title="Connect your Gmail"
     >
-      <p className={styles.text}>
-        Monara reads your bank emails and logs every payment for you. Nothing to type.
-      </p>
-      <p className={styles.note}>Only emails from banks and e-wallets are read.</p>
+      <ul className={styles.consent}>
+        {consentPoints.map((point) => (
+          <li className={styles.consentRow} key={point.lead}>
+            <span aria-hidden className={styles.consentIcon}>
+              <Icon className="h-4 w-4" name={point.icon} strokeWidth={2.2} />
+            </span>
+            <span>
+              <strong>{point.lead}</strong> {point.rest}
+            </span>
+          </li>
+        ))}
+      </ul>
       {error ? (
         <p className={styles.error} role="alert">
           {error}
