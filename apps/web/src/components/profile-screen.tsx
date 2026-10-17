@@ -2,6 +2,7 @@
 
 import { Button, Card } from "@monara/ui";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { Icon } from "@/components/icon";
@@ -10,6 +11,7 @@ import { MonaraMascot } from "@/components/monara-mascot";
 import { SectionTitle } from "@/components/visual";
 import { WhatsAppLinkRow } from "@/components/whatsapp-link-row";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
+import { legalHref } from "@/lib/legal/return";
 
 function Row({ title, detail, end }: { title: string; detail?: string; end?: ReactNode }) {
   return (
@@ -142,12 +144,14 @@ function ProfileAccount() {
 }
 
 function ProfileLegal() {
+  // Back on a legal page returns to this Profile, whether the real one or the demo's.
+  const from = usePathname();
   return (
     <Group id="legal" title="Legal">
-      <LinkRow detail="The terms for using Monara." href="/terms" title="Terms" />
+      <LinkRow detail="The terms for using Monara." href={legalHref("terms", from)} title="Terms" />
       <LinkRow
         detail="How your email and data are handled."
-        href="/privacy"
+        href={legalHref("privacy", from)}
         title="Privacy Policy"
       />
     </Group>
