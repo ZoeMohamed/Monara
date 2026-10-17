@@ -139,7 +139,10 @@ export function useTransactionActions(context: ActionContext) {
       setNotice({ message, tone: "warning" });
       return;
     }
-    if (Object.keys(transactionErrors(item)).length > 0 || !item.method) {
+    if (
+      Object.keys(transactionErrors(item)).length > 0 ||
+      (item.kind !== "exclusion" && !item.method)
+    ) {
       navigation.openEdit(id);
       return;
     }
@@ -265,7 +268,11 @@ export function useTransactionActions(context: ActionContext) {
   };
 
   const add = async (values: TransactionValues) => {
-    if (Object.keys(transactionErrors(values)).length > 0 || !values.merchant || !values.method)
+    if (
+      Object.keys(transactionErrors(values)).length > 0 ||
+      !values.merchant ||
+      (values.kind !== "exclusion" && !values.method)
+    )
       throw new Error("Check the transaction details.");
     if (live) {
       const nextValues = backendValues(values);

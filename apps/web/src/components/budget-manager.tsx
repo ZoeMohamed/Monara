@@ -1087,13 +1087,15 @@ function BudgetSavedNotice({
       );
       setState({ pending: false, undone: true, unavailable: false, error: null });
     } catch (error) {
+      const conflict = error instanceof FinanceClientError && error.code === "CONFLICT";
       setState({
         pending: false,
         undone: false,
-        unavailable: error instanceof FinanceClientError && error.code === "CONFLICT",
-        error:
-          error instanceof FinanceClientError && error.code === "CONFLICT"
-            ? "This budget changed again or its undo window ended. Refresh your records and review its latest details."
+        unavailable: conflict,
+        error: conflict
+          ? "This budget changed again or its undo window ended. Refresh your records and review its latest details."
+          : error instanceof FinanceClientError && !error.actionMayHaveCompleted
+            ? error.message
             : "We couldn’t confirm the undo. Refresh your records before trying again.",
       });
     } finally {

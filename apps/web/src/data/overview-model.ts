@@ -210,7 +210,10 @@ function weeklySpending(
         (total, { budget }) => total + BigInt(budget.limit.amountMinor),
         BigInt(0),
       )
-    : monthlyWeekGuide(budgets, dates);
+    : monthlyWeekGuide(
+        budgets.filter((budget) => budget.cadence === "monthly"),
+        dates,
+      );
   const basis = sharedWeeklyPeriod ? "weekly-budgets" : limit > BigInt(0) ? "monthly-guide" : null;
   return {
     startsOn,

@@ -738,6 +738,7 @@ export function BudgetsScreen({
       current.limit !== after.limit ||
       current.startsOn !== after.startsOn ||
       current.warningPercent !== after.warningPercent ||
+      current.cadence !== after.cadence ||
       current.icon !== after.icon
     ) {
       setFeedback({

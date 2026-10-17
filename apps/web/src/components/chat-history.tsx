@@ -85,7 +85,7 @@ export function ChatHistory({
                     </strong>
                     <small>
                       {conversation.messages.length > 0
-                        ? `${conversation.messages.length} messages`
+                        ? `${conversation.messages.length} ${conversation.messages.length === 1 ? "message" : "messages"}`
                         : "Unsent draft"}
                       {conversation.id === activeId ? " · Current" : ""}
                     </small>

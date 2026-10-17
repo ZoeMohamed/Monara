@@ -535,6 +535,11 @@ export function ChatScreen({
     else void sendText(draft);
   };
   const sendPrompt = useEffectEvent((prompt: string) => {
+    if (receipt.isPreparing() || recovery?.requiresRecordCheck || recovery?.signInRequired) {
+      onPromptUsed?.();
+      if (!draft.trim()) setDraft(prompt);
+      return;
+    }
     onPromptUsed?.();
     void sendText(prompt);
   });

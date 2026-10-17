@@ -325,7 +325,7 @@ function validateDraft(
     throw error;
   }
   const validation = transactionErrors(values);
-  if (action !== "edit" && !values.method)
+  if (action !== "edit" && values.kind !== "exclusion" && !values.method)
     validation.method = "Choose the account used for this transaction.";
   if (action === "edit") {
     for (const field of ["kind", "amount", "currency", "date", "method"] as const) {
@@ -340,7 +340,7 @@ function validateDraft(
       validation.merchant =
         values.kind === "income" ? "Enter an income source." : "Enter a merchant.";
     }
-    if (!values.method) validation.method = "Choose an account.";
+    if (values.kind !== "exclusion" && !values.method) validation.method = "Choose an account.";
   }
   if (
     resources &&
