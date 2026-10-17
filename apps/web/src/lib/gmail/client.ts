@@ -1,5 +1,6 @@
 import {
   disconnectGmailConnectionInputSchema,
+  dismissGmailDiscoveryInputSchema,
   type GmailDiscovery,
   type GmailSyncStatus,
   gmailConnectionListSchema,
@@ -13,6 +14,8 @@ export type GmailMailbox = {
   email: string;
   status: "active" | "reconnect-required";
   lastSyncedAt: string | null;
+  /** Banks found after the first scan with no account yet. */
+  newAccounts: number;
   sync:
     | { state: "idle" | "queued" | "running" }
     | {
@@ -114,7 +117,7 @@ const DISCOVERY_TIMEOUT_MS = 65_000;
 
 async function request(
   path: string,
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   options: RequestOptions,
   timeoutMs = method === "DELETE" ? 45_000 : 20_000,
 ) {
@@ -173,6 +176,7 @@ export async function loadGmailConnections(options: RequestOptions = {}): Promis
       email: connection.gmailAddress,
       status: connection.status === "active" ? "active" : "reconnect-required",
       lastSyncedAt: connection.lastSyncedAt,
+      newAccounts: connection.newAccounts,
       // Stored on the server, so a reload or another tab shows the same sync.
       sync: toMailboxSync(connection.sync),
     }));
@@ -254,4 +258,25 @@ export async function requestGmailDiscovery(
     throw new GmailClientError("error", "Gmail returned invalid account suggestions. Try again.");
   }
   return result.data;
+}
+
+/** Hides a newly found bank, card, or wallet from the new-account notice. */
+export async function dismissGmailDiscovery(
+  id: string,
+  institutionKey: string,
+  options: RequestOptions = {},
+) {
+  const input = dismissGmailDiscoveryInputSchema.safeParse({ connectionId: id, institutionKey });
+  if (!input.success) throw new GmailClientError("error", "Invalid account suggestion.");
+  const response = await request(
+    connectionPath(
+      input.data.connectionId,
+      `discovery/${encodeURIComponent(input.data.institutionKey)}`,
+    ),
+    "PATCH",
+    options,
+  );
+  if (response.status !== 204) {
+    throw new GmailClientError("error", "Gmail did not confirm that the suggestion was dismissed.");
+  }
 }

@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(31);
+select plan(32);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001, the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234), and default Categories.
@@ -79,6 +79,26 @@ select is(
     where gmail_connection_id = '12000000-0000-4000-8000-000000000001'),
   array[row('BCA_CC', 5)::text],
   'a new scan replaces the previous findings'
+);
+update public.gmail_institution_discoveries
+  set dismissed_at = statement_timestamp()
+  where gmail_connection_id = '12000000-0000-4000-8000-000000000001'
+    and institution_key = 'BCA_CC';
+select public.record_gmail_discovery(
+  '12000000-0000-4000-8000-000000000001',
+  $$[{"institutionKey": "BCA_CC", "emailCount": 6, "lastFours": [], "lastSeenAt": null},
+     {"institutionKey": "Jago_App", "emailCount": 1, "lastFours": [], "lastSeenAt": null}]$$::jsonb
+);
+select is(
+  (select array_agg(
+      row(found.institution_key, found.dismissed_at is not null,
+        found.first_seen_at > connection.discovery_first_completed_at)::text
+      order by found.institution_key)
+    from public.gmail_institution_discoveries as found
+    join public.gmail_connections as connection on connection.id = found.gmail_connection_id
+    where found.gmail_connection_id = '12000000-0000-4000-8000-000000000001'),
+  array[row('BCA_CC', true, false)::text, row('Jago_App', false, true)::text],
+  'a rescan keeps a dismissal and marks only findings after the first scan as new'
 );
 select throws_ok(
   $$select public.record_gmail_discovery('12000000-0000-4000-8000-000000000001',

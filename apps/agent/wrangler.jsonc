@@ -46,6 +46,7 @@
     ]
   },
   "triggers": {
-    "crons": ["*/15 * * * *"]
+    // Daily at 01:00 UTC (08:00 WIB): new-bank discovery and a catch-up import per mailbox.
+    "crons": ["0 1 * * *"]
   }
 }

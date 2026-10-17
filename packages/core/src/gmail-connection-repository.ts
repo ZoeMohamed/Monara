@@ -7,6 +7,7 @@ import {
   type GmailConnectionRepository,
   type StoredGmailConnection,
 } from "./gmail-connections.ts";
+import { isNewFinding } from "./gmail-discovery.ts";
 
 type Row = Database["public"]["Tables"]["gmail_connections"]["Row"];
 
@@ -57,6 +58,7 @@ function toStored(
     | "created_at"
   >,
   sync: GmailSyncStatus = IDLE_SYNC,
+  newAccounts = 0,
 ): StoredGmailConnection {
   return {
     ...gmailConnectionSchema.parse({
@@ -66,6 +68,7 @@ function toStored(
       lastSyncedAt: row.last_synced_at,
       createdAt: row.created_at,
       sync,
+      newAccounts,
     }),
     composioConnectedAccountId: row.composio_connected_account_id,
   };
@@ -87,18 +90,47 @@ export function createSupabaseGmailConnectionRepository(
 ): GmailConnectionRepository {
   return {
     async listForUser(userId: UserId) {
-      const [connections, statuses] = await Promise.all([
+      const [connections, statuses, findings, accounts] = await Promise.all([
         client
           .from("gmail_connections")
-          .select(COLUMNS)
+          .select(`${COLUMNS}, discovery_first_completed_at`)
           .eq("user_id", userId)
           .order("created_at", { ascending: true }),
         client.rpc("gmail_sync_statuses", { p_user_id: userId }),
+        client
+          .from("gmail_institution_discoveries")
+          .select("gmail_connection_id, institution_key, first_seen_at, dismissed_at")
+          .eq("user_id", userId)
+          .is("dismissed_at", null),
+        client
+          .from("financial_accounts")
+          .select("institution_key")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .not("institution_key", "is", null),
       ]);
       if (connections.error) fail(connections.error);
       if (statuses.error) fail(statuses.error);
+      if (findings.error) fail(findings.error);
+      if (accounts.error) fail(accounts.error);
       const byConnection = new Map(statuses.data.map((row) => [row.connection_id, row]));
-      return connections.data.map((row) => toStored(row, toSyncStatus(byConnection.get(row.id))));
+      const linkedKeys = new Set(accounts.data.map((account) => account.institution_key ?? ""));
+      return connections.data.map((row) => {
+        const newAccounts = findings.data.filter(
+          (finding) =>
+            finding.gmail_connection_id === row.id &&
+            isNewFinding(
+              {
+                institutionKey: finding.institution_key,
+                firstSeenAt: finding.first_seen_at,
+                dismissedAt: finding.dismissed_at,
+              },
+              row.discovery_first_completed_at,
+              linkedKeys,
+            ),
+        ).length;
+        return toStored(row, toSyncStatus(byConnection.get(row.id)), newAccounts);
+      });
     },
 
     async activate({ userId, gmailAddress, composioConnectedAccountId }) {

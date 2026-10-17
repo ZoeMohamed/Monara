@@ -101,6 +101,12 @@ export interface GmailIngestionRepository {
   failDiscovery(connectionId: GmailConnectionId): Promise<void>;
   /** The User's own discovery view for one connection; NOT_FOUND if it is not theirs. */
   discoveryFor(userId: UserId, connectionId: GmailConnectionId): Promise<GmailDiscovery>;
+  /** Hides one of the User's findings from the new-account notice; false if not theirs. */
+  dismissDiscovery(
+    userId: UserId,
+    connectionId: GmailConnectionId,
+    institutionKey: string,
+  ): Promise<boolean>;
   /** NOT_FOUND unless the id is a Gmail-imported transaction. */
   resolveImportedTransaction(transactionId: string): Promise<ResolvedImportedTransaction>;
   claimMerchantProfile(merchantName: string): Promise<ClaimMerchantProfileResult>;

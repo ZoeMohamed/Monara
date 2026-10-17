@@ -5,7 +5,7 @@ import {
   consumeMerchantJobs,
   handleGmailIngestRequest,
   handleGmailSyncRequest,
-  scheduleGmailSyncs,
+  scheduleGmailDaily,
 } from "./gmail/index.ts";
 import { healthResponse, notFoundResponse } from "./http.ts";
 import { handleKapsoWebhook } from "./whatsapp/index.ts";
@@ -37,7 +37,7 @@ export default {
   },
 
   scheduled(_controller, env) {
-    return scheduleGmailSyncs(env);
+    return scheduleGmailDaily(env);
   },
 
   queue(batch, env) {

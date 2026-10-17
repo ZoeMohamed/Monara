@@ -3,5 +3,5 @@ export {
   consumeMerchantJobs,
   handleGmailIngestRequest,
   handleGmailSyncRequest,
-  scheduleGmailSyncs,
+  scheduleGmailDaily,
 } from "./worker.ts";

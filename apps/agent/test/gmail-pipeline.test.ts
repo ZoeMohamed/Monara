@@ -25,6 +25,7 @@ import type { LlmClient } from "../src/gmail/llm.ts";
 import { createGmailPipeline, sendersFor, syncQuery } from "../src/gmail/pipeline.ts";
 
 const connectionId = "00000000-0000-4000-8000-000000000010";
+const otherConnectionId = "00000000-0000-4000-8000-000000000011";
 const processedMessageId = "00000000-0000-4000-8000-000000000020";
 const receivedAt = "2026-10-12T03:15:00.000Z";
 const now = new Date("2026-10-13T00:00:00.000Z");
@@ -114,7 +115,12 @@ function setup(overrides: Overrides = {}) {
   };
   const backend: GmailBackend = {
     async listActiveConnections() {
-      return { connections: [{ connectionId, lastSyncedAt: "2026-10-12T00:00:00.000Z" }] };
+      return {
+        connections: [
+          { connectionId, lastSyncedAt: "2026-10-12T00:00:00.000Z", hasAccounts: true },
+          { connectionId: otherConnectionId, lastSyncedAt: null, hasAccounts: false },
+        ],
+      };
     },
     async resolveConnection(id) {
       calls.resolved += 1;
@@ -499,8 +505,9 @@ describe("syncConnection", () => {
       page: { messages: [summary("m1")], nextPageToken: "p2" },
     });
     await pipeline.runJob({ ...syncJob, since: "2026-10-12T00:00:00.000Z" }, notFinal);
-    // A new account must get its recent mail, so every sync uses the whole window.
-    assert.equal(calls.listed[0]?.query, "newer_than:30d from:(KartuKreditBCA@klikbca.com)");
+    // A catch-up reads from a day before the last finished import.
+    const after = Date.parse("2026-10-11T00:00:00.000Z") / 1000;
+    assert.equal(calls.listed[0]?.query, `after:${after} from:(KartuKreditBCA@klikbca.com)`);
     assert.deepEqual(calls.enqueued[1], {
       ...syncJob,
       since: "2026-10-12T00:00:00.000Z",
@@ -520,10 +527,23 @@ describe("syncConnection", () => {
     assert.equal(calls.record[0]?.outcome, "transactions");
   });
 
-  it("schedules a sync per active connection from its last sync time", async () => {
+  it("never reads past the import window, whatever the last import time", () => {
+    const senders = ["a@bank.example"];
+    assert.equal(
+      syncQuery(senders, "2026-08-01T00:00:00.000Z", now),
+      "newer_than:30d from:(a@bank.example)",
+    );
+    assert.equal(syncQuery(senders, null, now), "newer_than:30d from:(a@bank.example)");
+  });
+
+  it("schedules discovery for every mailbox and a catch-up only where accounts read from it", async () => {
     const { pipeline, calls } = setup();
-    assert.equal(await pipeline.scheduleSyncs(), 1);
-    assert.deepEqual(calls.enqueued, [{ ...syncJob, since: "2026-10-12T00:00:00.000Z" }]);
+    assert.deepEqual(await pipeline.scheduleDaily(), { discoveries: 2, imports: 1 });
+    assert.deepEqual(calls.enqueued, [
+      { kind: "gmail.discover", connectionId },
+      { kind: "gmail.discover", connectionId: otherConnectionId },
+      { ...syncJob, since: "2026-10-12T00:00:00.000Z" },
+    ]);
   });
 });
 

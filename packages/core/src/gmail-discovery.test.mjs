@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DISCOVERY_STALL_MS, discoveryNeedsRun, runGmailDiscovery } from "./gmail-discovery.ts";
+import {
+  DISCOVERY_STALL_MS,
+  discoveryNeedsRun,
+  isNewFinding,
+  runGmailDiscovery,
+} from "./gmail-discovery.ts";
 import { GmailIngestionError, runGmailIngestionOperation } from "./gmail-ingestion.ts";
 
 const connectionId = "00000000-0000-4000-8000-000000000010";
@@ -183,5 +188,22 @@ describe("discover operation", () => {
     await assert.rejects(runGmailIngestionOperation({}, "discover", { connectionId }), {
       code: "INTERNAL",
     });
+  });
+});
+
+describe("isNewFinding", () => {
+  const firstScan = "2026-10-10T00:00:00.000Z";
+  const finding = {
+    institutionKey: "BCA_CC",
+    firstSeenAt: "2026-10-12T01:00:00.000Z",
+    dismissedAt: null,
+  };
+
+  it("is new only when a later scan found it and it has no account or dismissal", () => {
+    assert.equal(isNewFinding(finding, firstScan, new Set()), true);
+    assert.equal(isNewFinding({ ...finding, firstSeenAt: firstScan }, firstScan, new Set()), false);
+    assert.equal(isNewFinding(finding, firstScan, new Set(["BCA_CC"])), false);
+    assert.equal(isNewFinding({ ...finding, dismissedAt: firstScan }, firstScan, new Set()), false);
+    assert.equal(isNewFinding(finding, null, new Set()), false);
   });
 });

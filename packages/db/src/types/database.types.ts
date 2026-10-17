@@ -119,28 +119,28 @@ isOneToOne: false
                   ]
                 },"gmail_connections": {
                   Row: {
-                    "composio_connected_account_id": string,"composio_trigger_id": string | null,"created_at": string,"discovery_state": string,"discovery_updated_at": string | null,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"sync_error": string | null,"sync_requested_at": string | null,"sync_state": string,"sync_updated_at": string | null,"updated_at": string,"user_id": string
+                    "composio_connected_account_id": string,"composio_trigger_id": string | null,"created_at": string,"discovery_first_completed_at": string | null,"discovery_state": string,"discovery_updated_at": string | null,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"sync_error": string | null,"sync_requested_at": string | null,"sync_state": string,"sync_updated_at": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "composio_connected_account_id": string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address": string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id": string
+                    "composio_connected_account_id": string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address": string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "composio_connected_account_id"?: string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address"?: string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "composio_connected_account_id"?: string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address"?: string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
 
                   ]
                 },"gmail_institution_discoveries": {
                   Row: {
-                    "discovered_at": string,"email_count": number,"gmail_connection_id": string,"institution_key": string,"last_fours": (string)[],"last_seen_at": string | null,"user_id": string
+                    "discovered_at": string,"dismissed_at": string | null,"email_count": number,"first_seen_at": string,"gmail_connection_id": string,"institution_key": string,"last_fours": (string)[],"last_seen_at": string | null,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "discovered_at"?: string,"email_count": number,"gmail_connection_id": string,"institution_key": string,"last_fours"?: (string)[],"last_seen_at"?: string | null,"user_id": string
+                    "discovered_at"?: string,"dismissed_at"?: string | null,"email_count": number,"first_seen_at"?: string,"gmail_connection_id": string,"institution_key": string,"last_fours"?: (string)[],"last_seen_at"?: string | null,"user_id": string
                   }
                   Update: {
-                    "discovered_at"?: string,"email_count"?: number,"gmail_connection_id"?: string,"institution_key"?: string,"last_fours"?: (string)[],"last_seen_at"?: string | null,"user_id"?: string
+                    "discovered_at"?: string,"dismissed_at"?: string | null,"email_count"?: number,"first_seen_at"?: string,"gmail_connection_id"?: string,"institution_key"?: string,"last_fours"?: (string)[],"last_seen_at"?: string | null,"user_id"?: string
                   }
                   Relationships: [
                     {

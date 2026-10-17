@@ -5,7 +5,12 @@ import { Button, Chip } from "@monara/ui";
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
-import { GmailClientError, loadGmailDiscovery, requestGmailDiscovery } from "@/lib/gmail/client";
+import {
+  dismissGmailDiscovery,
+  GmailClientError,
+  loadGmailDiscovery,
+  requestGmailDiscovery,
+} from "@/lib/gmail/client";
 import { accountInputFor, choiceFromSuggestion } from "@/lib/onboarding/banks";
 
 /** How often the page checks on a running search. */
@@ -30,12 +35,14 @@ function SuggestionRow({
   busy,
   onAdd,
   onLink,
+  onDismiss,
 }: {
   suggestion: GmailAccountSuggestion;
   accounts: FinancialAccount[];
   busy: boolean;
   onAdd: () => void;
   onLink: (account: FinancialAccount) => void;
+  onDismiss: () => void;
 }) {
   const selectId = useId();
   const linkable = accounts.filter((account) => account.institutionKey === null);
@@ -51,6 +58,11 @@ function SuggestionRow({
         {suggestion.linkedAccounts.length > 0 && (
           <Chip color="success" variant="soft">
             Linked
+          </Chip>
+        )}
+        {suggestion.isNew && (
+          <Chip color="accent" variant="soft">
+            New
           </Chip>
         )}
       </div>
@@ -98,6 +110,11 @@ function SuggestionRow({
                 Link
               </Button>
             </>
+          )}
+          {suggestion.isNew && (
+            <Button className="min-h-11" isDisabled={busy} onPress={onDismiss} variant="ghost">
+              Dismiss
+            </Button>
           )}
         </div>
       )}
@@ -192,8 +209,16 @@ export function GmailAccountSuggestions({ connectionId }: { connectionId: string
       }),
     );
 
+  const dismiss = (suggestion: GmailAccountSuggestion) =>
+    act(suggestion.institutionKey, () =>
+      dismissGmailDiscovery(connectionId, suggestion.institutionKey),
+    );
+
   const discovery = view.discovery;
-  const suggestions = discovery?.suggestions ?? [];
+  // Banks found since the mailbox was connected come first, where the Profile badge points.
+  const suggestions = [...(discovery?.suggestions ?? [])].sort(
+    (a, b) => Number(b.isNew) - Number(a.isNew),
+  );
   return (
     <section aria-labelledby={titleId} className="mt-5 border-t border-border pt-4">
       <h3 className="text-sm font-bold" id={titleId}>
@@ -214,14 +239,14 @@ export function GmailAccountSuggestions({ connectionId }: { connectionId: string
       )}
       {discovery?.state === "completed" && suggestions.length === 0 && (
         <p className="mt-2 text-sm text-muted">
-          No bank or wallet emails from the last 30 days. Sync imports only emails from banks and
+          No bank or wallet emails from the last 30 days. Monara imports only emails from banks and
           wallets you add.
         </p>
       )}
       {suggestions.length > 0 && (
         <>
           <p className="mt-2 text-sm leading-6 text-muted">
-            Sync imports only from banks and wallets you add or link here.
+            Monara imports only from banks and wallets you add or link here.
           </p>
           <ul className="divide-y divide-separator">
             {suggestions.map((suggestion) => (
@@ -230,6 +255,7 @@ export function GmailAccountSuggestions({ connectionId }: { connectionId: string
                 busy={view.busyKey !== null}
                 key={suggestion.institutionKey}
                 onAdd={() => void add(suggestion)}
+                onDismiss={() => void dismiss(suggestion)}
                 onLink={(account) => void link(suggestion, account)}
                 suggestion={suggestion}
               />

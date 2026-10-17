@@ -1,9 +1,9 @@
 "use client";
 
-import { Button, Card } from "@monara/ui";
+import { Button, Card, Chip } from "@monara/ui";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { Icon } from "@/components/icon";
 import { InstallAppButton } from "@/components/install-app-button";
@@ -11,6 +11,7 @@ import { MonaraMascot } from "@/components/monara-mascot";
 import { SectionTitle } from "@/components/visual";
 import { WhatsAppLinkRow } from "@/components/whatsapp-link-row";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
+import { loadGmailConnections } from "@/lib/gmail/client";
 import { legalHref } from "@/lib/legal/return";
 
 function Row({ title, detail, end }: { title: string; detail?: string; end?: ReactNode }) {
@@ -25,7 +26,17 @@ function Row({ title, detail, end }: { title: string; detail?: string; end?: Rea
   );
 }
 
-function LinkRow({ href, title, detail }: { href: string; title: string; detail: string }) {
+function LinkRow({
+  href,
+  title,
+  detail,
+  badge,
+}: {
+  href: string;
+  title: string;
+  detail: string;
+  badge?: string;
+}) {
   return (
     <Link
       className="-mx-5 flex min-h-16 items-center gap-3 px-5 py-2.5 transition-colors duration-100 hover:bg-surface-secondary focus-visible:bg-surface-secondary focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus active:bg-surface-secondary"
@@ -35,6 +46,11 @@ function LinkRow({ href, title, detail }: { href: string; title: string; detail:
         <p className="text-sm font-medium">{title}</p>
         <p className="mt-1 text-xs leading-5 text-muted">{detail}</p>
       </div>
+      {badge ? (
+        <Chip className="shrink-0" color="accent" size="sm" variant="soft">
+          {badge}
+        </Chip>
+      ) : null}
       <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
     </Link>
   );
@@ -101,6 +117,44 @@ function DemoSignup() {
   );
 }
 
+/** Banks found in the User's mailboxes since they connected, with no account yet. */
+function useNewGmailAccounts(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    loadGmailConnections({ signal: controller.signal }).then(
+      (mailboxes) => {
+        if (controller.signal.aborted) return;
+        setCount(
+          mailboxes
+            .filter((mailbox) => mailbox.status === "active")
+            .reduce((total, mailbox) => total + mailbox.newAccounts, 0),
+        );
+      },
+      // The row still links to Gmail settings when the count cannot be read.
+      () => undefined,
+    );
+    return () => controller.abort();
+  }, []);
+  return count;
+}
+
+function GmailLinkRow() {
+  const newAccounts = useNewGmailAccounts();
+  return (
+    <LinkRow
+      badge={newAccounts > 0 ? `${newAccounts} new` : undefined}
+      detail={
+        newAccounts > 0
+          ? `${newAccounts === 1 ? "A new bank or wallet" : "New banks or wallets"} found in your email`
+          : "Manage connections · up to 3 mailboxes"
+      }
+      href="/connections/gmail"
+      title="Gmail"
+    />
+  );
+}
+
 function ProfileConnections({ demo }: { demo: boolean }) {
   return (
     <Group id="connections" title="Connections">
@@ -109,13 +163,15 @@ function ProfileConnections({ demo }: { demo: boolean }) {
         end={demo ? "Not signed in" : "Connected"}
         title="Google sign-in"
       />
-      <LinkRow
-        detail={
-          demo ? "Sign in first · up to 3 mailboxes" : "Manage connections · up to 3 mailboxes"
-        }
-        href={demo ? "/sign-in?next=/connections/gmail" : "/connections/gmail"}
-        title="Gmail"
-      />
+      {demo ? (
+        <LinkRow
+          detail="Sign in first · up to 3 mailboxes"
+          href="/sign-in?next=/connections/gmail"
+          title="Gmail"
+        />
+      ) : (
+        <GmailLinkRow />
+      )}
       {demo ? (
         <Row detail="Sign in first to link your number." end="Not linked" title="WhatsApp" />
       ) : (

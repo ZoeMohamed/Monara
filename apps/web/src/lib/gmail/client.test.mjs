@@ -64,6 +64,7 @@ describe("Gmail connection response boundary", () => {
         email: "mailbox@example.com",
         status: "active",
         lastSyncedAt: null,
+        newAccounts: 0,
         sync: { state: "idle" },
       },
       {
@@ -71,6 +72,7 @@ describe("Gmail connection response boundary", () => {
         email: "reconnect@example.com",
         status: "reconnect-required",
         lastSyncedAt: "2026-10-12T06:00:00Z",
+        newAccounts: 0,
         sync: { state: "idle" },
       },
     ]);

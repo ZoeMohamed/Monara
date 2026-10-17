@@ -28,7 +28,9 @@ const sampleBanks = [
     lastFours: ["1730"],
   },
   { institutionKey: "Jago_App", name: "Jago", provider: "Jago", emailCount: 4, lastFours: [] },
-].map((bank) => choiceFromSuggestion({ ...bank, platform: "BANKING_APP", linkedAccounts: [] }));
+].map((bank) =>
+  choiceFromSuggestion({ ...bank, platform: "BANKING_APP", linkedAccounts: [], isNew: false }),
+);
 
 const sampleEmails = 58;
 

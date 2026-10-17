@@ -15,6 +15,7 @@ import {
   resolvedImportedTransactionSchema,
 } from "@monara/contracts";
 import type { MonaraServiceRoleClient } from "@monara/db";
+import { isNewFinding } from "./gmail-discovery.ts";
 import {
   connectionNotActive,
   GmailIngestionError,
@@ -64,16 +65,30 @@ export function createSupabaseGmailIngestionRepository(
 ): GmailIngestionRepository {
   return {
     async listActiveConnections() {
-      const { data, error } = await client
+      const connections = await client
         .from("gmail_connections")
         .select("id, last_synced_at")
         .eq("status", "active")
         .order("created_at", { ascending: true });
-      if (error) fail(error);
+      if (connections.error) fail(connections.error);
+      const accounts =
+        connections.data.length === 0
+          ? { data: [], error: null }
+          : await client
+              .from("financial_accounts")
+              .select("gmail_connection_id")
+              .eq("is_active", true)
+              .in(
+                "gmail_connection_id",
+                connections.data.map((row) => row.id),
+              );
+      if (accounts.error) fail(accounts.error);
+      const fed = new Set(accounts.data.map((account) => account.gmail_connection_id));
       return listActiveGmailConnectionsResultSchema.parse({
-        connections: data.map((row) => ({
+        connections: connections.data.map((row) => ({
           connectionId: row.id,
           lastSyncedAt: row.last_synced_at,
+          hasAccounts: fed.has(row.id),
         })),
       });
     },
@@ -194,6 +209,7 @@ export function createSupabaseGmailIngestionRepository(
       });
       if (error) fail(error);
       const ids = input.messages.map((message) => message.gmailMessageId);
+      // Only claimed mail nobody finished is queued again; mail recorded as failed stays failed.
       const pending =
         data === 0 || ids.length === 0
           ? { data: [], error: null }
@@ -202,7 +218,7 @@ export function createSupabaseGmailIngestionRepository(
               .select("id, gmail_message_id")
               .eq("gmail_connection_id", input.connectionId)
               .in("gmail_message_id", ids)
-              .in("processing_status", ["processing", "failed"]);
+              .eq("processing_status", "processing");
       if (pending.error) fail(pending.error);
       return claimGmailMessagesResultSchema.parse({
         pendingGmailMessageIds: pending.data.map((row) => row.gmail_message_id),
@@ -320,13 +336,13 @@ export function createSupabaseGmailIngestionRepository(
       const [connection, findings, accounts] = await Promise.all([
         client
           .from("gmail_connections")
-          .select("discovery_state")
+          .select("discovery_state, discovery_first_completed_at")
           .eq("id", connectionId)
           .eq("user_id", userId)
           .maybeSingle(),
         client
           .from("gmail_institution_discoveries")
-          .select("institution_key, email_count, last_fours")
+          .select("institution_key, email_count, last_fours, first_seen_at, dismissed_at")
           .eq("gmail_connection_id", connectionId)
           .eq("user_id", userId)
           .order("email_count", { ascending: false }),
@@ -343,6 +359,8 @@ export function createSupabaseGmailIngestionRepository(
       if (!connection.data) {
         throw new GmailIngestionError("NOT_FOUND", "That Gmail connection was not found.");
       }
+      const linkedKeys = new Set(accounts.data.map((account) => account.institution_key ?? ""));
+      const firstCompletedAt = connection.data.discovery_first_completed_at;
       return gmailDiscoverySchema.parse({
         state: connection.data.discovery_state,
         suggestions: findings.data.flatMap((finding) => {
@@ -359,10 +377,31 @@ export function createSupabaseGmailIngestionRepository(
               linkedAccounts: accounts.data
                 .filter((account) => account.institution_key === institution.key)
                 .map((account) => ({ id: account.id, name: account.name })),
+              isNew: isNewFinding(
+                {
+                  institutionKey: finding.institution_key,
+                  firstSeenAt: finding.first_seen_at,
+                  dismissedAt: finding.dismissed_at,
+                },
+                firstCompletedAt,
+                linkedKeys,
+              ),
             },
           ];
         }),
       });
+    },
+
+    async dismissDiscovery(userId, connectionId, institutionKey) {
+      const { data, error } = await client
+        .from("gmail_institution_discoveries")
+        .update({ dismissed_at: new Date().toISOString() })
+        .eq("gmail_connection_id", connectionId)
+        .eq("user_id", userId)
+        .eq("institution_key", institutionKey)
+        .select("institution_key");
+      if (error) fail(error);
+      return data.length > 0;
     },
 
     async resolveImportedTransaction(transactionId) {

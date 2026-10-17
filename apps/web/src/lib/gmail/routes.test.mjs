@@ -11,6 +11,7 @@ const state = {
   inlineDiscoveries: [],
   discoveryState: "completed",
   discoveryFails: false,
+  dismissed: [],
 };
 globalThis.monaraGmailRouteTest = state;
 const service = `
@@ -35,6 +36,13 @@ export function gmailIngestionRepository() { return {
       throw Object.assign(new Error("not found"), { code: "NOT_FOUND" });
     }
     return { state: globalThis.monaraGmailRouteTest.discoveryState, suggestions: [] };
+  },
+  async dismissDiscovery(userId, connectionId, institutionKey) {
+    if (userId !== globalThis.monaraGmailRouteTest.user.id || connectionId !== "${connectionId}") {
+      return false;
+    }
+    globalThis.monaraGmailRouteTest.dismissed.push(institutionKey);
+    return true;
   },
 }; }
 `;
@@ -83,6 +91,9 @@ const { POST } = await import("../../app/api/gmail/connections/route.ts");
 const { GET: callback } = await import("../../app/api/gmail/connections/callback/route.ts");
 const discoveryRoute = await import(
   "../../app/api/gmail/connections/[connectionId]/discovery/route.ts"
+);
+const dismissRoute = await import(
+  "../../app/api/gmail/connections/[connectionId]/discovery/[institutionKey]/route.ts"
 );
 hooks.deregister();
 
@@ -277,5 +288,39 @@ describe("Gmail account discovery in the web backend", () => {
       state.discoveryFails = false;
       state.discoveryState = "completed";
     }
+  });
+});
+
+describe("dismissing a newly found account", () => {
+  const request = (origin = "http://localhost:3005") =>
+    new Request(`http://localhost:3005/api/gmail/connections/${connectionId}/discovery/BCA_CC`, {
+      method: "PATCH",
+      headers: { host: "localhost:3005", origin },
+    });
+  const params = (id, institutionKey = "BCA_CC") => ({
+    params: Promise.resolve({ connectionId: id, institutionKey }),
+  });
+
+  it("dismisses only the signed-in User's own finding", async () => {
+    state.dismissed = [];
+    assert.equal((await dismissRoute.PATCH(request(), params(connectionId))).status, 204);
+    assert.deepEqual(state.dismissed, ["BCA_CC"]);
+    const other = await dismissRoute.PATCH(
+      request(),
+      params("00000000-0000-4000-8000-000000000099"),
+    );
+    assert.equal((await other.json()).code, "NOT_FOUND");
+    assert.deepEqual(state.dismissed, ["BCA_CC"]);
+  });
+
+  it("refuses cross-site requests and invalid keys before writing", async () => {
+    state.dismissed = [];
+    assert.equal(
+      (await dismissRoute.PATCH(request("https://evil.example"), params(connectionId))).status,
+      403,
+    );
+    const invalid = await dismissRoute.PATCH(request(), params(connectionId, "bad key!"));
+    assert.equal((await invalid.json()).code, "VALIDATION_FAILED");
+    assert.deepEqual(state.dismissed, []);
   });
 });

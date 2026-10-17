@@ -148,6 +148,8 @@ export const listActiveGmailConnectionsResultSchema = z
         .object({
           connectionId: gmailConnectionIdSchema,
           lastSyncedAt: isoDateTimeSchema.nullable(),
+          /** Whether any active account reads from this mailbox. */
+          hasAccounts: z.boolean(),
         })
         .strict(),
     ),

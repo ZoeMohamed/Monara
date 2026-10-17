@@ -25,10 +25,13 @@ import { parseEmail, shouldParse } from "./parse/index.ts";
 import { isSenderVerified } from "./sender.ts";
 
 /**
- * Every sync looks back this far, so an account added after the last sync still gets
- * its recent mail. Already processed mail is skipped before any extraction job.
+ * A first import, or one for a newly linked account, looks back this far. Already
+ * processed mail is skipped before any extraction job.
  */
-const IMPORT_WINDOW = "newer_than:30d";
+const IMPORT_WINDOW_DAYS = 30;
+/** A catch-up overlaps the last finished import by a day, for mail Gmail listed late. */
+const CATCH_UP_OVERLAP_MS = 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 100;
 
 export interface GmailPipelineDependencies {
@@ -135,9 +138,22 @@ export function sendersFor(institutionKeys: readonly string[]): string[] {
   return institutionKeys.flatMap((key) => findInstitution(key)?.senderEmails ?? []);
 }
 
-/** Only mail from the given senders over the import window. */
-export function syncQuery(senders: readonly string[]): string {
-  return `${IMPORT_WINDOW} ${fromClause(senders)}`;
+/**
+ * Only mail from the given senders: since a day before `since` when it is set, never
+ * further back than the import window.
+ */
+export function syncQuery(
+  senders: readonly string[],
+  since: string | null = null,
+  now: Date = new Date(),
+): string {
+  const windowStart = now.getTime() - IMPORT_WINDOW_DAYS * DAY_MS;
+  const sinceMs = since === null ? Number.NaN : Date.parse(since) - CATCH_UP_OVERLAP_MS;
+  const window =
+    Number.isFinite(sinceMs) && sinceMs > windowStart
+      ? `after:${Math.floor(sinceMs / 1000)}`
+      : `newer_than:${IMPORT_WINDOW_DAYS}d`;
+  return `${window} ${fromClause(senders)}`;
 }
 
 export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
@@ -250,7 +266,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       }
       page = await read(connection, () =>
         reader.listMessages(toMailbox(connection), {
-          query: syncQuery(senders),
+          query: syncQuery(senders, job.since, new Date(startedAt)),
           pageToken: job.pageToken,
           maxResults: PAGE_SIZE,
         }),
@@ -461,21 +477,32 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       return "listed";
     },
 
-    /** Queues a sync for every active connection. Runs from the cron trigger. */
-    async scheduleSyncs(): Promise<number> {
+    /**
+     * The daily cron: every active mailbox is searched again for new banks, and each
+     * one that feeds accounts catches up from its last finished import. An import that
+     * failed or never finished left that time where it was, so it runs again.
+     */
+    async scheduleDaily(): Promise<{ discoveries: number; imports: number }> {
       const { connections } = await backend.listActiveConnections();
-      const jobs: GmailJob[] = connections.map((connection) => ({
-        kind: "gmail.sync",
+      const discoveries: GmailJob[] = connections.map((connection) => ({
+        kind: "gmail.discover",
         connectionId: connection.connectionId,
-        since: connection.lastSyncedAt,
-        pageToken: null,
-        startedAt: null,
-        institutionKeys: null,
-        messageIds: null,
-        tracksSync: true,
       }));
+      const imports: GmailJob[] = connections
+        .filter((connection) => connection.hasAccounts)
+        .map((connection) => ({
+          kind: "gmail.sync",
+          connectionId: connection.connectionId,
+          since: connection.lastSyncedAt,
+          pageToken: null,
+          startedAt: null,
+          institutionKeys: null,
+          messageIds: null,
+          tracksSync: true,
+        }));
+      const jobs = [...discoveries, ...imports];
       if (jobs.length > 0) await enqueue(jobs);
-      return jobs.length;
+      return { discoveries: discoveries.length, imports: imports.length };
     },
 
     /** Runs one queued job. A connection that is no longer active ends the job without retrying. */

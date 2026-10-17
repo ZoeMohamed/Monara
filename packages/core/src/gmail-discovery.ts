@@ -22,6 +22,24 @@ const MAX_LAST_FOURS = 10;
 /** Card or account endings as banks write them in subjects: "****1234", "xx1234", "ending 1234". */
 const SUBJECT_LAST_FOUR = /(?:\*{2,}|x{2,}|ending\s+|akhiran\s+)(\d{4})\b/gi;
 
+/**
+ * A finding is new when a scan after the mailbox's first completed one found it, the
+ * User has no account for it, and they have not dismissed it. The first scan's
+ * findings were already offered when the mailbox was connected.
+ */
+export function isNewFinding(
+  finding: { institutionKey: string; firstSeenAt: string; dismissedAt: string | null },
+  firstCompletedAt: string | null,
+  linkedInstitutionKeys: ReadonlySet<string>,
+): boolean {
+  return (
+    firstCompletedAt !== null &&
+    finding.dismissedAt === null &&
+    Date.parse(finding.firstSeenAt) > Date.parse(firstCompletedAt) &&
+    !linkedInstitutionKeys.has(finding.institutionKey)
+  );
+}
+
 /** One listed message, metadata only. */
 interface DiscoveryMessage {
   id: string;

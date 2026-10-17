@@ -54,6 +54,8 @@ export const gmailConnectionSchema = z
     lastSyncedAt: isoDateTimeSchema.nullable(),
     createdAt: isoDateTimeSchema,
     sync: gmailSyncStatusSchema,
+    /** Banks, cards, and wallets found after the first scan that have no account yet. */
+    newAccounts: z.number().int().nonnegative().default(0),
   })
   .strict();
 
@@ -110,6 +112,8 @@ export const gmailAccountSuggestionSchema = z
     linkedAccounts: z.array(
       z.object({ id: financialAccountIdSchema, name: z.string().min(1).max(100) }).strict(),
     ),
+    /** Found by a later scan, not yet added or dismissed. */
+    isNew: z.boolean().default(false),
   })
   .strict();
 
@@ -118,6 +122,14 @@ export const gmailDiscoverySchema = z
   .object({
     state: gmailDiscoveryStateSchema,
     suggestions: z.array(gmailAccountSuggestionSchema),
+  })
+  .strict();
+
+/** Hides a newly found bank, card, or wallet from the "new account" notice. */
+export const dismissGmailDiscoveryInputSchema = z
+  .object({
+    connectionId: gmailConnectionIdSchema,
+    institutionKey: institutionKeySchema,
   })
   .strict();
 

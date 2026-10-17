@@ -222,10 +222,10 @@ async function queueSync(
   return Response.json({ status: "queued" }, { status: 202 });
 }
 
-/** Cron: queues one sync job per active Gmail connection. */
-export async function scheduleGmailSyncs(env: Env): Promise<void> {
-  const count = await createPipeline(env).scheduleSyncs();
-  logEvent("info", { event: "gmail.syncs_scheduled", count });
+/** Daily cron: queues discovery for every active mailbox and a catch-up import for each that feeds accounts. */
+export async function scheduleGmailDaily(env: Env): Promise<void> {
+  const counts = await createPipeline(env).scheduleDaily();
+  logEvent("info", { event: "gmail.daily_scheduled", ...counts });
 }
 
 /**
