@@ -91,6 +91,8 @@ export interface GmailIngestionRepository {
    * CONFLICT while another sync is queued or running; NOT_FOUND if not theirs or inactive.
    */
   requestSync(userId: UserId, connectionId: GmailConnectionId): Promise<string>;
+  /** Joins an already queued/running sync and returns that run's request timestamp. */
+  joinSync(userId: UserId, connectionId: GmailConnectionId): Promise<string>;
   startDiscovery(connectionId: GmailConnectionId): Promise<void>;
   /** Where an active connection's discovery stands; NOT_FOUND unless it is active. */
   discoveryStatus(connectionId: GmailConnectionId): Promise<{

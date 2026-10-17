@@ -10,6 +10,7 @@ import {
   removeChoice,
 } from "./banks.ts";
 import {
+  migrateLegacyOnboardingPhase,
   parseOnboardingPhase,
   resolvePhase,
   returnsToOnboarding,
@@ -29,6 +30,12 @@ const bca = {
 };
 
 describe("onboarding phase", () => {
+  it("moves only the legacy detect checkpoint back to the new name step", () => {
+    assert.equal(migrateLegacyOnboardingPhase("detect"), "name");
+    assert.equal(migrateLegacyOnboardingPhase("name"), "name");
+    assert.equal(migrateLegacyOnboardingPhase("done"), "done");
+    assert.equal(migrateLegacyOnboardingPhase(null), null);
+  });
   it("starts a new User at connect and treats an existing mailbox as already set up", () => {
     assert.equal(resolvePhase(null, false), "connect");
     assert.equal(resolvePhase(null, true), "done");

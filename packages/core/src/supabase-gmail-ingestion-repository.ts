@@ -35,6 +35,7 @@ function fail(error: { code?: string }): never {
 }
 
 const MAX_HOLDER_NAME = 100;
+const ACCOUNT_PAGE_SIZE = 1000;
 
 function usableName(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -71,19 +72,21 @@ export function createSupabaseGmailIngestionRepository(
         .eq("status", "active")
         .order("created_at", { ascending: true });
       if (connections.error) fail(connections.error);
-      const accounts =
-        connections.data.length === 0
-          ? { data: [], error: null }
-          : await client
-              .from("financial_accounts")
-              .select("gmail_connection_id")
-              .eq("is_active", true)
-              .in(
-                "gmail_connection_id",
-                connections.data.map((row) => row.id),
-              );
-      if (accounts.error) fail(accounts.error);
-      const fed = new Set(accounts.data.map((account) => account.gmail_connection_id));
+      const fed = new Set<string | null>();
+      if (connections.data.length > 0) {
+        const connectionIds = connections.data.map((row) => row.id);
+        for (let offset = 0; ; offset += ACCOUNT_PAGE_SIZE) {
+          const accounts = await client
+            .from("financial_accounts")
+            .select("gmail_connection_id")
+            .eq("is_active", true)
+            .in("gmail_connection_id", connectionIds)
+            .range(offset, offset + ACCOUNT_PAGE_SIZE - 1);
+          if (accounts.error) fail(accounts.error);
+          for (const account of accounts.data) fed.add(account.gmail_connection_id);
+          if (accounts.data.length < ACCOUNT_PAGE_SIZE) break;
+        }
+      }
       return listActiveGmailConnectionsResultSchema.parse({
         connections: connections.data.map((row) => ({
           connectionId: row.id,
@@ -203,29 +206,46 @@ export function createSupabaseGmailIngestionRepository(
     },
 
     async claimMessages(input) {
-      const { data, error } = await client.rpc("claim_gmail_messages", {
+      const { error } = await client.rpc("claim_gmail_messages", {
         p_connection_id: input.connectionId,
         p_messages: input.messages,
       });
       if (error) fail(error);
       const ids = input.messages.map((message) => message.gmailMessageId);
-      // Only claimed mail nobody finished is queued again; mail recorded as failed stays failed.
-      const pending =
-        data === 0 || ids.length === 0
+      // Read every matching claim once: unfinished mail is retried, while finished mail can
+      // still recover a categorization enqueue that failed after its transaction committed.
+      const claimed =
+        ids.length === 0
           ? { data: [], error: null }
           : await client
               .from("processed_gmail_messages")
-              .select("id, gmail_message_id")
+              .select("id, gmail_message_id, processing_status")
               .eq("gmail_connection_id", input.connectionId)
-              .in("gmail_message_id", ids)
-              .eq("processing_status", "processing");
-      if (pending.error) fail(pending.error);
+              .in("gmail_message_id", ids);
+      if (claimed.error) fail(claimed.error);
+      const pending = claimed.data.filter((row) => row.processing_status === "processing");
+      const processedIds = claimed.data
+        .filter((row) => row.processing_status === "processed")
+        .map((row) => row.id);
+      const uncategorized =
+        processedIds.length === 0
+          ? { data: [], error: null }
+          : await client
+              .from("transactions")
+              .select("id")
+              .in("processed_gmail_message_id", processedIds)
+              .in("transaction_type", ["expense", "income"])
+              .is("category_id", null)
+              .is("deleted_at", null)
+              .not("merchant_name", "is", null);
+      if (uncategorized.error) fail(uncategorized.error);
       return claimGmailMessagesResultSchema.parse({
-        pendingGmailMessageIds: pending.data.map((row) => row.gmail_message_id),
-        pending: pending.data.map((row) => ({
+        pendingGmailMessageIds: pending.map((row) => row.gmail_message_id),
+        pending: pending.map((row) => ({
           gmailMessageId: row.gmail_message_id,
           processedMessageId: row.id,
         })),
+        uncategorizedTransactionIds: uncategorized.data.map((row) => row.id),
       });
     },
 
@@ -240,6 +260,15 @@ export function createSupabaseGmailIngestionRepository(
 
     async requestSync(userId, connectionId) {
       const { data, error } = await client.rpc("request_gmail_sync", {
+        p_user_id: userId,
+        p_connection_id: connectionId,
+      });
+      if (error) fail(error);
+      return data;
+    },
+
+    async joinSync(userId, connectionId) {
+      const { data, error } = await client.rpc("join_gmail_sync", {
         p_user_id: userId,
         p_connection_id: connectionId,
       });

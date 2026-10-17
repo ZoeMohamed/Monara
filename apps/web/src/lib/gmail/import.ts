@@ -16,18 +16,17 @@ async function startImport(
   input: { reason: GmailIngestReason; institutionKeys: string[] | null },
 ): Promise<void> {
   const repository = gmailIngestionRepository();
-  let requestedAt: string | null = null;
+  let requestedAt: string;
   try {
     requestedAt = await repository.requestSync(userId, connectionId);
   } catch (error) {
     if (!(error instanceof GmailIngestionError && error.code === "CONFLICT")) throw error;
+    requestedAt = await repository.joinSync(userId, connectionId);
   }
   try {
-    await requestAgentIngest({ connectionId, ...input, tracksSync: requestedAt !== null });
+    await requestAgentIngest({ connectionId, ...input, tracksSync: true });
   } catch (error) {
-    if (requestedAt !== null) {
-      await repository.failSync({ connectionId, error: "agent_unavailable", requestedAt });
-    }
+    await repository.failSync({ connectionId, error: "agent_unavailable", requestedAt });
     throw error;
   }
 }

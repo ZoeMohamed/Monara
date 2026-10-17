@@ -227,7 +227,7 @@ export function GmailAccountSuggestions({ connectionId }: { connectionId: string
       {discovery === null && !view.error && (
         <p className="mt-2 text-sm text-muted">Loading suggestions…</p>
       )}
-      {running && (
+      {(running || view.busyKey === "search") && (
         <p role="status" className="mt-2 text-sm text-muted">
           Looking for bank and wallet emails…
         </p>

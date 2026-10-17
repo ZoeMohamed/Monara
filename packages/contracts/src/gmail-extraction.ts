@@ -255,6 +255,8 @@ export const claimGmailMessagesResultSchema = z
           .strict(),
       )
       .max(100),
+    /** Finished messages whose imported Transactions still need categorization. */
+    uncategorizedTransactionIds: z.array(transactionIdSchema),
   })
   .strict();
 

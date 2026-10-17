@@ -39,7 +39,9 @@ export function isHolderName(counterparty: string, holderName: string): boolean 
   // Every word but the last must match in order; the last may be cut off mid-word.
   const last = other.length - 1;
   return other.every((word, index) =>
-    index < last ? word === holder[index] : holder[index]?.startsWith(word) === true,
+    index < last
+      ? word === holder[index]
+      : word.length >= 3 && holder[index]?.startsWith(word) === true,
   );
 }
 

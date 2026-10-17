@@ -374,16 +374,18 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
 
     let emails = job.emails;
     if (options.isRetry) {
-      const claims = await Promise.all(
-        emails.map((email) =>
-          backend.claimMessage({
-            connectionId: job.connectionId,
-            gmailMessageId: email.gmailMessageId,
-            receivedAt: email.receivedAt,
-          }),
-        ),
+      const claims = await backend.claimMessages({
+        connectionId: job.connectionId,
+        messages: emails.map(({ gmailMessageId, receivedAt }) => ({ gmailMessageId, receivedAt })),
+      });
+      await queueCategorization(claims.uncategorizedTransactionIds);
+      const pending = new Map(
+        claims.pending.map((claim) => [claim.gmailMessageId, claim.processedMessageId]),
       );
-      emails = emails.filter((_email, index) => !claims[index]?.alreadyFinished);
+      emails = emails.flatMap((email) => {
+        const processedMessageId = pending.get(email.gmailMessageId);
+        return processedMessageId ? [{ ...email, processedMessageId }] : [];
+      });
       if (emails.length === 0) return "already_finished";
     }
 
@@ -416,9 +418,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
     if (results.length > 0) {
       const recorded = await backend.recordExtractions({ results });
       await queueCategorization(
-        recorded.results.flatMap((entry) =>
-          entry.alreadyFinished ? [] : entry.uncategorizedTransactionIds,
-        ),
+        recorded.results.flatMap((entry) => entry.uncategorizedTransactionIds),
       );
     }
 

@@ -119,14 +119,14 @@ isOneToOne: false
                   ]
                 },"gmail_connections": {
                   Row: {
-                    "composio_connected_account_id": string,"composio_trigger_id": string | null,"created_at": string,"discovery_first_completed_at": string | null,"discovery_state": string,"discovery_updated_at": string | null,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"sync_error": string | null,"sync_requested_at": string | null,"sync_state": string,"sync_updated_at": string | null,"updated_at": string,"user_id": string
+                    "composio_connected_account_id": string,"composio_trigger_id": string | null,"created_at": string,"discovery_first_completed_at": string | null,"discovery_state": string,"discovery_updated_at": string | null,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"sync_error": string | null,"sync_pending_runs": number,"sync_requested_at": string | null,"sync_state": string,"sync_updated_at": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "composio_connected_account_id": string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address": string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id": string
+                    "composio_connected_account_id": string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address": string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_pending_runs"?: number,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "composio_connected_account_id"?: string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address"?: string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "composio_connected_account_id"?: string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address"?: string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_pending_runs"?: number,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
 
@@ -379,6 +379,9 @@ isOneToOne: false
 { Args: { "p_transaction_id": string }; Returns: {
               "location": string,"merchant_name": string,"needs_category": boolean,"user_id": string
             }[]
+                           },
+"join_gmail_sync":
+{ Args: { "p_connection_id": string,"p_user_id": string }; Returns: string
                            },
 "mark_gmail_connection_synced":
 { Args: { "p_connection_id": string,"p_synced_at": string }; Returns: undefined

@@ -1,4 +1,5 @@
 import { gmailConnectionIdSchema, gmailDiscoverySchema } from "@monara/contracts";
+import { GmailIngestionError } from "@monara/core";
 import type { NextRequest } from "next/server";
 import { rerunDiscoveryIfNeeded, runDiscovery } from "@/lib/gmail/discovery";
 import {
@@ -68,7 +69,10 @@ export async function POST(request: NextRequest, context: Context) {
     }
     try {
       await runDiscovery(connectionId);
-    } catch {
+    } catch (error) {
+      if (error instanceof GmailIngestionError && error.code === "NOT_FOUND") {
+        return errorResponse("CONFLICT", "Reconnect this Gmail account first.");
+      }
       return errorResponse("DEPENDENCY_UNAVAILABLE", "Your inbox could not be checked. Try again.");
     }
     const discovery = await gmailIngestionRepository().discoveryFor(identity.id, connectionId);

@@ -10,7 +10,7 @@ const state = {
   discoveries: [],
   inlineDiscoveries: [],
   discoveryState: "completed",
-  discoveryFails: false,
+  discoveryFailure: null,
   dismissed: [],
 };
 globalThis.monaraGmailRouteTest = state;
@@ -52,7 +52,12 @@ export function startDiscoveryAfterResponse(connectionId) {
 }
 export async function runDiscovery(connectionId) {
   globalThis.monaraGmailRouteTest.inlineDiscoveries.push(connectionId);
-  if (globalThis.monaraGmailRouteTest.discoveryFails) throw new Error("gmail down");
+  if (globalThis.monaraGmailRouteTest.discoveryFailure === "unavailable") throw new Error("gmail down");
+  if (globalThis.monaraGmailRouteTest.discoveryFailure === "disconnected") {
+    const error = new globalThis.monaraGmailRouteTest.GmailIngestionError("gone");
+    error.code = "NOT_FOUND";
+    throw error;
+  }
   globalThis.monaraGmailRouteTest.discoveryState = "completed";
 }
 export async function rerunDiscoveryIfNeeded(connectionId) {
@@ -78,6 +83,11 @@ const hooks = registerHooks({
       };
     if (specifier === "@/lib/gmail/discovery")
       return { url: `data:text/javascript,${encodeURIComponent(discovery)}`, shortCircuit: true };
+    if (specifier === "@monara/core")
+      return {
+        url: `data:text/javascript,${encodeURIComponent("export class GmailConnectionError extends Error {} export class GmailIngestionError extends Error {} globalThis.monaraGmailRouteTest.GmailIngestionError = GmailIngestionError;")}`,
+        shortCircuit: true,
+      };
     if (specifier === "@/lib/http/origin")
       return nextResolve(new URL("../http/origin.ts", import.meta.url).href, context);
     if (specifier === "@/lib/onboarding/flow")
@@ -280,12 +290,23 @@ describe("Gmail account discovery in the web backend", () => {
   });
 
   it("reports an unavailable inbox when the requested search fails", async () => {
-    state.discoveryFails = true;
+    state.discoveryFailure = "unavailable";
     try {
       const response = await discoveryRoute.POST(sameOrigin(), context);
       assert.equal((await response.json()).code, "DEPENDENCY_UNAVAILABLE");
     } finally {
-      state.discoveryFails = false;
+      state.discoveryFailure = null;
+      state.discoveryState = "completed";
+    }
+  });
+
+  it("asks for a reconnect when authorization disappeared during search", async () => {
+    state.discoveryFailure = "disconnected";
+    try {
+      const response = await discoveryRoute.POST(sameOrigin(), context);
+      assert.equal((await response.json()).code, "CONFLICT");
+    } finally {
+      state.discoveryFailure = null;
       state.discoveryState = "completed";
     }
   });

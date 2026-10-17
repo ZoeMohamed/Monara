@@ -14,6 +14,13 @@ export function parseOnboardingPhase(value: unknown): OnboardingPhase | null {
   return phases.find((phase) => phase === value) ?? null;
 }
 
+/** The old flow used detect before name; move only that legacy checkpoint forward. */
+export function migrateLegacyOnboardingPhase(
+  stored: OnboardingPhase | null,
+): OnboardingPhase | null {
+  return stored === "detect" ? "name" : stored;
+}
+
 /**
  * The phase to show. A User with a connected mailbox and no stored phase set up Gmail
  * before first-run setup existed, so they are done. Later phases need a mailbox, so

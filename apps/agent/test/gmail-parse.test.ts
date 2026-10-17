@@ -27,6 +27,8 @@ describe("isHolderName", () => {
     // Banks cut long names short.
     ["ADLYN FAKHREY", true],
     ["ADLYN FAKHREYZ PRA", true],
+    // One-letter prefixes are too ambiguous to identify the same person.
+    ["ADLYN F", false],
     // A shared family name alone is someone else.
     ["Budi Pratama", false],
     ["Pratama", false],

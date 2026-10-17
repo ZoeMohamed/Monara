@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(25);
+select plan(28);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001 and the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234). User 2 owns neither.
@@ -80,7 +80,22 @@ select throws_ok(
   'a second request while one is queued is refused'
 );
 
+select ok(
+  public.join_gmail_sync(
+    '10000000-0000-4000-8000-000000000001',
+    '12000000-0000-4000-8000-000000000001'
+  ) is not null,
+  'an account-linked import can join the queued mailbox sync'
+);
+
 select public.start_gmail_sync('12000000-0000-4000-8000-000000000001');
+
+select is(
+  (select sync_pending_runs from public.gmail_connections
+    where id = '12000000-0000-4000-8000-000000000001'),
+  2,
+  'the shared status tracks both listing jobs'
+);
 
 select is(
   public.claim_gmail_messages(
@@ -94,6 +109,18 @@ select is(
   ),
   4,
   'claiming a listed page reports every new message as pending'
+);
+
+select public.mark_gmail_connection_synced(
+  '12000000-0000-4000-8000-000000000001',
+  '2026-10-13T10:00:00+07:00'
+);
+
+select is(
+  (select row(sync_state, sync_pending_runs)::text from public.gmail_connections
+    where id = '12000000-0000-4000-8000-000000000001'),
+  row('listing', 1)::text,
+  'the first joined job cannot complete the shared listing state'
 );
 
 select public.mark_gmail_connection_synced(

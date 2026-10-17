@@ -40,6 +40,7 @@ begin
 
   delete from public.gmail_institution_discoveries as discovery
     where discovery.gmail_connection_id = p_connection_id
+      and discovery.dismissed_at is null
       and not exists (
         select 1 from jsonb_array_elements(p_found) as entry
         where entry ->> 'institutionKey' = discovery.institution_key

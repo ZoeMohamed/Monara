@@ -16,6 +16,7 @@ function reset() {
     running: [],
     agentFails: false,
     requests: [],
+    joins: [],
     ingests: [],
     failures: [],
   });
@@ -42,6 +43,10 @@ export function gmailIngestionRepository() {
       return "2026-10-17T08:00:00.000Z";
     },
     async failSync(input) { test.failures.push(input); },
+    async joinSync(userId, connectionId) {
+      test.joins.push(connectionId);
+      return "2026-10-17T08:00:00.000Z";
+    },
     async resolveConnection(connectionId) { return { institutionKeys: test.linked[connectionId] ?? [] }; },
   };
 }
@@ -115,16 +120,17 @@ describe("importing after an account is linked to a mailbox", () => {
     assert.deepEqual(state.ingests, []);
   });
 
-  it("joins a running import without taking over its status", async () => {
+  it("joins a running import and keeps the status open for both jobs", async () => {
     await importAfterAccountLinked(userId, account("BCA_CC"), "account_added");
     await importAfterAccountLinked(userId, account("CIMB_Octo"), "account_added");
     assert.deepEqual(
       state.ingests.map((ingest) => [ingest.institutionKeys[0], ingest.tracksSync]),
       [
         ["BCA_CC", true],
-        ["CIMB_Octo", false],
+        ["CIMB_Octo", true],
       ],
     );
+    assert.deepEqual(state.joins, [first]);
   });
 
   it("marks the import failed when the agent cannot be reached", async () => {

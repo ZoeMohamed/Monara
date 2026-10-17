@@ -90,6 +90,10 @@ interface Overrides {
   failIds?: string[];
   /** Messages a claim reports as finished, for retried parse jobs. */
   finishedOnClaim?: string[];
+  /** Uncategorized transactions recovered while claiming finished retry messages. */
+  recoveredUncategorized?: string[];
+  /** Simulates a record response whose transaction committed on an earlier attempt. */
+  alreadyFinishedOnRecord?: boolean;
   holderName?: string | null;
   subject?: string;
 }
@@ -157,10 +161,15 @@ function setup(overrides: Overrides = {}) {
       calls.claimedPages.push(input);
       const pending = input.messages
         .map((message) => message.gmailMessageId)
-        .filter((id) => !(overrides.finished ?? []).includes(id));
+        .filter(
+          (id) =>
+            !(overrides.finished ?? []).includes(id) &&
+            !(overrides.finishedOnClaim ?? []).includes(id),
+        );
       return {
         pendingGmailMessageIds: pending,
         pending: pending.map((id) => ({ gmailMessageId: id, processedMessageId: claimId(id) })),
+        uncategorizedTransactionIds: overrides.recoveredUncategorized ?? [],
       };
     },
     async reportSyncFailure(input) {
@@ -182,7 +191,7 @@ function setup(overrides: Overrides = {}) {
       return {
         results: input.results.map((result) => ({
           transactionIds: result.outcome === "transactions" ? uncategorized : [],
-          alreadyFinished: false,
+          alreadyFinished: overrides.alreadyFinishedOnRecord ?? false,
           uncategorizedTransactionIds: result.outcome === "transactions" ? uncategorized : [],
         })),
       };
@@ -609,6 +618,8 @@ describe("processBatch", () => {
     const { pipeline, calls } = setup({ finishedOnClaim: ["m1"] });
     await pipeline.runJob(parseJob(["m1", "m2"]), { isFinalAttempt: false, isRetry: true });
     assert.deepEqual(calls.fetched, ["m2"]);
+    assert.equal(calls.claimedPages.length, 1, "a retry reclaims the whole batch in one request");
+    assert.deepEqual(calls.claim, []);
     assert.deepEqual(
       calls.record.map((result) => result.processedMessageId),
       [claimId("m2")],
@@ -620,6 +631,32 @@ describe("processBatch", () => {
       "already_finished",
     );
     assert.deepEqual(done.calls.fetched, []);
+  });
+
+  it("requeues categorization for a transaction committed before a retry", async () => {
+    const { pipeline, calls } = setup({
+      finishedOnClaim: ["m1"],
+      recoveredUncategorized: [transactionId],
+    });
+    assert.equal(
+      await pipeline.runJob(parseJob(["m1"]), { isFinalAttempt: false, isRetry: true }),
+      "already_finished",
+    );
+    assert.deepEqual(calls.fetched, []);
+    assert.deepEqual(calls.merchantJobs, [
+      { kind: "merchant.categorize", transactionIds: [transactionId] },
+    ]);
+  });
+
+  it("requeues categorization when a retried record is already finished", async () => {
+    const { pipeline, calls } = setup({
+      uncategorized: [transactionId],
+      alreadyFinishedOnRecord: true,
+    });
+    assert.equal(await pipeline.runJob(parseJob(["m1"]), notFinal), "transactions");
+    assert.deepEqual(calls.merchantJobs, [
+      { kind: "merchant.categorize", transactionIds: [transactionId] },
+    ]);
   });
 
   it("skips mail from senders the User has no account for, without the model", async () => {
