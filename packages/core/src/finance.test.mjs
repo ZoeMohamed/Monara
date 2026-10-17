@@ -382,6 +382,7 @@ describe("Budget threshold events", () => {
       },
       async createBudgetThresholdReminder(input) {
         dedupe.add(input.dedupeKey);
+        return null;
       },
     };
     const service = createFinanceService(repository, {
@@ -707,13 +708,14 @@ function createMemoryFinanceRepository() {
     },
     async createBudgetThresholdReminder(input) {
       const scopedKey = `${input.userId}:${input.dedupeKey}`;
-      if (reminderKeys.has(scopedKey)) return;
+      if (reminderKeys.has(scopedKey)) return null;
       reminderKeys.add(scopedKey);
       const createdAt = stamp();
+      const id = nextId();
       reminders.push({
         ownerId: input.userId,
         value: {
-          id: nextId(),
+          id,
           kind: "budget_threshold",
           status: "unread",
           budgetId: input.budget.id,
@@ -727,6 +729,7 @@ function createMemoryFinanceRepository() {
           updatedAt: createdAt,
         },
       });
+      return id;
     },
     async createDestructiveConfirmation(input) {
       const confirmationId = nextId();
@@ -1475,5 +1478,71 @@ describe("ZO6-ZO8 backend journey simulation", () => {
     });
     assert.equal((await service.listBudgets(callerA, {})).items.length, 0);
     assert.ok(editedExpense.action.actionId);
+  });
+});
+
+describe("budget alert hook", () => {
+  it("reports each new threshold Reminder once and describes it for WhatsApp", async () => {
+    const memory = createMemoryFinanceRepository();
+    const reported = [];
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-15T01:00:30.000Z"),
+      onBudgetReminder: (input) => reported.push(input),
+    });
+    await service.createBudget(callerA, {
+      clientRequestId: "alert-budget",
+      categoryId: category.id,
+      name: "Food",
+      cadence: "monthly",
+      limit: { amountMinor: "1000000", currency: "IDR" },
+      warningPercent: 80,
+      startsOn: "2026-10-01",
+    });
+    const spend = (clientRequestId, amountMinor) =>
+      service.addTransaction(callerA, {
+        clientRequestId,
+        kind: "expense",
+        merchantName: "Synthetic Warteg",
+        money: { amountMinor, currency: "IDR" },
+        occurredOn: "2026-10-15",
+        occurredTime: null,
+        description: null,
+        location: null,
+        accountHint: null,
+        categoryId: category.id,
+        financialAccountId: "40000000-0000-4000-8000-000000000004",
+      });
+    await spend("alert-1", "850000");
+    await spend("alert-2", "10000");
+    assert.equal(reported.length, 1, "the 80% Reminder was reported more than once");
+    assert.equal(reported[0].userId, ownerA);
+
+    assert.deepEqual(await service.describeBudgetAlert(ownerA, reported[0].reminderId), {
+      budgetName: "Food",
+      used: { amountMinor: "860000", currency: "IDR" },
+      limit: { amountMinor: "1000000", currency: "IDR" },
+      periodEndsOn: "2026-10-31",
+    });
+    assert.equal(await service.describeBudgetAlert(ownerB, reported[0].reminderId), null);
+  });
+
+  it("never fails a write when the hook throws", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-15T01:00:30.000Z"),
+      onBudgetReminder: () => {
+        throw new Error("after() outside a request");
+      },
+    });
+    const created = await service.createBudget(callerA, {
+      clientRequestId: "alert-budget-throw",
+      categoryId: category.id,
+      name: "Food",
+      cadence: "monthly",
+      limit: { amountMinor: "1", currency: "IDR" },
+      warningPercent: 80,
+      startsOn: "2026-10-01",
+    });
+    assert.equal(created.budget.name, "Food");
   });
 });

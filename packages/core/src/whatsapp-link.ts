@@ -47,7 +47,7 @@ export function normalisePhone(input: string): string | null {
 
 /**
  * The stored form of a number: a keyed hash for lookup and the last four digits
- * for display. The plain number is never stored.
+ * for display. The plain number is never stored; see encryptPhone for Reminders.
  */
 export async function protectPhone(
   phoneE164: string,
@@ -57,6 +57,60 @@ export async function protectPhone(
     phoneE164Hmac: await hmacHex(secret, `phone:${phoneE164}`),
     phoneLastFour: phoneE164.slice(-4),
   };
+}
+
+const PHONE_CIPHER_VERSION = "v1";
+
+async function phoneKey(secret: string): Promise<CryptoKey> {
+  if (!secret) throw new Error("A WhatsApp Link secret is required.");
+  const base = await crypto.subtle.importKey("raw", encoder.encode(secret), "HKDF", false, [
+    "deriveKey",
+  ]);
+  return crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(0),
+      info: encoder.encode("monara:whatsapp-phone:v1"),
+    },
+    base,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
+const fromBase64 = (text: string) => Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
+
+/**
+ * Encrypts a verified number so Reminders can be sent to it (PRD F13). Only the
+ * backend holds the key; the stored value reveals nothing without it.
+ */
+export async function encryptPhone(phoneE164: string, secret: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const sealed = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    await phoneKey(secret),
+    encoder.encode(phoneE164),
+  );
+  return `${PHONE_CIPHER_VERSION}.${toBase64(iv)}.${toBase64(new Uint8Array(sealed))}`;
+}
+
+/** The number in E.164, or null when the value was not sealed with this secret. */
+export async function decryptPhone(ciphertext: string, secret: string): Promise<string | null> {
+  const [version, iv, sealed] = ciphertext.split(".");
+  if (version !== PHONE_CIPHER_VERSION || !iv || !sealed) return null;
+  try {
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: fromBase64(iv) },
+      await phoneKey(secret),
+      fromBase64(sealed),
+    );
+    return normalisePhone(new TextDecoder().decode(plain));
+  } catch {
+    return null;
+  }
 }
 
 // Bound to the number, so a code issued for one number is useless for another.

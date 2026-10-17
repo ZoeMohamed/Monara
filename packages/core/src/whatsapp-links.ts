@@ -13,6 +13,7 @@ import { FinanceOperationError } from "./finance.ts";
 import {
   checkVerificationCode,
   createVerificationChallenge,
+  encryptPhone,
   normalisePhone,
   protectPhone,
 } from "./whatsapp-link.ts";
@@ -51,7 +52,14 @@ export interface WhatsAppLinkRepository {
    */
   claimAttempt(input: { id: string; codeDigest: string; attempts: number }): Promise<boolean>;
   /** Verifies the link only while it still holds this challenge. False when it does not. */
-  markVerified(input: { id: string; codeDigest: string; verifiedAt: string }): Promise<boolean>;
+  markVerified(input: {
+    id: string;
+    codeDigest: string;
+    phoneCiphertext: string;
+    verifiedAt: string;
+  }): Promise<boolean>;
+  /** Linking WhatsApp opts the User in to WhatsApp Reminders (PRD F13). */
+  enableWhatsAppReminders(userId: string): Promise<void>;
   /** Revokes a pending link locked by too many attempts, only while it holds this challenge. */
   lockPending(input: { id: string; codeDigest: string }): Promise<void>;
   touchInbound(input: { id: string; at: string }): Promise<void>;
@@ -158,8 +166,11 @@ export function createWhatsAppLinkService(input: {
 
       let reason: WhatsAppCodeRejection | null = null;
       for (const found of links) {
-        const outcome = await tryCode(found, verificationCode, key, at);
-        if (outcome === "verified") return { status: "verified", userId: found.userId };
+        const outcome = await tryCode(found, verificationCode, key, at, phoneE164);
+        if (outcome === "verified") {
+          await repository.enableWhatsAppReminders(found.userId);
+          return { status: "verified", userId: found.userId };
+        }
         reason = outcome ?? reason;
       }
       return reason ? { status: "code_rejected", reason } : { status: "unlinked" };
@@ -177,6 +188,7 @@ export function createWhatsAppLinkService(input: {
     code: string,
     key: string,
     at: Date,
+    phoneE164: string,
   ): Promise<"verified" | WhatsAppCodeRejection | null> {
     let link: StoredWhatsAppLink | null = found;
     for (let round = 0; round < CLAIM_RETRIES; round++) {
@@ -209,6 +221,7 @@ export function createWhatsAppLinkService(input: {
           const verified = await repository.markVerified({
             id: link.id,
             codeDigest,
+            phoneCiphertext: await encryptPhone(phoneE164, key),
             verifiedAt: at.toISOString(),
           });
           return verified ? "verified" : "incorrect";

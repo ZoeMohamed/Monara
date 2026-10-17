@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { FinanceOperationError } from "./finance.ts";
-import { MAX_VERIFICATION_ATTEMPTS } from "./whatsapp-link.ts";
+import { decryptPhone, MAX_VERIFICATION_ATTEMPTS } from "./whatsapp-link.ts";
 import { createWhatsAppLinkService } from "./whatsapp-links.ts";
 
 const userA = "60000000-0000-4000-8000-000000000006";
@@ -11,10 +11,12 @@ const sender = "+6281200000001";
 
 function createMemoryLinks() {
   const rows = [];
+  const optedIn = new Set();
   let sequence = 0;
   const byId = (id) => rows.find((row) => row.id === id);
   return {
     rows,
+    optedIn,
     repository: {
       async findByUser(userId) {
         const row = rows.find((candidate) => candidate.userId === userId);
@@ -61,9 +63,13 @@ function createMemoryLinks() {
           verificationCodeDigest: null,
           verificationExpiresAt: null,
           verificationAttempts: 0,
+          phoneCiphertext: input.phoneCiphertext,
           verifiedAt: input.verifiedAt,
         });
         return true;
+      },
+      async enableWhatsAppReminders(userId) {
+        optedIn.add(userId);
       },
       async lockPending(input) {
         const row = byId(input.id);
@@ -130,6 +136,11 @@ describe("WhatsApp Link service", () => {
       userId: userA,
     });
     assert.equal((await service.status(userA)).status, "verified");
+    assert.ok(memory.optedIn.has(userA), "linking did not opt in to WhatsApp Reminders");
+    const sealed = memory.rows[0].phoneCiphertext;
+    assert.ok(sealed && !sealed.includes("81200000001"), "the number was not encrypted");
+    assert.equal(await decryptPhone(sealed, "test-link-secret"), sender);
+    assert.equal(await decryptPhone(sealed, "another-secret"), null);
 
     await service.unlink(userA);
     assert.deepEqual(await service.status(userA), { status: "none" });

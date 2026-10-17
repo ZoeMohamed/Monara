@@ -8,6 +8,7 @@ import {
   scheduleGmailSyncs,
 } from "./gmail/index.ts";
 import { healthResponse, notFoundResponse } from "./http.ts";
+import { dispatchReminders } from "./reminders.ts";
 import { handleKapsoWebhook } from "./whatsapp/index.ts";
 
 export { WhatsAppConversation } from "./whatsapp/conversation.ts";
@@ -36,8 +37,10 @@ export default {
     return notFoundResponse();
   },
 
-  scheduled(_controller, env) {
-    return scheduleGmailSyncs(env);
+  async scheduled(_controller, env) {
+    // Reminder dispatch logs its own failures; a Gmail failure still fails the run as before.
+    const [gmail] = await Promise.allSettled([scheduleGmailSyncs(env), dispatchReminders(env)]);
+    if (gmail.status === "rejected") throw gmail.reason;
   },
 
   queue(batch, env) {

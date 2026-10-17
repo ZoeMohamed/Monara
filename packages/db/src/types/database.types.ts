@@ -313,14 +313,14 @@ isOneToOne: false
                   ]
                 },"whatsapp_links": {
                   Row: {
-                    "created_at": string,"id": string,"kapso_contact_id": string | null,"last_inbound_at": string | null,"phone_e164_hmac": string,"phone_last_four": string,"status": string,"updated_at": string,"user_id": string,"verification_attempts": number,"verification_code_digest": string | null,"verification_expires_at": string | null,"verified_at": string | null
+                    "created_at": string,"id": string,"kapso_contact_id": string | null,"last_inbound_at": string | null,"phone_e164_ciphertext": string | null,"phone_e164_hmac": string,"phone_last_four": string,"status": string,"updated_at": string,"user_id": string,"verification_attempts": number,"verification_code_digest": string | null,"verification_expires_at": string | null,"verified_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_hmac": string,"phone_last_four": string,"status"?: string,"updated_at"?: string,"user_id": string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
+                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_ciphertext"?: string | null,"phone_e164_hmac": string,"phone_last_four": string,"status"?: string,"updated_at"?: string,"user_id": string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_hmac"?: string,"phone_last_four"?: string,"status"?: string,"updated_at"?: string,"user_id"?: string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
+                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_ciphertext"?: string | null,"phone_e164_hmac"?: string,"phone_last_four"?: string,"status"?: string,"updated_at"?: string,"user_id"?: string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
                   }
                   Relationships: [
 

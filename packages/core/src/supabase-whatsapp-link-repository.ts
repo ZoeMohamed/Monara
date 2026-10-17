@@ -79,6 +79,7 @@ export function createSupabaseWhatsAppLinkRepository(
           phone_e164_hmac: input.phoneE164Hmac,
           phone_last_four: input.phoneLastFour,
           kapso_contact_id: null,
+          phone_e164_ciphertext: null,
           status: "pending",
           verification_code_digest: input.codeDigest,
           verification_expires_at: input.expiresAt,
@@ -112,6 +113,7 @@ export function createSupabaseWhatsAppLinkRepository(
           verification_code_digest: null,
           verification_expires_at: null,
           verification_attempts: 0,
+          phone_e164_ciphertext: input.phoneCiphertext,
           verified_at: input.verifiedAt,
           last_inbound_at: input.verifiedAt,
         })
@@ -121,6 +123,13 @@ export function createSupabaseWhatsAppLinkRepository(
         .select("id");
       if (result.error) fail(result.error);
       return result.data.length === 1;
+    },
+
+    async enableWhatsAppReminders(userId) {
+      const result = await client
+        .from("reminder_preferences")
+        .upsert({ user_id: userId, whatsapp_enabled: true }, { onConflict: "user_id" });
+      if (result.error) fail();
     },
 
     async lockPending(input) {
@@ -152,6 +161,7 @@ export function createSupabaseWhatsAppLinkRepository(
           status: "revoked",
           verification_code_digest: null,
           verification_expires_at: null,
+          phone_e164_ciphertext: null,
         })
         .eq("user_id", userId)
         .neq("status", "revoked");
