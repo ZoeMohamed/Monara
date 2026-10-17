@@ -18,8 +18,10 @@ export {
   isGmailIngestionOperation,
   runGmailIngestionOperation,
 } from "./gmail-ingestion.ts";
+export { createProfileService, type ProfileRepository, type ProfileService } from "./profile.ts";
 export { createSupabaseFinanceRepository } from "./supabase-finance-repository.ts";
 export { createSupabaseGmailIngestionRepository } from "./supabase-gmail-ingestion-repository.ts";
+export { createSupabaseProfileRepository } from "./supabase-profile-repository.ts";
 export { createSupabaseWhatsAppLinkRepository } from "./supabase-whatsapp-link-repository.ts";
 export * from "./whatsapp-link.ts";
 export {

@@ -260,6 +260,7 @@ erDiagram
 ### Profiles and Financial Accounts
 
 - `profiles.id` equals `auth.users.id`. Default timezone is `Asia/Jakarta`; MVP currency is `IDR`.
+- `profiles.full_name` is nullable (1 to 150 characters once set). Onboarding asks for it; `display_name` stays what Google sent. Categorization compares it with a payment's recipient to recognise transfers between the User's own accounts. Only the backend writes it, since signed-in browsers have select-only access to `profiles`.
 - Financial Account types are exactly `bank`, `wallet`, or `cash` for the MVP.
 - Financial Accounts do not store balances. Dashboard account figures are calculated from confirmed income and expense rows; transfers are excluded from spending and income totals.
 - Financial Account creates carry a `client_request_id` that is unique per User. Account deletion is outside the MVP and is not exposed to the Agent. Setting `is_active = false` stops new writes from selecting the Account while historical transactions keep their reference.
