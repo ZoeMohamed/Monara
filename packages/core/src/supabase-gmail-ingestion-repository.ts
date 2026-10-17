@@ -78,9 +78,10 @@ export function createSupabaseGmailIngestionRepository(
         for (let offset = 0; ; offset += ACCOUNT_PAGE_SIZE) {
           const accounts = await client
             .from("financial_accounts")
-            .select("gmail_connection_id")
+            .select("id, gmail_connection_id")
             .eq("is_active", true)
             .in("gmail_connection_id", connectionIds)
+            .order("id", { ascending: true })
             .range(offset, offset + ACCOUNT_PAGE_SIZE - 1);
           if (accounts.error) fail(accounts.error);
           for (const account of accounts.data) fed.add(account.gmail_connection_id);

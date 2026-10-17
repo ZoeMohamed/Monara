@@ -52,12 +52,16 @@ declare
   v_requested_at timestamptz;
 begin
   update public.gmail_connections
-    set sync_pending_runs = sync_pending_runs + 1,
+    set sync_state = 'listing',
+      sync_pending_runs = case
+        when sync_state = 'listed' then 1
+        else sync_pending_runs + 1
+      end,
       sync_updated_at = statement_timestamp()
     where id = p_connection_id
       and user_id = p_user_id
       and status = 'active'
-      and sync_state in ('queued', 'listing')
+      and sync_state in ('queued', 'listing', 'listed')
     returning sync_requested_at into v_requested_at;
   if not found then
     raise exception using errcode = '55000', message = 'There is no Gmail sync to join.';

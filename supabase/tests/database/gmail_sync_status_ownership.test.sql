@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(28);
+select plan(30);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001 and the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234). User 2 owns neither.
@@ -136,6 +136,26 @@ select is(
   ),
   row('running', 4::bigint)::text,
   'a listed sync keeps running while its messages are being extracted'
+);
+
+select ok(
+  public.join_gmail_sync(
+    '10000000-0000-4000-8000-000000000001',
+    '12000000-0000-4000-8000-000000000001'
+  ) is not null,
+  'an account-linked import can join while listed messages are still extracting'
+);
+
+select is(
+  (select row(sync_state, sync_pending_runs)::text from public.gmail_connections
+    where id = '12000000-0000-4000-8000-000000000001'),
+  row('listing', 1)::text,
+  'joining a listed sync starts one new listing run'
+);
+
+select public.mark_gmail_connection_synced(
+  '12000000-0000-4000-8000-000000000001',
+  '2026-10-13T10:00:00+07:00'
 );
 
 -- A confident, complete expense naming one of the owner's accounts.

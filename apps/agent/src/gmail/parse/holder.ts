@@ -41,7 +41,7 @@ export function isHolderName(counterparty: string, holderName: string): boolean 
   return other.every((word, index) =>
     index < last
       ? word === holder[index]
-      : word.length >= 3 && holder[index]?.startsWith(word) === true,
+      : word === holder[index] || (word.length >= 3 && holder[index]?.startsWith(word) === true),
   );
 }
 

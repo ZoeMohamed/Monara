@@ -45,6 +45,10 @@ describe("isHolderName", () => {
     assert.equal(isHolderName("SUKARNO", "Sukarno"), true);
     assert.equal(isHolderName("Sukarno Putra", "Sukarno"), false);
   });
+
+  it("accepts an exact short final word in a truncated holder name", () => {
+    assert.equal(isHolderName("MUHAMMAD AL", "Muhammad Al Farisi"), true);
+  });
 });
 
 describe("applyHolderRules", () => {
