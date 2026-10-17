@@ -20,6 +20,10 @@
   transform: none;
 }
 
+.row[data-kind="exclusion"] {
+  opacity: 0.82;
+}
+
 @media (hover: hover) {
   button.row:hover,
   button.row[data-hovered="true"] {

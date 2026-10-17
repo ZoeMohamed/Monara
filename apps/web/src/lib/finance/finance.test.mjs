@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { budgetUsage, transactionErrors } from "../../data/demo-ledger.ts";
+import { budgetUsage, reviewFlags, transactionErrors } from "../../data/demo-ledger.ts";
 import { callFinanceOperation, FinanceClientError } from "./client.ts";
 import {
   FinancePresentationError,
@@ -24,6 +24,7 @@ const accounts = [accountId, secondAccountId].map((id, index) => ({
   accountType: "bank",
   currency: "IDR",
   lastFour: null,
+  institutionKey: null,
   isActive: true,
   createdAt: timestamp,
   updatedAt: timestamp,
@@ -55,8 +56,6 @@ function record(overrides = {}) {
     accountHint: null,
     categoryId,
     financialAccountId: accountId,
-    fromFinancialAccountId: null,
-    toFinancialAccountId: null,
     reviewStatus: "pending",
     source: "gmail_email",
     confidence: 0.94,
@@ -148,20 +147,29 @@ describe("owned financial presentation", () => {
     assert.equal(mapped.status, "pending");
   });
 
-  it("maps arbitrary owned transfer pairs without treating account names as identity", () => {
+  it("allows Gmail expense review without inventing an account or requiring a Category", () => {
+    const mapped = mapOwnedTransaction(
+      record({ financialAccountId: null, categoryId: null }),
+      accounts,
+      categories,
+    );
+    assert.deepEqual(transactionErrors(mapped), {});
+    assert.deepEqual(reviewFlags(mapped), ["Financial account not assigned", "Low confidence"]);
+  });
+
+  it("maps an exclusion record with one owned Account/payment method", () => {
     const mapped = mapOwnedTransaction(
       record({
-        kind: "transfer",
-        financialAccountId: null,
-        fromFinancialAccountId: accountId,
-        toFinancialAccountId: secondAccountId,
+        kind: "exclusion",
+        reviewStatus: "confirmed",
+        categoryId: null,
+        financialAccountId: secondAccountId,
       }),
       accounts,
       categories,
     );
-    assert.equal(mapped.method, "Same display name → Savings");
-    assert.equal(mapped.backend.fromFinancialAccountId, accountId);
-    assert.equal(mapped.backend.toFinancialAccountId, secondAccountId);
+    assert.equal(mapped.method, "Savings");
+    assert.equal(mapped.backend.financialAccountId, secondAccountId);
     assert.throws(() => mapOwnedTransaction(record(), [], categories), FinancePresentationError);
   });
 
@@ -189,7 +197,7 @@ describe("owned financial presentation", () => {
     }
   });
 
-  it("permits unassigned imported expenses without weakening transfer validation", () => {
+  it("permits unassigned imported transactions without inventing an Account", () => {
     const imported = mapOwnedTransaction(
       record({ financialAccountId: null, reviewStatus: "confirmed" }),
       accounts,
@@ -197,15 +205,21 @@ describe("owned financial presentation", () => {
     );
     assert.equal(imported.method, null);
     assert.deepEqual(transactionErrors(imported), {});
-    const transfer = mapOwnedTransaction(
-      record({ kind: "transfer", financialAccountId: null }),
+    const excluded = mapOwnedTransaction(
+      record({
+        kind: "exclusion",
+        reviewStatus: "confirmed",
+        financialAccountId: null,
+        categoryId: null,
+      }),
       accounts,
       categories,
     );
-    assert.match(transactionErrors(transfer).method, /source and destination/);
+    assert.equal(excluded.method, null);
+    assert.deepEqual(transactionErrors(excluded), {});
   });
 
-  it("loads every page, excludes rejected/deleted records, and never inserts samples", async () => {
+  it("loads every page, retains exclusion audit records, drops deleted rows, and never inserts samples", async () => {
     const cursors = [];
     const read = emptyReader(async (input) => {
       cursors.push(input.cursor);
@@ -213,7 +227,11 @@ describe("owned financial presentation", () => {
         ? { items: [record()], nextCursor: "next-page" }
         : {
             items: [
-              record({ id: "00000000-0000-4000-8000-000000000302", reviewStatus: "rejected" }),
+              record({
+                id: "00000000-0000-4000-8000-000000000302",
+                kind: "exclusion",
+                reviewStatus: "confirmed",
+              }),
               record({ id: "00000000-0000-4000-8000-000000000303", deletedAt: timestamp }),
             ],
             nextCursor: null,
@@ -221,8 +239,10 @@ describe("owned financial presentation", () => {
     });
     const snapshot = await loadFinanceSnapshot(read, "2026-10", "2026-10-14");
     assert.deepEqual(cursors, [null, "next-page"]);
-    assert.equal(snapshot.transactions.length, 1);
+    assert.equal(snapshot.transactions.length, 2);
     assert.equal(snapshot.transactions[0].backend.id, transactionId);
+    assert.equal(snapshot.transactions[1].kind, "exclusion");
+    assert.equal(snapshot.transactions[1].status, "confirmed");
     assert.equal(snapshot.today, "2026-10-14");
     assert.deepEqual((await loadFinanceSnapshot(emptyReader(), "2026-10")).transactions, []);
   });
@@ -578,7 +598,8 @@ describe("financial HTTP boundary", () => {
       input,
       async (path, options) => {
         assert.equal(path, "/api/finance/operations/create_financial_account");
-        assert.deepEqual(JSON.parse(options.body), input);
+        // The client fills the optional Gmail institution with its default, none.
+        assert.deepEqual(JSON.parse(options.body), { ...input, institutionKey: null });
         return Response.json({
           financialAccount: saved,
           action: action("financial_account", accountId),
@@ -650,7 +671,7 @@ describe("financial HTTP boundary", () => {
   it("rejects invalid input before issuing a request", async () => {
     let requests = 0;
     await assert.rejects(
-      callFinanceOperation("reject_pending", { transactionId }, async () => {
+      callFinanceOperation("exclude_pending", { transactionId }, async () => {
         requests += 1;
         return Response.json({});
       }),
@@ -682,7 +703,7 @@ describe("financial HTTP boundary", () => {
   it("preserves stale-conflict and field errors without claiming a write completed", async () => {
     await assert.rejects(
       callFinanceOperation(
-        "reject_pending",
+        "exclude_pending",
         { transactionId, expectedUpdatedAt: timestamp },
         async () =>
           Response.json(
@@ -713,7 +734,7 @@ describe("financial HTTP boundary", () => {
     ]) {
       await assert.rejects(
         callFinanceOperation(
-          "reject_pending",
+          "exclude_pending",
           { transactionId, expectedUpdatedAt: timestamp },
           fetcher,
         ),

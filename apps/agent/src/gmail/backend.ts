@@ -1,24 +1,50 @@
 import {
   type ClaimGmailMessageInput,
   type ClaimGmailMessageResult,
+  type ClaimGmailMessagesInput,
+  type ClaimGmailMessagesResult,
+  type ClaimMerchantProfileResult,
   claimGmailMessageInputSchema,
   claimGmailMessageResultSchema,
+  claimGmailMessagesInputSchema,
+  claimGmailMessagesResultSchema,
+  claimMerchantProfileInputSchema,
+  claimMerchantProfileResultSchema,
+  emptyResultSchema,
   type ListActiveGmailConnectionsResult,
   listActiveGmailConnectionsResultSchema,
   type MarkGmailConnectionSyncedInput,
   markGmailConnectionSyncedInputSchema,
   markGmailConnectionSyncedResultSchema,
   operationErrorSchema,
+  type RecordGmailDiscoveryInput,
   type RecordGmailExtractionInput,
   type RecordGmailExtractionResult,
   type ReportGmailConnectionErrorInput,
+  type ReportGmailSyncFailureInput,
   type ResolvedGmailConnection,
+  type ResolvedImportedTransaction,
+  recordGmailDiscoveryInputSchema,
   recordGmailExtractionInputSchema,
   recordGmailExtractionResultSchema,
+  releaseMerchantProfileInputSchema,
   reportGmailConnectionErrorInputSchema,
   reportGmailConnectionErrorResultSchema,
+  reportGmailDiscoveryFailureInputSchema,
+  reportGmailSyncFailureInputSchema,
+  reportGmailSyncFailureResultSchema,
   resolvedGmailConnectionSchema,
+  resolvedImportedTransactionSchema,
   resolveGmailConnectionInputSchema,
+  resolveImportedTransactionInputSchema,
+  type SaveMerchantProfileInput,
+  type SetImportedCategoryInput,
+  saveMerchantProfileInputSchema,
+  setImportedCategoryInputSchema,
+  setImportedCategoryResultSchema,
+  startGmailDiscoveryInputSchema,
+  startGmailSyncInputSchema,
+  startGmailSyncResultSchema,
 } from "@monara/contracts";
 import type { z } from "zod";
 
@@ -132,6 +158,95 @@ export function createGmailBackend(config: BackendConfig) {
         recordGmailExtractionInputSchema.parse(input),
         recordGmailExtractionResultSchema,
       );
+    },
+
+    async startSync(connectionId: string): Promise<void> {
+      await call(
+        "gmail.start-sync",
+        startGmailSyncInputSchema.parse({ connectionId }),
+        startGmailSyncResultSchema,
+      );
+    },
+
+    claimMessages(input: ClaimGmailMessagesInput): Promise<ClaimGmailMessagesResult> {
+      return call(
+        "gmail.claim-messages",
+        claimGmailMessagesInputSchema.parse(input),
+        claimGmailMessagesResultSchema,
+      );
+    },
+
+    async reportSyncFailure(input: ReportGmailSyncFailureInput): Promise<void> {
+      await call(
+        "gmail.report-sync-failure",
+        reportGmailSyncFailureInputSchema.parse(input),
+        reportGmailSyncFailureResultSchema,
+      );
+    },
+
+    async startDiscovery(connectionId: string): Promise<void> {
+      await call(
+        "gmail.start-discovery",
+        startGmailDiscoveryInputSchema.parse({ connectionId }),
+        emptyResultSchema,
+      );
+    },
+
+    async recordDiscovery(input: RecordGmailDiscoveryInput): Promise<void> {
+      await call(
+        "gmail.record-discovery",
+        recordGmailDiscoveryInputSchema.parse(input),
+        emptyResultSchema,
+      );
+    },
+
+    async reportDiscoveryFailure(connectionId: string): Promise<void> {
+      await call(
+        "gmail.report-discovery-failure",
+        reportGmailDiscoveryFailureInputSchema.parse({ connectionId }),
+        emptyResultSchema,
+      );
+    },
+
+    resolveImportedTransaction(transactionId: string): Promise<ResolvedImportedTransaction> {
+      return call(
+        "gmail.resolve-imported-transaction",
+        resolveImportedTransactionInputSchema.parse({ transactionId }),
+        resolvedImportedTransactionSchema,
+      );
+    },
+
+    claimMerchantProfile(merchantName: string): Promise<ClaimMerchantProfileResult> {
+      return call(
+        "gmail.claim-merchant-profile",
+        claimMerchantProfileInputSchema.parse({ merchantName }),
+        claimMerchantProfileResultSchema,
+      );
+    },
+
+    async saveMerchantProfile(input: SaveMerchantProfileInput): Promise<void> {
+      await call(
+        "gmail.save-merchant-profile",
+        saveMerchantProfileInputSchema.parse(input),
+        emptyResultSchema,
+      );
+    },
+
+    async releaseMerchantProfile(merchantName: string): Promise<void> {
+      await call(
+        "gmail.release-merchant-profile",
+        releaseMerchantProfileInputSchema.parse({ merchantName }),
+        emptyResultSchema,
+      );
+    },
+
+    async setImportedCategory(input: SetImportedCategoryInput): Promise<boolean> {
+      const result = await call(
+        "gmail.set-imported-category",
+        setImportedCategoryInputSchema.parse(input),
+        setImportedCategoryResultSchema,
+      );
+      return result.applied;
     },
 
     async markSynced(input: MarkGmailConnectionSyncedInput): Promise<void> {

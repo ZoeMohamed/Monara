@@ -140,4 +140,13 @@ describe("Composio Gmail client", () => {
     );
     assert.equal(calls.length, 1);
   });
+
+  it("removes a replaced account without revoking the shared Google grant", async () => {
+    const { calls, fetcher } = fakeFetch({ status: 200 });
+    await client(fetcher).removeConnection("ca_1");
+    assert.deepEqual(
+      calls.map((call) => [call.method, call.url.replace("https://composio.test/api/v3.1", "")]),
+      [["DELETE", "/connected_accounts/ca_1"]],
+    );
+  });
 });

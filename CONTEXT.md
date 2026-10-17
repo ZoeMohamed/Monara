@@ -17,7 +17,7 @@ A transaction extracted from a source that awaits review and does not contribute
 _Avoid_: Confirmed transaction when review is outstanding
 
 **Confirmed Transaction**:
-A reviewed transaction included in the User's financial totals.
+A reviewed transaction included in the User's financial totals. A Gmail import is confirmed without review only when its sender is authenticated and the extraction is confident and complete.
 _Avoid_: Pending transaction
 
 **Gmail Connection**:
@@ -43,7 +43,7 @@ A payment that repeats on a regular cadence, such as a subscription or a utility
 _Avoid_: Subscription when the payment is not one
 
 **Review Queue**:
-The list of Pending Transactions a User confirms, edits, or rejects.
+The list of Pending Transactions a User confirms, edits, or excludes.
 _Avoid_: Inbox
 
 **Expense**:
@@ -54,9 +54,9 @@ _Avoid_: Debit, payment
 A transaction for money received by a User, such as salary, which counts toward income only.
 _Avoid_: Credit, deposit
 
-**Transfer**:
-A movement of money between a User's own Financial Accounts, excluded from both spending and income totals.
-_Avoid_: Payment to another person
+**Excluded Transaction**:
+A confirmed transaction whose type is `exclusion`, intentionally kept out of financial totals, such as an internal transfer, reimbursement, duplicate, or non-personal transaction.
+_Avoid_: Deleting an imported record when it must remain for deduplication
 
 ### Agent
 

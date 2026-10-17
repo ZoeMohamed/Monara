@@ -25,7 +25,7 @@ const CHANGES = new Set([
   "add_transaction",
   "edit_transaction",
   "confirm_pending",
-  "reject_pending",
+  "exclude_pending",
   "create_budget",
   "edit_budget",
   "undo_action",
@@ -99,21 +99,6 @@ const tasks: Scenario[] = [
     },
   },
   {
-    id: "log-transfer",
-    kind: "task",
-    title: "Log a transfer between the User's own accounts",
-    turns: ["moved 500k from BCA to my savings"],
-    check(run) {
-      const { failures, that } = expectations();
-      const [added] = inputsOf(run, "add_transaction");
-      that(added?.kind === "transfer", "the type was not transfer");
-      that(amount(added?.money) === "500000", "the amount was not Rp 500.000");
-      that(added?.fromFinancialAccountId === ACCOUNT.bca, "the source was not BCA");
-      that(added?.toFinancialAccountId === ACCOUNT.savings, "the destination was not BCA Savings");
-      return failures;
-    },
-  },
-  {
     id: "correct-and-undo",
     kind: "task",
     title: "Correct the last action, then undo it",
@@ -140,8 +125,8 @@ const tasks: Scenario[] = [
   {
     id: "review-queue",
     kind: "task",
-    title: "Review Queue: list, confirm one, reject the other",
-    turns: ["what's waiting for my review?", "confirm the Tokopedia one", "reject the Shopee one"],
+    title: "Review Queue: list, confirm one, exclude the other",
+    turns: ["what's waiting for my review?", "confirm the Tokopedia one", "exclude the Shopee one"],
     check(run) {
       const { failures, that } = expectations();
       const { pendingTokopedia, pendingShopee } = run.ledger.seeded;
@@ -154,7 +139,8 @@ const tasks: Scenario[] = [
         pendingTokopedia.money?.amountMinor === "249000",
         "confirming changed the Tokopedia amount",
       );
-      that(pendingShopee.reviewStatus === "rejected", "Shopee was not rejected");
+      that(pendingShopee.kind === "exclusion", "Shopee was not marked as an exclusion");
+      that(pendingShopee.reviewStatus === "confirmed", "Shopee exclusion was not confirmed");
       return failures;
     },
   },

@@ -61,6 +61,7 @@ export function createSandboxLedger(now: Date) {
       accountType: "bank",
       currency: "IDR",
       lastFour: "4821",
+      institutionKey: null,
       isActive: true,
       createdAt: stamp,
       updatedAt: stamp,
@@ -72,6 +73,7 @@ export function createSandboxLedger(now: Date) {
       accountType: "wallet",
       currency: "IDR",
       lastFour: null,
+      institutionKey: null,
       isActive: true,
       createdAt: stamp,
       updatedAt: stamp,
@@ -83,6 +85,7 @@ export function createSandboxLedger(now: Date) {
       accountType: "bank",
       currency: "IDR",
       lastFour: "9930",
+      institutionKey: null,
       isActive: true,
       createdAt: stamp,
       updatedAt: stamp,
@@ -121,8 +124,6 @@ export function createSandboxLedger(now: Date) {
       accountHint: null,
       categoryId: null,
       financialAccountId: ACCOUNT.gopay,
-      fromFinancialAccountId: null,
-      toFinancialAccountId: null,
       reviewStatus: "confirmed",
       source: "manual_form",
       confidence: null,
@@ -400,11 +401,15 @@ export function createSandboxLedger(now: Date) {
           action: receipt("transaction", transaction.id, () => Object.assign(transaction, before)),
         };
       }
-      case "reject_pending": {
+      case "exclude_pending": {
         const transaction = find(transactions, input.transactionId);
         if (transaction.reviewStatus !== "pending") throw new Error("CONFLICT");
         const before = { ...transaction };
-        Object.assign(transaction, { reviewStatus: "rejected", updatedAt: touch() });
+        Object.assign(transaction, {
+          kind: "exclusion",
+          reviewStatus: "confirmed",
+          updatedAt: touch(),
+        });
         return {
           transaction,
           action: receipt("transaction", transaction.id, () => Object.assign(transaction, before)),

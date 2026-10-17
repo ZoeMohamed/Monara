@@ -103,17 +103,17 @@ export const initialTransactions: Transaction[] = [
   },
   {
     id: "00000000-0000-4000-8000-000000000008",
-    merchant: "Move to savings",
+    merchant: "Reimbursement",
     category: null,
     amount: 500000,
     currency: "IDR",
     date: "2026-10-03",
     time: "12:00",
-    method: "BCA → Jago",
-    emoji: "↔",
+    method: "BCA",
+    emoji: "⊘",
     confidence: 98,
-    status: "pending",
-    kind: "transfer",
+    status: "confirmed",
+    kind: "exclusion",
   },
   {
     id: "00000000-0000-4000-8000-000000000009",
@@ -161,7 +161,7 @@ type HistoryRow = [
   time: string,
   method: string,
   emoji: string,
-  kind?: "expense" | "income",
+  kind?: "expense" | "income" | "exclusion",
 ];
 
 function history(rows: HistoryRow[]): Transaction[] {

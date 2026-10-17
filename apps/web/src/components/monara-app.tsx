@@ -10,6 +10,8 @@ import { Logo } from "@/components/logo";
 import { ModalDialog } from "@/components/modal-dialog";
 import styles from "@/components/monara-app.module.css";
 import { MonaraMascot } from "@/components/monara-mascot";
+import { OnboardingSheets } from "@/components/onboarding";
+import { OnboardingBanner } from "@/components/onboarding-banner";
 import { ProductTour } from "@/components/product-tour";
 import { RemindersCenter } from "@/components/reminders-center";
 import { SessionToast } from "@/components/session-toast";
@@ -224,18 +226,18 @@ function RejectDialog({
     >
       <div className="p-4 sm:p-5">
         <h2 id="reject-title" className="text-xl font-bold">
-          Reject this transaction?
+          Exclude this transaction?
         </h2>
         <p className="mt-3 break-words text-sm leading-6 text-muted">
           {transaction.merchant ?? "This transaction"} will leave the Review Queue and stay out of
-          totals. {transaction.backend ? "This imported record will stay rejected." : ""}
+          totals. {transaction.backend ? "The imported record stays available for audit." : ""}
         </p>
         <div className="mt-4 flex flex-wrap justify-end gap-2 sm:mt-6 sm:gap-3">
           <Button variant="secondary" className="min-h-11" onPress={onCancel} isDisabled={pending}>
             Keep pending
           </Button>
           <Button variant="danger" className="min-h-11" onPress={onReject} isDisabled={pending}>
-            {pending ? "Rejecting…" : "Reject transaction"}
+            {pending ? "Excluding…" : "Exclude transaction"}
           </Button>
         </div>
         {error ? (
@@ -264,7 +266,7 @@ function MissingTransaction({ onClose }: { onClose: () => void }) {
   );
 }
 
-function draftForMonth(month: string, today = demoToday, live = false): TransactionDraft {
+function draftForMonth(month: string, today = demoToday): TransactionDraft {
   return {
     merchant: "",
     amount: "",
@@ -274,7 +276,6 @@ function draftForMonth(month: string, today = demoToday, live = false): Transact
     currency: "IDR",
     category: null,
     method: null,
-    ...(live ? { fromAccount: null, toAccount: null } : {}),
   };
 }
 
@@ -298,7 +299,7 @@ export function MonaraApp({
 }
 
 function AppChrome({ workspace, children }: { workspace: Workspace; children: ReactNode }) {
-  const { session, live, view, mainRef, notice, setNotice, undo, sync } = workspace;
+  const { session, live, view, mainRef, notice, setNotice, undo, sync, onboarding } = workspace;
   const { profile, navigation, today, currentMonth, reminderCount, online, amountsHidden } =
     session;
   return (
@@ -368,6 +369,17 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
                 ) : null}
               </div>
             ) : null}
+            {onboarding.bannerOpen ? (
+              <OnboardingBanner
+                inset={view.screen === "home"}
+                onFinish={onboarding.finish}
+                onOpen={() => {
+                  navigation.navigate({ screen: "home" });
+                  onboarding.reopenImport();
+                }}
+                progress={onboarding.engine.progress}
+              />
+            ) : null}
             {children}
           </main>
         </div>
@@ -382,7 +394,6 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
 function AppSheets({ workspace }: { workspace: Workspace }) {
   const {
     session,
-    live,
     view,
     selected,
     editing,
@@ -400,6 +411,8 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
     missing,
     tourPending,
     tourMode,
+    finishTour,
+    onboarding,
     rejectSelected,
     resources,
     sync,
@@ -439,8 +452,8 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
       {view.adding ? (
         <TransactionEditor
           key={editorKey}
-          initialDraft={drafts[editorKey] ?? draftForMonth(view.month, today, live)}
-          pristineDraft={draftForMonth(view.month, today, live)}
+          initialDraft={drafts[editorKey] ?? draftForMonth(view.month, today)}
+          pristineDraft={draftForMonth(view.month, today)}
           onDraftChange={(draft) => setDrafts((items) => ({ ...items, [editorKey]: draft }))}
           onClose={closeEditor}
           onSave={add}
@@ -460,7 +473,8 @@ function AppSheets({ workspace }: { workspace: Workspace }) {
           onReject={rejectSelected}
         />
       ) : null}
-      {tourPending ? <ProductTour mode={tourMode} /> : null}
+      <OnboardingSheets onboarding={onboarding} />
+      {tourPending ? <ProductTour mode={tourMode} onFinish={finishTour} /> : null}
       {view.remindersOpen ? <RemindersCenter onClose={navigation.closePopup} /> : null}
     </>
   );

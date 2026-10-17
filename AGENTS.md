@@ -26,7 +26,7 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 - Verify identity and resource ownership on the server. Never trust a user ID, phone number, or connection ID supplied by a caller as proof of authorization.
 - Supabase Auth uses Google sign-in. Composio Gmail authorization is a separate connection.
 - A WhatsApp number must be explicitly linked and verified by the signed-in User.
-- Extracted transactions start pending review; confirmed transactions affect totals. Duplicate email processing must not create duplicate transactions.
+- Extracted transactions start pending review; confirmed transactions affect totals. The only exception is a Gmail expense or income from a sender Gmail authenticated (DKIM or SPF) that the extractor is confident about (`public.gmail_auto_confirm_confidence()`), with an amount, a date, and a Financial Account mapped from the sender's institution; it is confirmed on import. Gmail sync reads only the senders listed for the User's own accounts in `packages/contracts/src/institutions/institution-senders.json`. Duplicate email processing must not create duplicate transactions.
 - Keep database access behind repositories, with ownership checks and RLS. Never treat a service-role key as a replacement for authorization.
 - Real data operations require connectivity initially. Do not cache financial data or auth responses in the service worker.
 - Never invent financial amounts, dates, currencies, or account mappings when extraction is uncertain.
@@ -63,7 +63,7 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 
 ## Local environments
 
-- Each linked worktree has its own ports, env files, and Supabase stack, set up by `pnpm install`. Start servers with `pnpm dev` and `pnpm dev:agent`, and the database with `pnpm db:start`, so they use the worktree's ports.
+- Each linked worktree has its own ports, env files, and Supabase stack. T3 and `wt` run full bootstrap (locked dependency installation, env/port setup, Docker-backed database startup and readiness verification). For manual setup, run `pnpm worktree:bootstrap`, then `pnpm dev` and optionally `pnpm dev:agent`. `pnpm install` alone prepares env/ports without starting the database. Env defaults to the main checkout; `MONARA_ENV_SOURCE` can select another checkout root. Existing local credentials and database settings survive repeat setup.
 - Run `pnpm worktree:teardown` before removing a worktree; `pnpm worktree:prune` clears leftovers.
 - `pnpm dev:tunnel` starts only the ngrok tunnel to this worktree's web port; it never starts the app. For Gmail testing, run `pnpm dev`, `pnpm dev:tunnel`, and `pnpm dev:agent` in separate terminals. ngrok's `4040` is its inspector, not the app.
 - Composio has two projects: `monara_finance_dev` for local development, with its callback on the developer's ngrok domain, and `monara_finance` for production, with its callback on `https://monara-finance.vercel.app`. Local env files use only the dev project's credentials.

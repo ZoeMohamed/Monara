@@ -17,6 +17,7 @@ import {
   deleteBudgetInputSchema,
   deleteTransactionInputSchema,
   dismissReminderInputSchema,
+  excludeTransactionInputSchema,
   financialAccountMutationResultSchema,
   financialAccountPageSchema,
   getDashboardInputSchema,
@@ -28,7 +29,6 @@ import {
   markReminderReadInputSchema,
   type OperationErrorCode,
   operationErrorSchema,
-  rejectTransactionInputSchema,
   reminderPageSchema,
   reminderSchema,
   transactionMutationResultSchema,
@@ -81,7 +81,10 @@ const operations = {
     input: confirmTransactionInputSchema,
     output: transactionMutationResultSchema,
   },
-  reject_pending: { input: rejectTransactionInputSchema, output: transactionMutationResultSchema },
+  exclude_pending: {
+    input: excludeTransactionInputSchema,
+    output: transactionMutationResultSchema,
+  },
   delete_transaction: { input: deleteTransactionInputSchema, output: transactionSchema },
 } as const;
 

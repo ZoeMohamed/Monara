@@ -22,8 +22,6 @@ const coffee = {
   accountHint: null,
   categoryId: null,
   financialAccountId: "5e5f6a6b-7c7d-4e8f-9a9b-0c0d1e1f2a2b",
-  fromFinancialAccountId: null,
-  toFinancialAccountId: null,
   reviewStatus: "confirmed",
   source: "manual_form",
   confidence: null,
@@ -352,19 +350,12 @@ test("the backend caller authenticates, sends the User and Channel, and hides er
   );
 });
 
-test("get_summary adds every page up exactly and leaves transfers out", async () => {
+test("get_summary adds every confirmed page up exactly", async () => {
   const row = (kind: string, amountMinor: string, categoryId: string | null) => ({
     ...coffee,
     kind,
     categoryId,
     money: { amountMinor, currency: "IDR" },
-    ...(kind === "transfer"
-      ? {
-          financialAccountId: null,
-          fromFinancialAccountId: "5e5f6a6b-7c7d-4e8f-9a9b-0c0d1e1f2a2b",
-          toFinancialAccountId: "5e5f6a6b-7c7d-4e8f-9a9b-0c0d1e1f2a2c",
-        }
-      : {}),
   });
   const food = "c0c0c0c0-0000-4000-8000-000000000001";
   const pages: Record<string, unknown> = {
@@ -374,7 +365,7 @@ test("get_summary adds every page up exactly and leaves transfers out", async ()
       nextCursor: "next",
     },
     "2026-10|next": {
-      items: [row("expense", "48500", null), row("transfer", "500000", null)],
+      items: [row("expense", "48500", null), row("exclusion", "500000", null)],
       nextCursor: null,
     },
   };

@@ -19,24 +19,20 @@ function transactionRowModel(
   const date = showDate && transaction.date ? formatDay(transaction.date) : null;
   const metadata = [
     transaction.status === "pending" ? "Needs review" : null,
+    transaction.kind === "exclusion" ? "Excluded" : null,
     date,
     transaction.time,
   ]
     .filter(Boolean)
     .join(" · ");
   const category =
-    transaction.category ??
-    (transaction.kind === "income"
-      ? "Income"
-      : transaction.kind === "transfer"
-        ? "Transfer"
-        : "Uncategorized");
+    transaction.category ?? (transaction.kind === "income" ? "Income" : "Uncategorized");
   const sign = transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : "";
   const icon: IconName =
-    transaction.kind === "income"
-      ? "income"
-      : transaction.kind === "transfer"
-        ? "transfer"
+    transaction.kind === "exclusion"
+      ? "close"
+      : transaction.kind === "income"
+        ? "income"
         : chosenCategoryIcon(category, transaction.categoryIcon);
 
   return {
@@ -45,12 +41,17 @@ function transactionRowModel(
     account: transaction.method ?? "Account not assigned",
     amount:
       transaction.amount === null ? "Amount missing" : `${sign}${formatRupiah(transaction.amount)}`,
-    amountColor: transaction.kind === "income" ? "text-success" : "text-foreground",
+    amountColor:
+      transaction.kind === "exclusion"
+        ? "text-muted"
+        : transaction.kind === "income"
+          ? "text-success"
+          : "text-foreground",
     tint:
-      transaction.kind === "income"
-        ? "var(--success)"
-        : transaction.kind === "transfer"
-          ? "var(--muted)"
+      transaction.kind === "exclusion"
+        ? "var(--muted)"
+        : transaction.kind === "income"
+          ? "var(--success)"
           : categoryColor(category),
     icon,
     metadata,
@@ -106,10 +107,18 @@ export function TransactionRow({
     </>
   );
   return onClick ? (
-    <Button className={styles.row} onPress={onClick} type="button" variant="ghost">
+    <Button
+      className={styles.row}
+      data-kind={transaction.kind ?? "unknown"}
+      onPress={onClick}
+      type="button"
+      variant="ghost"
+    >
       {content}
     </Button>
   ) : (
-    <div className={styles.row}>{content}</div>
+    <div className={styles.row} data-kind={transaction.kind ?? "unknown"}>
+      {content}
+    </div>
   );
 }

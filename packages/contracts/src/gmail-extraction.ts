@@ -8,17 +8,20 @@ import {
   transactionIdSchema,
   userIdSchema,
 } from "./common.ts";
+import { institutionKeySchema } from "./institutions.ts";
 import { transactionKindSchema } from "./transactions.ts";
 
 export const gmailMessageIdSchema = z.string().trim().min(1).max(500);
 export const processedGmailMessageIdSchema = z.uuid();
 
 const categoryNameSchema = z.string().trim().min(1).max(100);
+const lastFourSchema = z.string().regex(/^[0-9]{4}$/);
 
 /**
- * One transaction read from an email. Every field stays null when the email
- * does not state it. The extractor never sees ids: categoryName is one of the
- * User's own Category names, which the backend maps to that User's Category.
+ * One transaction read from an email. Every field stays null when the email does
+ * not state it. The Financial Account comes from the email's sender, not from the
+ * extractor; accountLastFour only tells apart several accounts of that sender's
+ * institution. The Category is set later, by categorization.
  */
 export const extractedTransactionSchema = z
   .object({
@@ -30,7 +33,7 @@ export const extractedTransactionSchema = z
     description: z.string().trim().min(1).max(1_000).nullable(),
     location: z.string().trim().min(1).max(300).nullable(),
     accountHint: z.string().trim().min(1).max(200).nullable(),
-    categoryName: categoryNameSchema.nullable(),
+    accountLastFour: lastFourSchema.nullable(),
     confidence: z.number().min(0).max(1).nullable(),
   })
   .strict();
@@ -59,10 +62,30 @@ export const gmailExtractionJobSchema = z
   })
   .strict();
 
+/** After a connection, finds which registry entries have emailed the mailbox. Reads metadata only. */
+export const gmailDiscoveryJobSchema = z
+  .object({
+    kind: z.literal("gmail.discover"),
+    connectionId: gmailConnectionIdSchema,
+  })
+  .strict();
+
 export const gmailJobSchema = z.discriminatedUnion("kind", [
   gmailSyncJobSchema,
   gmailExtractionJobSchema,
+  gmailDiscoveryJobSchema,
 ]);
+
+/**
+ * Categorizes one imported transaction by its merchant. Runs on its own queue so
+ * web searches never hold up extraction and can be throttled separately.
+ */
+export const merchantCategorizeJobSchema = z
+  .object({
+    kind: z.literal("merchant.categorize"),
+    transactionId: transactionIdSchema,
+  })
+  .strict();
 
 // Gmail ingestion operations: POST /api/agent/gmail/<name without "gmail.">, authenticated
 // with the agent backend credential. The backend derives the User from its own
@@ -102,10 +125,61 @@ export const resolvedGmailConnectionSchema = z
     connectionId: gmailConnectionIdSchema,
     userId: userIdSchema,
     composioConnectedAccountId: z.string().trim().min(1).max(300),
-    /** The owner's unarchived Category names, offered to the extractor. */
+    /** The owner's unarchived Category names, offered to categorization. */
     categoryNames: z.array(categoryNameSchema).max(200),
+    /**
+     * Registry entries the owner has as active Financial Accounts. Sync reads mail
+     * only from these entries' senders.
+     */
+    institutionKeys: z.array(institutionKeySchema).max(100),
   })
   .strict();
+
+/** The agent began listing a connection's mail, for Sync Now or the schedule. */
+export const startGmailSyncInputSchema = z
+  .object({
+    connectionId: gmailConnectionIdSchema,
+  })
+  .strict();
+
+export const startGmailSyncResultSchema = z.object({}).strict();
+
+/**
+ * One listed page of messages, claimed before extraction jobs are queued so the
+ * sync's progress and completion can be derived from stored message outcomes.
+ */
+export const claimGmailMessagesInputSchema = z
+  .object({
+    connectionId: gmailConnectionIdSchema,
+    messages: z
+      .array(
+        z
+          .object({
+            gmailMessageId: gmailMessageIdSchema,
+            receivedAt: isoDateTimeSchema,
+          })
+          .strict(),
+      )
+      .max(100),
+  })
+  .strict();
+
+export const claimGmailMessagesResultSchema = z
+  .object({
+    /** Listed messages that still need extraction; finished ones are left out. */
+    pendingGmailMessageIds: z.array(gmailMessageIdSchema).max(100),
+  })
+  .strict();
+
+/** Sent when a sync job gave up, so the User sees the failure instead of a sync that never ends. */
+export const reportGmailSyncFailureInputSchema = z
+  .object({
+    connectionId: gmailConnectionIdSchema,
+    reason: z.enum(["gmail_unavailable", "sync_failed"]),
+  })
+  .strict();
+
+export const reportGmailSyncFailureResultSchema = z.object({}).strict();
 
 export const claimGmailMessageInputSchema = z
   .object({
@@ -130,6 +204,10 @@ export const recordGmailExtractionInputSchema = z
     processedMessageId: processedGmailMessageIdSchema,
     outcome: gmailExtractionOutcomeSchema,
     items: z.array(extractedTransactionSchema).max(50),
+    /** The registry entry of the email's sender; null when the sender is not listed. */
+    institutionKey: institutionKeySchema.nullable(),
+    /** Gmail authenticated the sender's domain with DKIM or SPF. Required for auto-confirm. */
+    senderVerified: z.boolean(),
   })
   .strict()
   .superRefine((value, context) => {
@@ -154,6 +232,8 @@ export const recordGmailExtractionResultSchema = z
   .object({
     transactionIds: z.array(transactionIdSchema),
     alreadyFinished: z.boolean(),
+    /** Transactions with a merchant whose Category the User's history could not supply. */
+    uncategorizedTransactionIds: z.array(transactionIdSchema),
   })
   .strict();
 
@@ -183,12 +263,18 @@ export type ExtractedTransaction = z.infer<typeof extractedTransactionSchema>;
 export type GmailSyncJob = z.infer<typeof gmailSyncJobSchema>;
 export type GmailExtractionJob = z.infer<typeof gmailExtractionJobSchema>;
 export type GmailJob = z.infer<typeof gmailJobSchema>;
+export type GmailDiscoveryJob = z.infer<typeof gmailDiscoveryJobSchema>;
+export type MerchantCategorizeJob = z.infer<typeof merchantCategorizeJobSchema>;
 export type ListActiveGmailConnectionsResult = z.infer<
   typeof listActiveGmailConnectionsResultSchema
 >;
 export type ResolveGmailConnectionInput = z.input<typeof resolveGmailConnectionInputSchema>;
 export type RequestGmailSyncInput = z.input<typeof requestGmailSyncInputSchema>;
 export type ResolvedGmailConnection = z.infer<typeof resolvedGmailConnectionSchema>;
+export type StartGmailSyncInput = z.input<typeof startGmailSyncInputSchema>;
+export type ClaimGmailMessagesInput = z.input<typeof claimGmailMessagesInputSchema>;
+export type ClaimGmailMessagesResult = z.infer<typeof claimGmailMessagesResultSchema>;
+export type ReportGmailSyncFailureInput = z.input<typeof reportGmailSyncFailureInputSchema>;
 export type ClaimGmailMessageInput = z.input<typeof claimGmailMessageInputSchema>;
 export type ClaimGmailMessageResult = z.infer<typeof claimGmailMessageResultSchema>;
 export type GmailExtractionOutcome = z.infer<typeof gmailExtractionOutcomeSchema>;
@@ -196,3 +282,96 @@ export type RecordGmailExtractionInput = z.input<typeof recordGmailExtractionInp
 export type RecordGmailExtractionResult = z.infer<typeof recordGmailExtractionResultSchema>;
 export type MarkGmailConnectionSyncedInput = z.input<typeof markGmailConnectionSyncedInputSchema>;
 export type ReportGmailConnectionErrorInput = z.input<typeof reportGmailConnectionErrorInputSchema>;
+
+export const startGmailDiscoveryInputSchema = z
+  .object({ connectionId: gmailConnectionIdSchema })
+  .strict();
+
+export const gmailDiscoveryFindingSchema = z
+  .object({
+    institutionKey: institutionKeySchema,
+    emailCount: z.number().int().positive(),
+    /** Card or account endings seen in the senders' subjects, at most ten. */
+    lastFours: z.array(lastFourSchema).max(10),
+    lastSeenAt: isoDateTimeSchema.nullable(),
+  })
+  .strict();
+
+export const recordGmailDiscoveryInputSchema = z
+  .object({
+    connectionId: gmailConnectionIdSchema,
+    findings: z.array(gmailDiscoveryFindingSchema).max(100),
+  })
+  .strict();
+
+export const reportGmailDiscoveryFailureInputSchema = z
+  .object({ connectionId: gmailConnectionIdSchema })
+  .strict();
+
+/** Normalizes a merchant name the same way as the database: lowercase, single spaces. */
+export function merchantKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+const merchantNameSchema = z.string().trim().min(1).max(200);
+
+export const resolveImportedTransactionInputSchema = z
+  .object({ transactionId: transactionIdSchema })
+  .strict();
+
+/** What categorization needs. Carries no User id, amounts, or email content. */
+export const resolvedImportedTransactionSchema = z
+  .object({
+    merchantName: merchantNameSchema.nullable(),
+    location: z.string().trim().min(1).max(300).nullable(),
+    /** False once the transaction has a Category or the User edited or deleted it. */
+    needsCategory: z.boolean(),
+    categoryNames: z.array(categoryNameSchema).max(200),
+  })
+  .strict();
+
+export const claimMerchantProfileInputSchema = z
+  .object({ merchantName: merchantNameSchema })
+  .strict();
+
+/**
+ * claimed: this job must search and save; ready: use the cached summary (null when
+ * nothing useful was found); busy: another job is searching, so retry shortly.
+ */
+export const claimMerchantProfileResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("claimed") }).strict(),
+  z.object({ status: z.literal("busy") }).strict(),
+  z.object({ status: z.literal("ready"), summary: z.string().max(2_000).nullable() }).strict(),
+]);
+
+export const saveMerchantProfileInputSchema = z
+  .object({
+    merchantName: merchantNameSchema,
+    /** Public facts from web search only; null records that nothing useful was found. */
+    summary: z.string().trim().min(1).max(2_000).nullable(),
+  })
+  .strict();
+
+export const releaseMerchantProfileInputSchema = z
+  .object({ merchantName: merchantNameSchema })
+  .strict();
+
+export const setImportedCategoryInputSchema = z
+  .object({
+    transactionId: transactionIdSchema,
+    categoryName: categoryNameSchema,
+  })
+  .strict();
+
+/** applied is false when the transaction already had a Category or the User changed it. */
+export const setImportedCategoryResultSchema = z.object({ applied: z.boolean() }).strict();
+
+export const emptyResultSchema = z.object({}).strict();
+
+export type StartGmailDiscoveryInput = z.input<typeof startGmailDiscoveryInputSchema>;
+export type GmailDiscoveryFinding = z.infer<typeof gmailDiscoveryFindingSchema>;
+export type RecordGmailDiscoveryInput = z.input<typeof recordGmailDiscoveryInputSchema>;
+export type ResolvedImportedTransaction = z.infer<typeof resolvedImportedTransactionSchema>;
+export type ClaimMerchantProfileResult = z.infer<typeof claimMerchantProfileResultSchema>;
+export type SaveMerchantProfileInput = z.input<typeof saveMerchantProfileInputSchema>;
+export type SetImportedCategoryInput = z.input<typeof setImportedCategoryInputSchema>;

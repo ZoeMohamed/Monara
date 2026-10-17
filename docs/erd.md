@@ -11,7 +11,109 @@ Status: implementation contract for the hackathon schema. This document defines 
 - Composio stores Gmail credentials. Monara does not store OAuth tokens or raw email bodies.
 - A WhatsApp number becomes an identity signal only after the signed-in User explicitly verifies a WhatsApp Link.
 
-## Entity relationship diagram
+## Product ERD
+
+Use this view for product discussion, onboarding, and the hackathon presentation. It shows the
+records a User understands; provider deduplication, delivery tracking, and Agent audit storage are
+implementation details shown separately below.
+
+```mermaid
+erDiagram
+    USER ||--o{ FINANCIAL_ACCOUNT : owns
+    USER ||--o{ CATEGORY : owns
+    USER ||--o{ GMAIL_CONNECTION : connects
+    USER ||--o{ TRANSACTION : owns
+    USER ||--o{ BUDGET : sets
+    USER ||--o{ RECURRING_BILL : tracks
+    USER ||--o{ REMINDER : receives
+
+    GMAIL_CONNECTION o|--o{ TRANSACTION : imports
+    FINANCIAL_ACCOUNT o|--o{ TRANSACTION : identifies_money_flow
+    CATEGORY o|--o{ TRANSACTION : classifies
+    CATEGORY ||--o{ BUDGET : limits
+    FINANCIAL_ACCOUNT o|--o{ RECURRING_BILL : pays
+    BUDGET o|--o{ REMINDER : triggers
+    RECURRING_BILL o|--o{ REMINDER : triggers
+
+    USER {
+        uuid id PK
+    }
+
+    FINANCIAL_ACCOUNT {
+        uuid id PK
+        uuid user_id FK
+        text name
+        text account_type
+        boolean is_active
+    }
+
+    CATEGORY {
+        uuid id PK
+        uuid user_id FK
+        text name
+        boolean is_archived
+    }
+
+    GMAIL_CONNECTION {
+        uuid id PK
+        uuid user_id FK
+        text gmail_address
+        text status
+    }
+
+    TRANSACTION {
+        uuid id PK
+        uuid user_id FK
+        text transaction_type
+        numeric amount
+        date occurred_on
+        uuid financial_account_id FK
+        uuid category_id FK
+        text review_status
+    }
+
+    BUDGET {
+        uuid id PK
+        uuid user_id FK
+        uuid category_id FK
+        numeric limit_amount
+        text cadence
+    }
+
+    RECURRING_BILL {
+        uuid id PK
+        uuid user_id FK
+        text merchant_name
+        numeric expected_amount
+        date next_due_on
+        text status
+    }
+
+    REMINDER {
+        uuid id PK
+        uuid user_id FK
+        text kind
+        text status
+        timestamptz scheduled_for
+    }
+```
+
+The Financial Account relationship is the single Account or payment method associated with a
+Transaction. Income and expense use the same optional `financial_account_id`; direct User and Agent
+creates require it, while Gmail imports may leave it unknown for review. Internal transfers are not a
+third money direction in the MVP: the User excludes them during review.
+
+Category assignment is automatic when Gmail extraction returns exactly one of the User's existing
+Category names. The backend maps that name to the owned `category_id`; it never creates or guesses a
+new Category. A missing or uncertain match remains `null`, and the User may correct the suggestion.
+Categories remain first-class records because Budgets, breakdowns, renames, and archives depend on
+stable Category UUIDs.
+
+<details>
+<summary>Physical storage ERD</summary>
+
+The implementation view includes security, deduplication, delivery, and Agent audit tables. These
+tables are required for safe execution but do not belong in the default product explanation.
 
 ```mermaid
 erDiagram
@@ -33,8 +135,6 @@ erDiagram
     GMAIL_CONNECTIONS ||--o{ PROCESSED_GMAIL_MESSAGES : contains
     PROCESSED_GMAIL_MESSAGES o|--o{ TRANSACTIONS : yields
     FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : records
-    FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : transfer_from
-    FINANCIAL_ACCOUNTS o|--o{ TRANSACTIONS : transfer_to
     CATEGORIES o|--o{ TRANSACTIONS : classifies
     CATEGORIES ||--o{ BUDGETS : limits
     FINANCIAL_ACCOUNTS o|--o{ RECURRING_BILLS : charges
@@ -114,8 +214,6 @@ erDiagram
         int source_item_index
         text client_request_id
         uuid financial_account_id FK
-        uuid from_financial_account_id FK
-        uuid to_financial_account_id FK
         uuid category_id FK
         uuid recurring_bill_id FK
         text source_type
@@ -255,13 +353,16 @@ erDiagram
     }
 ```
 
+</details>
+
 ## Table rules
 
 ### Profiles and Financial Accounts
 
 - `profiles.id` equals `auth.users.id`. Default timezone is `Asia/Jakarta`; MVP currency is `IDR`.
+- `profiles.full_name` is nullable (1 to 150 characters once set). Onboarding asks for it; `display_name` stays what Google sent. Categorization compares it with a payment's recipient to recognise transfers between the User's own accounts. Only the backend writes it, since signed-in browsers have select-only access to `profiles`.
 - Financial Account types are exactly `bank`, `wallet`, or `cash` for the MVP.
-- Financial Accounts do not store balances. Dashboard account figures are calculated from confirmed income and expense rows; transfers are excluded from spending and income totals.
+- Financial Accounts do not store balances. Dashboard account figures are calculated from confirmed income and expense rows; excluded records never enter those totals.
 - Financial Account creates carry a `client_request_id` that is unique per User. Account deletion is outside the MVP and is not exposed to the Agent. Setting `is_active = false` stops new writes from selecting the Account while historical transactions keep their reference.
 - Seed 15 default Category rows per User. `(user_id, slug)` is unique. Category names are editable presentation data; transactions and budgets reference Category UUIDs.
 
@@ -271,23 +372,23 @@ erDiagram
 - Gmail Connection status is exactly `active`, `disconnected`, or `error`. Processed-message status is exactly `processing`, `processed`, `skipped`, or `failed`.
 - `gmail_connections.composio_connected_account_id` is globally unique. `(user_id, gmail_address)` is unique.
 - `processed_gmail_messages` stores source identity and processing state only: no sender, subject, raw body, body hash, attachment, OAuth token, or extracted financial payload.
-- `(gmail_connection_id, gmail_message_id)` is unique. Keep this row after a transaction is rejected so re-import cannot recreate it.
+- `(gmail_connection_id, gmail_message_id)` is unique. Keep this row after a transaction is excluded so re-import cannot recreate it.
 - One Gmail message may contain multiple transactions. `transactions (processed_gmail_message_id, source_item_index)` is unique when the source message exists.
 - A Gmail transaction requires both `processed_gmail_message_id` and `source_item_index`. A non-Gmail transaction requires both columns to be null.
 
 ### Transactions and Review Queue
 
 - `source_type` is `manual_form`, `gmail_email`, `in_app_chat`, `whatsapp_text`, `whatsapp_receipt`, or `whatsapp_voice`. The backend derives this value from its authenticated route and verified provider context; callers cannot choose it.
-- `review_status` is `pending`, `confirmed`, or `rejected`. Provider extraction always creates `pending` rows.
+- `review_status` is only `pending` or `confirmed`. Provider extraction begins as `pending` unless the trusted Gmail auto-confirm rules accept a complete, confident expense or income.
 - Pending rows may keep `transaction_type`, `merchant_name`, `amount`, `currency`, `occurred_on`, `occurred_time`, account references, Category, description, location, account hint, and confidence as `null`. Missing values are never invented.
-- A confirmed row requires `transaction_type`, positive `amount`, `currency = 'IDR'`, and `occurred_on`. Time, merchant/source, Category, description, location, and the single Financial Account may remain unknown.
-- `transaction_type` is `expense`, `income`, or `transfer`. Confirmed transfers require different `from_financial_account_id` and `to_financial_account_id`; `financial_account_id` must be null. Non-transfers must have both transfer account columns null.
-- Only confirmed income and expense rows affect dashboard, category, budget, savings-rate, and recurring-bill calculations. Transfers are excluded from income and spending totals.
+- Every confirmed row requires `transaction_type`. Confirmed expenses and income additionally require positive `amount`, `currency = 'IDR'`, and `occurred_on`; a confirmed exclusion may retain unknown extracted fields because it never enters financial calculations. Time, merchant/source, Category, description, location, and the single Financial Account may remain unknown on provider imports.
+- `transaction_type` is `expense`, `income`, or `exclusion`. All three use the same optional `financial_account_id` as their Account/payment method; there are no transfer-specific from/to fields.
+- Use the `exclusion` type for internal transfers, reimbursements, duplicates, and non-personal records. Confirmed exclusions remain stored for audit and Gmail deduplication but never affect dashboard, category, budget, savings-rate, or recurring-bill calculations.
 - `ai_confidence` is nullable and constrained from `0` through `1`.
 - `client_request_id` is required for direct User and Agent creates and null for Gmail imports. `(user_id, client_request_id)` is unique when present, so retrying an ambiguous request cannot create another transaction. Provider adapters derive stable request IDs from verified provider message identity and item index.
 - Direct User and Agent creates require a Financial Account plus a merchant/source or description. Provider imports may leave those fields null while pending; missing data is never invented.
 - JSON operations use the shared `{ amountMinor: string, currency: "IDR" }` representation. IDR has zero minor-unit decimals, so `amountMinor` maps to exact Postgres `numeric` with constraints requiring a positive integer below `10^20`; fractional Rupiah values are rejected rather than rounded.
-- Reject and confirm are valid only from `pending`. Backend operations use the last observed `updated_at` to reject stale writes.
+- Exclude and confirm are valid only from `pending`. Backend operations use the last observed `updated_at` to reject stale writes.
 - `delete_transaction` is a T2 operation and sets `deleted_at`. Every T2 request first creates an expiring confirmation bound to its exact action and resource IDs; only the literal answer `yes` executes it. Soft-deleted rows are excluded from normal lists and every financial calculation.
 
 ### Budgets and recurring bills
@@ -339,7 +440,7 @@ erDiagram
 
 1. Extensions, private helper functions, Profiles, Financial Accounts, and Categories.
 2. Gmail Connections and Processed Gmail Messages.
-3. Transactions with nullable pending fields, transfer constraints, and durable deduplication.
+3. Transactions with nullable pending fields, expense/income/exclusion type, pending/confirmed review state, and durable deduplication.
 4. Budgets, Recurring Bills, Reminders, Reminder Preferences, and Reminder Deliveries.
 5. WhatsApp Links, verification constraints, Agent Action Logs, and short-lived Agent Action States.
 6. Soft-delete and idempotency indexes, triggers, grants, RLS policies, ownership tests, and synthetic seed data.

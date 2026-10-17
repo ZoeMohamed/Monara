@@ -1,3 +1,5 @@
+export type { BraveSearchClient, BraveSearchResult } from "./brave.ts";
+export { BraveSearchError, createBraveSearchClient } from "./brave.ts";
 export type {
   CompleteConnectionResult,
   ComposioGmailClient,
@@ -12,7 +14,12 @@ export type {
   GmailMessagePage,
   GmailMessageSummary,
 } from "./gmail-read.ts";
-export { createComposioGmailReader, decodeBase64Url, GmailReadError } from "./gmail-read.ts";
+export {
+  createComposioGmailReader,
+  decodeBase64Url,
+  GmailReadError,
+  parseSenderAddress,
+} from "./gmail-read.ts";
 export type { KapsoInboundMedia, KapsoInboundMessage, WhatsAppTransport } from "./whatsapp.ts";
 export {
   createKapsoTransport,

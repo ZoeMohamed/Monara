@@ -25,6 +25,9 @@ export interface GmailMessageSummary {
   id: string;
   /** ISO timestamp, or null when the listing did not include one. */
   receivedAt: string | null;
+  /** The From address alone, lowercased, when the listing included it. */
+  senderAddress: string | null;
+  subject: string | null;
 }
 
 export interface GmailMessagePage {
@@ -36,19 +39,28 @@ export interface GmailMessageContent {
   id: string;
   receivedAt: string;
   from: string | null;
+  /** The From address alone, lowercased. */
+  fromAddress: string | null;
   subject: string | null;
   text: string | null;
   html: string | null;
+  /** Authentication-Results header values, in the order Gmail lists them (newest first). */
+  authenticationResults: string[];
 }
 
-/** Thrown for transport failures and unexpected responses. Never carries response bodies. */
+/**
+ * Thrown for transport failures and unexpected responses. Never carries response bodies;
+ * `code` is only Composio's machine-readable error slug, kept so failures can be diagnosed.
+ */
 export class GmailReadError extends Error {
   readonly status: number | null;
+  readonly code: string | null;
 
-  constructor(message: string, status: number | null = null) {
+  constructor(message: string, status: number | null = null, code: string | null = null) {
     super(message);
     this.name = "GmailReadError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -67,6 +79,15 @@ function isComposioNotFound(value: unknown): boolean {
   const error = value.error;
   const slug = readString(error, "slug");
   return error.status === 404 && slug !== null && /^not[_-]?found(?:[_-]?error)?$/i.test(slug);
+}
+
+/** Reads Composio's error slug (or numeric code) from an error envelope, never its message. */
+function readErrorCode(value: unknown): string | null {
+  if (!isRecord(value) || !isRecord(value.error)) return null;
+  const slug = readString(value.error, "slug");
+  if (slug && /^[\w.-]{1,80}$/.test(slug)) return slug;
+  const code = value.error.code;
+  return typeof code === "number" && Number.isInteger(code) ? String(code) : null;
 }
 
 /** Composio may wrap tool output in one or two `data` levels. */
@@ -107,15 +128,29 @@ export function decodeBase64Url(data: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-function readHeader(payload: Record<string, unknown>, name: string): string | null {
+function readHeaders(payload: Record<string, unknown>, name: string): string[] {
   const headers = payload.headers;
-  if (!Array.isArray(headers)) return null;
+  if (!Array.isArray(headers)) return [];
+  const values: string[] = [];
   for (const header of headers) {
     if (isRecord(header) && readString(header, "name")?.toLowerCase() === name) {
-      return readString(header, "value");
+      const value = readString(header, "value");
+      if (value) values.push(value);
     }
   }
-  return null;
+  return values;
+}
+
+function readHeader(payload: Record<string, unknown>, name: string): string | null {
+  return readHeaders(payload, name)[0] ?? null;
+}
+
+/** The address in a From value such as `BCA <bca@bca.co.id>`, lowercased. */
+export function parseSenderAddress(from: string | null): string | null {
+  if (!from) return null;
+  const match =
+    from.match(/<([^<>\s]+@[^<>\s]+)>\s*$/) ?? from.match(/^\s*([^<>\s]+@[^<>\s]+)\s*$/);
+  return match ? match[1].toLowerCase() : null;
 }
 
 /** Walks the MIME tree and returns the first text/plain and text/html bodies. */
@@ -179,7 +214,12 @@ export function createComposioGmailReader(config: ComposioGmailReaderConfig) {
       throw new GmailReadError(`Composio ${slug} could not be reached.`);
     }
     if (!response.ok) {
-      throw new GmailReadError(`Composio ${slug} failed.`, response.status);
+      const errorPayload: unknown = await response.json().catch(() => null);
+      throw new GmailReadError(
+        `Composio ${slug} failed.`,
+        response.status,
+        readErrorCode(errorPayload),
+      );
     }
     let payload: unknown;
     try {
@@ -188,7 +228,14 @@ export function createComposioGmailReader(config: ComposioGmailReaderConfig) {
       throw new GmailReadError(`Composio ${slug} returned invalid JSON.`, response.status);
     }
     if (!isRecord(payload) || payload.successful !== true) {
-      throw new GmailReadError(`Composio ${slug} was not successful.`, response.status);
+      // Composio answers 200 when Gmail itself refused; keep only Gmail's status number.
+      const gmailStatus = isRecord(payload)
+        ? readString(payload, "error")?.match(/^(?:HTTP\s+)?([45]\d\d)\b/)
+        : null;
+      throw new GmailReadError(
+        `Composio ${slug} was not successful.`,
+        gmailStatus ? Number(gmailStatus[1]) : response.status,
+      );
     }
     const data = unwrapData(payload.data);
     if (!data) throw new GmailReadError(`Composio ${slug} returned no data.`, response.status);
@@ -255,7 +302,14 @@ export function createComposioGmailReader(config: ComposioGmailReaderConfig) {
         for (const message of data.messages) {
           if (!isRecord(message)) continue;
           const id = readString(message, "messageId") ?? readString(message, "id");
-          if (id) messages.push({ id, receivedAt: readTimestamp(message) });
+          if (id) {
+            messages.push({
+              id,
+              receivedAt: readTimestamp(message),
+              senderAddress: parseSenderAddress(readString(message, "sender")),
+              subject: readString(message, "subject"),
+            });
+          }
         }
       }
       return { messages, nextPageToken: readString(data, "nextPageToken") };
@@ -276,13 +330,16 @@ export function createComposioGmailReader(config: ComposioGmailReaderConfig) {
       // Composio may also return a pre-extracted plain-text body.
       bodies.text ??= readString(data, "messageText");
 
+      const from = (payload && readHeader(payload, "from")) ?? readString(data, "sender");
       return {
         id: readString(data, "messageId") ?? readString(data, "id") ?? messageId,
         receivedAt,
-        from: (payload && readHeader(payload, "from")) ?? readString(data, "sender"),
+        from,
+        fromAddress: parseSenderAddress(from),
         subject: (payload && readHeader(payload, "subject")) ?? readString(data, "subject"),
         text: bodies.text,
         html: bodies.html,
+        authenticationResults: payload ? readHeaders(payload, "authentication-results") : [],
       };
     },
   };

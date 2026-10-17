@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Lets the developer's `pnpm dev:tunnel` domain reach dev-only resources such as HMR.
+  allowedDevOrigins: process.env.NGROK_DOMAIN ? [process.env.NGROK_DOMAIN] : [],
   async headers() {
     return [
       {

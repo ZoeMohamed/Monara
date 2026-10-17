@@ -24,8 +24,11 @@
   color: var(--success);
 }
 
-.amount[data-kind="transfer"],
 .amount[data-kind="unknown"] {
+  color: var(--muted);
+}
+
+.amount[data-kind="exclusion"] {
   color: var(--muted);
 }
 

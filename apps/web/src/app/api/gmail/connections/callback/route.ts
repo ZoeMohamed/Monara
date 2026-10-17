@@ -1,7 +1,9 @@
 import { GmailConnectionError } from "@monara/core";
 import type { NextRequest } from "next/server";
+import { requestAgentDiscovery } from "@/lib/gmail/agent-sync";
 import { gmailConnectionService } from "@/lib/gmail/service";
 import { browserOrigin } from "@/lib/http/origin";
+import { ONBOARDING_RETURN_COOKIE, returnsToOnboarding } from "@/lib/onboarding/flow";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 const RESULT_PAGE = "/connections/gmail";
@@ -9,16 +11,22 @@ const RESULT_PAGE = "/connections/gmail";
 /**
  * Composio's callback identity verifier. Composio redirects here with a
  * single-use session_uri after Google consent, and holds the connection until
- * this server confirms which signed-in User came back.
+ * this server confirms which signed-in User came back. Setup that started the
+ * connection returns to Home, where it carries on; anything else lands on the
+ * Gmail connections page.
  */
 export async function GET(request: NextRequest) {
+  const fromSetup = returnsToOnboarding(request.headers.get("cookie"));
   const finish = (result: string) => {
-    const target = new URL(RESULT_PAGE, browserOrigin(request));
-    target.searchParams.set("result", result);
-    return new Response(null, {
-      status: 303,
-      headers: { Location: target.toString(), "Cache-Control": "private, no-store" },
+    const target = new URL(fromSetup ? "/" : RESULT_PAGE, browserOrigin(request));
+    target.searchParams.set(fromSetup ? "gmail" : "result", result);
+    const headers = new Headers({
+      Location: target.toString(),
+      "Cache-Control": "private, no-store",
     });
+    // The marker is single use, so a later connection from Profile is not redirected here.
+    if (fromSetup) headers.append("Set-Cookie", `${ONBOARDING_RETURN_COOKIE}=; Path=/; Max-Age=0`);
+    return new Response(null, { status: 303, headers });
   };
 
   const identity = await getAuthenticatedIdentity();
@@ -30,7 +38,9 @@ export async function GET(request: NextRequest) {
   if (!sessionUri) return finish("VALIDATION_FAILED");
 
   try {
-    await gmailConnectionService().complete(identity.id, sessionUri);
+    const connection = await gmailConnectionService().complete(identity.id, sessionUri);
+    // Best effort: the Gmail page can start discovery again if the agent is unavailable.
+    await requestAgentDiscovery(connection.id).catch(() => undefined);
     return finish("connected");
   } catch (error) {
     return finish(error instanceof GmailConnectionError ? error.code : "DEPENDENCY_UNAVAILABLE");

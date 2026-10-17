@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(52);
+select plan(55);
 
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'financial_accounts', 'financial_accounts exists');
@@ -30,8 +30,6 @@ select is(
       'processed_gmail_messages_gmail_connection_id_user_id_fkey',
       'transactions_processed_gmail_message_id_user_id_fkey',
       'transactions_financial_account_id_user_id_fkey',
-      'transactions_from_financial_account_id_user_id_fkey',
-      'transactions_to_financial_account_id_user_id_fkey',
       'transactions_category_id_user_id_fkey',
       'transactions_recurring_bill_id_user_id_fkey',
       'budgets_category_id_user_id_fkey',
@@ -43,7 +41,7 @@ select is(
       and condeferrable
       and condeferred
   ),
-  12::bigint,
+  10::bigint,
   'owned composite references defer checks until the cascade transaction ends'
 );
 
@@ -141,15 +139,16 @@ select ok(
   )
   and not has_function_privilege(
     'authenticated',
-    'public.record_gmail_extraction(uuid,text,jsonb)',
+    'public.record_gmail_extraction(uuid,text,jsonb,boolean,text)',
     'execute'
   )
+  and to_regprocedure('public.record_gmail_extraction(uuid,text,jsonb)') is null
   and not has_function_privilege(
     'authenticated',
     'public.mark_gmail_connection_synced(uuid,timestamp with time zone)',
     'execute'
   ),
-  'authenticated clients cannot execute Gmail ingestion operations'
+  'authenticated clients cannot execute Gmail ingestion operations and the unverified overload is absent'
 );
 
 insert into auth.users (id, email, raw_user_meta_data)
@@ -458,6 +457,13 @@ select throws_ok(
   'a pending import cannot confirm against an inactive account'::text
 );
 
+select lives_ok(
+  $$update public.transactions
+    set transaction_type = 'exclusion', review_status = 'confirmed'
+    where id = 'a4000000-0000-4000-8000-000000000004'$$::text,
+  'a pending item can be excluded after its Financial Account is deactivated'::text
+);
+
 select throws_ok(
   $$insert into public.transactions (
       user_id, client_request_id, financial_account_id, source_type,
@@ -502,7 +508,7 @@ select throws_ok(
 
 select throws_ok(
   $$update public.transactions
-    set review_status = 'rejected'
+    set review_status = 'pending'
     where id = 'a4000000-0000-4000-8000-000000000001'$$::text,
   '23514'::char(5),
   'Only pending transactions may change review status.',
@@ -511,17 +517,54 @@ select throws_ok(
 
 select throws_ok(
   $$insert into public.transactions (
-      user_id, client_request_id, from_financial_account_id, to_financial_account_id,
+      user_id, client_request_id, financial_account_id,
       source_type, transaction_type, description, amount, currency, occurred_on, review_status
     ) values (
-      'a0000000-0000-4000-8000-000000000001', 'same-account-transfer',
+      'a0000000-0000-4000-8000-000000000001', 'removed-transfer-direction',
       'a1000000-0000-4000-8000-000000000001',
-      'a1000000-0000-4000-8000-000000000001',
-      'manual_form', 'transfer', 'Invalid transfer', 50000, 'IDR', '2026-10-12', 'confirmed'
+      'manual_form', 'transfer', 'Move savings', 50000, 'IDR', '2026-10-12', 'confirmed'
     )$$::text,
   '23514'::char(5),
   null::text,
-  'a confirmed transfer requires different accounts'::text
+  'transfer is not a transaction direction'::text
+);
+
+select lives_ok(
+  $$insert into public.transactions (
+      user_id, client_request_id, financial_account_id,
+      category_id, source_type, transaction_type, description, amount, currency,
+      occurred_on, review_status
+    ) values (
+      'a0000000-0000-4000-8000-000000000001', 'excluded-reimbursement',
+      'a1000000-0000-4000-8000-000000000001',
+      (select id from public.categories
+        where user_id = 'a0000000-0000-4000-8000-000000000001'
+          and slug = 'food-drinks'),
+      'manual_form', 'exclusion', 'Reimbursement', 50000, 'IDR', '2026-10-12',
+      'confirmed'
+    )$$::text,
+  'an exclusion reimbursement remains stored without affecting totals'::text
+);
+
+select lives_ok(
+  $test$do $block$
+    declare inserted_id uuid;
+    begin
+      insert into public.transactions (
+        user_id, client_request_id, financial_account_id,
+        source_type, transaction_type, description, review_status
+      ) values (
+        'a0000000-0000-4000-8000-000000000001', 'incomplete-exclusion',
+        'a1000000-0000-4000-8000-000000000001',
+        'manual_form', null, 'Unusable imported record', 'pending'
+      ) returning id into inserted_id;
+
+      update public.transactions
+      set transaction_type = 'exclusion', review_status = 'confirmed'
+      where id = inserted_id;
+    end;
+  $block$;$test$::text,
+  'an incomplete pending record can become a confirmed exclusion without invented facts'::text
 );
 
 select throws_ok(

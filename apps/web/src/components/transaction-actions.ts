@@ -13,8 +13,8 @@ import type { AppNavigation } from "@/components/use-app-navigation";
 import type { SaveNotice } from "@/components/use-monara-session";
 import {
   deleteConfirmedTransaction,
+  excludePendingTransaction,
   type RecurringBill,
-  rejectPendingTransaction,
   type TransactionValues,
   transactionErrors,
   undoTransactionDeletion,
@@ -80,28 +80,21 @@ export function useTransactionActions(context: ActionContext) {
       values.financialAccountId === undefined
         ? (previous?.financialAccountId ?? null)
         : values.financialAccountId;
-    const fromFinancialAccountId =
-      values.fromFinancialAccountId === undefined
-        ? (previous?.fromFinancialAccountId ?? null)
-        : values.fromFinancialAccountId;
-    const toFinancialAccountId =
-      values.toFinancialAccountId === undefined
-        ? (previous?.toFinancialAccountId ?? null)
-        : values.toFinancialAccountId;
     if (categoryId && !resources?.categories.some((category) => category.id === categoryId))
       throw new FinanceClientError(
         "VALIDATION_FAILED",
         "Choose a category from your account.",
         null,
       );
-    for (const id of [financialAccountId, fromFinancialAccountId, toFinancialAccountId]) {
-      if (id && !resources?.financialAccounts.some((account) => account.id === id))
-        throw new FinanceClientError(
-          "VALIDATION_FAILED",
-          "Choose an account from your finance space.",
-          null,
-        );
-    }
+    if (
+      financialAccountId &&
+      !resources?.financialAccounts.some((account) => account.id === financialAccountId)
+    )
+      throw new FinanceClientError(
+        "VALIDATION_FAILED",
+        "Choose an account from your finance space.",
+        null,
+      );
     return transactionValuesSchema.parse({
       kind: values.kind,
       merchantName: values.merchant,
@@ -109,13 +102,11 @@ export function useTransactionActions(context: ActionContext) {
         values.amount === null ? null : { amountMinor: String(values.amount), currency: "IDR" },
       occurredOn: values.date,
       occurredTime: values.time,
-      description: previous?.description ?? (values.kind === "transfer" ? values.merchant : null),
+      description: previous?.description ?? null,
       location: previous?.location ?? null,
       accountHint: previous?.accountHint ?? null,
       categoryId,
-      financialAccountId: values.kind === "transfer" ? null : financialAccountId,
-      fromFinancialAccountId: values.kind === "transfer" ? fromFinancialAccountId : null,
-      toFinancialAccountId: values.kind === "transfer" ? toFinancialAccountId : null,
+      financialAccountId,
     });
   };
 
@@ -150,8 +141,6 @@ export function useTransactionActions(context: ActionContext) {
               accountHint: item.backend?.accountHint,
               categoryId: item.backend?.categoryId,
               financialAccountId: item.backend?.financialAccountId,
-              fromFinancialAccountId: item.backend?.fromFinancialAccountId,
-              toFinancialAccountId: item.backend?.toFinancialAccountId,
             }),
           }),
         );
@@ -239,11 +228,7 @@ export function useTransactionActions(context: ActionContext) {
   };
 
   const add = async (values: TransactionValues) => {
-    if (
-      Object.keys(transactionErrors(values)).length > 0 ||
-      !values.merchant ||
-      (!values.method && values.kind !== "transfer")
-    )
+    if (Object.keys(transactionErrors(values)).length > 0 || !values.merchant || !values.method)
       throw new Error("Check the transaction details.");
     if (live) {
       const nextValues = backendValues(values);
@@ -379,7 +364,7 @@ export function useTransactionActions(context: ActionContext) {
     if (live && rejecting.backend) {
       try {
         await mutate(() =>
-          callFinanceOperation("reject_pending", {
+          callFinanceOperation("exclude_pending", {
             transactionId: rejecting.id,
             expectedUpdatedAt: rejecting.backend?.updatedAt,
           }),
@@ -394,9 +379,9 @@ export function useTransactionActions(context: ActionContext) {
       }
     }
     setRemovedId(rejecting.id);
-    if (!live) setTransactions((items) => rejectPendingTransaction(items, rejecting.id));
+    if (!live) setTransactions((items) => excludePendingTransaction(items, rejecting.id));
     navigation.closePopup();
-    setNotice({ message: "Transaction rejected." });
+    setNotice({ message: "Transaction excluded." });
   };
 
   return {
