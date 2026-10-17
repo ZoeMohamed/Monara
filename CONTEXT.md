@@ -43,7 +43,7 @@ A payment that repeats on a regular cadence, such as a subscription or a utility
 _Avoid_: Subscription when the payment is not one
 
 **Review Queue**:
-The list of Pending Transactions a User confirms, edits, or excludes.
+The Pending Transactions a User confirms, edits, or excludes, shown in the transaction list as the "To review" filter with its own count, rather than on a separate screen.
 _Avoid_: Inbox
 
 **Expense**:
