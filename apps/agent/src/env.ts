@@ -23,6 +23,6 @@ export interface Env {
   BRAVE_SEARCH_API_KEY?: string;
   /** Emails per parse job, 1–10 (default 10). Lower it if invocations hit their request limit. */
   GMAIL_PARSE_BATCH_SIZE?: string;
-  /** Emails one parse job works on at once, 1–10 (default 5). Bounded by the model's rate limit. */
+  /** Emails one parse job works on at once, 1–10 (default 2). Bounded by the model's rate limit. */
   GMAIL_PARSE_CONCURRENCY?: string;
 }

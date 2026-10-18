@@ -20,7 +20,7 @@ import {
 } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "./backend.ts";
 import { toEmailForExtraction } from "./email-text.ts";
-import type { LlmClient } from "./llm.ts";
+import { isTemporaryLlmError, type LlmClient, type LlmError } from "./llm.ts";
 import { parseEmail, shouldParse } from "./parse/index.ts";
 import { isSenderVerified } from "./sender.ts";
 
@@ -39,6 +39,8 @@ export interface GmailPipelineDependencies {
   reader: ComposioGmailReader;
   llm: LlmClient;
   enqueue: (jobs: GmailJob[]) => Promise<void>;
+  /** Queues jobs to run after a delay, e.g. emails put back while the model is busy. */
+  enqueueLater: (jobs: GmailJob[], delaySeconds: number) => Promise<void>;
   /** Queues categorization, which runs apart from extraction. */
   enqueueMerchant: (jobs: MerchantCategorizeJob[]) => Promise<void>;
   /** Emails per parse job, at most GMAIL_PARSE_JOB_MAX_EMAILS. */
@@ -48,7 +50,24 @@ export interface GmailPipelineDependencies {
   now?: () => Date;
 }
 
-const DEFAULT_PARSE_CONCURRENCY = 5;
+const DEFAULT_PARSE_CONCURRENCY = 2;
+/**
+ * Emails put back this many times while the model stays busy (about a day at the
+ * longest delay) go through the normal retries instead, and fail if those do.
+ */
+const MAX_DEFERRALS = 100;
+const MIN_DEFER_SECONDS = 30;
+/** Cloudflare Queues accept delays up to 12 hours; this keeps imports moving. */
+const MAX_DEFER_SECONDS = 900;
+
+/** How long to wait before parsing emails the model was too busy for. */
+function deferSeconds(error: LlmError, deferrals: number): number {
+  const backoff = MIN_DEFER_SECONDS * 2 ** Math.min(deferrals, 5);
+  const asked = error.retryAfterMs === null ? 0 : Math.ceil(error.retryAfterMs / 1000);
+  // A little spread so the put-back jobs do not all return at once.
+  const jitter = Math.floor(Math.random() * 15);
+  return Math.min(Math.max(backoff, asked) + jitter, MAX_DEFER_SECONDS);
+}
 
 /** Options for one run of a queued job. */
 export interface JobRunOptions {
@@ -66,6 +85,7 @@ export type GmailJobOutcome =
   | "already_finished"
   | "transactions"
   | "skipped"
+  | "deferred"
   | "failed";
 
 function toMailbox(connection: ResolvedGmailConnection): GmailMailbox {
@@ -157,7 +177,7 @@ export function syncQuery(
 }
 
 export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
-  const { backend, reader, llm, enqueue, enqueueMerchant } = dependencies;
+  const { backend, reader, llm, enqueue, enqueueLater, enqueueMerchant } = dependencies;
   const now = dependencies.now ?? (() => new Date());
   const parseBatchSize = Math.min(
     Math.max(1, dependencies.parseBatchSize ?? GMAIL_PARSE_JOB_MAX_EMAILS),
@@ -298,6 +318,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       kind: "gmail.parse",
       connectionId: job.connectionId,
       emails: batch,
+      deferrals: 0,
     }));
     if (page.nextPageToken) {
       jobs.push({ ...job, pageToken: page.nextPageToken, startedAt });
@@ -364,7 +385,9 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
   /**
    * Parses one job's claimed emails a few at a time and records them in one call.
    * Failed emails make the job retry; a retry first drops emails an earlier delivery
-   * finished. On the final attempt they are recorded as failed instead.
+   * finished. On the final attempt they are recorded as failed instead. Emails the
+   * model was too busy for are never failures: once it reports a rate limit or an
+   * outage, the rest of the job is not sent and those emails go back on the queue.
    */
   async function processBatch(
     job: GmailParseJob,
@@ -389,21 +412,34 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       if (emails.length === 0) return "already_finished";
     }
 
-    const settled = await settleWithLimit(emails, parseConcurrency, (email) =>
-      extractOne(connection, email.processedMessageId, email.gmailMessageId),
-    );
+    let busy: LlmError | null = null;
+    const deferrable = job.deferrals < MAX_DEFERRALS;
+    const settled = await settleWithLimit(emails, parseConcurrency, async (email) => {
+      if (busy) throw busy;
+      try {
+        return await extractOne(connection, email.processedMessageId, email.gmailMessageId);
+      } catch (error) {
+        if (deferrable && isTemporaryLlmError(error)) busy ??= error;
+        throw error;
+      }
+    });
     const results: RecordGmailExtractionInput[] = [];
     const failures: unknown[] = [];
+    const deferred: GmailParseJob["emails"] = [];
     settled.forEach((outcome, index) => {
       if (outcome.status === "fulfilled") {
         results.push(outcome.value);
+        return;
+      }
+      const email = emails[index];
+      if (deferrable && isTemporaryLlmError(outcome.reason) && email) {
+        deferred.push(email);
         return;
       }
       failures.push(outcome.reason);
       // A lost connection or an inactive one leaves the message claimed but unfinished.
       const recoverable =
         !isNotFound(outcome.reason) && !(outcome.reason instanceof ConnectionLostError);
-      const email = emails[index];
       if (options.isFinalAttempt && recoverable && email) {
         results.push({
           processedMessageId: email.processedMessageId,
@@ -426,10 +462,20 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       (reason) => reason instanceof ConnectionLostError || isNotFound(reason),
     );
     if (lost) throw lost;
-    if (failures.length > 0 && !options.isFinalAttempt) throw failures[0];
+    if (failures.length > 0 && !options.isFinalAttempt) {
+      // The busy emails are retried with the rest of the job rather than queued twice.
+      throw failures[0];
+    }
+    if (busy && deferred.length > 0) {
+      // A fresh job starts its retries over, so a busy model never uses them up.
+      await enqueueLater(
+        [{ ...job, emails: deferred, deferrals: job.deferrals + 1 }],
+        deferSeconds(busy, job.deferrals),
+      );
+    }
     if (results.some((result) => result.outcome === "transactions")) return "transactions";
     if (results.some((result) => result.outcome === "failed")) return "failed";
-    return "skipped";
+    return deferred.length > 0 ? "deferred" : "skipped";
   }
 
   /**

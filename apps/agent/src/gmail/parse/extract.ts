@@ -281,6 +281,8 @@ export async function extractTransactions(
     user: formatEmail(email, context),
     schemaName: "gmail_transactions",
     schema: RESPONSE_SCHEMA,
+    // Room for a long multi-item email; most answers are a few hundred tokens.
+    maxOutputTokens: 1_500,
   });
   const parsed = modelOutputSchema.safeParse(raw);
   if (!parsed.success) throw new ExtractionOutputError();

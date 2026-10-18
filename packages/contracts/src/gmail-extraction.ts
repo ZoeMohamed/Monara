@@ -96,6 +96,8 @@ export const gmailParseJobSchema = z
       )
       .min(1)
       .max(GMAIL_PARSE_JOB_MAX_EMAILS),
+    /** How often these emails were put back because the model was busy. */
+    deferrals: z.number().int().min(0).max(100).default(0),
   })
   .strict();
 

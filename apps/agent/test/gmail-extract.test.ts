@@ -91,6 +91,33 @@ describe("email text", () => {
     );
     assert.equal(toEmailForExtraction({ ...base, text: null, html: null }), null);
   });
+
+  it("drops quoted replies and the footer, and keeps only the start of a long body", () => {
+    const base = {
+      id: "m1",
+      receivedAt,
+      from: null,
+      fromAddress: null,
+      subject: null,
+      html: null,
+      authenticationResults: [],
+    };
+    const alert = `Transaksi kartu kredit BCA\nMerchant: KOPI KENANGAN\nTotal Rp 25.000\n${"Detail ".repeat(80)}`;
+    const body = toEmailForExtraction({
+      ...base,
+      text: `${alert}\n> earlier message\nEmail ini dikirim secara otomatis.\nUnsubscribe here`,
+    })?.body;
+    assert.equal(body, alert.trim());
+    // A footer-like line at the very top is part of the alert, not boilerplate.
+    assert.ok(
+      toEmailForExtraction({
+        ...base,
+        text: "Do not reply to OTP requests\nTotal Rp 10.000",
+      })?.body.includes("Total Rp 10.000"),
+    );
+    const long = toEmailForExtraction({ ...base, text: "x".repeat(20_000) })?.body ?? "";
+    assert.equal(long.length, 4_000);
+  });
 });
 
 describe("extractTransactions", () => {

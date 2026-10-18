@@ -7,7 +7,24 @@ COMPOSIO_API_URL=https://backend.composio.dev/api/v3.1
 COMPOSIO_API_KEY=
 KAPSO_API_KEY=
 KAPSO_WEBHOOK_SECRET=
+
+# Any OpenAI-compatible chat completions endpoint that supports strict json_schema
+# output. Used for Gmail parsing, merchant categories, and WhatsApp replies.
+#   OpenRouter:   LLM_BASE_URL=https://openrouter.ai/api/v1   LLM_MODEL=openai/gpt-4o-mini
+#   Azure OpenAI / AI Foundry: LLM_BASE_URL=https://<resource>.openai.azure.com/openai/v1
+#                 LLM_MODEL=<deployment name>   LLM_API_KEY=<the deployment's key>
+# Prefer a small non-reasoning model (e.g. gpt-4o-mini); raise its tokens-per-minute limit.
+# Avoid ":free" OpenRouter models: they allow about 20 requests a minute and a small
+# daily cap, and their providers may keep prompts, which here are bank emails.
 LLM_BASE_URL=
 LLM_API_KEY=
 LLM_MODEL=
+
 BRAVE_SEARCH_API_KEY=
+
+# Gmail parse throughput. At most (queue max_concurrency 3) x GMAIL_PARSE_CONCURRENCY
+# model calls run at once. A rate-limited or busy model puts emails back on the queue
+# instead of failing them, but raise this only as far as the model's tokens-per-minute
+# limit allows. Both accept 1-10.
+GMAIL_PARSE_BATCH_SIZE=10
+GMAIL_PARSE_CONCURRENCY=2
