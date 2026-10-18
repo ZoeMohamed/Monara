@@ -185,6 +185,7 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
   );
 }
 
+/** No button while the import runs; closing the sheet leaves it running behind a banner. */
 export function ImportStep({ progress, onNext }: { progress: ImportProgress; onNext: () => void }) {
   const done = progress.state === "completed";
   const failed = progress.state === "failed";
@@ -192,10 +193,12 @@ export function ImportStep({ progress, onNext }: { progress: ImportProgress; onN
   return (
     <StepFrame
       actions={
-        <Button className="min-h-12" onPress={onNext}>
-          {done ? "Explore Monara" : "Next"}
-          <ButtonIcon name="arrow" />
-        </Button>
+        done || failed ? (
+          <Button className="min-h-12" onPress={onNext}>
+            Explore Monara
+            <ButtonIcon name="arrow" />
+          </Button>
+        ) : undefined
       }
       step={3}
     >
