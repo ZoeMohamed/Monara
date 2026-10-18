@@ -123,6 +123,10 @@ update public.transactions
 set occurred_on = (created_at at time zone 'Asia/Jakarta')::date
 where occurred_on is null;
 
+-- Production rows can queue the schema's deferred ownership foreign-key checks
+-- during the backfill. Flush them before changing this table's definition.
+set constraints all immediate;
+
 alter table public.transactions
   alter column occurred_on set default ((statement_timestamp() at time zone 'Asia/Jakarta')::date),
   alter column occurred_on set not null,
