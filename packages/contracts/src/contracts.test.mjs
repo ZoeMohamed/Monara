@@ -534,6 +534,19 @@ describe("Gmail extraction contracts", () => {
     );
   });
 
+  it("accepts parse jobs before and after delayed-retry metadata is deployed", () => {
+    const job = {
+      kind: "gmail.parse",
+      connectionId,
+      emails: [{ processedMessageId, gmailMessageId: "m1", receivedAt: timestamp }],
+    };
+    const oldProducer = gmailJobSchema.parse(job);
+    const newProducer = gmailJobSchema.parse({ ...job, deferrals: 2 });
+    assert.equal(oldProducer.deferrals, 0);
+    assert.equal(newProducer.deferrals, 2);
+    assert.equal(gmailJobSchema.safeParse({ ...job, deferrals: 101 }).success, false);
+  });
+
   it("records only registry institutions and a sender verification flag", () => {
     const base = { processedMessageId, outcome: "skipped", items: [], senderVerified: false };
     assert.equal(
