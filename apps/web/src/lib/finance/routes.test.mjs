@@ -70,6 +70,9 @@ const hooks = registerHooks({
     if (specifier === "@/lib/http/origin") {
       return nextResolve(new URL("../http/origin.ts", import.meta.url).href, context);
     }
+    if (specifier === "@/lib/http/rate-limit") {
+      return nextResolve(new URL("../http/rate-limit.ts", import.meta.url).href, context);
+    }
     return nextResolve(specifier, context);
   },
 });

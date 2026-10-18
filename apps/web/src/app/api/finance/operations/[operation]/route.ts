@@ -11,6 +11,7 @@ import {
 import { importAfterAccountLinked } from "@/lib/gmail/import";
 import { syncUserTriggers } from "@/lib/gmail/trigger";
 import { isSameOriginRequest } from "@/lib/http/origin";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/http/rate-limit";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -39,6 +40,12 @@ export async function POST(
   if (!identity) {
     return financeErrorResponse(
       new FinanceOperationError("UNAUTHENTICATED", "Sign in to continue."),
+    );
+  }
+  const limited = checkRateLimit("finance", identity.id, RATE_LIMITS.finance);
+  if (!limited.ok) {
+    return financeErrorResponse(
+      new FinanceOperationError("RATE_LIMITED", "Too many requests. Try again in a moment."),
     );
   }
   const { operation } = await params;

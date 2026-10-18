@@ -32,6 +32,9 @@ const hooks = registerHooks({
     if (specifier === "@/lib/http/origin") {
       return nextResolve(new URL("../http/origin.ts", import.meta.url).href, context);
     }
+    if (specifier === "@/lib/http/rate-limit") {
+      return nextResolve(new URL("../http/rate-limit.ts", import.meta.url).href, context);
+    }
     return nextResolve(specifier, context);
   },
 });
@@ -67,6 +70,39 @@ describe("chat reply persistence boundary", () => {
       assert.equal(state.saves[0][1].conversationId, conversationId);
       assert.ok(state.saves[0][3] instanceof AbortSignal);
     } finally {
+      globalThis.fetch = originalFetch;
+      if (previousUrl === undefined) delete process.env.MONARA_AGENT_URL;
+      else process.env.MONARA_AGENT_URL = previousUrl;
+      if (previousSecret === undefined) delete process.env.MONARA_AGENT_BACKEND_SECRET;
+      else process.env.MONARA_AGENT_BACKEND_SECRET = previousSecret;
+    }
+  });
+
+  it("refuses with a retry time once a User sends too many messages", async () => {
+    const originalFetch = globalThis.fetch;
+    const previousUrl = process.env.MONARA_AGENT_URL;
+    const previousSecret = process.env.MONARA_AGENT_BACKEND_SECRET;
+    process.env.MONARA_AGENT_URL = "https://agent.example";
+    process.env.MONARA_AGENT_BACKEND_SECRET = "synthetic-secret";
+    globalThis.fetch = async () => Response.json(answer);
+    const { resetRateLimits, RATE_LIMITS } = await import("../http/rate-limit.ts");
+    resetRateLimits();
+    const send = () =>
+      POST(
+        new Request("https://web.example/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", "sec-fetch-site": "same-origin" },
+          body: JSON.stringify({ text: "log coffee", history: [], conversationId }),
+        }),
+      );
+    try {
+      for (let i = 0; i < RATE_LIMITS.chat.limit; i++) assert.equal((await send()).status, 200);
+      const refused = await send();
+      assert.equal(refused.status, 429);
+      assert.equal((await refused.json()).code, "RATE_LIMITED");
+      assert.ok(Number(refused.headers.get("retry-after")) >= 1);
+    } finally {
+      resetRateLimits();
       globalThis.fetch = originalFetch;
       if (previousUrl === undefined) delete process.env.MONARA_AGENT_URL;
       else process.env.MONARA_AGENT_URL = previousUrl;
