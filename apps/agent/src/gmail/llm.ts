@@ -146,7 +146,9 @@ export function createLlmClient(config: LlmConfig) {
   /** The output cap, under the name this provider takes, and the reasoning effort. */
   function limits(request: JsonCompletionRequest): Record<string, unknown> {
     const answer = Math.min(request.maxOutputTokens ?? MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS);
-    const cap = answer + (reasoningEffort === null ? 0 : REASONING_TOKEN_ALLOWANCE);
+    const cap =
+      answer +
+      (reasoningEffort === null || reasoningEffort === "none" ? 0 : REASONING_TOKEN_ALLOWANCE);
     if (isOpenRouter) {
       return reasoningEffort === null
         ? { max_tokens: cap }
@@ -205,9 +207,18 @@ export function createLlmClient(config: LlmConfig) {
 
     // OpenRouter sends whitespace while the model works; a provider failure after that
     // leaves the 200 with a cut-off body, which is worth retrying.
+    let body: string;
+    try {
+      body = (await response.text()).trim();
+    } catch {
+      // Reading a streamed body can time out after the headers arrived. There is no
+      // useful HTTP status in that case, so defer to the queue instead of retrying
+      // the full request inline for several more minutes.
+      throw new LlmError("The model response could not be read.", null, "unavailable");
+    }
     let payload: unknown;
     try {
-      payload = JSON.parse((await response.text()).trim());
+      payload = JSON.parse(body);
     } catch {
       throw new LlmError("The model response was cut off.", response.status, "unavailable");
     }

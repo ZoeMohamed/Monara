@@ -160,6 +160,12 @@ describe("extractTransactions", () => {
     assert.doesNotMatch(request?.user ?? "", /categories|financial accounts/i);
   });
 
+  it("allows the full client output cap for multi-item emails", async () => {
+    const llm = fakeLlm({ isTransactionEmail: false, items: [] });
+    await extractTransactions(llm, email("Total Rp 25.000"));
+    assert.equal(llm.requests[0]?.maxOutputTokens, 2000);
+  });
+
   it("keeps a location only when the email states it", async () => {
     const llm = fakeLlm({
       isTransactionEmail: true,

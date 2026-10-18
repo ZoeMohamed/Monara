@@ -106,6 +106,29 @@ describe("busy or failing model providers", () => {
     assert.deepEqual(await padded.llm.completeJson(request), { ok: 1 });
   });
 
+  it("defers immediately when reading the response body fails", async () => {
+    let calls = 0;
+    const llm = createLlmClient({
+      baseUrl: "https://llm.example/v1",
+      apiKey: "test-key",
+      model: "test-model",
+      async fetcher() {
+        calls += 1;
+        const response = Response.json({ choices: [] });
+        response.text = async () => {
+          throw new DOMException("Timed out", "TimeoutError");
+        };
+        return response;
+      },
+    });
+
+    await assert.rejects(llm.completeJson(request), {
+      failure: "unavailable",
+      status: null,
+    });
+    assert.equal(calls, 1);
+  });
+
   it("never retries a rejected request such as a bad key", async () => {
     const { llm, calls } = client([() => new Response(null, { status: 401 })]);
     await assert.rejects(llm.completeJson(request), { failure: "failed", status: 401 });
@@ -161,6 +184,12 @@ describe("reasoning models", () => {
     assert.equal(Object.hasOwn(plain, "reasoning_effort"), false);
     const renamed = await bodyFor("https://res.openai.azure.com/openai/v1", "parser", "minimal");
     assert.equal(renamed.reasoning_effort, "minimal");
+  });
+
+  it("does not reserve reasoning tokens when reasoning is disabled", async () => {
+    const body = await bodyFor("https://res.openai.azure.com/openai/v1", "parser", "none");
+    assert.equal(body.max_completion_tokens, 1500);
+    assert.equal(body.reasoning_effort, "none");
   });
 
   it("uses OpenRouter's own fields", async () => {
