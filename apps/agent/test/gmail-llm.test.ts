@@ -112,3 +112,44 @@ describe("busy or failing model providers", () => {
     assert.equal(calls(), 1);
   });
 });
+
+describe("reasoning models", () => {
+  const request = { system: "s", user: "u", schemaName: "t", schema: { type: "object" } };
+
+  async function bodyFor(baseUrl: string, model: string, reasoningEffort?: string) {
+    let body: Record<string, unknown> = {};
+    const llm = createLlmClient({
+      baseUrl,
+      apiKey: "k",
+      model,
+      reasoningEffort,
+      async fetcher(_input, init) {
+        body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return Response.json({ choices: [{ message: { content: "{}" } }] });
+      },
+    });
+    await llm.completeJson({ ...request, maxOutputTokens: 1500 });
+    return body;
+  }
+
+  it("sends Azure's max_completion_tokens and low effort, with room to reason, for gpt-5", async () => {
+    const body = await bodyFor("https://res.openai.azure.com/openai/v1", "gpt-5.4-mini");
+    assert.equal(body.max_completion_tokens, 3500);
+    assert.equal(body.reasoning_effort, "low");
+    assert.equal(Object.hasOwn(body, "max_tokens"), false);
+  });
+
+  it("sends no effort to a non-reasoning model, and honors a set effort for a renamed deployment", async () => {
+    const plain = await bodyFor("https://res.openai.azure.com/openai/v1", "gpt-4o-mini");
+    assert.equal(plain.max_completion_tokens, 1500);
+    assert.equal(Object.hasOwn(plain, "reasoning_effort"), false);
+    const renamed = await bodyFor("https://res.openai.azure.com/openai/v1", "parser", "minimal");
+    assert.equal(renamed.reasoning_effort, "minimal");
+  });
+
+  it("uses OpenRouter's own fields", async () => {
+    const body = await bodyFor("https://openrouter.ai/api/v1", "openai/gpt-5-mini");
+    assert.equal(body.max_tokens, 3500);
+    assert.deepEqual(body.reasoning, { effort: "low" });
+  });
+});

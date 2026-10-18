@@ -72,6 +72,7 @@ function createLlm(env: Env) {
     baseUrl: env.LLM_BASE_URL ?? "",
     apiKey: env.LLM_API_KEY ?? "",
     model: env.LLM_MODEL ?? "",
+    reasoningEffort: env.LLM_REASONING_EFFORT,
   });
 }
 

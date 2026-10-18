@@ -10,6 +10,11 @@ const MAX_INLINE_WAIT_MS = 10_000;
 const MAX_INLINE_RETRIES = 2;
 /** Used when a busy provider does not say how long to wait. */
 const DEFAULT_BUSY_WAIT_MS = 2_000;
+/** Reasoning tokens count against the cap too, so a reasoning model gets this much more. */
+const REASONING_TOKEN_ALLOWANCE = 2_000;
+/** gpt-5 and o-series models reason before answering; their names start like this. */
+const REASONING_MODEL = /^(openai\/)?(gpt-5|o[1-9])/i;
+const REASONING_EFFORTS = new Set(["none", "minimal", "low", "medium", "high"]);
 
 type Fetcher = (input: string, init: RequestInit) => Promise<Response>;
 
@@ -17,6 +22,11 @@ export interface LlmConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /**
+   * How hard a reasoning model thinks. Unset means "low" for a gpt-5 or o-series model
+   * name and nothing for others; set it for an Azure deployment named differently.
+   */
+  reasoningEffort?: string;
   fetcher?: Fetcher;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -117,9 +127,36 @@ export function createLlmClient(config: LlmConfig) {
   if (!baseUrl || !apiKey || !model) {
     throw new Error("Missing required LLM configuration: LLM_BASE_URL, LLM_API_KEY, LLM_MODEL.");
   }
+  const configuredEffort = config.reasoningEffort?.trim().toLowerCase() || null;
+  const reasoningEffort =
+    configuredEffort !== null && REASONING_EFFORTS.has(configuredEffort)
+      ? configuredEffort
+      : REASONING_MODEL.test(model)
+        ? "low"
+        : null;
+  const host = new URL(baseUrl).hostname;
+  // OpenAI and Azure reasoning models reject max_tokens; OpenRouter takes max_tokens.
+  const openAiStyle = host.endsWith(".azure.com") || host === "api.openai.com";
+  const isOpenRouter = host === "openrouter.ai";
   const fetcher = config.fetcher ?? fetch;
   const sleep =
     config.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+
+  /** The output cap, under the name this provider takes, and the reasoning effort. */
+  function limits(request: JsonCompletionRequest): Record<string, unknown> {
+    const answer = Math.min(request.maxOutputTokens ?? MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS);
+    const cap = answer + (reasoningEffort === null ? 0 : REASONING_TOKEN_ALLOWANCE);
+    if (isOpenRouter) {
+      return reasoningEffort === null
+        ? { max_tokens: cap }
+        : { max_tokens: cap, reasoning: { effort: reasoningEffort } };
+    }
+    const fields: Record<string, unknown> = openAiStyle
+      ? { max_completion_tokens: cap }
+      : { max_tokens: cap };
+    if (reasoningEffort !== null) fields.reasoning_effort = reasoningEffort;
+    return fields;
+  }
 
   async function attempt(request: JsonCompletionRequest): Promise<unknown> {
     let response: Response;
@@ -129,7 +166,7 @@ export function createLlmClient(config: LlmConfig) {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
           model,
-          max_tokens: Math.min(request.maxOutputTokens ?? MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS),
+          ...limits(request),
           messages: [
             { role: "system", content: request.system },
             {

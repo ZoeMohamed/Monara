@@ -37,6 +37,7 @@ export class WhatsAppConversation extends DurableObject<Env> {
             baseUrl: env.LLM_BASE_URL ?? "",
             apiKey: env.LLM_API_KEY ?? "",
             model: env.LLM_MODEL ?? "",
+            reasoningEffort: env.LLM_REASONING_EFFORT,
           }),
           callOperation: createCallOperation({
             baseUrl: env.MONARA_BACKEND_URL ?? "",

@@ -19,6 +19,10 @@ KAPSO_WEBHOOK_SECRET=
 LLM_BASE_URL=
 LLM_API_KEY=
 LLM_MODEL=
+# Only for reasoning models (gpt-5.x, o-series): none, minimal, low, medium, or high.
+# Defaults to low when LLM_MODEL starts with gpt-5 or o1-o9; set it if the Azure
+# deployment has another name. Leave empty for non-reasoning models.
+LLM_REASONING_EFFORT=
 
 BRAVE_SEARCH_API_KEY=
 
