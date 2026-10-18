@@ -106,6 +106,26 @@ describe("busy or failing model providers", () => {
     assert.deepEqual(await padded.llm.completeJson(request), { ok: 1 });
   });
 
+  it("retries an empty or broken answer, but not one cut at the cap or filtered", async () => {
+    const empty = client([() => Response.json({ choices: [{ message: { content: null } }] })]);
+    await assert.rejects(empty.llm.completeJson(request), { failure: "unavailable", status: 200 });
+    assert.equal(empty.calls(), 3);
+
+    const broken = client([
+      () => Response.json({ choices: [{ message: { content: '{"ok":' } }] }),
+      answer,
+    ]);
+    assert.deepEqual(await broken.llm.completeJson(request), { ok: true });
+
+    for (const finish_reason of ["length", "content_filter"]) {
+      const capped = client([
+        () => Response.json({ choices: [{ finish_reason, message: { content: '{"ok":' } }] }),
+      ]);
+      await assert.rejects(capped.llm.completeJson(request), { failure: "failed" });
+      assert.equal(capped.calls(), 1);
+    }
+  });
+
   it("defers immediately when reading the response body fails", async () => {
     let calls = 0;
     const llm = createLlmClient({
