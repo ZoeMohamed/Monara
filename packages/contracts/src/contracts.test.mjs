@@ -302,6 +302,11 @@ describe("transaction contracts", () => {
 
   it("applies pagination defaults without making them required at input", () => {
     assert.deepEqual(listTransactionsInputSchema.parse({}), { limit: 50 });
+    assert.deepEqual(
+      listTransactionsInputSchema.parse({ financialAccountIds: [ids.accountA, ids.accountB] }),
+      { limit: 50, financialAccountIds: [ids.accountA, ids.accountB] },
+    );
+    assert.equal(listTransactionsInputSchema.safeParse({ financialAccountIds: [] }).success, false);
   });
 });
 

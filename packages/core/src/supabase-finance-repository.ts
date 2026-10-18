@@ -340,6 +340,9 @@ export function createSupabaseFinanceRepository(
         .range(offset, offset + limit);
       if (input.reviewStatus) query = query.eq("review_status", input.reviewStatus);
       if (input.kind) query = query.eq("transaction_type", input.kind);
+      if (input.financialAccountIds) {
+        query = query.in("financial_account_id", input.financialAccountIds);
+      }
       if (input.month) {
         const { startsOn, endsOn } = monthRange(input.month);
         query = query.gte("occurred_on", startsOn).lte("occurred_on", endsOn);
