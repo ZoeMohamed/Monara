@@ -157,6 +157,7 @@ export function syncQuery(
   return `${window} ${fromClause(senders)}`;
 }
 
+/** Builds the Gmail queue handlers from runtime-owned provider dependencies. */
 export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
   const { backend, reader, llm, enqueue, enqueueMerchant } = dependencies;
   const now = dependencies.now ?? (() => new Date());

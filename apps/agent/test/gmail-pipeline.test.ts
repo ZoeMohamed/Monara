@@ -99,6 +99,7 @@ interface Overrides {
 }
 
 /** Fake backend, reader and model that record every call the pipeline makes. */
+/** Creates an isolated Gmail pipeline test harness with captured side effects. */
 function setup(overrides: Overrides = {}) {
   const calls = {
     claim: [] as ClaimGmailMessageInput[],
