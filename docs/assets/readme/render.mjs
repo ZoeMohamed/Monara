@@ -41,7 +41,7 @@ const browser = await chromium.launch({ channel: "chrome" });
 try {
   for (const [name, width, height, scale] of [
     ["showcase", 1500, 960, 1],
-    ["architecture", 1500, 1060, 2],
+    ["architecture", 1500, 1110, 2],
     ["social-preview", 1280, 640, 1],
   ]) {
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale });

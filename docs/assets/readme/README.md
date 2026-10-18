@@ -29,6 +29,7 @@ Base URL: `https://monara-finance.vercel.app`. Demo records use a fixed 11 Octob
 The image summarizes source boundaries, not deployment acceptance or every HTTP exchange:
 
 - `apps/web/src/lib/finance/service.ts`, `packages/core/src/finance.ts`, and `packages/core/src/supabase-finance-repository.ts`: owned backend operations and database repositories.
+- `apps/web/src/app/api/agent/operations/[operation]/route.ts`: agent calls authenticate with the shared runtime bearer secret and carry a runtime-supplied User ID, rather than a Supabase session principal. Backend ownership filters protect these service-role operations; RLS does not apply to service-role database calls.
 - `apps/web/src/app/auth/sign-in/route.ts` and `auth/callback/route.ts`: Supabase Google sign-in. Auth token exchange is summarized in the Supabase card.
 - `apps/agent/src/conversation/agent.ts` and `backend.ts`: shared agent and authenticated backend calls.
 - `apps/agent/src/gmail`, `apps/agent/src/merchant`, and `apps/agent/wrangler.jsonc`: durable email processing, merchant enrichment, and scheduled jobs.

@@ -63,6 +63,8 @@ Individual screenshots: [Overview](docs/assets/readme/screenshots/overview.png) 
 - **Cloudflare Workers** host the shared agent, per-User WhatsApp Durable Objects, Gmail and merchant queues, and scheduled processing. The worker calls authenticated backend operations for financial reads and writes.
 - **Composio and Kapso** handle Gmail access and WhatsApp transport. Signed provider webhooks, server identity checks, and explicit WhatsApp linking establish who may act.
 
+Web requests verify Supabase sessions. Agent requests instead authenticate the runtime with a shared bearer secret and use its supplied User context. Backend services scope financial operations to that User; service-role database calls bypass RLS.
+
 The PWA includes an installable shell and a static offline fallback. Personal financial data and authentication responses are never cached by the service worker.
 
 See [runtime boundaries](docs/adr/0001-initial-runtime-boundaries.md), [workspace ownership](docs/repository-structure.md), and the [agent runtime](apps/agent/README.md) for the detailed contracts. The initial ADR records the architecture decision; its original scaffold status is historical.
