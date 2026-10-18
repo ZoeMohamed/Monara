@@ -1,9 +1,11 @@
 "use client";
 
+import type { FinancialAccount, Transaction } from "@monara/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   Detection,
+  ImportedTransaction,
   ImportProgress,
   OnboardingEngine,
 } from "@/components/use-onboarding-engine";
@@ -23,6 +25,8 @@ import { saveFullName } from "@/lib/profile/client";
 const POLL_MS = 3_000;
 /** Detection reads a few hundred headers; past this Gmail is probably not answering. */
 const DETECTION_TIMEOUT_MS = 90_000;
+/** The import covers 30 days of email; the newest page of transactions is plenty to show. */
+const FEED_LIMIT = 100;
 
 export function onboardingErrorMessage(error: unknown) {
   return error instanceof FinanceClientError || error instanceof GmailClientError
@@ -120,9 +124,61 @@ function useDetection(mailboxId: string | null | undefined, enabled: boolean) {
   return { detection, retry };
 }
 
+function feedItem(
+  transaction: Transaction,
+  accounts: Map<string, FinancialAccount>,
+): ImportedTransaction | null {
+  const account = transaction.financialAccountId
+    ? accounts.get(transaction.financialAccountId)
+    : undefined;
+  if (
+    !account ||
+    transaction.source !== "gmail_email" ||
+    transaction.deletedAt !== null ||
+    !transaction.kind ||
+    !transaction.money ||
+    !transaction.occurredOn
+  ) {
+    return null;
+  }
+  const amount = Number(transaction.money.amountMinor);
+  if (!Number.isSafeInteger(amount)) return null;
+  return {
+    id: transaction.id,
+    provider: account.institution ?? account.name,
+    bankName: account.name,
+    merchant: transaction.merchantName ?? transaction.description ?? "Transaction",
+    amount,
+    date: transaction.occurredOn,
+    kind: transaction.kind,
+  };
+}
+
+/** The newest transactions Gmail imported into the mailbox's accounts. */
+async function loadImportFeed(mailboxId: string): Promise<ImportedTransaction[]> {
+  const [accounts, transactions] = await Promise.all([
+    callFinanceOperation("list_financial_accounts", { limit: 100 }),
+    callFinanceOperation("list_transactions", { limit: FEED_LIMIT }),
+  ]);
+  const owned = new Map(
+    accounts.items
+      .filter((account) => account.gmailConnectionId === mailboxId)
+      .map((account) => [account.id, account]),
+  );
+  return transactions.items.flatMap((transaction) => feedItem(transaction, owned) ?? []);
+}
+
+/** Keeps rows already shown in place and puts new ones on top, so only new rows animate in. */
+function mergeFeed(current: ImportedTransaction[], latest: ImportedTransaction[]) {
+  const shown = new Set(current.map((item) => item.id));
+  const added = latest.filter((item) => !shown.has(item.id));
+  return added.length === 0 ? current : [...added, ...current];
+}
+
 /**
- * Reads how the mailbox's latest sync is going. It only reads: starting the import
- * belongs to the backend, which will run it as soon as the accounts exist.
+ * Reads how the mailbox's latest sync is going and the transactions it has imported so
+ * far. It only reads: starting the import belongs to the backend, which runs it as soon
+ * as the accounts exist.
  */
 function useImportProgress(mailboxId: string | null | undefined, enabled: boolean) {
   const [progress, setProgress] = useState<ImportProgress>(waitingProgress);
@@ -133,41 +189,47 @@ function useImportProgress(mailboxId: string | null | undefined, enabled: boolea
     const controller = new AbortController();
     const { signal } = controller;
     const poll = () =>
-      loadGmailConnections({ signal }).then(
-        (mailboxes) => {
-          const sync = mailboxes.find((mailbox) => mailbox.id === mailboxId)?.sync;
-          if (signal.aborted || !sync) return;
+      Promise.all([
+        loadGmailConnections({ signal }),
+        // A failed read of the rows keeps the ones already shown.
+        loadImportFeed(mailboxId).catch(() => []),
+      ]).then(([mailboxes, feed]) => {
+        const sync = mailboxes.find((mailbox) => mailbox.id === mailboxId)?.sync;
+        if (signal.aborted || !sync) return;
+        setProgress((current) => {
+          const merged = mergeFeed(current.feed, feed);
           if (sync.state === "completed") {
-            setProgress({
+            return {
               state: "completed",
               emailsRead: null,
               totalEmails: null,
               transactions: sync.transactions,
               totalTransactions: sync.transactions,
-              feed: [],
-            });
-          } else if (sync.state === "failed") {
-            setProgress({
+              feed: merged,
+            };
+          }
+          if (sync.state === "failed") {
+            return {
               state: "failed",
               emailsRead: null,
               totalEmails: null,
               transactions: null,
               totalTransactions: null,
-              feed: [],
+              feed: merged,
               message: sync.message,
-            });
-          } else {
-            setProgress({
-              ...waitingProgress,
-              state: sync.state === "running" ? "running" : "waiting",
-            });
+            };
           }
-        },
-        // A failed check keeps the last known state; the next one tries again.
-        () => undefined,
-      );
-    void poll();
-    const timer = window.setInterval(() => void poll(), POLL_MS);
+          return {
+            ...waitingProgress,
+            state: sync.state === "running" ? "running" : "waiting",
+            feed: merged,
+          };
+        });
+      });
+    // A failed check keeps the last known state; the next one tries again.
+    const check = () => void poll().catch(() => undefined);
+    check();
+    const timer = window.setInterval(check, POLL_MS);
     return () => {
       controller.abort();
       window.clearInterval(timer);
@@ -183,7 +245,13 @@ export function useGmailOnboarding(
   phase: OnboardingPhase | null,
 ): OnboardingEngine {
   const { detection, retry } = useDetection(mailboxId, phase === "detect");
-  const progress = useImportProgress(mailboxId, phase === "import" || phase === "background");
+  // Saving the banks starts the import, so progress is read from then on, even while
+  // the bank step is still showing.
+  const [saved, setSaved] = useState(false);
+  const progress = useImportProgress(
+    mailboxId,
+    phase === "import" || phase === "background" || (phase === "detect" && saved),
+  );
   const created = useRef(new Set<string>());
   // One request id per bank for the life of the sheet, so a retry after a lost response
   // reuses it and cannot create the account twice.
@@ -215,6 +283,7 @@ export function useGmailOnboarding(
       );
       const failure = results.find((result) => result.status === "rejected");
       if (failure) throw failure.reason;
+      setSaved(true);
     },
     [mailboxId],
   );
