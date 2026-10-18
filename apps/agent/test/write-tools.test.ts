@@ -136,6 +136,7 @@ test("add_transaction fills what the User left out with null and returns the rec
   assert.match(String(clientRequestId), /^[0-9a-f-]{36}$/);
   assert.deepEqual(values, {
     kind: "expense",
+    flowDirection: "out",
     merchantName: "Warteg Bahari",
     money: { amountMinor: "20000", currency: "IDR" },
     occurredOn: "2026-10-13",

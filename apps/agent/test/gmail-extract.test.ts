@@ -103,6 +103,7 @@ describe("extractTransactions", () => {
     assert.deepEqual(result.items, [
       {
         kind: "expense",
+        flowDirection: "out",
         merchantName: "Kopi Contoh",
         money: { amountMinor: "25000", currency: "IDR" },
         occurredOn: "2026-10-12",
@@ -173,10 +174,11 @@ describe("extractTransactions", () => {
     assert.equal(result.money, null);
   });
 
-  it("drops a date after the email arrived", async () => {
+  it("replaces an invalid future date with the email's Jakarta date", async () => {
     const llm = fakeLlm({ isTransactionEmail: true, items: [item({ occurredOn: "2026-11-30" })] });
     const [result] = (await extractTransactions(llm, email("Total Rp 25.000"))).items;
-    assert.equal(result.occurredOn, null);
+    assert.equal(result.occurredOn, "2026-10-12");
+    assert.equal(result.occurredTime, null);
     assert.equal(result.money?.amountMinor, "25000");
   });
 

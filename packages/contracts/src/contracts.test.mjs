@@ -193,7 +193,7 @@ describe("transaction contracts", () => {
         createdAt: timestamp,
         updatedAt: timestamp,
       }).success,
-      true,
+      false,
     );
     assert.equal(
       transactionSchema.safeParse({

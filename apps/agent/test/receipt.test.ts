@@ -108,6 +108,7 @@ test("a receipt photo is saved as one pending transaction with the photo sent to
     clientRequestId: "wa:wamid.receipt-1",
     values: {
       kind: "expense",
+      flowDirection: "out",
       merchantName: "INDOMARET KEMANG RAYA",
       money: { amountMinor: "37000", currency: "IDR" },
       occurredOn: "2026-10-17",
@@ -135,10 +136,10 @@ test("an unknown account is left empty and the User is asked which one paid", as
   assert.match(reply, /Which account paid for it\?/);
 });
 
-test("a future date is dropped and lowers confidence instead of being guessed", async () => {
+test("a future date falls back to today's Jakarta date and lowers confidence", async () => {
   const { saved } = await run({ ...reading, occurredOn: "2027-01-01" });
   const values = saved?.values as Record<string, unknown> | undefined;
-  assert.equal(values?.occurredOn, null);
+  assert.equal(values?.occurredOn, "2026-10-17");
   assert.equal(values?.occurredTime, null);
   assert.equal(saved?.confidence, 0.5);
 });

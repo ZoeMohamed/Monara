@@ -61,7 +61,7 @@ type ReminderRow = Pick<
 >;
 
 const TRANSACTION_COLUMNS =
-  "id, financial_account_id, category_id, source_type, transaction_type, merchant_name, amount::text, currency, occurred_on, occurred_time, description, location, account_hint, ai_confidence, review_status, deleted_at, created_at, updated_at";
+  "id, financial_account_id, category_id, source_type, transaction_type, flow_direction, merchant_name, amount::text, currency, occurred_on, occurred_time, description, location, account_hint, ai_confidence, review_status, deleted_at, created_at, updated_at";
 const ACCOUNT_COLUMNS =
   "id, name, institution, account_type, currency, last_four, institution_key, gmail_connection_id, is_active, created_at, updated_at";
 const CATEGORY_COLUMNS =
@@ -143,6 +143,7 @@ function toTransaction(row: ExactTransactionRow): Transaction {
   return transactionSchema.parse({
     id: row.id,
     kind: row.transaction_type,
+    flowDirection: row.flow_direction,
     merchantName: row.merchant_name,
     money:
       row.amount === null || row.currency === null
@@ -244,10 +245,18 @@ const transactionUpdate = (
   values: Parameters<FinanceRepository["replaceTransaction"]>[0]["values"],
 ) => ({
   transaction_type: values.kind,
+  flow_direction:
+    values.kind === "expense"
+      ? "out"
+      : values.kind === "income"
+        ? "in"
+        : (values.flowDirection ?? null),
   merchant_name: values.merchantName,
   amount: values.money ? databaseNumeric(values.money.amountMinor) : null,
   currency: values.money?.currency ?? null,
-  occurred_on: values.occurredOn,
+  // Pending captures may omit a stated date. Inserts use the database's Jakarta
+  // fallback; updates leave the already-normalized date intact.
+  occurred_on: values.occurredOn ?? undefined,
   occurred_time: values.occurredTime,
   description: values.description,
   location: values.location,

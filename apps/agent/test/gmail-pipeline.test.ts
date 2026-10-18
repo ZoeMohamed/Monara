@@ -747,6 +747,7 @@ describe("processBatch", () => {
     });
     await pipeline.runJob(parseJob(["m1"]), notFinal);
     assert.equal(calls.record[0]?.items[0]?.kind, "exclusion");
+    assert.equal(calls.record[0]?.items[0]?.flowDirection, "out");
   });
 
   it("stops without recording when the connection is lost", async () => {

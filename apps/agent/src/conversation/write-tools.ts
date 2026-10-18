@@ -55,6 +55,12 @@ const addTransaction: AgentTool<typeof addTransactionInputSchema> = {
     const request = createTransactionInputSchema.safeParse({
       ...UNSET_TRANSACTION_VALUES,
       ...input,
+      flowDirection:
+        input.kind === "expense"
+          ? "out"
+          : input.kind === "income"
+            ? "in"
+            : (input.flowDirection ?? null),
       // Minted here, not by the model, so a backend retry cannot record it twice.
       clientRequestId: crypto.randomUUID(),
     });

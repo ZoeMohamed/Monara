@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(33);
+select plan(34);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001, the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234), and default Categories.
@@ -227,7 +227,7 @@ select public.record_gmail_extraction(
       "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
       "accountHint": null, "accountLastFour": null, "confidence": 0.5},
-     {"kind": "exclusion", "merchantName": null,
+     {"kind": "exclusion", "flowDirection": "in", "merchantName": null,
       "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": "Top up", "location": null,
       "accountHint": "****5555", "accountLastFour": "5555", "confidence": 0.99}]$$::jsonb,
@@ -328,15 +328,24 @@ select is(
   array[
     row('inst-007', 'pending', false)::text,
     row('inst-008', 'pending', true)::text,
-    row('inst-009', 'pending', false)::text
+    row('inst-009', 'pending', true)::text
   ],
-  'below 95 percent never qualifies, exactly 95 percent qualifies, and incomplete data never does'
+  'below 95 percent never qualifies and dates missing from email content use the received date'
+);
+
+select is(
+  (select row(item.occurred_on, item.flow_direction)::text
+    from public.transactions as item
+    join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
+    where source.gmail_message_id = 'inst-009'),
+  row('2026-10-13'::date, 'out')::text,
+  'Gmail fallback dates use the received instant in Jakarta and expenses retain outflow direction'
 );
 
 -- Categorization write-back.
 select is(
   (select row(applied, review_status)::text
-    from public.set_imported_category((select transaction_ids[1] from recorded_001), 'food & DRINKS')),
+    from public.set_imported_category((select transaction_ids[1] from recorded_001), 'resto & CAFE')),
   row(true, 'confirmed')::text,
   'categorization fills an empty category with the owner''s own Category'
 );
@@ -345,7 +354,7 @@ select is(
     from public.transactions as item
     join public.categories as category on category.id = item.category_id
     where item.id = (select transaction_ids[1] from recorded_001)),
-  row('food-drinks', false)::text,
+  row('resto-cafe', false)::text,
   'the Category matched by name ignoring case, and the transaction stopped waiting'
 );
 select is(
@@ -413,7 +422,7 @@ select is(
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     join public.categories as category on category.id = item.category_id
     where source.gmail_message_id = 'inst-006'),
-  row('food-drinks', 'confirmed', false)::text,
+  row('resto-cafe', 'confirmed', false)::text,
   'a merchant the owner confirmed before gets the same Category and confirms on import'
 );
 select is(
