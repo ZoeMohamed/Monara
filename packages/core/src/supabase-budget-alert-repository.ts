@@ -47,22 +47,67 @@ export function createSupabaseBudgetAlertRepository(
         .select("id")
         .single();
       // reminder_deliveries_reminder_channel_key: another call reserved it first.
-      if (result.error?.code === "23505") return null;
+      if (result.error?.code === "23505") {
+        const existing = await client
+          .from("reminder_deliveries")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("reminder_id", reminderId)
+          .eq("channel", "whatsapp")
+          .maybeSingle();
+        if (existing.error) fail();
+        return existing.data?.id ?? null;
+      }
       if (result.error) fail();
       return result.data.id;
     },
 
-    async claim({ id, userId, attemptedAt }) {
+    async claim({ id, userId, attemptedAt, reclaimBefore }) {
       const result = await client
         .from("reminder_deliveries")
         .update({ attempted_at: attemptedAt })
         .eq("id", id)
         .eq("user_id", userId)
         .eq("status", "queued")
-        .is("attempted_at", null)
+        .or(`attempted_at.is.null,attempted_at.lt.${reclaimBefore}`)
         .select("id");
       if (result.error) fail();
       return result.data.length === 1;
+    },
+
+    async releaseClaim({ id, userId, attemptedAt }) {
+      const result = await client
+        .from("reminder_deliveries")
+        .update({ attempted_at: null })
+        .eq("id", id)
+        .eq("user_id", userId)
+        .eq("status", "queued")
+        .eq("attempted_at", attemptedAt);
+      if (result.error) fail();
+    },
+
+    async markSending({ id, userId, attemptedAt }) {
+      const result = await client
+        .from("reminder_deliveries")
+        .update({ status: "sending" })
+        .eq("id", id)
+        .eq("user_id", userId)
+        .eq("status", "queued")
+        .eq("attempted_at", attemptedAt)
+        .select("id");
+      if (result.error) fail();
+      return result.data.length === 1;
+    },
+
+    async abandonStaleSending(before) {
+      const result = await client
+        .from("reminder_deliveries")
+        .update({ status: "failed", failure_code: "delivery_outcome_unknown" })
+        .eq("status", "sending")
+        .lt("attempted_at", before)
+        .select("id");
+      if (result.error) fail();
+      return result.data.length;
     },
 
     async countAttemptedSince(userId, since) {
@@ -70,7 +115,7 @@ export function createSupabaseBudgetAlertRepository(
         .from("reminder_deliveries")
         .select("id", { count: "exact", head: true })
         .eq("user_id", userId)
-        .in("status", ["sent", "queued"])
+        .in("status", ["sent", "queued", "sending"])
         .gte("attempted_at", since);
       if (result.error) fail();
       return result.count ?? 0;
@@ -87,16 +132,16 @@ export function createSupabaseBudgetAlertRepository(
         })
         .eq("id", id)
         .eq("user_id", userId)
-        .eq("status", "queued");
+        .in("status", ["queued", "sending"]);
       if (result.error) fail();
     },
 
-    async listQueued(limit) {
+    async listQueued(limit, reclaimBefore) {
       const result = await client
         .from("reminder_deliveries")
         .select("id, user_id, reminder_id")
         .eq("status", "queued")
-        .is("attempted_at", null)
+        .or(`attempted_at.is.null,attempted_at.lt.${reclaimBefore}`)
         .order("created_at", { ascending: true })
         .limit(limit);
       if (result.error) fail();

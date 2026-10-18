@@ -738,6 +738,7 @@ function createMemoryFinanceRepository() {
           kind: "budget_threshold",
           status: "unread",
           budgetId: input.budget.id,
+          periodStartsOn: input.periodStartsOn,
           thresholdPercent: input.thresholdPercent,
           title: `${input.budget.name} Budget`,
           message: `${input.thresholdPercent}% threshold reached.`,
@@ -1543,6 +1544,45 @@ describe("budget alert hook", () => {
       periodEndsOn: "2026-10-31",
     });
     assert.equal(await service.describeBudgetAlert(ownerB, reported[0].reminderId), null);
+  });
+
+  it("describes the exact older period that raised a backdated threshold", async () => {
+    const memory = createMemoryFinanceRepository();
+    const reported = [];
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-15T01:00:30.000Z"),
+      onBudgetReminder: (input) => reported.push(input),
+    });
+    await service.createBudget(callerA, {
+      clientRequestId: "backdated-alert-budget",
+      categoryId: category.id,
+      name: "Food",
+      cadence: "monthly",
+      limit: { amountMinor: "1000000", currency: "IDR" },
+      warningPercent: 80,
+      startsOn: "2026-09-01",
+    });
+    await service.addTransaction(callerA, {
+      clientRequestId: "backdated-alert-spend",
+      kind: "expense",
+      merchantName: "September Warteg",
+      money: { amountMinor: "850000", currency: "IDR" },
+      occurredOn: "2026-09-15",
+      occurredTime: null,
+      description: null,
+      location: null,
+      accountHint: null,
+      categoryId: category.id,
+      financialAccountId: "40000000-0000-4000-8000-000000000004",
+    });
+
+    assert.equal(reported.length, 1);
+    assert.deepEqual(await service.describeBudgetAlert(ownerA, reported[0].reminderId), {
+      budgetName: "Food",
+      used: { amountMinor: "850000", currency: "IDR" },
+      limit: { amountMinor: "1000000", currency: "IDR" },
+      periodEndsOn: "2026-09-30",
+    });
   });
 
   it("never fails a write when the hook throws", async () => {

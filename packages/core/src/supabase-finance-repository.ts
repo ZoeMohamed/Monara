@@ -49,6 +49,7 @@ type ReminderRow = Pick<
   | "kind"
   | "status"
   | "dedupe_key"
+  | "period_starts_on"
   | "threshold_percent"
   | "offset_days"
   | "title"
@@ -68,7 +69,7 @@ const CATEGORY_COLUMNS =
 const BUDGET_COLUMNS =
   "id, category_id, name, cadence, limit_amount::text, currency, warning_percent, starts_on, is_active, deleted_at, created_at, updated_at";
 const REMINDER_COLUMNS =
-  "id, budget_id, recurring_bill_id, kind, status, dedupe_key, threshold_percent, offset_days, title, message, scheduled_for, read_at, created_at, updated_at";
+  "id, budget_id, recurring_bill_id, kind, status, dedupe_key, period_starts_on, threshold_percent, offset_days, title, message, scheduled_for, read_at, created_at, updated_at";
 
 type ExactTransactionRow = Omit<TransactionRow, "amount"> & { amount: string | null };
 type ExactBudgetRow = Omit<BudgetRow, "limit_amount"> & { limit_amount: string };
@@ -227,6 +228,7 @@ function toReminder(row: ReminderRow): Reminder {
           ...common,
           kind: row.kind,
           budgetId: row.budget_id,
+          periodStartsOn: row.period_starts_on,
           thresholdPercent: row.threshold_percent,
         }
       : {
@@ -838,6 +840,7 @@ export function createSupabaseFinanceRepository(
           budget_id: input.budget.id,
           kind: "budget_threshold",
           dedupe_key: input.dedupeKey,
+          period_starts_on: input.periodStartsOn,
           threshold_percent: input.thresholdPercent,
           title: `${input.budget.name} Budget`,
           message: `${input.budget.name} reached ${input.thresholdPercent}%: IDR ${input.usage.amountMinor} of IDR ${input.budget.limit.amountMinor}.`,

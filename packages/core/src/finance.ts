@@ -1462,7 +1462,7 @@ export function createFinanceService(
           candidate.id === reminder.budgetId && candidate.isActive && !candidate.deletedAt,
       );
       if (!budget) return null;
-      const period = budgetPeriodForDate(budget, reminder.createdAt.slice(0, 10));
+      const period = budgetPeriodForDate(budget, reminder.periodStartsOn);
       if (!period) return null;
       const usage = calculateBudgetUsage(
         budget,

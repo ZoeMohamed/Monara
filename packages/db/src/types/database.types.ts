@@ -255,14 +255,14 @@ isOneToOne: false
                   ]
                 },"reminders": {
                   Row: {
-                    "budget_id": string | null,"created_at": string,"dedupe_key": string,"id": string,"kind": string,"message": string,"offset_days": number | null,"read_at": string | null,"recurring_bill_id": string | null,"scheduled_for": string,"status": string,"threshold_percent": number | null,"title": string,"updated_at": string,"user_id": string
+                    "budget_id": string | null,"created_at": string,"dedupe_key": string,"id": string,"kind": string,"message": string,"offset_days": number | null,"period_starts_on": string | null,"read_at": string | null,"recurring_bill_id": string | null,"scheduled_for": string,"status": string,"threshold_percent": number | null,"title": string,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key": string,"id"?: string,"kind": string,"message": string,"offset_days"?: number | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for": string,"status"?: string,"threshold_percent"?: number | null,"title": string,"updated_at"?: string,"user_id": string
+                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key": string,"id"?: string,"kind": string,"message": string,"offset_days"?: number | null,"period_starts_on"?: string | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for": string,"status"?: string,"threshold_percent"?: number | null,"title": string,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key"?: string,"id"?: string,"kind"?: string,"message"?: string,"offset_days"?: number | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for"?: string,"status"?: string,"threshold_percent"?: number | null,"title"?: string,"updated_at"?: string,"user_id"?: string
+                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key"?: string,"id"?: string,"kind"?: string,"message"?: string,"offset_days"?: number | null,"period_starts_on"?: string | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for"?: string,"status"?: string,"threshold_percent"?: number | null,"title"?: string,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
