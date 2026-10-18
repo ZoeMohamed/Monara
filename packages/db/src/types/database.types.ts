@@ -255,14 +255,14 @@ isOneToOne: false
                   ]
                 },"reminders": {
                   Row: {
-                    "budget_id": string | null,"created_at": string,"dedupe_key": string,"id": string,"kind": string,"message": string,"offset_days": number | null,"read_at": string | null,"recurring_bill_id": string | null,"scheduled_for": string,"status": string,"threshold_percent": number | null,"title": string,"updated_at": string,"user_id": string
+                    "budget_id": string | null,"created_at": string,"dedupe_key": string,"id": string,"kind": string,"message": string,"offset_days": number | null,"period_starts_on": string | null,"read_at": string | null,"recurring_bill_id": string | null,"scheduled_for": string,"status": string,"threshold_percent": number | null,"title": string,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key": string,"id"?: string,"kind": string,"message": string,"offset_days"?: number | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for": string,"status"?: string,"threshold_percent"?: number | null,"title": string,"updated_at"?: string,"user_id": string
+                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key": string,"id"?: string,"kind": string,"message": string,"offset_days"?: number | null,"period_starts_on"?: string | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for": string,"status"?: string,"threshold_percent"?: number | null,"title": string,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key"?: string,"id"?: string,"kind"?: string,"message"?: string,"offset_days"?: number | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for"?: string,"status"?: string,"threshold_percent"?: number | null,"title"?: string,"updated_at"?: string,"user_id"?: string
+                    "budget_id"?: string | null,"created_at"?: string,"dedupe_key"?: string,"id"?: string,"kind"?: string,"message"?: string,"offset_days"?: number | null,"period_starts_on"?: string | null,"read_at"?: string | null,"recurring_bill_id"?: string | null,"scheduled_for"?: string,"status"?: string,"threshold_percent"?: number | null,"title"?: string,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -319,14 +319,14 @@ isOneToOne: false
                   ]
                 },"whatsapp_links": {
                   Row: {
-                    "created_at": string,"id": string,"kapso_contact_id": string | null,"last_inbound_at": string | null,"phone_e164_hmac": string,"phone_last_four": string,"status": string,"updated_at": string,"user_id": string,"verification_attempts": number,"verification_code_digest": string | null,"verification_expires_at": string | null,"verified_at": string | null
+                    "created_at": string,"id": string,"kapso_contact_id": string | null,"last_inbound_at": string | null,"phone_e164_ciphertext": string | null,"phone_e164_hmac": string,"phone_last_four": string,"status": string,"updated_at": string,"user_id": string,"verification_attempts": number,"verification_code_digest": string | null,"verification_expires_at": string | null,"verified_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_hmac": string,"phone_last_four": string,"status"?: string,"updated_at"?: string,"user_id": string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
+                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_ciphertext"?: string | null,"phone_e164_hmac": string,"phone_last_four": string,"status"?: string,"updated_at"?: string,"user_id": string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_hmac"?: string,"phone_last_four"?: string,"status"?: string,"updated_at"?: string,"user_id"?: string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
+                    "created_at"?: string,"id"?: string,"kapso_contact_id"?: string | null,"last_inbound_at"?: string | null,"phone_e164_ciphertext"?: string | null,"phone_e164_hmac"?: string,"phone_last_four"?: string,"status"?: string,"updated_at"?: string,"user_id"?: string,"verification_attempts"?: number,"verification_code_digest"?: string | null,"verification_expires_at"?: string | null,"verified_at"?: string | null
                   }
                   Relationships: [
 

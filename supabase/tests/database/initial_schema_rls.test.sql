@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(55);
+select plan(59);
 
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'financial_accounts', 'financial_accounts exists');
@@ -18,6 +18,7 @@ select has_table('public', 'recurring_bills', 'recurring_bills exists');
 select has_table('public', 'reminder_preferences', 'reminder_preferences exists');
 select has_table('public', 'reminders', 'reminders exists');
 select has_table('public', 'reminder_deliveries', 'reminder_deliveries exists');
+select has_column('public', 'reminders', 'period_starts_on', 'threshold period is persisted');
 select has_table('public', 'whatsapp_links', 'whatsapp_links exists');
 select has_table('public', 'agent_action_logs', 'agent_action_logs exists');
 select has_table('public', 'agent_action_states', 'agent_action_states exists');
@@ -672,6 +673,7 @@ insert into public.reminders (
   budget_id,
   kind,
   dedupe_key,
+  period_starts_on,
   threshold_percent,
   title,
   message,
@@ -682,6 +684,7 @@ values (
   'a5000000-0000-4000-8000-000000000001',
   'budget_threshold',
   'budget:a5000000-0000-4000-8000-000000000001:2026-10:80',
+  '2026-10-01',
   80,
   'Budget warning',
   'Food reached 80 percent.',
@@ -691,17 +694,58 @@ values (
 select throws_ok(
   $$insert into public.reminders (
       user_id, budget_id, kind, dedupe_key, threshold_percent,
-      title, message, scheduled_for
+      period_starts_on, title, message, scheduled_for
     ) values (
       'a0000000-0000-4000-8000-000000000001',
       'a5000000-0000-4000-8000-000000000001',
       'budget_threshold',
       'budget:a5000000-0000-4000-8000-000000000001:2026-10:80',
-      80, 'Duplicate', 'Duplicate warning.', '2026-10-12T09:01:00+07:00'
+      80, '2026-10-01', 'Duplicate', 'Duplicate warning.', '2026-10-12T09:01:00+07:00'
     )$$::text,
   '23505'::char(5),
   null::text,
   'a budget threshold creates one Reminder per period'::text
+);
+
+select throws_ok(
+  $$insert into public.reminders (
+      user_id, budget_id, kind, dedupe_key, threshold_percent,
+      title, message, scheduled_for
+    ) values (
+      'a0000000-0000-4000-8000-000000000001',
+      'a5000000-0000-4000-8000-000000000001',
+      'budget_threshold', 'budget:missing-period', 100,
+      'Invalid', 'Missing period.', '2026-10-12T09:02:00+07:00'
+    )$$::text,
+  '23514'::char(5),
+  null::text,
+  'a budget threshold Reminder requires its exact period'::text
+);
+
+insert into public.reminder_deliveries (
+  id, user_id, reminder_id, channel, status, attempted_at
+)
+select
+  'a7000000-0000-4000-8000-000000000001',
+  user_id,
+  id,
+  'whatsapp',
+  'queued',
+  statement_timestamp()
+from public.reminders
+where dedupe_key = 'budget:a5000000-0000-4000-8000-000000000001:2026-10:80';
+
+select lives_ok(
+  $$update public.reminder_deliveries
+    set status = 'sending'
+    where id = 'a7000000-0000-4000-8000-000000000001'$$,
+  'a claimed delivery records the provider boundary before sending'
+);
+
+select is(
+  (select status from public.reminder_deliveries where id = 'a7000000-0000-4000-8000-000000000001'),
+  'sending',
+  'the provider boundary is persisted before the request starts'
 );
 
 select lives_ok(

@@ -8,6 +8,7 @@ import {
   scheduleGmailDaily,
 } from "./gmail/index.ts";
 import { healthResponse, notFoundResponse } from "./http.ts";
+import { dispatchReminders } from "./reminders.ts";
 import { handleKapsoWebhook } from "./whatsapp/index.ts";
 
 export { WhatsAppConversation } from "./whatsapp/conversation.ts";
@@ -36,8 +37,9 @@ export default {
     return notFoundResponse();
   },
 
-  scheduled(_controller, env) {
-    return scheduleGmailDaily(env);
+  scheduled(controller, env) {
+    if (controller.cron === "0 1 * * *") return scheduleGmailDaily(env);
+    if (controller.cron === "*/15 * * * *") return dispatchReminders(env);
   },
 
   queue(batch, env) {

@@ -210,7 +210,7 @@ export interface FinanceRepository {
     usage: Money;
     scheduledFor: string;
     dedupeKey: string;
-  }): Promise<void>;
+  }): Promise<string | null>;
 
   recordUndoAction(input: {
     userId: string;
@@ -700,9 +700,24 @@ function undoString(state: Record<string, unknown>, key: string): string {
   return value;
 }
 
+/** What a WhatsApp budget alert says (template budget_alert). */
+export interface BudgetAlertDetails {
+  budgetName: string;
+  used: Money;
+  limit: Money;
+  periodEndsOn: string;
+}
+
 export function createFinanceService(
   repository: FinanceRepository,
-  options: { now?: () => Date } = {},
+  options: {
+    now?: () => Date;
+    /**
+     * Called once for each new budget threshold Reminder, after it is saved.
+     * It must not throw or block: delivery happens outside the User's request.
+     */
+    onBudgetReminder?: (input: { userId: string; reminderId: string }) => void;
+  } = {},
 ) {
   const now = () => (options.now ?? (() => new Date()))().toISOString();
 
@@ -757,7 +772,7 @@ export function createFinanceService(
       const thresholds = [...new Set([budget.warningPercent, 100])];
       for (const thresholdPercent of thresholds) {
         if (used * 100n < limit * BigInt(thresholdPercent)) continue;
-        await repository.createBudgetThresholdReminder({
+        const reminderId = await repository.createBudgetThresholdReminder({
           userId,
           budget,
           periodStartsOn: period.startsOn,
@@ -767,6 +782,13 @@ export function createFinanceService(
           // Including the limit re-arms a threshold if the User raises it.
           dedupeKey: `budget:${budget.id}:${period.startsOn}:${budget.limit.amountMinor}:${thresholdPercent}`,
         });
+        if (reminderId) {
+          try {
+            options.onBudgetReminder?.({ userId, reminderId });
+          } catch {
+            // The Reminder is saved and shows in the app; a delivery problem never fails the write.
+          }
+        }
       }
     }
   }
@@ -1422,6 +1444,37 @@ export function createFinanceService(
         const period = budgetPeriodForDate(budget, date);
         return period ? [calculateBudgetUsage(budget, period, transactions)] : [];
       });
+    },
+
+    /**
+     * What a WhatsApp alert for this budget threshold Reminder should say, using
+     * the spending of the period it was raised in. Null once it no longer applies.
+     */
+    async describeBudgetAlert(
+      userId: string,
+      reminderId: string,
+    ): Promise<BudgetAlertDetails | null> {
+      const ownerId = userIdSchema.parse(userId);
+      const reminder = await repository.findReminder(ownerId, reminderId);
+      if (reminder?.kind !== "budget_threshold" || reminder.status === "dismissed") return null;
+      const budget = (await repository.listAllBudgets(ownerId)).find(
+        (candidate) =>
+          candidate.id === reminder.budgetId && candidate.isActive && !candidate.deletedAt,
+      );
+      if (!budget) return null;
+      const period = budgetPeriodForDate(budget, reminder.periodStartsOn);
+      if (!period) return null;
+      const usage = calculateBudgetUsage(
+        budget,
+        period,
+        await repository.listTransactionsForDateRange(ownerId, period.startsOn, period.endsOn),
+      );
+      return {
+        budgetName: budget.name,
+        used: usage.used,
+        limit: budget.limit,
+        periodEndsOn: period.endsOn,
+      };
     },
 
     async listReminders(operationCaller: FinanceCaller, input: unknown) {

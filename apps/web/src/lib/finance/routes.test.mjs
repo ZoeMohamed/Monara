@@ -43,6 +43,7 @@ const mockConfig = "export const publicSupabaseConfig = () => ({});";
 const mockNextServer = "export const after = () => {};";
 const mockGmailImport = "export async function importAfterAccountLinked() {}";
 const mockGmailTrigger = "export async function syncUserTriggers() {}";
+const mockBudgetAlerts = "export function scheduleBudgetAlert() {}";
 const mockIdentity =
   "export async function getAuthenticatedIdentity() { return globalThis.monaraFinanceRouteTest.identity; }";
 const hooks = registerHooks({
@@ -53,6 +54,7 @@ const hooks = registerHooks({
       "next/server": mockNextServer,
       "@/lib/gmail/import": mockGmailImport,
       "@/lib/gmail/trigger": mockGmailTrigger,
+      "@/lib/whatsapp/budget-alerts": mockBudgetAlerts,
       "@/lib/supabase/config": mockConfig,
       "@/lib/supabase/server": mockIdentity,
     };

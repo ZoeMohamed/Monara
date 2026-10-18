@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   budgetIdSchema,
+  calendarDateSchema,
   isoDateTimeSchema,
   paginationInputSchema,
   recurringBillIdSchema,
@@ -48,6 +49,7 @@ export const budgetThresholdReminderSchema = z
     ...reminderBaseShape,
     kind: z.literal("budget_threshold"),
     budgetId: budgetIdSchema,
+    periodStartsOn: calendarDateSchema,
     thresholdPercent: z.number().int().min(1).max(100),
   })
   .strict()
@@ -98,7 +100,13 @@ export const reminderPageSchema = z
   })
   .strict();
 
-export const reminderDeliveryStatusSchema = z.enum(["queued", "sent", "skipped", "failed"]);
+export const reminderDeliveryStatusSchema = z.enum([
+  "queued",
+  "sending",
+  "sent",
+  "skipped",
+  "failed",
+]);
 
 export const reminderDeliverySchema = z
   .object({

@@ -7,6 +7,7 @@ import {
 import { createMonaraServiceRoleClient } from "@monara/db";
 
 import { publicSupabaseConfig } from "@/lib/supabase/config";
+import { scheduleBudgetAlert } from "@/lib/whatsapp/budget-alerts";
 
 const FINANCE_OPERATIONS = [
   "list_transactions",
@@ -58,7 +59,9 @@ function financeService(): FinanceService {
     publicSupabaseConfig(),
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
-  return createFinanceService(createRepository(client));
+  return createFinanceService(createRepository(client), {
+    onBudgetReminder: scheduleBudgetAlert,
+  });
 }
 
 /** Budget follow-up for Gmail imports confirmed without review. See evaluateConfirmedImports. */

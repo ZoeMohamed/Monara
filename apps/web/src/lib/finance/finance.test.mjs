@@ -443,6 +443,7 @@ describe("financial HTTP boundary", () => {
       kind: "budget_threshold",
       status: "read",
       budgetId,
+      periodStartsOn: "2026-10-01",
       thresholdPercent: 80,
       title: "Synthetic budget",
       message: "Budget threshold reached.",
