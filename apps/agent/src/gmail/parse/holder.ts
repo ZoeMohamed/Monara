@@ -50,14 +50,22 @@ export function isHolderName(counterparty: string, holderName: string): boolean 
  * exclusion: money moving between the holder's own accounts. Never the reverse.
  */
 export function applyHolderRules<
-  T extends { kind: string | null; counterpartyName: string | null },
+  T extends {
+    kind: string | null;
+    counterpartyName: string | null;
+    flowDirection?: "in" | "out" | null;
+  },
 >(items: readonly T[], holderName: string | null): T[] {
   if (!holderName) return [...items];
   return items.map((item) =>
     (item.kind === "expense" || item.kind === "income") &&
     item.counterpartyName !== null &&
     isHolderName(item.counterpartyName, holderName)
-      ? { ...item, kind: "exclusion" }
+      ? {
+          ...item,
+          kind: "exclusion",
+          flowDirection: item.kind === "expense" ? "out" : "in",
+        }
       : item,
   );
 }

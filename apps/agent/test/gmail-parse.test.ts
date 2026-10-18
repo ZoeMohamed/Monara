@@ -53,17 +53,22 @@ describe("isHolderName", () => {
 
 describe("applyHolderRules", () => {
   const items = [
-    { kind: "expense", counterpartyName: "ADLYN FAKHREYZ" },
-    { kind: "income", counterpartyName: "Adlyn Fakhreyz" },
-    { kind: "expense", counterpartyName: "Kopi Contoh" },
-    { kind: "exclusion", counterpartyName: "Kopi Contoh" },
-    { kind: null, counterpartyName: "Adlyn Fakhreyz" },
+    { kind: "expense", flowDirection: "out" as const, counterpartyName: "ADLYN FAKHREYZ" },
+    { kind: "income", flowDirection: "in" as const, counterpartyName: "Adlyn Fakhreyz" },
+    { kind: "expense", flowDirection: "out" as const, counterpartyName: "Kopi Contoh" },
+    { kind: "exclusion", flowDirection: "in" as const, counterpartyName: "Kopi Contoh" },
+    { kind: null, flowDirection: null, counterpartyName: "Adlyn Fakhreyz" },
   ];
 
   it("turns only expenses and incomes with the holder as counterparty into exclusions", () => {
+    const result = applyHolderRules(items, "Adlyn Fakhreyz");
     assert.deepEqual(
-      applyHolderRules(items, "Adlyn Fakhreyz").map((item) => item.kind),
+      result.map((item) => item.kind),
       ["exclusion", "exclusion", "expense", "exclusion", null],
+    );
+    assert.deepEqual(
+      result.map((item) => item.flowDirection),
+      ["out", "in", "out", "in", null],
     );
   });
 
@@ -156,6 +161,7 @@ describe("parseEmail", () => {
       institution: bca,
     });
     assert.equal(result.items[0]?.kind, "exclusion");
+    assert.equal(result.items[0]?.flowDirection, "out");
   });
 
   it("marks the holder unknown when there is no name", async () => {

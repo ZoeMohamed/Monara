@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(59);
+select plan(62);
 
 select has_table('public', 'profiles', 'profiles exists');
 select has_table('public', 'financial_accounts', 'financial_accounts exists');
@@ -159,8 +159,16 @@ values
 
 select is(
   (select count(*)::integer from public.categories where user_id = 'a0000000-0000-4000-8000-000000000001'),
-  15,
-  'new users receive 15 default categories'
+  25,
+  'new users receive the 25 current default categories'
+);
+
+select is(
+  (select count(*)::integer from public.categories
+    where user_id = 'a0000000-0000-4000-8000-000000000001'
+      and is_default and not is_archived and icon <> ''),
+  25,
+  'every current default Category is active and has an icon'
 );
 
 select is(
@@ -256,7 +264,7 @@ values (
   'a0000000-0000-4000-8000-000000000001',
   'transaction-owner-confirmed',
   'a1000000-0000-4000-8000-000000000001',
-  (select id from public.categories where user_id = 'a0000000-0000-4000-8000-000000000001' and slug = 'food-drinks'),
+  (select id from public.categories where user_id = 'a0000000-0000-4000-8000-000000000001' and slug = 'resto-cafe'),
   'manual_form',
   'expense',
   'Synthetic merchant',
@@ -289,6 +297,13 @@ values (
   'IDR',
   '2026-10-12',
   'pending'
+);
+
+select is(
+  (select flow_direction from public.transactions
+    where id = 'a4000000-0000-4000-8000-000000000001'),
+  'out',
+  'expense cash direction is normalized on storage'
 );
 
 set local role anon;
@@ -540,7 +555,7 @@ select lives_ok(
       'a1000000-0000-4000-8000-000000000001',
       (select id from public.categories
         where user_id = 'a0000000-0000-4000-8000-000000000001'
-          and slug = 'food-drinks'),
+          and slug = 'resto-cafe'),
       'manual_form', 'exclusion', 'Reimbursement', 50000, 'IDR', '2026-10-12',
       'confirmed'
     )$$::text,
@@ -566,6 +581,14 @@ select lives_ok(
     end;
   $block$;$test$::text,
   'an incomplete pending record can become a confirmed exclusion without invented facts'::text
+);
+
+select ok(
+  (select occurred_on is not null
+    from public.transactions
+    where user_id = 'a0000000-0000-4000-8000-000000000001'
+      and client_request_id = 'incomplete-exclusion'),
+  'a transaction without a stated date receives a deterministic Jakarta ledger date'
 );
 
 select throws_ok(
@@ -644,7 +667,7 @@ insert into public.budgets (
 values (
   'a5000000-0000-4000-8000-000000000001',
   'a0000000-0000-4000-8000-000000000001',
-  (select id from public.categories where user_id = 'a0000000-0000-4000-8000-000000000001' and slug = 'food-drinks'),
+  (select id from public.categories where user_id = 'a0000000-0000-4000-8000-000000000001' and slug = 'resto-cafe'),
   'budget-owner-food',
   'Food',
   'monthly',

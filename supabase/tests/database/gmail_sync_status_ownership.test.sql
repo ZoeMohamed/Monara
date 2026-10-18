@@ -216,7 +216,7 @@ select public.record_gmail_extraction(
       "occurredTime": null, "description": null, "location": null,
       "accountHint": null, "accountLastFour": null,
       "categoryName": null, "confidence": 0.99},
-     {"kind": "exclusion", "merchantName": null,
+     {"kind": "exclusion", "flowDirection": "in", "merchantName": null,
       "money": {"amountMinor": "50000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": "Top up", "location": null,
       "accountHint": null, "accountLastFour": null,
@@ -253,7 +253,7 @@ select public.set_imported_category(
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     where source.gmail_message_id = 'sync-001'),
-  'Food & Drinks'
+  'Resto & Cafe'
 );
 
 select is(

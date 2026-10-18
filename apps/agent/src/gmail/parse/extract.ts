@@ -39,6 +39,7 @@ Rules:
 - isTransactionEmail is true only for receipts, payments, transfers, top-ups, paid bills, refunds, reimbursements, and income notices. Promotions, newsletters, OTP codes, statements without a specific transaction, and unpaid invoices are false with no items.
 - One item per transaction the email confirms. Most emails have one.
 - kind: "expense" for money leaving the holder, "income" for money the holder received, and "exclusion" for reimbursements, internal transfers, duplicates, or non-personal activity. Never invent a kind when it is unclear.
+- flowDirection: "out" when money left the holder and "in" when money reached the holder. Keep this direction for exclusions. Null only when the direction is not stated.
 - Internal transfer: when money moves between two accounts that both belong to the holder, kind is "exclusion". It is internal when the sender and the recipient are both the holder, or when the other party's name is the holder's name in <holder>. A shared family name alone does not make it internal.
 - counterpartyName: the other person or business in the transaction, as payer or recipient, copied exactly as written. Null if not stated.
 - amountText: the amount copied exactly as written in the email, including its currency symbol, for example "Rp 150.000" or "IDR 1,250,000.00". Null if no amount is stated. Never calculate or convert.
@@ -64,6 +65,7 @@ const RESPONSE_SCHEMA = {
         additionalProperties: false,
         required: [
           "kind",
+          "flowDirection",
           "counterpartyName",
           "amountText",
           "currency",
@@ -77,6 +79,7 @@ const RESPONSE_SCHEMA = {
         ],
         properties: {
           kind: { type: ["string", "null"], enum: ["expense", "income", "exclusion", null] },
+          flowDirection: { type: ["string", "null"], enum: ["in", "out", null] },
           counterpartyName: nullableString,
           amountText: nullableString,
           currency: nullableString,
@@ -99,6 +102,7 @@ const modelOutputSchema = z.object({
   items: z.array(
     z.object({
       kind: z.enum(["expense", "income", "exclusion"]).nullable(),
+      flowDirection: z.enum(["in", "out"]).nullable().default(null),
       counterpartyName: z.string().nullable().default(null),
       amountText: z.string().nullable(),
       currency: z.string().nullable(),
@@ -179,6 +183,11 @@ function guardDate(value: string | null, receivedAt: string): string | null {
   return value;
 }
 
+/** Jakarta has no daylight-saving changes, so a received instant has one stable ledger date. */
+function jakartaDate(instant: string): string {
+  return new Date(Date.parse(instant) + 7 * 60 * 60 * 1_000).toISOString().slice(0, 10);
+}
+
 /** The card or account ending in a hint such as "BCA ****1234", when it shows one. */
 export function lastFourFromHint(hint: string | null): string | null {
   return hint?.match(/(?:^|\D)(\d{4})\D*$/)?.[1] ?? null;
@@ -197,8 +206,10 @@ function toExtractedTransaction(item: ModelItem, email: EmailForExtraction): Ext
     if (amountMinor === null) guarded = true;
   }
 
-  const occurredOn = guardDate(item.occurredOn, email.receivedAt);
-  if (item.occurredOn !== null && occurredOn === null) guarded = true;
+  const statedDate = guardDate(item.occurredOn, email.receivedAt);
+  const rejectedDate = item.occurredOn !== null && statedDate === null;
+  const occurredOn = statedDate ?? jakartaDate(email.receivedAt);
+  if (rejectedDate) guarded = true;
 
   // Like amounts, a location must be copied from the email, never inferred from a merchant.
   const statedLocation = cleanText(item.location, 300);
@@ -207,7 +218,8 @@ function toExtractedTransaction(item: ModelItem, email: EmailForExtraction): Ext
   if (statedLocation !== null && location === null) guarded = true;
 
   const time = item.occurredTime?.trim() ?? null;
-  const occurredTime = time !== null && localTimeSchema.safeParse(time).success ? time : null;
+  const occurredTime =
+    !rejectedDate && time !== null && localTimeSchema.safeParse(time).success ? time : null;
 
   let confidence =
     item.confidence === null || !Number.isFinite(item.confidence)
@@ -217,6 +229,8 @@ function toExtractedTransaction(item: ModelItem, email: EmailForExtraction): Ext
 
   return extractedTransactionSchema.parse({
     kind: item.kind,
+    flowDirection:
+      item.kind === "expense" ? "out" : item.kind === "income" ? "in" : item.flowDirection,
     merchantName: cleanText(item.merchantName, 200),
     money: amountMinor === null ? null : { amountMinor, currency: "IDR" },
     occurredOn,

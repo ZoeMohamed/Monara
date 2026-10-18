@@ -651,8 +651,12 @@ export function calculateDashboard(input: {
 const directSource = (input: FinanceCaller): TransactionSource =>
   input.directSource ?? (input.channel === "whatsapp" ? "whatsapp_text" : "in_app_chat");
 
+const jakartaDateForInstant = (instant: string) =>
+  new Date(Date.parse(instant) + 7 * 60 * 60 * 1_000).toISOString().slice(0, 10);
+
 const transactionValues = (transaction: Transaction): TransactionValues => ({
   kind: transaction.kind,
+  flowDirection: transaction.flowDirection,
   merchantName: transaction.merchantName,
   money: transaction.money,
   occurredOn: transaction.occurredOn,
@@ -990,6 +994,10 @@ export function createFinanceService(
         values: confirmedTransactionValuesSchema.parse({
           ...transactionValues(previous),
           kind: "exclusion",
+          flowDirection:
+            previous.flowDirection ??
+            (previous.kind === "expense" ? "out" : previous.kind === "income" ? "in" : null),
+          occurredOn: previous.occurredOn ?? jakartaDateForInstant(previous.createdAt),
         }),
         reviewStatus: "confirmed",
       });

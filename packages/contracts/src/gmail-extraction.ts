@@ -9,7 +9,7 @@ import {
   userIdSchema,
 } from "./common.ts";
 import { institutionKeySchema } from "./institutions.ts";
-import { transactionKindSchema } from "./transactions.ts";
+import { transactionFlowDirectionSchema, transactionKindSchema } from "./transactions.ts";
 
 export const gmailMessageIdSchema = z.string().trim().min(1).max(500);
 export const processedGmailMessageIdSchema = z.uuid();
@@ -26,6 +26,7 @@ const lastFourSchema = z.string().regex(/^[0-9]{4}$/);
 export const extractedTransactionSchema = z
   .object({
     kind: transactionKindSchema.nullable(),
+    flowDirection: transactionFlowDirectionSchema.nullable().default(null),
     merchantName: z.string().trim().min(1).max(200).nullable(),
     money: positiveMoneySchema.nullable(),
     occurredOn: calendarDateSchema.nullable(),

@@ -14,6 +14,7 @@ import {
 } from "./common.ts";
 
 export const transactionKindSchema = z.enum(["expense", "income", "exclusion"]);
+export const transactionFlowDirectionSchema = z.enum(["in", "out"]);
 export const transactionReviewStatusSchema = z.enum(["pending", "confirmed"]);
 export const transactionSourceSchema = z.enum([
   "manual_form",
@@ -26,6 +27,8 @@ export const transactionSourceSchema = z.enum([
 
 const transactionValuesShape = {
   kind: transactionKindSchema.nullable(),
+  /** Cash direction, retained for exclusions even though they do not affect totals. */
+  flowDirection: transactionFlowDirectionSchema.nullable().optional(),
   merchantName: z.string().trim().min(1).max(200).nullable(),
   money: positiveMoneySchema.nullable(),
   occurredOn: calendarDateSchema.nullable(),
@@ -44,6 +47,20 @@ function validateTransactionValues(
   value: z.infer<typeof transactionValuesSchema> & { reviewStatus?: string },
   context: z.RefinementCtx,
 ): void {
+  const expectedDirection =
+    value.kind === "expense" ? "out" : value.kind === "income" ? "in" : null;
+  if (
+    (expectedDirection !== null &&
+      value.flowDirection != null &&
+      value.flowDirection !== expectedDirection) ||
+    (value.kind === null && value.flowDirection != null)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["flowDirection"],
+      message: "The cash direction does not match the transaction type.",
+    });
+  }
   if (value.reviewStatus === "confirmed") {
     if (value.kind === null) {
       context.addIssue({
@@ -59,7 +76,7 @@ function validateTransactionValues(
         message: "Confirmed transactions need an amount.",
       });
     }
-    if (value.kind !== "exclusion" && value.occurredOn === null) {
+    if (value.occurredOn === null) {
       context.addIssue({
         code: "custom",
         path: ["occurredOn"],
@@ -226,6 +243,7 @@ export const transactionMutationResultSchema = z
   .strict();
 
 export type TransactionKind = z.infer<typeof transactionKindSchema>;
+export type TransactionFlowDirection = z.infer<typeof transactionFlowDirectionSchema>;
 export type TransactionReviewStatus = z.infer<typeof transactionReviewStatusSchema>;
 export type TransactionSource = z.infer<typeof transactionSourceSchema>;
 export type TransactionValues = z.infer<typeof transactionValuesSchema>;
