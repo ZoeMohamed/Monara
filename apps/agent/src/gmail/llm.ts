@@ -228,11 +228,17 @@ export function createLlmClient(config: LlmConfig) {
     const first: unknown = Array.isArray(choices) ? choices[0] : null;
     const message = isRecord(first) ? first.message : null;
     const content = isRecord(message) ? message.content : null;
-    if (typeof content !== "string") throw new LlmError("The model returned no content.");
+    // An answer cut at the token cap or blocked by the content filter comes out the same
+    // every time; any other empty or broken answer is worth another try.
+    const finish = isRecord(first) ? first.finish_reason : null;
+    const failure = finish === "length" || finish === "content_filter" ? "failed" : "unavailable";
+    if (typeof content !== "string") {
+      throw new LlmError("The model returned no content.", response.status, failure);
+    }
     try {
       return JSON.parse(content);
     } catch {
-      throw new LlmError("The model output was not JSON.");
+      throw new LlmError("The model output was not JSON.", response.status, failure);
     }
   }
 
