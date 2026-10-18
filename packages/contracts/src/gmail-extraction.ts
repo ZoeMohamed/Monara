@@ -371,6 +371,12 @@ export type GmailExtractionJob = z.infer<typeof gmailExtractionJobSchema>;
 export type GmailParseJob = z.infer<typeof gmailParseJobSchema>;
 export type GmailJob = z.infer<typeof gmailJobSchema>;
 export type GmailDiscoveryJob = z.infer<typeof gmailDiscoveryJobSchema>;
+/** Queue producer input; only delayed-retry metadata stays optional during rollout. */
+export type GmailJobInput =
+  | GmailSyncJob
+  | z.input<typeof gmailParseJobSchema>
+  | GmailExtractionJob
+  | GmailDiscoveryJob;
 export type MerchantCategorizeJob = z.infer<typeof merchantCategorizeJobSchema>;
 export type ListActiveGmailConnectionsResult = z.infer<
   typeof listActiveGmailConnectionsResultSchema

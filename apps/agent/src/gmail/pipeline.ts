@@ -5,6 +5,7 @@ import {
   type GmailDiscoveryJob,
   type GmailExtractionJob,
   type GmailJob,
+  type GmailJobInput,
   type GmailParseJob,
   type GmailSyncJob,
   MERCHANT_JOB_MAX_TRANSACTIONS,
@@ -38,7 +39,7 @@ export interface GmailPipelineDependencies {
   backend: GmailBackend;
   reader: ComposioGmailReader;
   llm: LlmClient;
-  enqueue: (jobs: GmailJob[]) => Promise<void>;
+  enqueue: (jobs: GmailJobInput[]) => Promise<void>;
   /** Queues categorization, which runs apart from extraction. */
   enqueueMerchant: (jobs: MerchantCategorizeJob[]) => Promise<void>;
   /** Emails per parse job, at most GMAIL_PARSE_JOB_MAX_EMAILS. */
@@ -294,11 +295,10 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       const processedMessageId = pending.get(message.gmailMessageId);
       return processedMessageId ? [{ processedMessageId, ...message }] : [];
     });
-    const jobs: GmailJob[] = chunk(emails, parseBatchSize).map((batch) => ({
+    const jobs: GmailJobInput[] = chunk(emails, parseBatchSize).map((batch) => ({
       kind: "gmail.parse",
       connectionId: job.connectionId,
       emails: batch,
-      deferrals: 0,
     }));
     if (page.nextPageToken) {
       jobs.push({ ...job, pageToken: page.nextPageToken, startedAt });

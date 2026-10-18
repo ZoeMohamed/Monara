@@ -4,7 +4,7 @@ import type {
   ClaimGmailMessageInput,
   ClaimGmailMessagesInput,
   GmailExtractionJob,
-  GmailJob,
+  GmailJobInput,
   GmailParseJob,
   GmailSyncJob,
   MarkGmailConnectionSyncedInput,
@@ -106,7 +106,7 @@ function setup(overrides: Overrides = {}) {
     recordCalls: [] as RecordGmailExtractionsInput[],
     resolved: 0,
     synced: [] as MarkGmailConnectionSyncedInput[],
-    enqueued: [] as GmailJob[],
+    enqueued: [] as GmailJobInput[],
     fetched: [] as string[],
     listed: [] as { query: string; pageToken?: string | null }[],
     reported: [] as ReportGmailConnectionErrorInput[],
@@ -387,7 +387,6 @@ describe("syncConnection", () => {
         kind: "gmail.parse",
         connectionId,
         emails: [{ processedMessageId: claimId("m1"), gmailMessageId: "m1", receivedAt }],
-        deferrals: 0,
       },
     ]);
     assert.deepEqual(calls.synced, [{ connectionId, syncedAt: now.toISOString() }]);
