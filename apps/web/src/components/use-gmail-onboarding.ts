@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   Detection,
+  ImportedTransaction,
   ImportProgress,
   OnboardingEngine,
 } from "@/components/use-onboarding-engine";
@@ -16,6 +17,7 @@ import {
   requestGmailDiscovery,
   startGmailConnection,
 } from "@/lib/gmail/client";
+import { loadImportFeed } from "@/lib/gmail/import-feed";
 import { accountInputFor, choiceFromSuggestion, choicesToCreate } from "@/lib/onboarding/banks";
 import type { OnboardingPhase } from "@/lib/onboarding/flow";
 import { saveFullName } from "@/lib/profile/client";
@@ -120,9 +122,17 @@ function useDetection(mailboxId: string | null | undefined, enabled: boolean) {
   return { detection, retry };
 }
 
+/** Keeps rows already shown in place and puts new ones on top, so only new rows animate in. */
+function mergeFeed(current: ImportedTransaction[], latest: ImportedTransaction[]) {
+  const shown = new Set(current.map((item) => item.id));
+  const added = latest.filter((item) => !shown.has(item.id));
+  return added.length === 0 ? current : [...added, ...current];
+}
+
 /**
- * Reads how the mailbox's latest sync is going. It only reads: starting the import
- * belongs to the backend, which will run it as soon as the accounts exist.
+ * Reads how the mailbox's latest sync is going and the transactions it has imported so
+ * far. It only reads: starting the import belongs to the backend, which runs it as soon
+ * as the accounts exist.
  */
 function useImportProgress(mailboxId: string | null | undefined, enabled: boolean) {
   const [progress, setProgress] = useState<ImportProgress>(waitingProgress);
@@ -133,41 +143,54 @@ function useImportProgress(mailboxId: string | null | undefined, enabled: boolea
     const controller = new AbortController();
     const { signal } = controller;
     const poll = () =>
-      loadGmailConnections({ signal }).then(
-        (mailboxes) => {
+      Promise.all([loadGmailConnections({ signal }), loadImportFeed(mailboxId, signal)]).then(
+        ([mailboxes, feed]) => {
           const sync = mailboxes.find((mailbox) => mailbox.id === mailboxId)?.sync;
           if (signal.aborted || !sync) return;
-          if (sync.state === "completed") {
-            setProgress({
-              state: "completed",
-              emailsRead: null,
-              totalEmails: null,
-              transactions: sync.transactions,
-              totalTransactions: sync.transactions,
-              feed: [],
-            });
-          } else if (sync.state === "failed") {
-            setProgress({
-              state: "failed",
-              emailsRead: null,
-              totalEmails: null,
-              transactions: null,
-              totalTransactions: null,
-              feed: [],
-              message: sync.message,
-            });
-          } else {
-            setProgress({
+          setProgress((current) => {
+            const merged = mergeFeed(current.feed, feed);
+            if (sync.state === "completed") {
+              return {
+                state: "completed",
+                emailsRead: null,
+                totalEmails: null,
+                transactions: sync.transactions,
+                totalTransactions: sync.transactions,
+                feed: merged,
+              };
+            }
+            if (sync.state === "failed") {
+              return {
+                state: "failed",
+                emailsRead: null,
+                totalEmails: null,
+                transactions: null,
+                totalTransactions: null,
+                feed: merged,
+                message: sync.message,
+              };
+            }
+            return {
               ...waitingProgress,
               state: sync.state === "running" ? "running" : "waiting",
-            });
-          }
+              feed: merged,
+            };
+          });
         },
-        // A failed check keeps the last known state; the next one tries again.
-        () => undefined,
       );
-    void poll();
-    const timer = window.setInterval(() => void poll(), POLL_MS);
+    // A failed check keeps the last known state; the next one tries again.
+    let polling = false;
+    const check = () => {
+      if (polling) return;
+      polling = true;
+      void poll()
+        .catch(() => undefined)
+        .finally(() => {
+          polling = false;
+        });
+    };
+    check();
+    const timer = window.setInterval(check, POLL_MS);
     return () => {
       controller.abort();
       window.clearInterval(timer);

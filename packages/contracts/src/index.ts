@@ -1,6 +1,7 @@
 export * from "./budgets.ts";
 export * from "./category-presets.ts";
 export * from "./channels.ts";
+export * from "./chat-history.ts";
 export * from "./chat-media.ts";
 export * from "./common.ts";
 export * from "./dashboard.ts";

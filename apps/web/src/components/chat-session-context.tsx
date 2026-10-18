@@ -28,7 +28,10 @@ type ChatSession = {
 
 const ChatSessionContext = createContext<ChatSession | null>(null);
 
-/** Page-session memory only. The entire store is discarded when the app shell unmounts. */
+/**
+ * The working copy of the User's chats. Signed-in chats are saved by the server after each
+ * answer and merged back in here; drafts and receipt photos stay in this page only.
+ */
 export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState(initialChatSession);
   const [pending, setPending] = useState(false);

@@ -417,6 +417,14 @@ erDiagram
 - Store only a one-way verification-code digest. Codes expire, attempts are limited, and challenge fields are cleared after verification.
 - `status` is `pending`, `verified`, or `revoked`. Incoming messages resolve a User only through a verified link; a caller-supplied phone number or User ID is not proof of identity.
 
+### Web chat history
+
+- `chat_conversations` and `chat_messages` hold the signed-in User's in-app chat so a reload or another device finds it again. WhatsApp conversations are not stored here; they stay in the Agent's Durable Object for 30 minutes.
+- Only the Next.js backend reads and writes them, through the service role after it has verified the User. `authenticated` has no grant, so a browser cannot read them directly. RLS is enabled and forced, and `chat_messages` references `(chat_conversations.id, user_id)` so a message always belongs to its conversation's owner.
+- `public.append_chat_exchange` saves a question and its answer in one transaction and creates the conversation on first use. A conversation id that belongs to another User fails the composite key rather than being adopted.
+- A saved Agent message keeps the reply and the receipts of what it changed. An unanswered confirmation is saved as closed (`closed_confirmation`), never open, and signed image links are not stored because they expire. Failed turns are not saved.
+- Rows are removed only when the User's account is deleted. There is no delete action in the app yet.
+
 ### Agent action log
 
 - Every attempted Agent tool call creates one `agent_action_logs` row with `event_type = 'tool_call'`, the verified User, Channel, tool name, permission tier, coarse result, and timestamps. Valid Channels are `web`, `whatsapp`, and `gmail`; Gmail is used only for security events. Valid tiers are `T0`, `T1`, `T2`, and `T3`; a T3 attempt is recorded as blocked and never executed through chat.

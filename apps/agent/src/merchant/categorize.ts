@@ -59,6 +59,8 @@ export async function chooseCategory(
     ].join("\n"),
     schemaName: "merchant_category",
     schema: RESPONSE_SCHEMA,
+    // The answer is one Category name.
+    maxOutputTokens: 200,
   });
   const parsed = modelOutputSchema.safeParse(raw);
   if (!parsed.success || parsed.data.categoryName === null) return null;

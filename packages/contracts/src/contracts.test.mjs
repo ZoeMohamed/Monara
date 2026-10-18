@@ -302,6 +302,11 @@ describe("transaction contracts", () => {
 
   it("applies pagination defaults without making them required at input", () => {
     assert.deepEqual(listTransactionsInputSchema.parse({}), { limit: 50 });
+    assert.deepEqual(
+      listTransactionsInputSchema.parse({ financialAccountIds: [ids.accountA, ids.accountB] }),
+      { limit: 50, financialAccountIds: [ids.accountA, ids.accountB] },
+    );
+    assert.equal(listTransactionsInputSchema.safeParse({ financialAccountIds: [] }).success, false);
   });
 });
 
@@ -532,6 +537,19 @@ describe("Gmail extraction contracts", () => {
       ),
       false,
     );
+  });
+
+  it("accepts parse jobs before and after delayed-retry metadata is deployed", () => {
+    const job = {
+      kind: "gmail.parse",
+      connectionId,
+      emails: [{ processedMessageId, gmailMessageId: "m1", receivedAt: timestamp }],
+    };
+    const oldProducer = gmailJobSchema.parse(job);
+    const newProducer = gmailJobSchema.parse({ ...job, deferrals: 2 });
+    assert.equal(oldProducer.deferrals, 0);
+    assert.equal(newProducer.deferrals, 2);
+    assert.equal(gmailJobSchema.safeParse({ ...job, deferrals: 101 }).success, false);
   });
 
   it("records only registry institutions and a sender verification flag", () => {

@@ -47,6 +47,12 @@ type ChatScreenProps = {
   initialPrompt?: string | null;
   onPromptUsed?: () => void;
   onOpenResource?: (type: ReversibleResourceType, id: string) => void;
+  /** A saved chat is fetched when it is opened; the composer waits until it is ready. */
+  status?: "ready" | "loading" | "failed";
+  onRetryLoad?: () => void;
+  /** Chats are kept in the User's account. False in the demo, which keeps them in the page. */
+  saved?: boolean;
+  savedLoadFailed?: boolean;
 };
 
 function ConversationMessage({
@@ -94,6 +100,76 @@ function ConversationMessage({
         <ChatVisual key={visual.id} visual={visual} />
       ))}
     </li>
+  );
+}
+
+function ConversationBody({
+  messages,
+  status,
+  busy,
+  activeConfirmationId,
+  onRetryLoad,
+  onOpenResource,
+  onSendText,
+}: {
+  messages: ChatMessage[];
+  status: "ready" | "loading" | "failed";
+  busy: boolean;
+  activeConfirmationId: string | null;
+  onRetryLoad?: () => void;
+  onOpenResource: ChatScreenProps["onOpenResource"];
+  onSendText: (text: string) => void;
+}) {
+  const latest = messages.at(-1);
+  if (status === "loading") {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted" role="status">
+        <Spinner aria-hidden size="sm" /> Loading your chat…
+      </div>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <div className={styles.intro}>
+        <p role="alert">Monara couldn’t load this chat. Check your connection and try again.</p>
+        {onRetryLoad ? (
+          <Button className="mt-3 min-h-11" onPress={onRetryLoad} variant="secondary">
+            Try again
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+  if (messages.length === 0) {
+    return (
+      <div className={styles.intro}>
+        <div className={styles.introHeading}>
+          <MonaraMascot className="h-16 w-16 shrink-0" />
+          <h2>Hey, I’m Monara.</h2>
+        </div>
+        <p>
+          Need a quick money check? Ask for a summary, or drop a note like “kopi 25rb”. I’ll work
+          from your confirmed records.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <ol className={styles.messageList}>
+      {messages.map((message) => (
+        <ConversationMessage
+          activeConfirmationId={activeConfirmationId}
+          key={message.id}
+          message={message}
+          onAnswer={onSendText}
+          onOpenResource={onOpenResource}
+          onUndoLastChange={
+            message.id === latest?.id ? () => onSendText("Undo my last change") : undefined
+          }
+          sending={busy}
+        />
+      ))}
+    </ol>
   );
 }
 
@@ -432,6 +508,10 @@ export function ChatScreen({
   conversations,
   activeConversationId,
   pending,
+  status = "ready",
+  onRetryLoad,
+  saved = false,
+  savedLoadFailed = false,
 }: ChatScreenProps) {
   const { dispatch } = useChatSession();
   const conversation = conversations.find((item) => item.id === activeConversationId);
@@ -453,6 +533,7 @@ export function ChatScreen({
   const activeConfirmationId =
     latest?.role === "agent" ? (latest.result?.confirmation?.confirmationId ?? null) : null;
   const busy = sending || pending;
+  const locked = busy || status !== "ready";
   useEffect(() => {
     if (messages.length === 0 && !busy) return;
     const conversation = conversationRef.current;
@@ -464,6 +545,7 @@ export function ChatScreen({
       !text ||
       sendingRef.current ||
       pending ||
+      status !== "ready" ||
       receipt.isPreparing() ||
       recovery?.requiresRecordCheck ||
       recovery?.signInRequired
@@ -556,7 +638,7 @@ export function ChatScreen({
         onClose={onClose}
         onHistory={() => setHistoryOpen(true)}
         onNewChat={onNewChat}
-        sending={busy || receipt.preparing}
+        sending={locked || receipt.preparing}
       />
       <div
         aria-label="Conversation"
@@ -565,36 +647,15 @@ export function ChatScreen({
         ref={conversationRef}
         role="log"
       >
-        {messages.length === 0 ? (
-          <div className={styles.intro}>
-            <div className={styles.introHeading}>
-              <MonaraMascot className="h-16 w-16 shrink-0" />
-              <h2>Hey, I’m Monara.</h2>
-            </div>
-            <p>
-              Need a quick money check? Ask for a summary, or drop a note like “kopi 25rb”. I’ll
-              work from your confirmed records.
-            </p>
-          </div>
-        ) : (
-          <ol className={styles.messageList}>
-            {messages.map((message) => (
-              <ConversationMessage
-                activeConfirmationId={activeConfirmationId}
-                key={message.id}
-                message={message}
-                onAnswer={(answer) => void sendText(answer, true)}
-                onOpenResource={onOpenResource}
-                onUndoLastChange={
-                  message.id === latest?.id
-                    ? () => void sendText("Undo my last change", true)
-                    : undefined
-                }
-                sending={busy}
-              />
-            ))}
-          </ol>
-        )}
+        <ConversationBody
+          activeConfirmationId={activeConfirmationId}
+          busy={busy}
+          messages={messages}
+          onOpenResource={onOpenResource}
+          onRetryLoad={onRetryLoad}
+          onSendText={(text) => void sendText(text, true)}
+          status={status}
+        />
         {busy ? (
           <div className="mt-2 flex w-fit items-center gap-2 rounded-2xl bg-surface-secondary px-3.5 py-2 text-sm text-muted">
             <Spinner aria-hidden size="sm" /> Working on it. Your reply will stay in this chat.
@@ -623,7 +684,7 @@ export function ChatScreen({
         receipt={receipt}
         recovery={recovery}
         receiptAvailable={Boolean(onSendReceipt)}
-        sending={busy || receipt.preparing}
+        sending={locked || receipt.preparing}
         sendText={sendText}
         setDraft={setDraft}
       />
@@ -635,6 +696,8 @@ export function ChatScreen({
           onNewChat={onNewChat}
           onRestore={onRestoreConversation}
           pending={busy || receipt.preparing}
+          saved={saved}
+          savedLoadFailed={savedLoadFailed}
         />
       ) : null}
     </div>

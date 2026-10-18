@@ -86,7 +86,7 @@ Recurring bills (`list_recurring_bills`, `delete_bill`, `confirm_recurring_bill`
 | A T2 tool has no code to run, and the yes is handled outside the model | A `confirm` tool the model calls after the User agrees | A model can be talked into calling a tool. It cannot produce the User's own next message. |
 | Only the exact word `yes` confirms | Accept "ok", "sure", or a yes inside a longer message | PRD 6.2 asks for an explicit yes. "Yes, and delete the rest too" must not confirm. |
 | Totals are computed in code | Let the model add amounts | In testing the model averaged three months to Rp 723.333 when the answer was Rp 715.000. |
-| In-app chat sends its own history; WhatsApp keeps it in a Durable Object | Store conversations in Postgres | The ERD keeps conversations out of product tables. WhatsApp has no client to hold history, so it is held for 30 minutes and then deleted. |
+| In-app chat sends its own history, and the backend saves each exchange; WhatsApp keeps it in a Durable Object | Let the Agent store conversations in Postgres | The Agent holds no database client. The web backend saves the signed-in User's chat after the Agent answers (see the ERD's web chat history), so a reload finds it. WhatsApp has no client to hold history, so it is held for 30 minutes and then deleted. |
 | On WhatsApp the Agent runs at most once per message | Retry the whole turn on failure | A retried turn could record a transaction twice. Only sending the reply is retried. |
 | English only | An i18n layer | PRD 6.3. Out of scope for the submission. |
 
@@ -101,7 +101,7 @@ Recurring bills (`list_recurring_bills`, `delete_bill`, `confirm_recurring_bill`
 Open risks:
 
 - Owned backend operations and expiring confirmations exist, but live isolation/concurrency acceptance remains outstanding. Durable client-turn idempotency/status is absent; uncertain requests must not be replayed automatically. Financial mutation, receipt writes and destructive-confirmation consumption use separate repository calls, so atomic recovery still needs review.
-- History for in-app chat comes from the caller. A forged history cannot confirm a delete without a confirmation id the backend issued, but the backend must check every id.
+- History for in-app chat comes from the caller, rebuilt from the saved chat after a reload. A forged history cannot confirm a delete without a confirmation id the backend issued, but the backend must check every id.
 - The model runs with reasoning switched off, because the provider does not accept function tools with reasoning on its chat completions endpoint.
 - WhatsApp conversation turns sit in Durable Object storage for up to 30 minutes, including the User's number while a reply is waiting to be sent.
 - The webhook, Durable Object and Kapso send path were tested once against the real Kapso number on 13 October, with a local Worker behind a tunnel and every sender unlinked. A linked conversation has not yet run end to end against the real backend.

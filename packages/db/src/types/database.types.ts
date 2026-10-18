@@ -97,6 +97,40 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"chat_conversations": {
+                  Row: {
+                    "created_at": string,"id": string,"title": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id": string,"title": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"title"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
+                },"chat_messages": {
+                  Row: {
+                    "closed_confirmation": boolean,"conversation_id": string,"created_at": string,"id": string,"result": Json | null,"role": string,"seq": number,"text": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "closed_confirmation"?: boolean,"conversation_id": string,"created_at"?: string,"id"?: string,"result"?: Json | null,"role": string,"seq"?: never,"text": string,"user_id": string
+                  }
+                  Update: {
+                    "closed_confirmation"?: boolean,"conversation_id"?: string,"created_at"?: string,"id"?: string,"result"?: Json | null,"role"?: string,"seq"?: never,"text"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "chat_messages_conversation_id_user_id_fkey"
+      columns: ["conversation_id","user_id"]
+isOneToOne: false
+      referencedRelation: "chat_conversations"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
                 },"financial_accounts": {
                   Row: {
                     "account_type": string,"client_request_id": string,"created_at": string,"currency": string,"gmail_connection_id": string | null,"id": string,"institution": string | null,"institution_key": string | null,"is_active": boolean,"last_four": string | null,"name": string,"updated_at": string,"user_id": string
@@ -337,7 +371,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "claim_gmail_message":
+            "append_chat_exchange":
+{ Args: { "p_agent_result": Json,"p_agent_text": string,"p_closed_confirmation": boolean,"p_conversation_id": string,"p_title": string,"p_user_id": string,"p_user_text": string }; Returns: undefined
+                           },
+"claim_gmail_message":
 { Args: { "p_connection_id": string,"p_gmail_message_id": string,"p_received_at": string }; Returns: {
               "already_finished": boolean,"processed_message_id": string
             }[]

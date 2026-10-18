@@ -78,7 +78,8 @@ export function StepFrame({
   children,
 }: {
   step: number;
-  actions: ReactNode;
+  /** Left out while a step has nothing for the User to do. */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   const stepRef = useRef<HTMLDivElement>(null);
@@ -100,7 +101,7 @@ export function StepFrame({
         Step {step + 1} of {onboardingSteps.length}
       </span>
       {children}
-      <div className={styles.actions}>{actions}</div>
+      {actions ? <div className={styles.actions}>{actions}</div> : null}
     </div>
   );
 }
