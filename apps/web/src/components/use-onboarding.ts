@@ -137,6 +137,20 @@ export function useOnboarding({
     [engine, go, refreshFinance, run],
   );
 
+  // Once the banks are found, add them all right away so the import runs while the User
+  // reads the list. A failure stays quiet here: Next tries again and shows the error.
+  const detection = engine.detection;
+  const autoSaved = useRef(false);
+  useEffect(() => {
+    if (phase !== "detect" || autoSaved.current) return;
+    if (detection.status !== "ready" || detection.choices.length === 0) return;
+    autoSaved.current = true;
+    void engine
+      .saveBanks(detection.choices)
+      .then(() => refreshFinance())
+      .catch(() => undefined);
+  }, [phase, detection, engine, refreshFinance]);
+
   const saveName = useCallback(
     (fullName: string) =>
       run(async () => {

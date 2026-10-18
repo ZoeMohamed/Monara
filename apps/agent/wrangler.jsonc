@@ -19,16 +19,16 @@
     "consumers": [
       {
         "queue": "monara-gmail-jobs",
-        // A parse job already carries up to 10 emails and works on 5 at a time, so 2 jobs per
-        // invocation stay under the Workers Free limit of 50 outside requests:
-        // 2 × (10 Composio reads + 10 model calls + 2 backend calls + 1 queue send) = 46.
+        // A parse job carries up to 10 emails, and a busy model can be asked again twice per
+        // email, so one job per invocation stays under the Workers Free limit of 50 outside
+        // requests: 10 Composio reads + 30 model calls + 2 backend calls + 1 queue send = 43.
         // On Workers Paid this can go up.
-        "max_batch_size": 2,
+        "max_batch_size": 1,
         // Every hop used to wait up to 5 s for a batch to fill; onboarding makes two hops.
         "max_batch_timeout": 1,
-        // Invocations at once. 5 × 2 jobs × 5 emails = up to 50 model calls in parallel;
-        // set from the model provider's rate limit.
-        "max_concurrency": 5,
+        // Invocations at once. 3 jobs × GMAIL_PARSE_CONCURRENCY (default 2) = 6 model calls in
+        // parallel; raise both only as far as the model's tokens-per-minute limit allows.
+        "max_concurrency": 3,
         // Keep in sync with GMAIL_QUEUE_MAX_RETRIES in src/gmail/worker.ts.
         "max_retries": 3
       },

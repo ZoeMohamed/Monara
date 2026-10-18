@@ -4,6 +4,7 @@ import type {
   ClaimGmailMessageInput,
   ClaimGmailMessagesInput,
   GmailExtractionJob,
+  GmailJob,
   GmailJobInput,
   GmailParseJob,
   GmailSyncJob,
@@ -21,7 +22,7 @@ import {
   GmailReadError,
 } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "../src/gmail/backend.ts";
-import type { LlmClient } from "../src/gmail/llm.ts";
+import { type LlmClient, LlmError } from "../src/gmail/llm.ts";
 import { createGmailPipeline, sendersFor, syncQuery } from "../src/gmail/pipeline.ts";
 
 const connectionId = "00000000-0000-4000-8000-000000000010";
@@ -78,6 +79,8 @@ interface Overrides {
   /** What Composio says about the connected account; "throws" for a failed check. */
   accountUsable?: boolean | "throws";
   llmOutput?: unknown;
+  /** Thrown by the model on these calls (1-based); every call when set to "all". */
+  llmError?: { error: unknown; calls: number[] | "all" };
   page?: GmailMessagePage;
   /** Registry entries the User has as accounts. */
   institutionKeys?: string[];
@@ -98,7 +101,6 @@ interface Overrides {
   subject?: string;
 }
 
-/** Fake backend, reader and model that record every call the pipeline makes. */
 /** Creates an isolated Gmail pipeline test harness with captured side effects. */
 function setup(overrides: Overrides = {}) {
   const calls = {
@@ -116,6 +118,7 @@ function setup(overrides: Overrides = {}) {
     syncFailures: [] as ReportGmailSyncFailureInput[],
     merchantJobs: [] as MerchantCategorizeJob[],
     discovered: [] as string[],
+    later: [] as { jobs: GmailJob[]; delaySeconds: number }[],
     modelCalls: 0,
   };
   const backend: GmailBackend = {
@@ -246,6 +249,10 @@ function setup(overrides: Overrides = {}) {
   const llm: LlmClient = {
     async completeJson() {
       calls.modelCalls += 1;
+      const failing = overrides.llmError;
+      if (failing && (failing.calls === "all" || failing.calls.includes(calls.modelCalls))) {
+        throw failing.error;
+      }
       return overrides.llmOutput ?? receipt;
     },
   };
@@ -255,6 +262,9 @@ function setup(overrides: Overrides = {}) {
     llm,
     enqueue: async (jobs) => {
       calls.enqueued.push(...jobs);
+    },
+    enqueueLater: async (jobs, delaySeconds) => {
+      calls.later.push({ jobs, delaySeconds });
     },
     enqueueMerchant: async (jobs) => {
       calls.merchantJobs.push(...jobs);
@@ -271,6 +281,7 @@ const extractJob: GmailExtractionJob = {
   receivedAt,
 };
 const notFinal = { isFinalAttempt: false };
+const final = { isFinalAttempt: true };
 
 describe("processMessage", () => {
   it("claims, extracts and records the items with the sender's institution", async () => {
@@ -668,6 +679,59 @@ describe("processBatch", () => {
     assert.equal(calls.record[0]?.outcome, "skipped");
   });
 
+  it("puts emails back when the model is rate limited, without sending the rest or failing them", async () => {
+    const busy = new LlmError("The model request failed.", 429, "rate_limited", 40_000);
+    const { pipeline, calls } = setup({
+      llmError: { error: busy, calls: [2] },
+      uncategorized: [transactionId],
+    });
+    const outcome = await pipeline.runJob(
+      { ...parseJob(["m1", "m2", "m3", "m4"]), deferrals: 1 },
+      final,
+    );
+    assert.equal(outcome, "transactions");
+    // Two run at once: m1 parses, m2 hits the limit, and m3 and m4 are never sent.
+    assert.equal(calls.modelCalls, 2);
+    assert.deepEqual(
+      calls.recordCalls[0]?.results.map((result) => result.outcome),
+      ["transactions"],
+    );
+    assert.equal(calls.later.length, 1);
+    const later = calls.later[0];
+    const deferredJob = later?.jobs[0] as GmailParseJob;
+    assert.deepEqual(
+      deferredJob.emails.map((email) => email.gmailMessageId),
+      ["m2", "m3", "m4"],
+    );
+    assert.equal(deferredJob.deferrals, 2);
+    // The provider asked for 40 s; the backoff for a second deferral is 60 s.
+    const delay = later?.delaySeconds ?? 0;
+    assert.ok(delay >= 60 && delay < 75);
+  });
+
+  it("treats a model that answers with a cut-off body like a busy one", async () => {
+    const cut = new LlmError("The model response was cut off.", 200, "unavailable");
+    const { pipeline, calls } = setup({ llmError: { error: cut, calls: "all" } });
+    assert.equal(await pipeline.runJob(parseJob(["m1"]), final), "deferred");
+    assert.deepEqual(calls.recordCalls, []);
+    assert.equal(calls.later.length, 1);
+  });
+
+  it("still fails a request the model rejects, such as a bad key", async () => {
+    const rejected = new LlmError("The model request failed.", 401, "failed");
+    const { pipeline, calls } = setup({ llmError: { error: rejected, calls: "all" } });
+    await assert.rejects(pipeline.runJob(parseJob(["m1"]), notFinal), rejected);
+    assert.equal(await pipeline.runJob(parseJob(["m1"]), final), "failed");
+    assert.deepEqual(calls.later, []);
+  });
+
+  it("stops putting emails back after too many deferrals", async () => {
+    const busy = new LlmError("The model request failed.", 429, "rate_limited");
+    const { pipeline, calls } = setup({ llmError: { error: busy, calls: "all" } });
+    assert.equal(await pipeline.runJob({ ...parseJob(["m1"]), deferrals: 100 }, final), "failed");
+    assert.deepEqual(calls.later, []);
+  });
+
   it("works on at most the configured number of emails at once", async () => {
     let inFlight = 0;
     let peak = 0;
@@ -724,6 +788,7 @@ describe("processBatch", () => {
         },
       },
       enqueue: async () => {},
+      enqueueLater: async () => {},
       enqueueMerchant: async () => {},
       parseConcurrency: 2,
     });
