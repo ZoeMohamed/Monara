@@ -97,6 +97,9 @@ function pagedClient(tables, failAtOffset = null, beforeRead = () => {}) {
         eq(column, value) {
           return filter(column, (candidate) => candidate === value);
         },
+        in(column, values) {
+          return filter(column, (candidate) => values.includes(candidate));
+        },
         is(column, value) {
           return filter(column, (candidate) => candidate === value);
         },
@@ -220,5 +223,21 @@ describe("complete owned aggregate reads", () => {
     const page = await repository.listTransactions(owner, { month: "9999-12" });
     assert.equal(page.items.length, 1);
     assert.equal((await repository.listTransactionsForMonth(owner, "9999-12")).length, 1);
+  });
+
+  it("scopes a transaction page to owned financial accounts before applying its limit", async () => {
+    const tables = rows(2);
+    tables.transactions[1].financial_account_id = uuid(6_001);
+    const repository = createSupabaseFinanceRepository(pagedClient(tables));
+
+    const page = await repository.listTransactions(owner, {
+      financialAccountIds: [uuid(6_001)],
+      limit: 1,
+    });
+
+    assert.deepEqual(
+      page.items.map((transaction) => transaction.id),
+      [tables.transactions[1].id],
+    );
   });
 });

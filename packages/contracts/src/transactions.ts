@@ -225,6 +225,7 @@ export const listTransactionsInputSchema = paginationInputSchema
     reviewStatus: transactionReviewStatusSchema.optional(),
     kind: transactionKindSchema.optional(),
     month: calendarMonthSchema.optional(),
+    financialAccountIds: z.array(financialAccountIdSchema).min(1).max(100).optional(),
   })
   .strict();
 
