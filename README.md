@@ -1,115 +1,106 @@
-# Monara
+<div align="center">
 
-Monara is a mobile-first personal-finance PWA built with Next.js. Visitors can explore an interactive demo before signing in. Signed-in screens load owned financial records and use the financial APIs for transactions, review, budgets, and financial accounts. The repository also includes Gmail connection lifecycle screens, an authenticated in-app Chat bridge, database migrations/RLS tests, and a Cloudflare Agent runtime. Implemented source does not establish deployed configuration or live-provider acceptance.
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/readme/monara-avatar.png">
+  <img src="docs/assets/readme/monara-avatar.gif" alt="Monara's onboarding cat catching receipts" width="180" height="110">
+</picture>
 
-See [repository structure and team ownership](docs/repository-structure.md), [architecture decisions](docs/adr/0001-initial-runtime-boundaries.md), [UI design system](docs/ui-design-system.md), [Supabase workflow](docs/supabase-workflow.md), and [agent instructions](AGENTS.md).
+<a href="https://monara-finance.vercel.app/demo">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/logos/monara-lockup-dark.svg">
+    <img src="apps/web/public/logos/monara-lockup-light.svg" alt="Monara" width="300">
+  </picture>
+</a>
 
-## Requirements
+### No more scattered spending.
 
-- Node.js 24 (`.nvmrc`)
-- pnpm 10+
+An AI personal-finance assistant for tracking spending,<br>reviewing transactions, and managing budgets.
+
+[![CI](https://github.com/ZoeMohamed/Monara/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ZoeMohamed/Monara/actions/workflows/ci.yml) [![Try the demo](https://img.shields.io/badge/Try_the_demo-3171FD?style=flat-square&logo=googlechrome&logoColor=white)](https://monara-finance.vercel.app/demo) [![Technical docs](https://img.shields.io/badge/Technical_docs-192D52?style=flat-square&logo=readthedocs&logoColor=white)](docs/tech/README.md)
+
+[![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat-square&logo=nextdotjs&logoColor=white)](apps/web) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](packages/contracts) [![Supabase](https://img.shields.io/badge/Supabase-1C4735?style=flat-square&logo=supabase&logoColor=3FCF8E)](supabase) [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-F38020?style=flat-square&logo=cloudflareworkers&logoColor=white)](apps/agent)
+
+[Overview](#overview) · [Try it](#try-it) · [Architecture](#architecture) · [Run locally](#run-locally) · [Documentation](#documentation)
+
+<a href="https://monara-finance.vercel.app/demo"><img src="docs/assets/readme/showcase.png" alt="Four real Monara mobile screens: spending overview, transaction review, budgets, and demo chat" width="100%"></a>
+
+<sub>Captured from the public demo at 390 × 844. All records are synthetic; demo chat uses sample responses.</sub>
+
+</div>
+
+## Overview
+
+Bank emails, e-wallet payments, receipts, and quick spending notes can leave your finances scattered across apps. Monara brings them into a personal ledger, helps you review uncertain entries, and shows how confirmed spending fits your budgets.
+
+Built for **FinTechathon 2026**, Monara combines a mobile-first PWA with a shared finance agent for in-app chat and WhatsApp.
+
+- **See where it goes.** Explore confirmed spending, income, category breakdowns, merchant totals, and weekly or monthly trends.
+- **Bring supported bank emails together.** Connect Gmail separately from sign-in. Background jobs extract and categorize notifications from supported institutions, with deduplication and review for uncertain records.
+- **Keep control of your ledger.** Add, edit, confirm, exclude, or delete transactions. Only confirmed records contribute to financial totals.
+- **Plan with budgets.** Set category limits and follow spending against weekly or monthly budget periods.
+- **Ask Monara.** Use natural-language questions and supported ledger operations in-app or through a verified WhatsApp link. WhatsApp receipt photos create pending entries for review.
+
+> [!NOTE]
+> The public demo runs without sign-in and resets on reload. The repository includes the backend and integration implementations, but real Google sign-in, Gmail, WhatsApp, model calls, and alerts require configured services and live acceptance. Recurring bills and personal reminders remain demo features. See the [runtime guide](apps/agent/README.md) for supported operations and remaining work.
+
+## Try it
+
+**[Open the interactive demo →](https://monara-finance.vercel.app/demo)** No account or Gmail connection needed.
+
+| Explore | What to try |
+| --- | --- |
+| [Overview](https://monara-finance.vercel.app/demo) | Check the spending snapshot and weekly guide. |
+| [Transaction review](https://monara-finance.vercel.app/demo/transactions?view=review) | Inspect an incomplete receipt or confirm a pending payment. |
+| [Budgets](https://monara-finance.vercel.app/demo/budgets) | Explore category limits and the daily budget guide. |
+| [Reports](https://monara-finance.vercel.app/demo/reports) | Compare categories and spending over time. |
+| [Ask Monara](https://monara-finance.vercel.app/demo/chat) | Try “Summarize my spending this week” with the demo assistant. |
+
+Individual screenshots: [Overview](docs/assets/readme/screenshots/overview.png) · [Review](docs/assets/readme/screenshots/review.png) · [Budgets](docs/assets/readme/screenshots/budgets.png) · [Chat](docs/assets/readme/screenshots/chat.png).
+
+## Architecture
+
+<a href="docs/assets/readme/architecture.png"><img src="docs/assets/readme/architecture.png" alt="Monara PWA calls the Next.js backend on Vercel. The backend owns Supabase financial access. The Cloudflare agent uses authenticated backend operations and connects to Gmail through Composio, WhatsApp through Kapso, an LLM provider, and Brave merchant search." width="100%"></a>
+
+- **Next.js on Vercel** serves the PWA and owns financial writes through shared services and repositories.
+- **Supabase Auth and Postgres** provide Google sign-in, owned financial records, and row-level security. Gmail authorization through Composio is separate from sign-in.
+- **Cloudflare Workers** host the shared agent, per-User WhatsApp Durable Objects, Gmail and merchant queues, and scheduled processing. The worker calls authenticated backend operations for financial reads and writes.
+- **Composio and Kapso** handle Gmail access and WhatsApp transport. Signed provider webhooks, server identity checks, and explicit WhatsApp linking establish who may act.
+
+The PWA includes an installable shell and a static offline fallback. Personal financial data and authentication responses are never cached by the service worker.
+
+See [runtime boundaries](docs/adr/0001-initial-runtime-boundaries.md), [workspace ownership](docs/repository-structure.md), and the [agent runtime](apps/agent/README.md) for the detailed contracts. The initial ADR records the architecture decision; its original scaffold status is historical.
 
 ## Run locally
+
+Use **Node.js 24** and **pnpm 10+**. To explore the public demo locally:
 
 ```bash
 git clone https://github.com/ZoeMohamed/Monara.git
 cd Monara
 corepack enable
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open `http://localhost:3000`.
+Open the URL printed by Next.js and visit `/demo`. The main checkout defaults to port `3000`; linked worktrees receive their own ports.
 
-Explore sample finances at `/demo` without signing in. Personal financial routes require Google sign-in and load the User's records. Without valid public Supabase configuration, Monara shows an unavailable sign-in state and denies financial requests; failed ledger loads show a recovery screen. See the [Supabase workflow](docs/supabase-workflow.md) for local database setup and [environment configuration](docs/repository-structure.md#environment-configuration) for the empty templates and required settings.
-
-## Test Gmail locally
-
-Composio must reach the Gmail callback, so local Gmail testing runs the web app behind an ngrok tunnel. `pnpm dev:tunnel` starts only the tunnel, not the app. Run each command in its own terminal, from the same checkout:
+For the backend, start a Docker-compatible runtime and run `pnpm worktree:bootstrap`, then `pnpm dev`. Google OAuth and external integrations need their own local configuration. Follow the [local development guide](docs/local-development.md) for database setup, Gmail testing, phone previews, PWA installation, and team deployment instructions.
 
 ```bash
-pnpm dev          # 1. web app; wait for "Ready"
-pnpm dev:tunnel   # 2. public HTTPS URL forwarded to the web app
-pnpm dev:agent    # 3. agent worker that reads and extracts Gmail
+pnpm check   # Lint, types, dependency checks, tests, React Doctor, docs, DB prerequisites
+pnpm build   # Web build and local agent dry-run bundle
 ```
 
-Set `NGROK_DOMAIN` in `apps/web/.env.local` first, then open the app on that public URL, not on `localhost`. Each worktree uses its own web port; the tunnel forwards to it automatically. Port `4040` is ngrok's request inspector, not the app.
+## Documentation
 
-Monara uses two Composio projects:
+| Guide | Contents |
+| --- | --- |
+| [Technical documentation](docs/tech/README.md) | Hackathon submission sections, authors, and review status |
+| [Local development](docs/local-development.md) | Demo setup, local backend, integrations, and deployment workflow |
+| [Repository structure](docs/repository-structure.md) | Workspace packages, dependency direction, and team ownership |
+| [Supabase workflow](docs/supabase-workflow.md) | Local migrations, generated types, and ownership/RLS checks |
+| [Agent runtime](apps/agent/README.md) | Conversation tools, Gmail processing, WhatsApp, and integration limits |
+| [Domain glossary](CONTEXT.md) | Shared product terminology |
+| [UI design system](docs/ui-design-system.md) | Branding, components, and interaction conventions |
 
-| Composio project | Use | Gmail callback |
-| --- | --- | --- |
-| `monara_finance_dev` | Local development | `https://<your NGROK_DOMAIN>/api/gmail/connections/callback` |
-| `monara_finance` | Production | `https://monara-finance.vercel.app/api/gmail/connections/callback` |
-
-Local `.env.local` and `.dev.vars` use the `monara_finance_dev` API key and Gmail auth config ID. Never use the production project's keys locally.
-
-## Test on another phone or laptop
-
-Connect both devices to the same Wi-Fi. Find the computer's local IP, then open it on the other device:
-
-```bash
-# macOS
-ipconfig getifaddr en0
-
-# Linux
-hostname -I
-```
-
-Open `http://YOUR_LOCAL_IP:3000`, for example `http://192.168.1.20:3000`.
-
-If it does not load, allow Node.js/port `3000` through the computer firewall. `pnpm dev` already binds Next.js to the network interface.
-
-## PWA install and offline test
-
-Normal LAN HTTP is enough to preview the UI. Browser PWA install and service-worker offline behavior require `localhost` or HTTPS. For a real phone install test, use an HTTPS deployment. On iOS, use Safari → Share → Add to Home Screen.
-
-## Verify before sharing
-
-```bash
-pnpm lint
-pnpm typecheck
-pnpm build
-pnpm start
-```
-
-The web build includes a manifest, 192px/512px/maskable/Apple Touch icons, a standalone static offline fallback, standalone metadata, and security headers. The service worker caches only that fallback and explicitly allowlisted public assets; navigation remains network-first, and it does not cache app HTML, Next.js chunks, authentication, or financial responses. The agent build is a local Wrangler dry run and does not deploy anything.
-
-## Deployment otomatis untuk tim
-
-Versi sederhananya:
-
-`Perubahan kode → masuk ke main → Vercel membangun aplikasi → website production diperbarui`
-
-Yang perlu dilakukan anggota tim:
-
-1. Kerjakan perubahan di branch masing-masing.
-2. Push branch tersebut ke GitHub dan buat Pull Request.
-3. Setelah diperiksa, merge Pull Request ke `main`.
-4. Tunggu status **Vercel** di commit berubah menjadi hijau dengan tulisan **Deployment has completed**.
-
-Push langsung ke `main` juga memicu deployment jika anggota tersebut memang memiliki izin push. Push ke branch selain `main` hanya membuat Preview Deployment dan tidak mengubah website production.
-
-Anggota tim tidak perlu:
-
-- memakai akun atau token milik Zoe;
-- membuat dummy commit atau `vercel-sign.md`;
-- menjalankan deploy secara manual;
-- menjadi anggota berbayar di Vercel untuk repository public ini.
-
-Konfigurasi yang sudah terhubung:
-
-- Vercel Project: `monara`
-- Root Directory: `apps/web`
-- Production Branch: `main`
-- Framework: Next.js
-- Node.js: 24.x
-- Production URL: <https://monara-finance.vercel.app>
-
-Jika deployment gagal, buka status **Vercel** pada commit GitHub untuk melihat build log. Jangan pernah menyimpan token, Deploy Hook URL, atau secret lain di repository.
-
-## Product scope
-
-The UI uses shared HeroUI components and a light theme from `packages/ui`. The public demo uses labelled synthetic records, keeps edits in memory, and resets on reload. Personal financial screens use persisted records through owned UUID resources and exact IDR contracts. The live UI supports transaction creation and editing, review, deletion, budget management, and adding financial accounts. Reads and writes fail explicitly when the backend is unavailable; sample records are never substituted for failed personal ledger loads.
-
-Database migrations, ownership/RLS tests, and generated types are present. `pnpm check` validates their prerequisites without Docker; `pnpm db:check --reset` replays and tests this checkout's disposable local database. Gmail authorization is separate from Google sign-in, and its screens load mailbox status and support connection and disconnection. Live Chat uses the authenticated bridge when the Agent runtime is configured; demo Chat uses sample answers. Automatic Gmail ingestion, live recurring bills, verified WhatsApp linking, persistent Reminder delivery, and device/PWA acceptance still need integration or acceptance evidence. See the [UI backend handoff](docs/ui-backend-handoff.md) for the current boundaries and remaining acceptance checks.
+The technical documentation includes drafts and owner review statuses. A passing structure check does not establish final submission acceptance.
