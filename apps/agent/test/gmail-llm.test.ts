@@ -139,6 +139,22 @@ describe("reasoning models", () => {
     assert.equal(Object.hasOwn(body, "max_tokens"), false);
   });
 
+  it("sends an Azure key in Azure's api-key header", async () => {
+    let headers: Record<string, string> = {};
+    const llm = createLlmClient({
+      baseUrl: "https://res.openai.azure.com/openai/v1",
+      apiKey: "azure-key",
+      model: "gpt-4o-mini",
+      async fetcher(_input, init) {
+        headers = init.headers as Record<string, string>;
+        return Response.json({ choices: [{ message: { content: "{}" } }] });
+      },
+    });
+    await llm.completeJson(request);
+    assert.equal(headers["api-key"], "azure-key");
+    assert.equal(Object.hasOwn(headers, "Authorization"), false);
+  });
+
   it("sends no effort to a non-reasoning model, and honors a set effort for a renamed deployment", async () => {
     const plain = await bodyFor("https://res.openai.azure.com/openai/v1", "gpt-4o-mini");
     assert.equal(plain.max_completion_tokens, 1500);

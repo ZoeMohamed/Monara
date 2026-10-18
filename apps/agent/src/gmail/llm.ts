@@ -136,7 +136,8 @@ export function createLlmClient(config: LlmConfig) {
         : null;
   const host = new URL(baseUrl).hostname;
   // OpenAI and Azure reasoning models reject max_tokens; OpenRouter takes max_tokens.
-  const openAiStyle = host.endsWith(".azure.com") || host === "api.openai.com";
+  const isAzure = host.endsWith(".azure.com");
+  const openAiStyle = isAzure || host === "api.openai.com";
   const isOpenRouter = host === "openrouter.ai";
   const fetcher = config.fetcher ?? fetch;
   const sleep =
@@ -163,7 +164,11 @@ export function createLlmClient(config: LlmConfig) {
     try {
       response = await fetcher(`${baseUrl}/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        // Azure takes resource keys in its own header; everyone else uses a bearer token.
+        headers: {
+          "Content-Type": "application/json",
+          ...(isAzure ? { "api-key": apiKey } : { Authorization: `Bearer ${apiKey}` }),
+        },
         body: JSON.stringify({
           model,
           ...limits(request),
