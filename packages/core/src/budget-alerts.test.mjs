@@ -232,6 +232,35 @@ describe("WhatsApp budget alerts", () => {
     assert.equal(sent.length, 0);
   });
 
+  it("continues the batch when one queued row fails", async () => {
+    const deliveries = createMemoryDeliveries();
+    await deliveries.reserve({ userId: "broken-user", reminderId: "broken" });
+    await deliveries.reserve({ userId: userA, reminderId: "healthy" });
+    const phoneCiphertext = await encryptPhone("+6281200000001", secret);
+    const sent = [];
+    const service = createBudgetAlertService({
+      repository: {
+        ...deliveries,
+        async findRecipient(userId) {
+          if (userId === "broken-user") throw new Error("temporary database failure");
+          return { phoneCiphertext };
+        },
+      },
+      describe: async () => details,
+      send: async (message) => {
+        sent.push(message);
+        return { messageId: "wamid.healthy" };
+      },
+      secret,
+      now: () => new Date("2026-10-18T00:30:00Z"), // 07:30 in Jakarta
+    });
+
+    assert.equal(await service.dispatchQueued(), 1);
+    assert.equal(sent.length, 1);
+    assert.equal(deliveries.rows[0].status, "queued");
+    assert.equal(deliveries.rows[1].status, "sent");
+  });
+
   it("stops at three WhatsApp alerts a day", async () => {
     const { service, deliveries, sent, setClock } = await setup();
     for (const id of ["r1", "r2", "r3"]) assert.equal(await service.deliver(userA, id), "sent");

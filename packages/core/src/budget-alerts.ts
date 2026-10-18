@@ -159,21 +159,25 @@ export function createBudgetAlertService(input: {
       await repository.abandonStaleSending(reclaimBefore);
       let settled = 0;
       for (const row of await repository.listQueued(DISPATCH_BATCH, reclaimBefore)) {
-        const recipient = await repository.findRecipient(row.userId);
-        if (!recipient) {
-          if (
-            await repository.claim({
-              ...row,
-              attemptedAt: at.toISOString(),
-              reclaimBefore,
-            })
-          ) {
-            await repository.settle({ ...row, outcome: skipped("not_linked") });
-            settled++;
+        try {
+          const recipient = await repository.findRecipient(row.userId);
+          if (!recipient) {
+            if (
+              await repository.claim({
+                ...row,
+                attemptedAt: at.toISOString(),
+                reclaimBefore,
+              })
+            ) {
+              await repository.settle({ ...row, outcome: skipped("not_linked") });
+              settled++;
+            }
+            continue;
           }
-          continue;
+          if (await attemptReserved(row, recipient.phoneCiphertext, at)) settled++;
+        } catch {
+          // One unavailable row must not block later alerts in the batch.
         }
-        if (await attemptReserved(row, recipient.phoneCiphertext, at)) settled++;
       }
       return settled;
     },
