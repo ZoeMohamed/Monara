@@ -1,6 +1,6 @@
 // Uses the canva-decking HTML-to-PNG workflow. No application or provider calls.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -73,23 +73,39 @@ try {
   const frames = mkdtempSync(join(tmpdir(), "monara-readme-avatar-"));
   try {
     const { OnboardingAvatar } = sourceModule("apps/web/src/components/onboarding-avatar.tsx");
-    const markup = renderToStaticMarkup(React.createElement(OnboardingAvatar, { scene: "import" }));
+    const markup = renderToStaticMarkup(
+      React.createElement(OnboardingAvatar, { scene: "import" }),
+    ).replace('viewBox="0 0 360 220"', 'viewBox="90 0 220 220"');
     const css = readFileSync(
       join(root, "apps/web/src/components/onboarding-avatar.module.css"),
       "utf8",
     );
-    const document = `<!doctype html><html><head><meta charset="utf-8"><style>
-      :root{--brand:#3171fd;--border:#dae8f3;--line-strong:#a7bbce;--warning:#e8b748;--warning-foreground:#483216}
-      body{margin:0;background:transparent}#w{width:360px;height:220px}${css}
-      </style></head><body><div id="w">${markup}</div></body></html>`;
     const page = await browser.newPage({
-      viewport: { width: 360, height: 220 },
+      viewport: { width: 720, height: 200 },
       deviceScaleFactor: 1,
     });
+    await page.setContent(
+      readFileSync(join(root, "apps/web/public/logos/monara-lockup-light.svg"), "utf8"),
+    );
+    const lettering = await page.evaluate(() => {
+      // The supplied lockup contains the cat path followed by the original lettering.
+      const path = document.querySelectorAll("svg > g > path")[1];
+      if (!(path instanceof SVGPathElement)) throw new Error("Monara lettering path is missing");
+      const box = path.getBBox();
+      return { path: path.outerHTML, viewBox: `${box.x} ${box.y} ${box.width} ${box.height}` };
+    });
+    const document = `<!doctype html><html><head><meta charset="utf-8"><style>
+      :root{--brand:#3171fd;--wordmark:#3171fd;--border:#dae8f3;--line-strong:#a7bbce;--warning:#e8b748;--warning-foreground:#483216}
+      body{margin:0;background:transparent}#w{position:relative;width:720px;height:200px}
+      .avatar{position:absolute;left:0;top:0;width:200px;height:200px}
+      .wordmark{position:absolute;left:204px;top:80px;width:500px;height:auto;fill:var(--wordmark)}${css}
+      </style></head><body><div id="w"><div class="avatar">${markup}</div>
+      <svg class="wordmark" viewBox="${lettering.viewBox}">${lettering.path}</svg></div></body></html>`;
     await page.setContent(document);
     await page.evaluate(() => {
       for (const animation of document.getAnimations()) animation.pause();
     });
+    for (const theme of ["light", "dark"]) mkdirSync(join(frames, theme));
     const frameCount = 78;
     for (let frame = 0; frame < frameCount; frame++) {
       // Warm up delayed receipts, then capture one full 5.2-second blink cycle at 15 fps.
@@ -99,34 +115,39 @@ try {
         },
         5200 + (frame * 1000) / 15,
       );
-      await page.locator("#w").screenshot({
-        path: join(frames, `${String(frame).padStart(3, "0")}.png`),
-        omitBackground: true,
-        animations: "allow",
-      });
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate(
+          (color) => {
+            document.documentElement.style.setProperty("--wordmark", color);
+          },
+          theme === "dark" ? "#ffffff" : "#3171fd",
+        );
+        await page.locator("#w").screenshot({
+          path: join(frames, theme, `${String(frame).padStart(3, "0")}.png`),
+          omitBackground: true,
+          animations: "allow",
+        });
+      }
     }
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await page
-      .locator("#w")
-      .screenshot({ path: join(directory, "monara-avatar.png"), omitBackground: true });
     await page.close();
-    execFileSync("ffmpeg", [
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-y",
-      "-framerate",
-      "15",
-      "-i",
-      join(frames, "%03d.png"),
-      "-filter_complex",
-      "[0:v]split[a][b];[a]palettegen=reserve_transparent=1[p];[b][p]paletteuse=dither=sierra2_4a:alpha_threshold=128",
-      "-loop",
-      "0",
-      join(directory, "monara-avatar.gif"),
-    ]);
+    for (const theme of ["light", "dark"])
+      execFileSync("ffmpeg", [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-framerate",
+        "15",
+        "-i",
+        join(frames, theme, "%03d.png"),
+        "-filter_complex",
+        "[0:v]split[a][b];[a]palettegen=reserve_transparent=1[p];[b][p]paletteuse=dither=sierra2_4a:alpha_threshold=128",
+        "-loop",
+        "0",
+        join(directory, `monara-lockup-${theme}.gif`),
+      ]);
     process.stdout.write(
-      "Rendered monara-avatar.gif and reduced-motion PNG from the onboarding component\n",
+      "Rendered light and dark animated lockups from the onboarding cat and original lettering\n",
     );
   } finally {
     rmSync(frames, { recursive: true, force: true });

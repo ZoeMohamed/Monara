@@ -1,14 +1,11 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-reduced-motion: reduce)" srcset="docs/assets/readme/monara-avatar.png">
-  <img src="docs/assets/readme/monara-avatar.gif" alt="Monara's onboarding cat catching receipts" width="180" height="110">
-</picture>
-
 <a href="https://monara-finance.vercel.app/demo">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/logos/monara-lockup-dark.svg">
-    <img src="apps/web/public/logos/monara-lockup-light.svg" alt="Monara" width="300">
+    <source media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)" srcset="apps/web/public/logos/monara-lockup-dark.svg">
+    <source media="(prefers-reduced-motion: reduce)" srcset="apps/web/public/logos/monara-lockup-light.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/monara-lockup-dark.gif">
+    <img src="docs/assets/readme/monara-lockup-light.gif" alt="Monara, with its animated onboarding cat catching receipts" width="420">
   </picture>
 </a>
 

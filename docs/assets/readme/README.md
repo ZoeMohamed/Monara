@@ -5,8 +5,9 @@ Public presentation assets for the root [README](../../../README.md). The direct
 ## Branding and sources
 
 - Brand blue: `#3171FD`; product font: Nunito Sans. Both come from the existing [UI design system](../../ui-design-system.md).
-- The header uses the existing complete wordmarks in `apps/web/public/logos/monara-lockup-{light,dark}.svg`.
-- `monara-avatar.gif` is an export of the real `import` scene in `apps/web/src/components/onboarding-avatar.tsx`, its CSS module, and `apps/web/src/data/avatar-geometry.ts`. It is 360 × 220 at 15 frames per second for 5.2 seconds. The accompanying PNG uses the component's reduced-motion appearance.
+- The header uses one animated lockup, with the onboarding cat replacing the static cat beside the original Monara lettering. The lettering path is extracted unchanged from `apps/web/public/logos/monara-lockup-light.svg`.
+- `monara-lockup-{light,dark}.gif` combine the real `import` scene in `apps/web/src/components/onboarding-avatar.tsx`, its CSS module, and `apps/web/src/data/avatar-geometry.ts` with that lettering. Each is 720 × 200 at 15 frames per second for 5.2 seconds. The light version has blue lettering; the dark version has white lettering. The cat retains its brand blue.
+- Reduced-motion readers receive the existing full static lockup in the matching theme. The social-preview image also retains the full static lockup.
 - The architecture is an HTML/SVG diagram rendered to PNG using the `canva-decking` approach. Its editable source lives in `src/architecture.html`; no Canva design is modified.
 - `social-preview.png` is a 1280 × 640 GitHub sharing image using the current hook, existing wordmark, and the real Overview capture.
 
