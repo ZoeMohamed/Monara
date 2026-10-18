@@ -171,7 +171,7 @@ export const readTools = [
   readTool({
     name: "get_spending_forecast",
     description:
-      "The User's latest spending forecast for the next 30 days: the payments they are expected to make (bills on a day of the month, habits on days of the week) with a confidence for each, plus the amount expected this week and this month. These are predictions, not records, so say they are expected. forecast is null when none has been made yet.",
+      "The User's latest spending forecast for the rest of this month: the payments they are expected to make (bills on a day of the month, habits on days of the week) with a confidence for each, plus the amount expected this week and this month. These are predictions, not records, so say they are expected. forecast is null when none has been made yet.",
     input: z.object({}).strict(),
     output: forecastResponseSchema,
   }),

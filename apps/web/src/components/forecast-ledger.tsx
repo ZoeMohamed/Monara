@@ -86,8 +86,8 @@ function Summary({ forecast, shown }: { forecast: ForecastSummary; shown: Foreca
   const left = forecast.discardedCount;
   return (
     <p className="mt-3 text-xs text-muted" role="status">
-      {shown.length} expected {shown.length === 1 ? "payment" : "payments"} in the next 30 days,
-      about <span data-amount>{formatRupiah(total)}</span>. These have not happened yet.
+      {shown.length} expected {shown.length === 1 ? "payment" : "payments"} this month, about{" "}
+      <span data-amount>{formatRupiah(total)}</span>. These have not happened yet.
       {left > 0 ? ` ${left} unsure ${left === 1 ? "payment" : "payments"} left out.` : ""}
     </p>
   );
@@ -109,7 +109,9 @@ function Notice({ state, hasForecast }: { state: ForecastState; hasForecast: boo
     );
   }
   return hasForecast ? null : (
-    <p className={styles.note}>See which bills and habits are likely to hit in the next 30 days.</p>
+    <p className={styles.note}>
+      See which bills and habits are likely to hit before the month ends.
+    </p>
   );
 }
 
@@ -128,7 +130,7 @@ function List({
       <p className={styles.note}>
         {query.trim()
           ? "No expected payment matches your search."
-          : "No repeating payments stood out for the next 30 days. Confirm a few months of expenses and refresh."}
+          : "No repeating payments stood out for the rest of the month. Confirm a few months of expenses and refresh."}
       </p>
     );
   }
@@ -169,7 +171,7 @@ function LiveForecastLedger({ today, query }: { today: string; query: string }) 
 }
 
 /**
- * The Forecast filter of History: payments expected over the next 30 days, drawn faint because
+ * The Forecast filter of History: payments expected for the rest of this month, drawn faint because
  * none of them has happened. The public demo shows a sample.
  */
 export function ForecastLedger({ today, query }: { today: string; query: string }) {

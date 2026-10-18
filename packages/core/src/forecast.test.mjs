@@ -102,7 +102,7 @@ describe("detectCandidates", () => {
     assert.equal(byKey.get("youtube premium")?.payments[0]?.amount, 59_000);
   });
 
-  it("finds a habit that repeats on days of the week, 30 days ahead", () => {
+  it("finds a habit that repeats on days of the week, to the end of the month", () => {
     const habit = byKey.get("ayam geprek bu sri");
     assert.equal(habit?.pattern, "weekly");
     assert.deepEqual(
@@ -116,12 +116,6 @@ describe("detectCandidates", () => {
         "2026-10-26",
         "2026-10-28",
         "2026-10-30",
-        "2026-11-02",
-        "2026-11-04",
-        "2026-11-06",
-        "2026-11-09",
-        "2026-11-11",
-        "2026-11-13",
       ],
     );
     assert.match(habit?.reason ?? "", /Mondays, Wednesdays and Fridays/);
@@ -133,39 +127,31 @@ describe("detectCandidates", () => {
     assert.equal(byKey.has("gojek"), false);
   });
 
-  it("does not expect a bill again in the month it was already paid, but does in the next", () => {
+  it("never predicts something already paid this month", () => {
     const withPaid = [
       ...payments({ until: today }),
       expense("2026-10-10", "YouTube Premium", 59_000),
     ];
-    // 20 November is past the 30-day horizon from 14 October, so nothing is expected yet.
     assert.equal(
       detectCandidates(withPaid, today).some((candidate) => candidate.key === "youtube premium"),
       false,
     );
-    // From 25 October the 20th of November is inside the horizon.
-    const later = detectCandidates(withPaid, "2026-10-25").find(
-      (candidate) => candidate.key === "youtube premium",
-    );
-    assert.deepEqual(
-      later?.payments.map((p) => p.predictedOn),
-      ["2026-11-20"],
-    );
   });
 
-  it("crosses into the next month when the horizon does", () => {
-    // Spotify was paid on 25 October, so on 28 October its next payment is 25 November.
+  it("stops at the end of the month, even for a bill due early next month", () => {
+    // Spotify was paid on 25 October. Its next date is in November, so nothing is expected yet.
     const history = [
       ...payments({ until: "2026-10-28" }),
       expense("2026-10-25", "Spotify", 54_990),
     ];
-    const spotify = detectCandidates(history, "2026-10-28").find(
-      (candidate) => candidate.key === "spotify",
+    const found = detectCandidates(history, "2026-10-28");
+    assert.equal(
+      found.some((candidate) => candidate.key === "spotify"),
+      false,
     );
-    assert.deepEqual(
-      spotify?.payments.map((p) => p.predictedOn),
-      ["2026-11-25"],
-    );
+    for (const candidate of found) {
+      assert.ok(candidate.payments.every((payment) => payment.predictedOn <= "2026-10-31"));
+    }
   });
 
   it("does not predict a habit again on a day it was already done", () => {

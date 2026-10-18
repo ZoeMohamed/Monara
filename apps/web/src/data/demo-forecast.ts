@@ -72,14 +72,14 @@ const items: ForecastItem[] = [
     "Paid around the 15th in each of the last 4 months.",
   ),
 ];
-// The habit: every Monday, Wednesday and Friday in the 30 days after the demo date.
-for (let offset = 1; offset <= 30; offset++) {
+// The habit: every Monday, Wednesday and Friday from the day after the demo date to the end of the month.
+for (let offset = 1; addDays(demoToday, offset) <= endOfMonth(demoToday); offset++) {
   const date = addDays(demoToday, offset);
   if ([1, 3, 5].includes(weekday(date)))
     items.push(item(date, "Ayam Geprek", "25000", 0.91, "weekly", habit));
 }
 const upcoming = items
-  .filter((entry) => entry.predictedOn >= demoToday && entry.predictedOn <= addDays(demoToday, 30))
+  .filter((entry) => entry.predictedOn >= demoToday && entry.predictedOn <= endOfMonth(demoToday))
   .sort(
     (a, b) =>
       a.predictedOn.localeCompare(b.predictedOn) || a.merchantName.localeCompare(b.merchantName),
@@ -87,7 +87,6 @@ const upcoming = items
 
 const sum = (list: ForecastItem[]) =>
   list.reduce((total, entry) => total + Number(entry.amount.amountMinor), 0);
-const inMonth = upcoming.filter((entry) => entry.predictedOn <= endOfMonth(demoToday));
 const weekEnd = addDays(demoToday, 7 - weekday(demoToday));
 const spentSoFar = 1_820_000;
 
@@ -105,9 +104,9 @@ export const demoForecast: ForecastSummary = {
   // Worked out from the items, so the totals always add up to what the list shows.
   totals: {
     weekRemaining: money(String(sum(upcoming.filter((entry) => entry.predictedOn <= weekEnd)))),
-    monthRemaining: money(String(sum(inMonth))),
+    monthRemaining: money(String(sum(upcoming))),
     monthSpentSoFar: money(String(spentSoFar)),
-    projectedMonthEnd: money(String(spentSoFar + sum(inMonth))),
+    projectedMonthEnd: money(String(spentSoFar + sum(upcoming))),
   },
   accuracy: { due: 0, realized: 0, meanAbsoluteErrorPercent: null },
 };

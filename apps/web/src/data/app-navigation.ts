@@ -1,7 +1,7 @@
 import { demoMonth, earliestReportMonth, isCalendarDate } from "./demo-ledger";
 
 export type AppScreen = "home" | "transactions" | "reports" | "budgets" | "chat" | "account";
-/** "forecast" is not a transaction kind: it lists the payments expected over the next 30 days. */
+/** "forecast" is not a transaction kind: it lists the payments expected for the rest of this month. */
 export type LedgerKind = "all" | "expense" | "income" | "exclusion" | "forecast";
 export type ReportPeriod = "monthly" | "yearly";
 
