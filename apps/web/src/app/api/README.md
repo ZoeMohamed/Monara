@@ -8,7 +8,8 @@ The Next.js backend lives here. Financial writes belong to these routes, includi
 | `POST /api/agent/operations/[operation]` | Requires the server-only Agent/backend credential, validates the trusted runtime caller and input, and rechecks resource ownership in the financial service. Transaction/budget deletion requires a bound destructive confirmation. |
 | `/api/gmail/connections`, `/api/gmail/connections/[connectionId]`, `/api/gmail/connections/callback` | Owned Gmail list, separate consent, callback verification, and disconnect lifecycle. |
 | `GET/POST /api/gmail/connections/[connectionId]/discovery` | Reads or reruns owned mailbox discovery; the institution child route accepts or dismisses a discovered account. |
-| `POST /api/chat` | Verifies the Google session and same origin, injects server identity, forwards bounded history with server-only Agent credentials and validates the reply. |
+| `POST /api/chat` | Verifies the Google session and same origin, injects server identity, forwards bounded history with server-only Agent credentials, validates the reply, and saves the exchange to the User's chat history. A failed save never fails the reply. |
+| `GET /api/chat/conversations`, `GET /api/chat/conversations/[conversationId]` | Lists the signed-in User's saved chats, newest first, and reads the newest 200 messages of one. Another User's chat reads as empty. |
 | `GET /api/brands?q=` | Public, session-free search over the bundled Simple Icons (CC0) logo catalog for the logo picker. `/brand-icons/[slug].svg` serves the matching mark from the same bundle, so no third-party logo service is called. |
 | `GET /api/health/supabase` | Reports configuration/connectivity availability without returning credentials. |
 

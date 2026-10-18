@@ -18,7 +18,13 @@ import { ProfileScreen } from "@/components/profile-screen";
 import { ReportsScreen } from "@/components/reports-screen";
 import { TransactionsScreen } from "@/components/transactions-screen";
 import { demoReply } from "@/data/demo-assistant";
-import { ChatClientError, nextHistory, sendChatMessage } from "@/lib/chat/client";
+import {
+  ChatClientError,
+  loadChatConversations,
+  loadChatMessages,
+  nextHistory,
+  sendChatMessage,
+} from "@/lib/chat/client";
 import { FinanceClientError } from "@/lib/finance/client";
 
 export function OverviewRoute() {
@@ -181,6 +187,42 @@ export function ChatRoute() {
   }, [conversation.id, dispatch]);
   const demo = session.dataMode === "demo";
 
+  // Saved chats are listed once per page load, then each is fetched when it is opened.
+  const [listFailed, setListFailed] = useState(false);
+  const listed = chat.state.listed;
+  useEffect(() => {
+    if (demo || listed) return;
+    let current = true;
+    loadChatConversations()
+      .then((conversations) => {
+        if (!current) return;
+        setListFailed(false);
+        dispatch({ type: "saved-list", conversations });
+      })
+      .catch(() => current && setListFailed(true));
+    return () => {
+      current = false;
+    };
+  }, [demo, listed, dispatch]);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [failedLoad, setFailedLoad] = useState<{ id: string; attempt: number } | null>(null);
+  const conversationId = conversation.id;
+  const needsLoad = !demo && !conversation.loaded;
+  useEffect(() => {
+    if (!needsLoad) return;
+    let current = true;
+    loadChatMessages(conversationId)
+      .then(
+        (messages) => current && dispatch({ type: "saved-messages", id: conversationId, messages }),
+      )
+      .catch(() => current && setFailedLoad({ id: conversationId, attempt: loadAttempt }));
+    return () => {
+      current = false;
+    };
+  }, [needsLoad, conversationId, loadAttempt, dispatch]);
+  const loadFailed = failedLoad?.id === conversationId && failedLoad.attempt === loadAttempt;
+  const status = !needsLoad ? "ready" : loadFailed ? "failed" : "loading";
+
   const requestReply = async (text: string): Promise<string | ChatReply> => {
     if (demo) {
       const result = demoReply(text, {
@@ -206,7 +248,7 @@ export function ChatRoute() {
       return await session.runMutation<ChatReply>(
         async () => {
           try {
-            const response = await sendChatMessage(text, conversation.history);
+            const response = await sendChatMessage(text, conversation.history, conversation.id);
             const safeResponse = mounted.current ? response : { ...response, confirmation: null };
             dispatch({
               type: "history",
@@ -296,6 +338,10 @@ export function ChatRoute() {
       conversations={chat.state.conversations}
       activeConversationId={conversation.id}
       pending={chat.pending}
+      saved={!demo}
+      savedLoadFailed={listFailed}
+      status={status}
+      onRetryLoad={() => setLoadAttempt((attempt) => attempt + 1)}
       onRestoreConversation={(id) => {
         if (!chat.pending) dispatch({ type: "restore", id });
       }}
