@@ -125,6 +125,7 @@
   padding: 4px 2px;
   border-top: 1px solid var(--separator);
   animation: row-in 320ms var(--ease-out) both;
+  animation-delay: calc(var(--row-index, 0) * 45ms);
 }
 
 .row:first-child {

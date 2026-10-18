@@ -16,7 +16,7 @@ import {
 import type { Env } from "../env.ts";
 import { createMerchantPipeline, MerchantBusyError } from "../merchant/pipeline.ts";
 import { BackendOperationError, createGmailBackend } from "./backend.ts";
-import { createLlmClient } from "./llm.ts";
+import { createLlmClient, isTemporaryLlmError, LlmError } from "./llm.ts";
 import { createGmailPipeline } from "./pipeline.ts";
 
 /** Matches max_retries for the Gmail queue consumer in wrangler.jsonc. */
@@ -40,6 +40,9 @@ function failureFields(error: unknown): Record<string, unknown> {
     return { reason, operation: error.operation, status: error.status, code: error.code };
   }
   if (error instanceof BraveSearchError) return { reason, status: error.status };
+  if (error instanceof LlmError) {
+    return { reason, status: error.status, code: error.failure, detail: error.message };
+  }
   return { reason };
 }
 
@@ -69,6 +72,7 @@ function createLlm(env: Env) {
     baseUrl: env.LLM_BASE_URL ?? "",
     apiKey: env.LLM_API_KEY ?? "",
     model: env.LLM_MODEL ?? "",
+    reasoningEffort: env.LLM_REASONING_EFFORT,
   });
 }
 
@@ -78,10 +82,16 @@ function smallCount(value: string | undefined): number | undefined {
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 10 ? parsed : undefined;
 }
 
-async function sendInBatches<T>(queue: Queue<T>, jobs: readonly T[]): Promise<void> {
+async function sendInBatches<T>(
+  queue: Queue<T>,
+  jobs: readonly T[],
+  delaySeconds?: number,
+): Promise<void> {
   for (let start = 0; start < jobs.length; start += QUEUE_SEND_BATCH_LIMIT) {
     const batch = jobs.slice(start, start + QUEUE_SEND_BATCH_LIMIT);
-    await queue.sendBatch(batch.map((body) => ({ body })));
+    await queue.sendBatch(
+      batch.map((body) => (delaySeconds === undefined ? { body } : { body, delaySeconds })),
+    );
   }
 }
 
@@ -101,6 +111,7 @@ function createPipeline(env: Env) {
     }),
     llm: createLlm(env),
     enqueue: (jobs) => sendInBatches(queue, jobs),
+    enqueueLater: (jobs, delaySeconds) => sendInBatches(queue, jobs, delaySeconds),
     enqueueMerchant: (jobs) => sendInBatches(merchantQueue, jobs),
     parseBatchSize: smallCount(env.GMAIL_PARSE_BATCH_SIZE),
     parseConcurrency: smallCount(env.GMAIL_PARSE_CONCURRENCY),
@@ -292,7 +303,13 @@ export async function consumeMerchantJobs(batch: MessageBatch<unknown>, env: Env
           delaySeconds:
             error instanceof MerchantBusyError
               ? MERCHANT_BUSY_RETRY_SECONDS
-              : retryDelaySeconds(message.attempts),
+              : Math.max(
+                  retryDelaySeconds(message.attempts),
+                  // A busy model said how long to wait; asking sooner only fails again.
+                  isTemporaryLlmError(error) && error.retryAfterMs !== null
+                    ? Math.min(Math.ceil(error.retryAfterMs / 1000), 900)
+                    : 0,
+                ),
         });
       }
     }),

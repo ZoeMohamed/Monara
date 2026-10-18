@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, ProgressBar } from "@monara/ui";
-import { type KeyboardEvent, useId, useRef, useState } from "react";
+import { type CSSProperties, type KeyboardEvent, useId, useRef, useState } from "react";
 
 import { useAmountDisplay } from "@/components/app-session-context";
 import { OnboardingAvatar } from "@/components/onboarding-avatar";
@@ -76,11 +76,15 @@ function Stats({ progress }: { progress: ImportProgress }) {
   );
 }
 
-function ImportRow({ item }: { item: ImportedTransaction }) {
+/** Rows arriving together fade in one after another; ones already shown do not replay. */
+const staggeredRows = 8;
+
+function ImportRow({ item, index }: { item: ImportedTransaction; index: number }) {
   const { formatRupiah } = useAmountDisplay();
   const sign = item.kind === "income" ? "+" : item.kind === "expense" ? "−" : "";
+  const style = { "--row-index": Math.min(index, staggeredRows) } as CSSProperties;
   return (
-    <li className={styles.row} data-kind={item.kind}>
+    <li className={styles.row} data-kind={item.kind} style={style}>
       <span className={styles.rowBadge}>
         <BankBadge
           name={item.bankName}
@@ -171,8 +175,8 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
           <p className={styles.empty}>{emptyText(progress, selected)}</p>
         ) : (
           <ul className={styles.rows}>
-            {items.map((item) => (
-              <ImportRow item={item} key={item.id} />
+            {items.map((item, index) => (
+              <ImportRow index={index} item={item} key={item.id} />
             ))}
           </ul>
         )}
@@ -181,6 +185,7 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
   );
 }
 
+/** No button while the import runs; closing the sheet leaves it running behind a banner. */
 export function ImportStep({ progress, onNext }: { progress: ImportProgress; onNext: () => void }) {
   const done = progress.state === "completed";
   const failed = progress.state === "failed";
@@ -188,10 +193,12 @@ export function ImportStep({ progress, onNext }: { progress: ImportProgress; onN
   return (
     <StepFrame
       actions={
-        <Button className="min-h-12" onPress={onNext}>
-          {done ? "Explore Monara" : "Next"}
-          <ButtonIcon name="arrow" />
-        </Button>
+        done || failed ? (
+          <Button className="min-h-12" onPress={onNext}>
+            Explore Monara
+            <ButtonIcon name="arrow" />
+          </Button>
+        ) : undefined
       }
       step={3}
     >
