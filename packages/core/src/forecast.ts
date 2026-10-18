@@ -53,6 +53,8 @@ interface ForecastItemDraft extends PredictedPayment {
 /** How far the model may move the rule confidence: down more than up, so it errs toward silence. */
 const MAX_DROP = 0.25;
 const MAX_RISE = 0.15;
+/** How far ahead the forecast looks: the next 30 days, so it can cross into next month. */
+const FORECAST_HORIZON_DAYS = 30;
 const HISTORY_DAYS = 130;
 const MONTHLY_RECENT_DAYS = 45;
 const WEEKLY_WINDOW_DAYS = 56;
@@ -84,6 +86,14 @@ function daysInMonth(month: string): number {
 
 export const endOfMonth = (date: string) =>
   `${monthOf(date)}-${String(daysInMonth(monthOf(date))).padStart(2, "0")}`;
+const horizonEndOf = (today: string) => fromDayNumber(dayNumber(today) + FORECAST_HORIZON_DAYS);
+function nextMonth(month: string): string {
+  const [year, number] = month.split("-").map(Number);
+  return number === 12
+    ? `${(year ?? 0) + 1}-01`
+    : `${year}-${String((number ?? 0) + 1).padStart(2, "0")}`;
+}
+
 /** The Sunday that ends the week `date` falls in. */
 export const endOfWeek = (date: string) => fromDayNumber(dayNumber(date) + (7 - isoWeekday(date)));
 
@@ -196,14 +206,16 @@ function monthlyCandidate(
     0.4 * consistency + 0.3 * amountStability(amounts) + 0.3 * Math.min(1, months.size / 4);
 
   const thisMonth = monthOf(today);
-  // A payment already made this month is not expected again.
-  if (months.has(thisMonth) || paidToday.has(group.key)) return null;
-  const date = `${thisMonth}-${String(Math.min(usual, daysInMonth(thisMonth))).padStart(2, "0")}`;
-  const payments = date >= today ? [{ predictedOn: date, ...paymentRange(amounts) }] : [];
-  return {
-    ...baseOf(group, "monthly", confidence, months.size, usual),
-    payments,
-  };
+  const horizonEnd = horizonEndOf(today);
+  const range = paymentRange(amounts);
+  const payments: PredictedPayment[] = [];
+  for (let month = thisMonth; month <= monthOf(horizonEnd); month = nextMonth(month)) {
+    // A payment already made this month is not expected again this month.
+    if (month === thisMonth && (months.has(thisMonth) || paidToday.has(group.key))) continue;
+    const date = `${month}-${String(Math.min(usual, daysInMonth(month))).padStart(2, "0")}`;
+    if (date >= today && date <= horizonEnd) payments.push({ predictedOn: date, ...range });
+  }
+  return { ...baseOf(group, "monthly", confidence, months.size, usual), payments };
 }
 
 function baseOf(
@@ -263,7 +275,7 @@ function weeklyCandidate(
   const confidence =
     0.5 * hitRate + 0.3 * amountStability(amounts) + 0.2 * Math.min(1, matching.length / 8);
 
-  const lastDay = endOfMonth(today);
+  const lastDay = horizonEndOf(today);
   const payments: PredictedPayment[] = [];
   const range = paymentRange(amounts);
   for (let day = dayNumber(today); day <= dayNumber(lastDay); day++) {

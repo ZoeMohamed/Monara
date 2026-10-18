@@ -1,7 +1,8 @@
 import { demoMonth, earliestReportMonth, isCalendarDate } from "./demo-ledger";
 
 export type AppScreen = "home" | "transactions" | "reports" | "budgets" | "chat" | "account";
-export type LedgerKind = "all" | "expense" | "income" | "exclusion";
+/** "forecast" is not a transaction kind: it lists the payments expected over the next 30 days. */
+export type LedgerKind = "all" | "expense" | "income" | "exclusion" | "forecast";
 export type ReportPeriod = "monthly" | "yearly";
 
 // The public demo mounts the same screens below /demo with sample data only.
@@ -41,7 +42,9 @@ function validMonth(value: string | null, fallback = demoMonth): string {
 }
 
 function validKind(value: string | null): LedgerKind {
-  return value === "expense" || value === "income" || value === "exclusion" ? value : "all";
+  return value === "expense" || value === "income" || value === "exclusion" || value === "forecast"
+    ? value
+    : "all";
 }
 
 function validYear(value: string | null, fallback: string): string {

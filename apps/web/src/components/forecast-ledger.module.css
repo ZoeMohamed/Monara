@@ -1,0 +1,91 @@
+.note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.error {
+  margin-top: 12px;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.group {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.group > * + * {
+  border-top: 1px solid var(--separator);
+}
+
+/* Not happened yet, so the whole row, mark and text included, is drawn faint. */
+.row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 10px;
+  opacity: 0.55;
+}
+
+.text {
+  min-width: 0;
+  flex: 1;
+}
+
+.merchant {
+  display: block;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reason {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.amount {
+  min-width: 0;
+  max-width: 47%;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.amount > strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.amount > span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (min-width: 1024px) {
+  .group {
+    border-radius: 20px;
+  }
+
+  .row {
+    padding-inline: 20px;
+  }
+}

@@ -7,7 +7,6 @@ import {
 } from "@monara/contracts";
 import {
   detectCandidates,
-  endOfMonth,
   forecastAccuracy,
   forecastTotals,
   type HistoryExpense,
@@ -172,7 +171,7 @@ export function createForecastService(input: {
         }
       }
       const from = fromDayNumber(dayNumber(today) - HISTORY_DAYS);
-      const history = await repository.listConfirmedExpenses(userId, from, endOfMonth(today));
+      const history = await repository.listConfirmedExpenses(userId, from, today);
       const candidates = detectCandidates(history, today);
 
       let judgements: ForecastJudgement[] | null = null;

@@ -4,7 +4,7 @@ Owner: Abhip. Features: F17. Status: Draft.
 
 ## Purpose
 
-The forecast tells a User what they are likely to spend for the rest of the month, before they spend it. It lists the payments they are expected to make, such as Spotify on the 25th or chicken rice every Monday, Wednesday and Friday, each with a confidence, and it totals what is expected this week and this month. It runs weekly and on demand, so a demo can trigger it by hand. A forecast is a prediction. It is always labelled as expected, and it never counts toward confirmed spending, income or Budget usage.
+The forecast tells a User what they are likely to spend over the next 30 days, before they spend it. It lists the payments they are expected to make, such as Spotify on the 25th or chicken rice every Monday, Wednesday and Friday, each with a confidence, and it totals what is expected this week and this month. It runs weekly and on demand, so a demo can trigger it by hand. A forecast is a prediction. It is always labelled as expected, and it never counts toward confirmed spending, income or Budget usage.
 
 ## How it works
 
@@ -23,8 +23,8 @@ flowchart LR
 
 **Rules** (`packages/core/src/forecast.ts`). The rules read the User's confirmed expenses from the last 130 days and group them by merchant name.
 
-- *Monthly bills.* A merchant paid about once a month, in at least two different months, on days within two days of each other, and recently enough to still be live (the last payment within 45 days). Its expected date is its usual day of the month, and it is skipped if it was already paid this month.
-- *Weekly habits.* A merchant bought on the same weekday in at least four of the last eight weeks. Every such weekday left in the month becomes an expected date. A merchant that fits both is a habit when it appears six or more times.
+- *Monthly bills.* A merchant paid about once a month, in at least two different months, on days within two days of each other, and recently enough to still be live (the last payment within 45 days). Its expected date is its usual day of the month. A bill already paid this month is not expected again this month, but its next date counts if it falls within the 30 days.
+- *Weekly habits.* A merchant bought on the same weekday in at least four of the last eight weeks. Every such weekday in the next 30 days becomes an expected date. A merchant that fits both is a habit when it appears six or more times.
 - *Amount.* The median of the recent payments, with the lowest and highest as the range. An amount is never made up.
 - *Rule confidence.* Monthly: 0.4 for date consistency, 0.3 for steady amounts and 0.3 for how many months it has been seen (up to four). Weekly: 0.5 for how often the weekday is hit, 0.3 for steady amounts and 0.2 for how many times it was seen.
 
@@ -32,7 +32,7 @@ flowchart LR
 
 **Threshold.** Items below 0.7 are dropped and only counted ("2 unsure payments left out").
 
-**Totals.** Expected this week (to Sunday), expected this month, confirmed spending so far, and the projected month end, which is the confirmed total plus what is still expected.
+**Totals.** Expected this week (to Sunday), expected this month (to the last day of the month), confirmed spending so far, and the projected month end, which is the confirmed total plus what is still expected this month. Payments later than the end of the month are in the list but not in these totals.
 
 **Did it come true?** When a prediction's date has passed, it is matched to a confirmed expense from the same merchant, made on or after the day the forecast was made, within 3 days and within 35% of the amount. A payment from before the forecast cannot fulfil it. A matched prediction shows as Paid and leaves the remaining total. The forecast reports how many earlier predictions came true. Nothing is stored for this, so it is worked out when the forecast is read.
 
@@ -45,7 +45,7 @@ flowchart LR
 | Routes | `apps/web/src/app/api/forecast/route.ts` (read and refresh), `api/agent/forecast/refresh/route.ts` (weekly run) |
 | Weekly trigger | Worker cron, Mondays 02:00 UTC (09:00 Jakarta) |
 | Agent tools | `get_spending_forecast` and `refresh_spending_forecast` (read tier) |
-| Interface | A Home card with this week, this month, month end, the list with confidence chips and a Refresh button (`apps/web/src/components/spending-forecast-card.tsx`). The public demo shows a sample |
+| Interface | A Home card with this week, this month, month end, the list with confidence chips and a Refresh button (`spending-forecast-card.tsx`), and a Forecast filter in History that lists every expected payment of the next 30 days by day, drawn faint because none has happened (`forecast-ledger.tsx`). The public demo shows a sample |
 
 ## Key decisions
 
