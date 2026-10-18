@@ -29,6 +29,7 @@ export interface ChatHistoryRepository {
     agentText: string;
     agentResult: AgentChatResponse;
     closedConfirmation: boolean;
+    signal?: AbortSignal;
   }): Promise<void>;
   /** The User's conversations, newest first. */
   listConversations(userId: string, limit: number): Promise<SavedChatConversation[]>;
@@ -41,6 +42,7 @@ export interface ChatHistoryService {
     userId: string,
     request: Pick<WebChatRequest, "conversationId" | "text">,
     response: WebChatResponse,
+    signal?: AbortSignal,
   ): Promise<void>;
   conversations(userId: string): Promise<SavedChatList>;
   messages(userId: string, conversationId: string): Promise<SavedChatMessages>;
@@ -55,7 +57,7 @@ function chatTitle(text: string): string {
 
 export function createChatHistoryService(repository: ChatHistoryRepository): ChatHistoryService {
   return {
-    async saveExchange(userId, request, response) {
+    async saveExchange(userId, request, response, signal) {
       const owner = userIdSchema.parse(userId);
       const conversationId = webChatRequestSchema.shape.conversationId.parse(
         request.conversationId,
@@ -74,6 +76,7 @@ export function createChatHistoryService(repository: ChatHistoryRepository): Cha
           confirmation: null,
         }),
         closedConfirmation: response.confirmation !== null,
+        signal,
       });
     },
 

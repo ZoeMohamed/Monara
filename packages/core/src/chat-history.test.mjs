@@ -95,6 +95,18 @@ describe("web chat history", () => {
     assert.equal(saved[0].title.length, 55);
   });
 
+  it("passes a caller timeout to persistence", async () => {
+    const { repository, saved } = memory();
+    const signal = AbortSignal.timeout(5_000);
+    await createChatHistoryService(repository).saveExchange(
+      user,
+      { conversationId: chat, text: "hi" },
+      { reply: "Done", actions: [], confirmation: null },
+      signal,
+    );
+    assert.equal(saved[0].signal, signal);
+  });
+
   it("refuses a conversation id or User id that is not a UUID before touching storage", async () => {
     const { repository, saved } = memory();
     const service = createChatHistoryService(repository);

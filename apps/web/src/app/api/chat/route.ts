@@ -1,4 +1,5 @@
 import { webChatRequestSchema, webChatResponseSchema } from "@monara/contracts";
+import { after } from "next/server";
 
 import { chatHistoryService } from "@/lib/chat/service";
 import { isSameOriginRequest } from "@/lib/http/origin";
@@ -7,6 +8,7 @@ import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 const headers = { "Cache-Control": "private, no-store" };
+const HISTORY_SAVE_TIMEOUT_MS = 5_000;
 
 function failure(status: number, code: string, message: string) {
   return Response.json({ code, message, requestId: null }, { status, headers });
@@ -66,15 +68,19 @@ export async function POST(request: Request) {
       "Monara's answer couldn't be verified. Check your records before trying again.",
     );
   }
-  // The Agent may already have changed records, so a failed save never fails the reply.
-  try {
-    await chatHistoryService().saveExchange(
-      identity.id,
-      { conversationId, text: message.text },
-      result.data,
-    );
-  } catch {
-    // The chat still works; only its history is missing this exchange.
-  }
+  // The Agent may already have changed records. Send its verified reply immediately;
+  // Next keeps the invocation alive briefly to persist history after the response.
+  after(async () => {
+    try {
+      await chatHistoryService().saveExchange(
+        identity.id,
+        { conversationId, text: message.text },
+        result.data,
+        AbortSignal.timeout(HISTORY_SAVE_TIMEOUT_MS),
+      );
+    } catch {
+      // The chat still works; only its history is missing this exchange.
+    }
+  });
   return Response.json(result.data, { headers });
 }

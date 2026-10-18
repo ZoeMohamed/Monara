@@ -20,7 +20,7 @@ export function createSupabaseChatHistoryRepository(
 ): ChatHistoryRepository {
   return {
     async appendExchange(input) {
-      const { error } = await client.rpc("append_chat_exchange", {
+      const query = client.rpc("append_chat_exchange", {
         p_user_id: input.userId,
         p_conversation_id: input.conversationId,
         p_title: input.title,
@@ -29,6 +29,7 @@ export function createSupabaseChatHistoryRepository(
         p_agent_result: input.agentResult,
         p_closed_confirmation: input.closedConfirmation,
       });
+      const { error } = await (input.signal ? query.abortSignal(input.signal) : query);
       if (error) fail("The chat could not be saved.", error);
     },
 
