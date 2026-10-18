@@ -51,6 +51,21 @@ pnpm docs:pdf --final    # also fails on any TODO or a Status below Reviewed
 
 The build needs `pandoc`, `typst` and `mmdc` (Mermaid CLI) on the PATH. It renders the Mermaid blocks to images, turns links to other sections into anchors (or a pointer to the PDF that holds them) and links to code into GitHub URLs, and applies the Monara cover, header and footer from `pdf/`. The PDFs use the app's Nunito Sans, brand blue and canvas colors.
 
+## Submission package
+
+The rules ask for six items, sent by email to `fintechathon@ican-x.com` with clear labels on each attachment (the organizers confirmed this on 14 October).
+
+| Item | Where it is |
+| --- | --- |
+| Technical documentation | `Team808-Technical-Documentation.pdf`, built by `pnpm docs:pdf` |
+| Presentation deck | Canva deck exported to PDF |
+| Demo video (optional, up to 5 minutes) | Link, to be added |
+| Source code | This repository, which will be public: https://github.com/ZoeMohamed/Monara |
+| Security self-assessment | `Team808-Security-Self-Assessment.pdf` |
+| Execution evidence | `Team808-Execution-Evidence.pdf`, with raw logs in [evidence/](evidence/) |
+
+Hosted app for the judges: https://monara-finance.vercel.app. Test accounts are to be added.
+
 If you use an AI agent to draft a section, ask it to follow `.agents/skills/tech-doc/SKILL.md`.
 
 ## Rules

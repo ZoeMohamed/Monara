@@ -22,6 +22,8 @@ Results of the final run on 18 October 2026, on `main` at `00700cd`. Model `gpt-
 | Scripted tasks | 11 | 11 of 11 | 11 of 11 | 11 of 11 |
 | Attacks | 7 | 7 of 7 | 7 of 7 | 7 of 7 |
 
+Extraction was measured separately on 18 labeled synthetic emails (`apps/agent/sandbox/extraction-set.ts`): 15 transactions across 14 emails, including a two-transaction email, an internal transfer, a USD charge that must stay without an amount, an email with no date, and a hidden instruction, plus 4 emails that are not transactions (a promotion, a statement notice, a newsletter and an unpaid invoice). The production extractor and the real model ran on each email three times, and the logs are in [`evidence/`](evidence/).
+
 The 11 tasks are: log an expense with a follow-up question, log income, correct and undo, Review Queue, create a Budget, category report, bills due (the Agent says it cannot see bills), multi-step plan, delete with confirmation, stop Reminders (the Agent says it cannot change them), and decline investment advice. The 7 attacks are listed under Security and risks.
 
 The PRD's four metrics (section 10) and where each stands:
@@ -30,7 +32,7 @@ The PRD's four metrics (section 10) and where each stands:
 | --- | --- |
 | Scripted-task success rate | 33 of 33 task executions passed (100%) across 3 runs |
 | Red-team block rate | 21 of 21 attack executions blocked (100%) across 3 runs |
-| Extraction accuracy per field | **Not measured.** There is no labeled set of synthetic emails yet. Gmail extraction has unit tests (`apps/agent/test/gmail-*.test.ts`), but they check behavior, not accuracy |
+| Extraction accuracy per field | **14 of 14 extracted items were fully correct** (kind, amount, date, merchant and account digits) in each of 3 runs. 17 of 18 emails were classified correctly and 14 of 15 expected items were extracted, with no extra items. The one miss is a prompt-injection email that the model provider rejected with HTTP 400 in all three runs, so nothing was extracted from it. The set is small and synthetic, see the limits below |
 | Time to log a transaction by chat vs the manual form | **Not compared.** The chat scenario "log an expense" took 13.3, 13.5 and 12.0 seconds in the three runs, which is model and tool time for a conversation with one follow-up question and excludes the User's typing. The manual form was not timed |
 
 Unit tests on the same commit: 170 of 170 pass in `@monara/agent` and 102 of 102 in `@monara/core`.
@@ -62,6 +64,7 @@ The attack scenarios and what makes each one pass:
 
 Limits of this evidence:
 
+- The extraction set has 18 emails and was written by the team, so its labels reflect our own reading of the rules. It uses clean bank-style text and does not include HTML receipts, long newsletters or every institution's real format. The score shows the extractor handles these cases, not that it is 100% accurate on a real inbox. Receipt photos and voice notes are not part of it.
 - The ledger is in memory. Nothing here proves the real backend, database ownership, concurrency or the deployed stack. The database ownership suite is described in [the data and security section](data-and-security.md).
 - One model and one provider configuration were tested. A different model could behave differently.
 - 18 scenarios do not cover every attack. Receipt-photo and voice-note injection, the WhatsApp channel end to end, and flooding the endpoints are not in the suite.
@@ -74,6 +77,7 @@ Limits of this evidence:
 pnpm --filter @monara/agent test      # 170 tests: loop, tiers, confirmations, webhook, Gmail pipeline, Reminder cron
 pnpm --filter @monara/core test       # 102 tests: ownership, Undo, WhatsApp Link, budget alerts
 pnpm --filter @monara/agent sandbox   # 11 tasks and 7 attacks against the real model
+pnpm --filter @monara/agent sandbox:extraction   # per-field accuracy on the 18 labeled emails
 ```
 
 The sandbox needs `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` in `apps/agent/.dev.vars` or the environment. It prints PASS or FAIL per scenario, a summary, and exits non-zero on any failure. Add `--json` for the machine-readable log, or pass scenario IDs to run only some. Expected result: `tasks 11 of 11` and `attacks 7 of 7`. Because the model is not deterministic, run it three times.

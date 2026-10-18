@@ -8,7 +8,7 @@ Monara stores each User's financial records in Supabase while keeping identity, 
 
 ## How it works
 
-Supabase Auth is the identity root. A new Auth User receives one Profile, Reminder Preferences, and 15 owned default Categories. Every owned relation carries `user_id`; references between owned records use composite `(id, user_id)` foreign keys, so a transaction, Budget, Reminder, or provider record cannot point to another User's resource.
+Supabase Auth is the identity root. A new Auth User receives one Profile, Reminder Preferences, and 25 owned default Categories. Every owned relation carries `user_id`; references between owned records use composite `(id, user_id)` foreign keys, so a transaction, Budget, Reminder, or provider record cannot point to another User's resource.
 
 ```mermaid
 erDiagram
@@ -59,7 +59,7 @@ F9 calculations live in `packages/core/src/finance.ts` and return basis numbers 
 
 ## Security and risks
 
-All 14 public product tables enable and force RLS. `anon` has no financial access. `authenticated` receives `SELECT` only on Profile, Financial Accounts, Categories, Transactions, Budgets, recurring bills, Reminder Preferences, and Reminders; owner policies compare `auth.uid()` with the row owner. Gmail connections and processed messages, WhatsApp links, Reminder deliveries, and Agent action/state tables have no authenticated grant. Gmail ingestion functions revoke execution from public roles and grant it only to `service_role`.
+All 18 public product tables enable and force RLS. `anon` has no financial access. `authenticated` receives `SELECT` only on Profile, Financial Accounts, Categories, Transactions, Budgets, recurring bills, Reminder Preferences, and Reminders; owner policies compare `auth.uid()` with the row owner. Gmail connections and processed messages, WhatsApp links, Reminder deliveries, and Agent action/state tables have no authenticated grant. Gmail ingestion functions revoke execution from public roles and grant it only to `service_role`.
 
 The service-role key is server-only and is not authorization by itself. Browser finance routes derive identity from the verified Supabase session. Repository reads, updates, optimistic-lock checks, idempotency lookups, and deletes all include `user_id`. Agent backend calls use a server-held bearer secret; the Agent must resolve the signed-in or verified-WhatsApp User before sending the User ID. A leaked Agent backend secret would widen that trust boundary, so it must remain server-only and be rotated through deployment secrets if exposed.
 
