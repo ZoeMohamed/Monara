@@ -13,7 +13,7 @@ const confirmation = {
 const at = "2026-10-17T12:00:00Z";
 
 function pendingConversation() {
-  let state = initialChatSession();
+  let state = initialChatSession("initial");
   state = reduceChatSession(state, {
     type: "message",
     id: "initial",
@@ -88,13 +88,13 @@ describe("page-session chat history", () => {
   });
 
   it("reuses an empty chat and ignores an unknown history entry", () => {
-    const original = initialChatSession();
+    const original = initialChatSession("initial");
     assert.equal(
       reduceChatSession(original, { type: "new", id: "unused" }).conversations.length,
       1,
     );
     assert.equal(reduceChatSession(original, { type: "restore", id: "missing" }), original);
-    assert.deepEqual(initialChatSession().conversations[0].messages, []);
+    assert.deepEqual(initialChatSession("initial").conversations[0].messages, []);
   });
 
   it("keeps unsent text and a receipt when starting and restoring another chat", () => {
@@ -110,7 +110,7 @@ describe("page-session chat history", () => {
       file: new File(["synthetic"], "synthetic.png", { type: "image/png" }),
       previewUrl: "data:image/png;base64,c3ludGhldGlj",
     };
-    let state = reduceChatSession(initialChatSession(), {
+    let state = reduceChatSession(initialChatSession("initial"), {
       type: "draft",
       id: "initial",
       draft: "Lunch 40k, still checking the account",
@@ -125,7 +125,7 @@ describe("page-session chat history", () => {
     assert.equal(restored.draft, "Lunch 40k, still checking the account");
     assert.equal(restored.receipt, receipt);
     assert.deepEqual(restored.messages, []);
-    assert.equal(initialChatSession().conversations[0].receipt, null);
+    assert.equal(initialChatSession("initial").conversations[0].receipt, null);
   });
 
   it("keeps an uncertain-result recovery gate when leaving and returning to a chat", () => {
@@ -135,7 +135,7 @@ describe("page-session chat history", () => {
     assert.equal(recovery.requiresRecordCheck, true);
     assert.equal(recovery.recordsOpened, false);
     assert.match(recovery.message, /may already be saved.*Check History/);
-    let state = reduceChatSession(initialChatSession(), {
+    let state = reduceChatSession(initialChatSession("initial"), {
       type: "recovery",
       id: "initial",
       recovery,
@@ -162,5 +162,86 @@ describe("page-session chat history", () => {
     assert.equal(recovery.signInRequired, true);
     assert.equal(recovery.requiresRecordCheck, false);
     assert.match(recovery.message, /message wasn’t sent.*Copy your draft/);
+  });
+});
+
+describe("saved web chats", () => {
+  const savedId = "20000000-0000-4000-8000-000000000001";
+  const summary = {
+    id: savedId,
+    title: "Delete my coffee payment",
+    updatedAt: "2026-10-17T09:00:00.000+00:00",
+    messageCount: 2,
+  };
+  const messages = [
+    {
+      id: "m1",
+      role: "user",
+      text: "Delete my coffee payment",
+      result: null,
+      closedConfirmation: false,
+    },
+    {
+      id: "m2",
+      role: "agent",
+      text: "Delete this payment?",
+      result: { reply: "Delete this payment?", actions: [], confirmation: null },
+      closedConfirmation: true,
+    },
+  ];
+
+  it("lists saved chats without opening them or disturbing the current chat", () => {
+    const original = initialChatSession("fresh");
+    const state = reduceChatSession(original, { type: "saved-list", conversations: [summary] });
+    assert.equal(state.listed, true);
+    assert.equal(state.activeId, "fresh");
+    const saved = state.conversations.find((item) => item.id === savedId);
+    assert.equal(saved.loaded, false);
+    assert.equal(saved.messageCount, 2);
+    assert.equal(saved.title, "Delete my coffee payment");
+    const again = reduceChatSession(state, { type: "saved-list", conversations: [summary] });
+    assert.equal(again.conversations.length, 2);
+  });
+
+  it("never reuses a saved chat that has not loaded as the empty chat", () => {
+    let state = reduceChatSession(initialChatSession("fresh"), {
+      type: "saved-list",
+      conversations: [summary],
+    });
+    state = reduceChatSession(state, { type: "restore", id: savedId });
+    state = reduceChatSession(state, { type: "new", id: "next" });
+    assert.equal(state.activeId, "fresh");
+    assert.equal(state.conversations.find((item) => item.id === savedId).loaded, false);
+  });
+
+  it("restores messages and the Agent's memory, with the old confirmation shown as closed", () => {
+    let state = reduceChatSession(initialChatSession("fresh"), {
+      type: "saved-list",
+      conversations: [summary],
+    });
+    state = reduceChatSession(state, { type: "saved-messages", id: savedId, messages });
+    const chat = state.conversations.find((item) => item.id === savedId);
+    assert.equal(chat.loaded, true);
+    assert.equal(chat.messages.length, 2);
+    assert.equal(chat.messages[1].closedConfirmation, true);
+    assert.equal(chat.messages[0].closedConfirmation, undefined);
+    assert.deepEqual(chat.history, [
+      { role: "user", text: "Delete my coffee payment" },
+      { role: "assistant", text: "Delete this payment?" },
+    ]);
+  });
+
+  it("keeps messages sent in this tab over a late fetch of the same chat", () => {
+    let state = reduceChatSession(initialChatSession("fresh"), {
+      type: "message",
+      id: "fresh",
+      message: { id: "local", role: "user", text: "Just now" },
+      at,
+    });
+    state = reduceChatSession(state, { type: "saved-messages", id: "fresh", messages });
+    assert.deepEqual(
+      state.conversations[0].messages.map((message) => message.id),
+      ["local"],
+    );
   });
 });

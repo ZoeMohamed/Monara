@@ -1,15 +1,18 @@
 import {
   type AgentChatResponse,
   type AgentChatTurn,
-  agentChatRequestSchema,
   type OperationErrorCode,
   operationErrorSchema,
+  type SavedChatConversation,
+  type SavedChatMessage,
+  savedChatListSchema,
+  savedChatMessagesSchema,
   type WebChatResponse,
+  webChatRequestSchema,
   webChatResponseSchema,
 } from "@monara/contracts";
 
 type ChatFetch = (input: string, init: RequestInit) => Promise<Response>;
-const browserChatSchema = agentChatRequestSchema.omit({ userId: true });
 const unverifiableAnswer =
   "Monara's answer couldn't be verified. Check your records before trying again.";
 
@@ -36,9 +39,10 @@ export class ChatClientError extends Error {
 export async function sendChatMessage(
   text: string,
   history: AgentChatTurn[],
+  conversationId: string,
   fetcher: ChatFetch = fetch,
 ): Promise<WebChatResponse> {
-  const request = browserChatSchema.safeParse({ text, history });
+  const request = webChatRequestSchema.safeParse({ text, history, conversationId });
   if (!request.success) {
     throw new ChatClientError(
       request.error.issues.some((issue) => issue.path[0] === "text")
@@ -94,4 +98,57 @@ export function nextHistory(
   if (response.confirmation) assistant.confirmation = response.confirmation;
   const user: AgentChatTurn = { role: "user", text: text.trim().slice(0, 4_000) };
   return [...history, user, assistant].slice(-40);
+}
+
+async function readSaved<T>(
+  path: string,
+  parse: (body: unknown) => T | null,
+  failure: string,
+  fetcher: ChatFetch,
+): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetcher(path, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new Error(failure);
+  }
+  const parsed = response.ok ? parse(await response.json().catch(() => null)) : null;
+  if (parsed === null) throw new Error(failure);
+  return parsed;
+}
+
+/** The signed-in User's saved chats, newest first. */
+export function loadChatConversations(
+  fetcher: ChatFetch = fetch,
+): Promise<SavedChatConversation[]> {
+  return readSaved(
+    "/api/chat/conversations",
+    (body) => {
+      const result = savedChatListSchema.safeParse(body);
+      return result.success ? result.data.conversations : null;
+    },
+    "Monara couldn't load your saved chats.",
+    fetcher,
+  );
+}
+
+/** The newest messages of one saved chat, oldest first. */
+export function loadChatMessages(
+  conversationId: string,
+  fetcher: ChatFetch = fetch,
+): Promise<SavedChatMessage[]> {
+  return readSaved(
+    `/api/chat/conversations/${encodeURIComponent(conversationId)}`,
+    (body) => {
+      const result = savedChatMessagesSchema.safeParse(body);
+      return result.success ? result.data.messages : null;
+    },
+    "Monara couldn't load this chat.",
+    fetcher,
+  );
 }

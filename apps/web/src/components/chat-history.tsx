@@ -7,6 +7,11 @@ import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import type { ChatConversation } from "@/lib/chat/session";
 
+function messageSummary(conversation: ChatConversation) {
+  const count = conversation.loaded ? conversation.messages.length : conversation.messageCount;
+  return count > 0 ? `${count} ${count === 1 ? "message" : "messages"}` : "Unsent draft";
+}
+
 export function ChatHistory({
   conversations,
   activeId,
@@ -14,6 +19,8 @@ export function ChatHistory({
   onClose,
   onRestore,
   onNewChat,
+  saved,
+  savedLoadFailed,
 }: {
   conversations: ChatConversation[];
   activeId: string;
@@ -21,12 +28,17 @@ export function ChatHistory({
   onClose: () => void;
   onRestore: (id: string) => void;
   onNewChat?: () => void;
+  saved: boolean;
+  savedLoadFailed: boolean;
 }) {
   const { maskAmountText } = useAmountDisplay();
   const recent = conversations
     .filter(
       (conversation) =>
-        conversation.messages.length > 0 || conversation.draft.trim() || conversation.receipt,
+        !conversation.loaded ||
+        conversation.messages.length > 0 ||
+        conversation.draft.trim() ||
+        conversation.receipt,
     )
     .toSorted((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
   return (
@@ -39,8 +51,15 @@ export function ChatHistory({
           </Button>
         </div>
         <p className={styles.historyNote}>
-          Chats and drafts stay here while this page is open. Reloading or signing out clears them.
+          {saved
+            ? "Your chats are saved to your account. Drafts stay on this page, and reloading clears them."
+            : "Chats and drafts stay here while this page is open. Reloading or signing out clears them."}
         </p>
+        {savedLoadFailed ? (
+          <p className={styles.historyNote} role="alert">
+            Your saved chats couldn’t be loaded. Close and reopen Ask Monara to try again.
+          </p>
+        ) : null}
         {onNewChat ? (
           <Button
             className="mt-4 min-h-11 w-full rounded-full"
@@ -78,15 +97,13 @@ export function ChatHistory({
                   <span>
                     <strong>
                       {maskAmountText(
-                        conversation.messages.length > 0
+                        !conversation.loaded || conversation.messages.length > 0
                           ? conversation.title
                           : conversation.draft.trim() || "Receipt draft",
                       )}
                     </strong>
                     <small>
-                      {conversation.messages.length > 0
-                        ? `${conversation.messages.length} ${conversation.messages.length === 1 ? "message" : "messages"}`
-                        : "Unsent draft"}
+                      {messageSummary(conversation)}
                       {conversation.id === activeId ? " · Current" : ""}
                     </small>
                   </span>

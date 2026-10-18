@@ -10,6 +10,11 @@ export {
   type SendBudgetAlert,
   WHATSAPP_DAILY_LIMIT,
 } from "./budget-alerts.ts";
+export {
+  type ChatHistoryRepository,
+  type ChatHistoryService,
+  createChatHistoryService,
+} from "./chat-history.ts";
 export * from "./finance.ts";
 export { createSupabaseGmailConnectionRepository } from "./gmail-connection-repository.ts";
 export {
@@ -34,6 +39,7 @@ export {
 } from "./gmail-ingestion.ts";
 export { createProfileService, type ProfileRepository, type ProfileService } from "./profile.ts";
 export { createSupabaseBudgetAlertRepository } from "./supabase-budget-alert-repository.ts";
+export { createSupabaseChatHistoryRepository } from "./supabase-chat-history-repository.ts";
 export { createSupabaseFinanceRepository } from "./supabase-finance-repository.ts";
 export { createSupabaseGmailIngestionRepository } from "./supabase-gmail-ingestion-repository.ts";
 export { createSupabaseProfileRepository } from "./supabase-profile-repository.ts";
