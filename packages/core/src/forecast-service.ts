@@ -108,7 +108,9 @@ export function createForecastService(input: {
       runStart < monthStart ? runStart : monthStart,
       today,
     );
-    const matches = matchRealized(stored.items, expenses, today);
+    // Only payments from the day the forecast was made count: earlier ones cannot have fulfilled it.
+    const since = jakartaDate(new Date(stored.run.generatedAt));
+    const matches = matchRealized(stored.items, expenses, today, since);
     const realizedBy = new Map(matches.map((match) => [match.itemIndex, match.transactionId]));
     const spentSoFar = expenses
       .filter((expense) => expense.occurredOn >= monthStart)

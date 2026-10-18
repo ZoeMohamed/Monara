@@ -2,6 +2,7 @@ import { FinanceOperationError } from "@monara/core";
 
 import { hasAgentCredential } from "@/lib/agent/credential";
 import { financeErrorResponse, financeSuccessResponse } from "@/lib/finance/service";
+import { dueForecastUsers, type ForecastDueCandidate } from "@/lib/forecast/due";
 import { forecastService } from "@/lib/forecast/service";
 
 export const runtime = "nodejs";
@@ -54,14 +55,16 @@ export async function POST(request: Request) {
         Promise.resolve(),
       );
     };
-    const due: string[] = [];
+    const known: ForecastDueCandidate[] = [];
     await inGroups(users, async (userId) => {
       const current = await service.get(userId);
-      if (!current || Date.parse(current.generatedAt) <= staleBefore) due.push(userId);
+      known.push({ userId, generatedAt: current?.generatedAt ?? null });
     });
+    // Users with no forecast first, then the oldest, so no one is starved by a fixed order.
+    const due = dueForecastUsers(known, staleBefore, BATCH);
     let refreshed = 0;
     // One User's failure must not stop the others. The next run tries again.
-    await inGroups(due.slice(0, BATCH), async (userId) => {
+    await inGroups(due, async (userId) => {
       await service.refresh(userId, "weekly");
       refreshed += 1;
     });

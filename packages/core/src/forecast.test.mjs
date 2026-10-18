@@ -312,4 +312,16 @@ describe("backtest on synthetic history", () => {
       0,
     );
   });
+
+  it("ignores payments made before the forecast existed", () => {
+    const item = [
+      { predictedOn: "2026-10-14", merchantName: "Ayam Geprek Bu Sri", amount: 25_000 },
+    ];
+    const monday = [expense("2026-10-12", "Ayam Geprek Bu Sri", 25_000)];
+    // Two days away and the same amount, so it would match without a lower bound.
+    assert.equal(matchRealized(item, monday, "2026-10-14").length, 1);
+    assert.equal(matchRealized(item, monday, "2026-10-14", "2026-10-14").length, 0);
+    const today = [expense("2026-10-14", "Ayam Geprek Bu Sri", 25_000)];
+    assert.equal(matchRealized(item, today, "2026-10-14", "2026-10-14").length, 1);
+  });
 });

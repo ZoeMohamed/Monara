@@ -82,10 +82,10 @@ export const demoForecast: ForecastSummary = {
     ),
   ],
   totals: {
-    weekRemaining: money("104990"),
-    monthRemaining: money("350000"),
+    weekRemaining: money("0"),
+    monthRemaining: money("349990"),
     monthSpentSoFar: money("1820000"),
-    projectedMonthEnd: money("2170000"),
+    projectedMonthEnd: money("2169990"),
   },
   accuracy: { due: 0, realized: 0, meanAbsoluteErrorPercent: null },
 };

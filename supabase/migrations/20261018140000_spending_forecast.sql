@@ -35,7 +35,10 @@ create table public.forecast_items (
   reason text not null check (char_length(btrim(reason)) between 1 and 300),
   check (amount_low <= amount and amount <= amount_high),
   foreign key (run_id, user_id) references public.forecast_runs (id, user_id) on delete cascade,
-  foreign key (category_id, user_id) references public.categories (id, user_id) on delete restrict
+  -- A forecast is derived data, so losing its Category must never block deleting that Category or
+  -- the whole account. Only the Category column is cleared; the owner stays on the row.
+  foreign key (category_id, user_id)
+    references public.categories (id, user_id) on delete set null (category_id)
 );
 
 create index forecast_runs_user_generated_idx on public.forecast_runs (user_id, generated_at desc);

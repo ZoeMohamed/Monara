@@ -190,4 +190,26 @@ describe("forecast service", () => {
     await later.refresh(userId, "manual");
     assert.equal(refined, 2);
   });
+
+  it("does not count a payment made before the forecast as fulfilling it", async () => {
+    // Chicken rice on Mondays, Wednesdays and Fridays for eight weeks up to Tuesday 13 October.
+    const expenses = [];
+    for (let day = Date.UTC(2026, 7, 17); day < Date.UTC(2026, 9, 14); day += 86_400_000) {
+      const current = new Date(day);
+      if ([1, 3, 5].includes(current.getUTCDay())) {
+        expenses.push(expense(current.toISOString().slice(0, 10), "Ayam Geprek", 25_000));
+      }
+    }
+    assert.ok(expenses.some((item) => item.occurredOn === "2026-10-12"));
+    const service = createForecastService({
+      repository: fakeRepository(expenses),
+      now: at("2026-10-14T03:00:00Z"),
+    });
+    const summary = await service.refresh(userId, "manual");
+    const today = summary.items.find((item) => item.predictedOn === "2026-10-14");
+    assert.ok(today, "a prediction for Wednesday the 14th");
+    // Monday's payment is two days away and the same amount, but it came before the forecast.
+    assert.equal(today.realizedTransactionId, null);
+    assert.equal(summary.totals.weekRemaining.amountMinor, String(25_000 * 2));
+  });
 });

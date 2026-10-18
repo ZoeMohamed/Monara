@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(12);
+select plan(15);
 
 insert into auth.users (id, email)
 values
@@ -100,6 +100,50 @@ select throws_ok(
 );
 
 reset role;
+insert into public.categories (id, user_id, name, slug, icon, color)
+values (
+  'f1000000-0000-4000-8000-000000000001',
+  'f0000000-0000-4000-8000-000000000001',
+  'Forecast category', 'forecast-category', 'tag', '#3171FD'
+);
+
+set local role service_role;
+select lives_ok(
+  $$select public.replace_forecast(
+    'f0000000-0000-4000-8000-000000000001',
+    '{"source":"manual","month":"2026-10","threshold":0.7,"usedModel":true,"candidateCount":1,"discardedCount":0}',
+    '[{"predictedOn":"2026-10-25","merchantName":"Spotify","categoryId":"f1000000-0000-4000-8000-000000000001","amount":"54990","amountLow":"54990","amountHigh":"54990","confidence":0.9,"pattern":"monthly","reason":"Paid on the 25th"}]'
+  )$$,
+  'an item can carry one of the User''s Categories'
+);
+
+reset role;
+delete from public.categories where id = 'f1000000-0000-4000-8000-000000000001';
+
+select is(
+  (select category_id from public.forecast_items
+   where user_id = 'f0000000-0000-4000-8000-000000000001'),
+  null,
+  'deleting a Category clears it from the forecast instead of being blocked'
+);
+
+select is(
+  (select count(*)::int from public.forecast_items
+   where user_id = 'f0000000-0000-4000-8000-000000000001'),
+  1,
+  'the forecast item itself stays'
+);
+
+insert into public.categories (id, user_id, name, slug, icon, color)
+values (
+  'f1000000-0000-4000-8000-000000000002',
+  'f0000000-0000-4000-8000-000000000001',
+  'Second category', 'second-category', 'tag', '#3171FD'
+);
+update public.forecast_items
+set category_id = 'f1000000-0000-4000-8000-000000000002'
+where user_id = 'f0000000-0000-4000-8000-000000000001';
+
 set local role authenticated;
 set local request.jwt.claim.sub = 'f0000000-0000-4000-8000-000000000001';
 

@@ -34,7 +34,7 @@ flowchart LR
 
 **Totals.** Expected this week (to Sunday), expected this month, confirmed spending so far, and the projected month end, which is the confirmed total plus what is still expected.
 
-**Did it come true?** When a prediction's date has passed, it is matched to a confirmed expense from the same merchant within 3 days and within 35% of the amount. A matched prediction shows as Paid and leaves the remaining total. The forecast reports how many earlier predictions came true. Nothing is stored for this, so it is worked out when the forecast is read.
+**Did it come true?** When a prediction's date has passed, it is matched to a confirmed expense from the same merchant, made on or after the day the forecast was made, within 3 days and within 35% of the amount. A payment from before the forecast cannot fulfil it. A matched prediction shows as Paid and leaves the remaining total. The forecast reports how many earlier predictions came true. Nothing is stored for this, so it is worked out when the forecast is read.
 
 **Where it runs.**
 
@@ -69,7 +69,7 @@ Open risks:
 - Merchant names reach the model provider, as they do in extraction. The provider's retention terms are not assessed here.
 - The rules need history. A new User with under two months of confirmed expenses gets an empty forecast, and the card says so.
 - Matching is by merchant name, so a merchant paid under two different names is treated as two merchants.
-- The weekly run handles up to 25 Users per call. A larger user base would need paging.
+- The weekly run refreshes up to 25 Users per call, Users without a forecast first and then the oldest, so no one is starved. With more than 25 stale Users it takes several weeks to catch up.
 - The forecast was not measured on real spending, only on synthetic history (see below).
 
 ## How to verify

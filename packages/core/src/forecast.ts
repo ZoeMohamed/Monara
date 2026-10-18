@@ -408,6 +408,8 @@ export function matchRealized(
   items: { predictedOn: string; merchantName: string; amount: number }[],
   expenses: HistoryExpense[],
   today: string,
+  /** Payments before this date are ignored: they happened before the forecast existed. */
+  since?: string,
 ): RealizedMatch[] {
   const taken = new Set<string>();
   const matches: RealizedMatch[] = [];
@@ -420,6 +422,7 @@ export function matchRealized(
     const key = merchantKey(item.merchantName);
     let best: { expense: HistoryExpense; distance: number } | null = null;
     for (const expense of expenses) {
+      if (since && expense.occurredOn < since) continue;
       if (taken.has(expense.id) || merchantKey(expense.merchantName) !== key) continue;
       const days = Math.abs(dayNumber(expense.occurredOn) - dayNumber(item.predictedOn));
       const off = Math.abs(expense.amount - item.amount) / item.amount;
