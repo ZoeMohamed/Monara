@@ -9,6 +9,7 @@ import type {
 import { callFinanceOperation } from "@/lib/finance/client";
 
 const FEED_LIMIT = 100;
+const ACCOUNT_FILTER_LIMIT = 100;
 
 export type GmailImportFeedItem = {
   id: string;
@@ -18,6 +19,11 @@ export type GmailImportFeedItem = {
   amount: number;
   date: string;
   kind: TransactionKind;
+};
+
+type FeedCandidate = {
+  item: GmailImportFeedItem;
+  transaction: Transaction;
 };
 
 /** Maps a persisted Gmail transaction only when it belongs in the onboarding feed. */
@@ -60,7 +66,14 @@ export async function loadImportFeed(
   mailboxId: string,
   signal?: AbortSignal,
 ): Promise<GmailImportFeedItem[]> {
-  const fetcher = (input: string, init: RequestInit) => fetch(input, { ...init, signal });
+  const fetcher = (input: string, init: RequestInit) => {
+    const requestSignal = init.signal ?? undefined;
+    const combinedSignal =
+      signal && requestSignal
+        ? AbortSignal.any([signal, requestSignal])
+        : (signal ?? requestSignal);
+    return fetch(input, { ...init, signal: combinedSignal });
+  };
   const owned = new Map<string, FinancialAccount>();
   const accountCursors = new Set<string>();
   let accountCursor: string | null = null;
@@ -81,10 +94,39 @@ export async function loadImportFeed(
   } while (accountCursor !== null);
   if (owned.size === 0) return [];
 
-  const page: TransactionPage = await callFinanceOperation(
-    "list_transactions",
-    { limit: FEED_LIMIT, financialAccountIds: [...owned.keys()] },
-    fetcher,
-  );
-  return page.items.flatMap((transaction) => feedItem(transaction, owned) ?? []);
+  const accountIds = [...owned.keys()];
+  const candidates: FeedCandidate[] = [];
+  for (let start = 0; start < accountIds.length; start += ACCOUNT_FILTER_LIMIT) {
+    const financialAccountIds = accountIds.slice(start, start + ACCOUNT_FILTER_LIMIT);
+    const transactionCursors = new Set<string>();
+    let transactionCursor: string | null = null;
+    let eligible = 0;
+    do {
+      const page: TransactionPage = await callFinanceOperation(
+        "list_transactions",
+        { limit: FEED_LIMIT, cursor: transactionCursor, financialAccountIds },
+        fetcher,
+      );
+      for (const transaction of page.items) {
+        const item = feedItem(transaction, owned);
+        if (item) candidates.push({ item, transaction });
+        if (item) eligible += 1;
+      }
+      if (page.nextCursor !== null && transactionCursors.has(page.nextCursor)) {
+        throw new Error("The transaction list did not finish loading.");
+      }
+      if (page.nextCursor !== null) transactionCursors.add(page.nextCursor);
+      transactionCursor = page.nextCursor;
+    } while (transactionCursor !== null && eligible < FEED_LIMIT);
+  }
+
+  return candidates
+    .sort(
+      (left, right) =>
+        (right.transaction.occurredOn ?? "").localeCompare(left.transaction.occurredOn ?? "") ||
+        right.transaction.createdAt.localeCompare(left.transaction.createdAt) ||
+        right.transaction.id.localeCompare(left.transaction.id),
+    )
+    .slice(0, FEED_LIMIT)
+    .map(({ item }) => item);
 }
