@@ -19,6 +19,9 @@ interface Window {
 const windows = new Map<string, Window>();
 /** Above this many tracked Users, expired windows are dropped so memory stays bounded. */
 const PRUNE_ABOVE = 2_000;
+/** Pruning scans every window, so it runs at most this often rather than on every request. */
+const PRUNE_EVERY_MS = 30_000;
+let lastPrunedAt = Number.NEGATIVE_INFINITY;
 
 export function checkRateLimit(
   scope: string,
@@ -26,7 +29,8 @@ export function checkRateLimit(
   { limit, windowMs }: RateLimit,
   now: number = Date.now(),
 ): RateLimitResult {
-  if (windows.size > PRUNE_ABOVE) {
+  if (windows.size > PRUNE_ABOVE && now - lastPrunedAt >= PRUNE_EVERY_MS) {
+    lastPrunedAt = now;
     for (const [key, value] of windows) if (value.resetsAt <= now) windows.delete(key);
   }
   const key = `${scope}:${userId}`;
@@ -48,6 +52,12 @@ export function checkRateLimit(
 /** Test hook: forget every counter. */
 export function resetRateLimits(): void {
   windows.clear();
+  lastPrunedAt = Number.NEGATIVE_INFINITY;
+}
+
+/** Test hook: how many windows are being tracked. */
+export function trackedRateLimitWindows(): number {
+  return windows.size;
 }
 
 /** The limits for each guarded route. Chat is the tightest because every call spends model tokens. */

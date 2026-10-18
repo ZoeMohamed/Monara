@@ -44,9 +44,11 @@ export async function POST(
   }
   const limited = checkRateLimit("finance", identity.id, RATE_LIMITS.finance);
   if (!limited.ok) {
-    return financeErrorResponse(
+    const refused = financeErrorResponse(
       new FinanceOperationError("RATE_LIMITED", "Too many requests. Try again in a moment."),
     );
+    refused.headers.set("Retry-After", String(limited.retryAfterSeconds));
+    return refused;
   }
   const { operation } = await params;
   if (!isFinanceOperation(operation)) {
