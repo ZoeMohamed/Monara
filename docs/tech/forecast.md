@@ -60,7 +60,7 @@ flowchart LR
 ## Security and risks
 
 - The forecast tables are backend-only: row-level security is forced and the browser has no grant, like the chat history tables. Every query includes the User's id, and an item cannot point at another User's run (composite key).
-- Forecast routes need a signed-in session and a same-origin request. The weekly route and the model route need the shared agent secret. A refresh made twice within 20 seconds returns the forecast just made, so a double tap does not call the model twice.
+- Forecast routes need a signed-in session and a same-origin request. The weekly route and the model route need the shared agent secret. A refresh made twice within 20 seconds returns the forecast just made, so a double tap does not call the model twice, and a User is limited to 10 refreshes a minute.
 - The model receives merchant names, dates and amounts but not the User's identity. Merchant names are treated as untrusted text in the prompt, and the answer is validated and limited to the candidates that were sent.
 - The Agent presents a forecast as expected, never as spent. Forecast tools only read and recompute. They do not change the User's records.
 

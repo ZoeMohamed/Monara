@@ -72,6 +72,9 @@ const hooks = registerHooks({
     if (specifier === "@/lib/http/origin") {
       return nextResolve(new URL("../http/origin.ts", import.meta.url).href, context);
     }
+    if (specifier === "@/lib/http/rate-limit") {
+      return nextResolve(new URL("../http/rate-limit.ts", import.meta.url).href, context);
+    }
     return nextResolve(specifier, context);
   },
 });
@@ -177,5 +180,23 @@ describe("owned web Undo boundary", () => {
     assert.equal(response.status, 409);
     assert.equal(state.action.consumedAt, null);
     assert.equal(state.writes.length, 0);
+  });
+
+  it("refuses with Retry-After once a User sends too many operations", async () => {
+    const { resetRateLimits, RATE_LIMITS } = await import("../http/rate-limit.ts");
+    resetRateLimits();
+    try {
+      reset();
+      for (let sent = 0; sent < RATE_LIMITS.finance.limit; sent++) {
+        assert.notEqual((await undo()).status, 429);
+      }
+      const refused = await undo();
+      assert.equal(refused.status, 429);
+      assert.equal((await refused.json()).code, "RATE_LIMITED");
+      assert.ok(Number(refused.headers.get("retry-after")) >= 1);
+      assert.equal(refused.headers.get("cache-control"), "private, no-store");
+    } finally {
+      resetRateLimits();
+    }
   });
 });

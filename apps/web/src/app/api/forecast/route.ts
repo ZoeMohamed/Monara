@@ -4,6 +4,7 @@ import { FinanceOperationError } from "@monara/core";
 import { financeErrorResponse, financeSuccessResponse } from "@/lib/finance/service";
 import { forecastService } from "@/lib/forecast/service";
 import { isSameOriginRequest } from "@/lib/http/origin";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/http/rate-limit";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -34,6 +35,14 @@ export async function POST(request: Request) {
   }
   const identity = await getAuthenticatedIdentity();
   if (!identity) return unauthenticated();
+  const limited = checkRateLimit("forecast", identity.id, RATE_LIMITS.forecast);
+  if (!limited.ok) {
+    const refused = financeErrorResponse(
+      new FinanceOperationError("RATE_LIMITED", "Too many requests. Try again in a moment."),
+    );
+    refused.headers.set("Retry-After", String(limited.retryAfterSeconds));
+    return refused;
+  }
   try {
     const forecast = await forecastService().service.refresh(identity.id, "manual");
     return financeSuccessResponse(forecastResponseSchema.parse({ forecast }));
