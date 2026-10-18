@@ -1,0 +1,159 @@
+// Pandoc template for the Monara submission PDFs. Built by scripts/build-submission-pdfs.mjs.
+// Colors and typeface follow docs/ui-design-system.md. Paths starting with "/" are relative to the repository root.
+
+#let brand = rgb("#3171FD")
+#let accent = rgb("#2865E5")
+#let ink = rgb("#192d52")
+#let muted = rgb("#566b83")
+#let hairline = rgb("#dae8f3")
+#let soft = rgb("#e2f4ff")
+#let canvas = rgb("#f5fbff")
+
+#let lockup-blue = "/apps/web/public/logos/monara-lockup-light.svg"
+#let lockup-white = "/apps/web/public/logos/monara-lockup-dark.svg"
+
+#set document(title: "$title$ $kind$", author: "Monara, Team 808")
+#set text(font: ("Nunito Sans", "Helvetica Neue", "Arial"), size: 10pt, fill: ink, lang: "en")
+#set smartquote(enabled: false)
+#set terms(hanging-indent: 1.5em)
+
+// Cover page: no header, footer or page number.
+#page(margin: 0pt, fill: canvas, header: none, footer: none)[
+  #place(top + left, rect(width: 100%, height: 13cm, fill: brand))
+  #place(top + left, dx: 2.2cm, dy: 2.4cm, image(lockup-white, width: 6.4cm))
+  #place(top + left, dx: 2.2cm, dy: 6.4cm, block(width: 15.6cm)[
+    #text(size: 11pt, weight: "bold", fill: soft, tracking: 0.12em)[#upper[$title$, an AI personal finance Agent]]
+    #v(0.5cm)
+    #text(size: 34pt, weight: "bold", fill: white)[$kind$]
+$if(subtitle)$
+    #v(0.35cm)
+    #text(size: 14pt, fill: soft)[$subtitle$]
+$endif$
+  ])
+  #place(top + left, dx: 2.2cm, dy: 15cm, block(width: 15.6cm)[
+    #set text(size: 10.5pt)
+    #grid(
+      columns: (4.2cm, 1fr),
+      row-gutter: 0.55cm,
+      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Competition]],
+      [2026 Shenzhen International FinTech Competition (FinTechathon)],
+      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Track and topic]],
+      [International Track, Topic A: Personal Finance Assistant],
+      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Team]],
+      [Team 808],
+$if(owner)$
+      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Owner]],
+      [$owner$],
+      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Features]],
+      [$features$],
+$endif$
+      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Version]],
+      [$version$, $date$],
+    )
+  ])
+]
+
+#set page(
+  paper: "a4",
+  margin: (top: 2.6cm, bottom: 2.4cm, x: 2.2cm),
+  header: [
+    #grid(
+      columns: (1fr, auto),
+      align: (left + horizon, right + horizon),
+      image(lockup-blue, height: 0.52cm),
+      text(size: 8pt, fill: muted)[$kind$],
+    )
+    #v(-0.15cm)
+    #line(length: 100%, stroke: 0.8pt + brand)
+  ],
+  header-ascent: 38%,
+  footer: [
+    #line(length: 100%, stroke: 0.6pt + hairline)
+    #v(-0.1cm)
+    #grid(
+      columns: (1fr, auto),
+      text(size: 8pt, fill: muted)[Monara #h(0.4em) · #h(0.4em) FinTechathon 2026, International Track, Team 808],
+      context text(size: 8pt, fill: muted)[Page #counter(page).display() of #counter(page).final().first()],
+    )
+  ],
+  footer-descent: 35%,
+)
+
+#set par(leading: 0.68em, spacing: 0.95em)
+#set list(indent: 0.6em, body-indent: 0.5em, marker: ([•], [–]))
+#set enum(indent: 0.6em, body-indent: 0.5em)
+
+#set heading(numbering: (..n) => if n.pos().len() <= 2 { numbering("1.1", ..n) })
+#show heading.where(level: 1): it => {
+$if(flow)$
+  v(1.4em, weak: true)
+$else$
+  pagebreak(weak: true)
+$endif$
+  block(width: 100%, below: 1.1em)[
+    #text(size: 22pt, weight: "bold", fill: accent)[
+      #if it.numbering != none { counter(heading).display(it.numbering); h(0.5em) }
+      #it.body
+    ]
+    #v(0.1cm)
+    #line(length: 100%, stroke: 1.4pt + brand)
+  ]
+}
+#show heading.where(level: 2): it => block(above: 1.6em, below: 0.8em, width: 100%, breakable: false, sticky: true)[
+  #text(size: 15pt, weight: "bold", fill: ink)[
+    #if it.numbering != none { counter(heading).display(it.numbering); h(0.5em) }
+    #it.body
+  ]
+  #v(-0.15cm)
+  #line(length: 100%, stroke: 0.6pt + hairline)
+]
+#show heading.where(level: 3): it => block(above: 1.3em, below: 0.6em, breakable: false, sticky: true)[
+  #text(size: 11.5pt, weight: "bold", fill: accent)[#it.body]
+]
+#show heading.where(level: 4): it => block(above: 1.1em, below: 0.5em, breakable: false, sticky: true)[
+  #text(size: 10pt, weight: "bold", fill: ink)[#it.body]
+]
+#show heading.where(level: 5): it => block(above: 1em, below: 0.4em, breakable: false, sticky: true)[
+  #text(size: 10pt, weight: "bold", style: "italic", fill: muted)[#it.body]
+]
+
+#show link: it => text(fill: accent)[#underline(offset: 1.5pt, stroke: 0.5pt + hairline)[#it]]
+#show strong: set text(weight: "bold")
+
+#show raw.where(block: false): it => highlight(fill: soft, extent: 1pt, radius: 2pt, text(font: ("Menlo", "DejaVu Sans Mono"), size: 0.88em, fill: ink, it))
+#show raw.where(block: true): it => block(breakable: false, fill: canvas, stroke: 0.6pt + hairline, radius: 4pt, inset: 9pt, width: 100%, text(font: ("Menlo", "DejaVu Sans Mono"), size: 7.8pt, fill: ink, it))
+
+#set table(
+  inset: (x: 6pt, y: 5pt),
+  stroke: (x, y) => (bottom: 0.5pt + hairline),
+  fill: (x, y) => if y == 0 { soft },
+)
+#show table: set text(size: 8.5pt)
+#show table.cell: set align(left)
+#show table.cell.where(y: 0): set text(weight: "bold", fill: ink)
+#show figure.where(kind: table): set figure.caption(position: top)
+#show figure.where(kind: table): set block(breakable: true)
+#show figure.where(kind: image): set figure.caption(position: bottom)
+#show figure.caption: set text(size: 8.5pt, fill: muted)
+
+#let horizontalRule = line(start: (25%, 0%), end: (75%, 0%), stroke: 0.6pt + hairline)
+#let divider = if "divider" in std { divider } else { horizontalRule }
+
+#show quote.where(block: true): it => block(
+  inset: (left: 10pt, y: 4pt), stroke: (left: 2.5pt + brand), width: 100%,
+)[#text(fill: muted)[#it.body]]
+
+$if(toc)$
+#block(below: 0.4cm)[
+  #text(size: 22pt, weight: "bold", fill: accent)[Contents]
+  #v(0.1cm)
+  #line(length: 100%, stroke: 1.4pt + brand)
+]
+#show outline.entry.where(level: 1): it => {
+  v(0.5em, weak: true)
+  text(weight: "bold")[#it]
+}
+#outline(title: none, depth: 2, indent: 1.2em)
+
+$endif$
+$body$

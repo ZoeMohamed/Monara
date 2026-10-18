@@ -31,3 +31,6 @@ supabase/.branches/
 
 # Local browser review artifacts
 .playwright-mcp/
+
+# Generated submission PDFs
+docs/tech/build/
