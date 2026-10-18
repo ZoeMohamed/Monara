@@ -298,6 +298,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       kind: "gmail.parse",
       connectionId: job.connectionId,
       emails: batch,
+      deferrals: 0,
     }));
     if (page.nextPageToken) {
       jobs.push({ ...job, pageToken: page.nextPageToken, startedAt });

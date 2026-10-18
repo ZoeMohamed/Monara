@@ -387,6 +387,7 @@ describe("syncConnection", () => {
         kind: "gmail.parse",
         connectionId,
         emails: [{ processedMessageId: claimId("m1"), gmailMessageId: "m1", receivedAt }],
+        deferrals: 0,
       },
     ]);
     assert.deepEqual(calls.synced, [{ connectionId, syncedAt: now.toISOString() }]);
@@ -566,6 +567,7 @@ describe("processBatch", () => {
         gmailMessageId: id,
         receivedAt,
       })),
+      deferrals: 0,
     };
   }
 

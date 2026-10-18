@@ -96,6 +96,8 @@ export const gmailParseJobSchema = z
       )
       .min(1)
       .max(GMAIL_PARSE_JOB_MAX_EMAILS),
+    /** Reserved for delayed retries; old producers omit it and receive zero. */
+    deferrals: z.number().int().min(0).max(100).default(0),
   })
   .strict();
 
