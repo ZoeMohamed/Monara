@@ -1,0 +1,216 @@
+"use client";
+
+import type { ForecastItem, ForecastSummary } from "@monara/contracts";
+import { Button } from "@monara/ui";
+import { useId, useState } from "react";
+import { useAmountDisplay, useAppSession } from "@/components/app-session-context";
+import { Icon } from "@/components/icon";
+import { type ForecastState, useForecast } from "@/components/use-forecast";
+import { demoForecast } from "@/data/demo-forecast";
+import { formatDay } from "@/data/demo-ledger";
+import styles from "./spending-forecast-card.module.css";
+
+/** How many predictions show before the User asks for the rest. */
+const PREVIEW_ITEMS = 4;
+
+const percent = (confidence: number) => `${Math.round(confidence * 100)}%`;
+const rupiah = (money: { amountMinor: string }) => BigInt(money.amountMinor);
+
+function updatedAt(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Jakarta",
+  });
+}
+
+function Totals({ totals }: { totals: ForecastSummary["totals"] }) {
+  const { formatRupiah } = useAmountDisplay();
+  return (
+    <>
+      <dl className={styles.totals}>
+        <div>
+          <dt>This week</dt>
+          <dd data-amount>{formatRupiah(rupiah(totals.weekRemaining))}</dd>
+        </div>
+        <div>
+          <dt>This month</dt>
+          <dd data-amount>{formatRupiah(rupiah(totals.monthRemaining))}</dd>
+        </div>
+        <div>
+          <dt>Month end</dt>
+          <dd data-amount>{formatRupiah(rupiah(totals.projectedMonthEnd))}</dd>
+        </div>
+      </dl>
+      <p className={styles.note}>
+        Month end is what you have confirmed so far plus what is still expected.
+      </p>
+    </>
+  );
+}
+
+function Row({ item }: { item: ForecastItem }) {
+  const { formatRupiah } = useAmountDisplay();
+  const paid = item.realizedTransactionId !== null;
+  return (
+    <li data-realized={paid}>
+      <span className={styles.date}>{formatDay(item.predictedOn)}</span>
+      <span className={styles.merchant}>
+        <strong>{item.merchantName}</strong>
+        <span>{item.reason}</span>
+      </span>
+      <span className={styles.amount}>
+        <span data-amount>{formatRupiah(rupiah(item.amount))}</span>
+        <span
+          className={styles.chip}
+          data-tone={paid ? "paid" : item.confidence >= 0.85 ? "high" : "medium"}
+        >
+          {paid ? "Paid" : `${percent(item.confidence)} sure`}
+        </span>
+      </span>
+    </li>
+  );
+}
+
+function Footnote({ forecast }: { forecast: ForecastSummary }) {
+  const { discardedCount, threshold, accuracy } = forecast;
+  return (
+    <p className={styles.footnote}>
+      Updated {updatedAt(forecast.generatedAt)}
+      {discardedCount > 0
+        ? ` · ${discardedCount} unsure ${discardedCount === 1 ? "payment" : "payments"} under ${percent(threshold)} left out`
+        : ""}
+      {accuracy.due > 0
+        ? ` · ${accuracy.realized} of ${accuracy.due} earlier predictions came true`
+        : ""}
+    </p>
+  );
+}
+
+function Items({ items }: { items: ForecastItem[] }) {
+  const [showAll, setShowAll] = useState(false);
+  if (items.length === 0) {
+    return (
+      <p className={styles.note}>
+        No repeating payments stood out yet. Confirm a few months of expenses and refresh.
+      </p>
+    );
+  }
+  return (
+    <>
+      <ol aria-label="Expected payments" className={styles.list}>
+        {(showAll ? items : items.slice(0, PREVIEW_ITEMS)).map((item) => (
+          <Row item={item} key={item.id} />
+        ))}
+      </ol>
+      {items.length > PREVIEW_ITEMS ? (
+        <Button
+          className={styles.more}
+          onPress={() => setShowAll((value) => !value)}
+          type="button"
+          variant="ghost"
+        >
+          {showAll ? "Show fewer" : `Show all ${items.length}`}
+        </Button>
+      ) : null}
+    </>
+  );
+}
+
+/** What to say while there is nothing to show yet, or when something went wrong. */
+function Notice({ state, hasForecast }: { state: ForecastState; hasForecast: boolean }) {
+  if (state.status === "loading") {
+    return (
+      <p aria-live="polite" className={styles.note}>
+        Loading your forecast…
+      </p>
+    );
+  }
+  if (state.status === "failed") {
+    return (
+      <p className={styles.error} role="alert">
+        {state.message}
+      </p>
+    );
+  }
+  return hasForecast ? null : (
+    <p className={styles.note}>
+      See which bills and habits are likely to hit before the month ends.
+    </p>
+  );
+}
+
+function RefreshButton({
+  hasForecast,
+  refreshing,
+  refresh,
+}: {
+  hasForecast: boolean;
+  refreshing: boolean;
+  refresh: () => void;
+}) {
+  return (
+    <div className={styles.footer}>
+      <Button
+        isDisabled={refreshing}
+        onPress={refresh}
+        type="button"
+        variant={hasForecast ? "secondary" : "primary"}
+      >
+        <Icon aria-hidden name="sparkle" />
+        {refreshing ? "Working it out…" : hasForecast ? "Refresh forecast" : "Make a forecast"}
+      </Button>
+    </div>
+  );
+}
+
+function Body({ forecast }: { forecast: ForecastSummary }) {
+  return (
+    <>
+      <Totals totals={forecast.totals} />
+      <Items items={forecast.items} />
+      <Footnote forecast={forecast} />
+    </>
+  );
+}
+
+/** The public demo shows a sample forecast, because it has no signed-in User to forecast for. */
+function DemoCard() {
+  const titleId = useId();
+  return (
+    <section aria-labelledby={titleId} className={styles.card}>
+      <div className={styles.header}>
+        <h2 id={titleId}>Spending forecast</h2>
+        <span>Sample data</span>
+      </div>
+      <Body forecast={demoForecast} />
+    </section>
+  );
+}
+
+function LiveCard() {
+  const titleId = useId();
+  const { state, refreshing, refresh } = useForecast();
+  const forecast = state.status === "loading" ? null : state.forecast;
+  return (
+    <section aria-labelledby={titleId} className={styles.card}>
+      <div className={styles.header}>
+        <h2 id={titleId}>Spending forecast</h2>
+        <span>Expected, not confirmed</span>
+      </div>
+      <Notice hasForecast={forecast !== null} state={state} />
+      {forecast ? <Body forecast={forecast} /> : null}
+      {state.status === "loading" ? null : (
+        <RefreshButton hasForecast={forecast !== null} refresh={refresh} refreshing={refreshing} />
+      )}
+    </section>
+  );
+}
+
+/**
+ * What the User is expected to spend for the rest of the month (PRD F17). Everything here is a
+ * prediction, so it is labelled as expected and kept apart from confirmed spending.
+ */
+export function SpendingForecastCard() {
+  return useAppSession().dataMode === "live" ? <LiveCard /> : <DemoCard />;
+}

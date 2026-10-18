@@ -1,3 +1,4 @@
+import { forecastResponseSchema } from "@monara/contracts";
 import type { FinanceCaller, FinanceService } from "@monara/core";
 import {
   createFinanceService,
@@ -6,6 +7,7 @@ import {
 } from "@monara/core";
 import { createMonaraServiceRoleClient } from "@monara/db";
 
+import { forecastService } from "@/lib/forecast/service";
 import { publicSupabaseConfig } from "@/lib/supabase/config";
 import { scheduleBudgetAlert } from "@/lib/whatsapp/budget-alerts";
 
@@ -52,7 +54,13 @@ const AGENT_CONFIRMATION_OPERATIONS = [
   "add_receipt_transaction",
 ] as const;
 type AgentConfirmationOperation = (typeof AGENT_CONFIRMATION_OPERATIONS)[number];
-export type AgentOperation = AgentFinanceOperation | AgentConfirmationOperation;
+/** Spending forecast (F17): predictions, never records, so the Agent may read and refresh them. */
+const AGENT_FORECAST_OPERATIONS = ["get_spending_forecast", "refresh_spending_forecast"] as const;
+type AgentForecastOperation = (typeof AGENT_FORECAST_OPERATIONS)[number];
+export type AgentOperation =
+  | AgentFinanceOperation
+  | AgentConfirmationOperation
+  | AgentForecastOperation;
 
 function financeService(): FinanceService {
   const client = createMonaraServiceRoleClient(
@@ -86,7 +94,8 @@ function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinance
 export function isAgentOperation(value: string): value is AgentOperation {
   return (
     (isFinanceOperation(value) && isAgentFinanceOperation(value)) ||
-    (AGENT_CONFIRMATION_OPERATIONS as readonly string[]).includes(value)
+    (AGENT_CONFIRMATION_OPERATIONS as readonly string[]).includes(value) ||
+    (AGENT_FORECAST_OPERATIONS as readonly string[]).includes(value)
   );
 }
 
@@ -164,6 +173,14 @@ export async function runAgentOperation(
   }
   if (operation === "add_receipt_transaction") {
     return financeService().addReceiptTransaction(caller, input);
+  }
+  if (operation === "get_spending_forecast") {
+    const forecast = await forecastService().service.get(caller.userId);
+    return forecastResponseSchema.parse({ forecast });
+  }
+  if (operation === "refresh_spending_forecast") {
+    const forecast = await forecastService().service.refresh(caller.userId, "agent");
+    return forecastResponseSchema.parse({ forecast });
   }
   return runFinanceOperation(operation, caller, input);
 }

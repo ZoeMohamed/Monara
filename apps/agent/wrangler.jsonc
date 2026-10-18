@@ -46,8 +46,9 @@
     ]
   },
   "triggers": {
-    // Every 15 minutes: deliver budget alerts held by quiet hours.
+    // Every 15 minutes: deliver budget alerts held by quiet hours. Mondays 02:00 UTC (09:00
+    // Jakarta): refresh spending forecasts.
     // Daily at 01:00 UTC (08:00 WIB): new-bank discovery and a catch-up import per mailbox.
-    "crons": ["*/15 * * * *", "0 1 * * *"]
+    "crons": ["*/15 * * * *", "0 1 * * *", "0 2 * * 1"]
   }
 }

@@ -9,6 +9,7 @@ import { CategoryAvatar } from "@/components/category-symbol";
 
 import { Icon, type IconName } from "@/components/icon";
 import { MonaraMascot } from "@/components/monara-mascot";
+import { SpendingForecastCard } from "@/components/spending-forecast-card";
 import { TransactionRow } from "@/components/transaction-row";
 import { WeeklySpendingCard } from "@/components/weekly-spending-card";
 import { categoryColor } from "@/data/category-style";
@@ -1145,6 +1146,7 @@ export function MobileOverview({
             {model.weekly ? (
               <WeeklySpendingCard week={model.weekly} openBudgets={openBudgets} />
             ) : null}
+            {model.isCurrentMonth ? <SpendingForecastCard /> : null}
             {model.isCurrentMonth ? (
               <AttentionCard
                 items={model.attention}

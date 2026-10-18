@@ -55,6 +55,8 @@ const hooks = registerHooks({
       "@/lib/gmail/import": mockGmailImport,
       "@/lib/gmail/trigger": mockGmailTrigger,
       "@/lib/whatsapp/budget-alerts": mockBudgetAlerts,
+      "@/lib/forecast/service":
+        'export function forecastService() { throw new Error("not used here"); }',
       "@/lib/supabase/config": mockConfig,
       "@/lib/supabase/server": mockIdentity,
     };

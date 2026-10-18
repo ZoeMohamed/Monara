@@ -151,6 +151,46 @@ isOneToOne: false
       referencedColumns: ["id","user_id"]
     }
                   ]
+                },"forecast_items": {
+                  Row: {
+                    "amount": number,"amount_high": number,"amount_low": number,"category_id": string | null,"confidence": number,"id": string,"merchant_name": string,"pattern": string,"predicted_on": string,"reason": string,"run_id": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount": number,"amount_high": number,"amount_low": number,"category_id"?: string | null,"confidence": number,"id"?: string,"merchant_name": string,"pattern": string,"predicted_on": string,"reason": string,"run_id": string,"user_id": string
+                  }
+                  Update: {
+                    "amount"?: number,"amount_high"?: number,"amount_low"?: number,"category_id"?: string | null,"confidence"?: number,"id"?: string,"merchant_name"?: string,"pattern"?: string,"predicted_on"?: string,"reason"?: string,"run_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "forecast_items_category_id_user_id_fkey"
+      columns: ["category_id","user_id"]
+isOneToOne: false
+      referencedRelation: "categories"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "forecast_items_run_id_user_id_fkey"
+      columns: ["run_id","user_id"]
+isOneToOne: false
+      referencedRelation: "forecast_runs"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"forecast_runs": {
+                  Row: {
+                    "candidate_count": number,"discarded_count": number,"generated_at": string,"id": string,"month": string,"source": string,"threshold": number,"used_model": boolean,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "candidate_count": number,"discarded_count": number,"generated_at"?: string,"id"?: string,"month": string,"source": string,"threshold": number,"used_model": boolean,"user_id": string
+                  }
+                  Update: {
+                    "candidate_count"?: number,"discarded_count"?: number,"generated_at"?: string,"id"?: string,"month"?: string,"source"?: string,"threshold"?: number,"used_model"?: boolean,"user_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"gmail_connections": {
                   Row: {
                     "composio_connected_account_id": string,"composio_trigger_id": string | null,"created_at": string,"discovery_first_completed_at": string | null,"discovery_state": string,"discovery_updated_at": string | null,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"sync_error": string | null,"sync_pending_runs": number,"sync_requested_at": string | null,"sync_state": string,"sync_updated_at": string | null,"updated_at": string,"user_id": string
@@ -436,6 +476,9 @@ isOneToOne: false
                            },
 "release_merchant_profile":
 { Args: { "p_merchant_key": string }; Returns: undefined
+                           },
+"replace_forecast":
+{ Args: { "p_items": Json,"p_run": Json,"p_user_id": string }; Returns: string
                            },
 "request_gmail_sync":
 { Args: { "p_connection_id": string,"p_user_id": string }; Returns: string
