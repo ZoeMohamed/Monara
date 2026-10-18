@@ -96,6 +96,8 @@ export const gmailParseJobSchema = z
       )
       .min(1)
       .max(GMAIL_PARSE_JOB_MAX_EMAILS),
+    /** Reserved for delayed retries; old producers omit it and receive zero. */
+    deferrals: z.number().int().min(0).max(100).default(0),
   })
   .strict();
 
@@ -369,6 +371,12 @@ export type GmailExtractionJob = z.infer<typeof gmailExtractionJobSchema>;
 export type GmailParseJob = z.infer<typeof gmailParseJobSchema>;
 export type GmailJob = z.infer<typeof gmailJobSchema>;
 export type GmailDiscoveryJob = z.infer<typeof gmailDiscoveryJobSchema>;
+/** Queue producer input; only delayed-retry metadata stays optional during rollout. */
+export type GmailJobInput =
+  | GmailSyncJob
+  | z.input<typeof gmailParseJobSchema>
+  | GmailExtractionJob
+  | GmailDiscoveryJob;
 export type MerchantCategorizeJob = z.infer<typeof merchantCategorizeJobSchema>;
 export type ListActiveGmailConnectionsResult = z.infer<
   typeof listActiveGmailConnectionsResultSchema

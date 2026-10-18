@@ -4,7 +4,7 @@ import type {
   ClaimGmailMessageInput,
   ClaimGmailMessagesInput,
   GmailExtractionJob,
-  GmailJob,
+  GmailJobInput,
   GmailParseJob,
   GmailSyncJob,
   MarkGmailConnectionSyncedInput,
@@ -99,6 +99,7 @@ interface Overrides {
 }
 
 /** Fake backend, reader and model that record every call the pipeline makes. */
+/** Creates an isolated Gmail pipeline test harness with captured side effects. */
 function setup(overrides: Overrides = {}) {
   const calls = {
     claim: [] as ClaimGmailMessageInput[],
@@ -106,7 +107,7 @@ function setup(overrides: Overrides = {}) {
     recordCalls: [] as RecordGmailExtractionsInput[],
     resolved: 0,
     synced: [] as MarkGmailConnectionSyncedInput[],
-    enqueued: [] as GmailJob[],
+    enqueued: [] as GmailJobInput[],
     fetched: [] as string[],
     listed: [] as { query: string; pageToken?: string | null }[],
     reported: [] as ReportGmailConnectionErrorInput[],
@@ -566,6 +567,7 @@ describe("processBatch", () => {
         gmailMessageId: id,
         receivedAt,
       })),
+      deferrals: 0,
     };
   }
 
