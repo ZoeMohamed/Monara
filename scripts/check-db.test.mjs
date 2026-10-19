@@ -212,6 +212,144 @@ describe("migration history", () => {
   });
 });
 
+describe("pinned failed-migration recovery", () => {
+  const name = "20261019120000_typed_gmail_categorization.sql";
+  const path = `supabase/migrations/${name}`;
+  const first = "supabase/migrations/20261010064300_initial_schema.sql";
+  function recoveryFixture(t) {
+    const context = fixture(t);
+    // Use the real corrected source, with only its actual backfill change reversed.
+    // This works in shallow CI checkouts without duplicating either approved digest.
+    const corrected = readFileSync(new URL(`../${path}`, import.meta.url));
+    const block = [
+      "    -- Share deletion acceptance's lock before checking whether writes are allowed.",
+      "    perform pg_advisory_xact_lock(hashtextextended(v_user.id::text,190026));",
+      "    if public.monara_user_is_active(v_user.id) then",
+      "      perform private.seed_default_categories(v_user.id);",
+      "    end if;",
+    ].join("\n");
+    assert.equal(corrected.toString().split(block).length, 2);
+    const original = corrected
+      .toString()
+      .replace(block, "    perform private.seed_default_categories(v_user.id);");
+    const isolatedEnv = (env) =>
+      Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith("GIT_")));
+    const git = (args) => {
+      const result = spawnSync("git", args, {
+        cwd: context.root,
+        encoding: "utf8",
+        env: isolatedEnv(process.env),
+      });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
+    const commit = () => {
+      git(["add", "."]);
+      git([
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-m",
+        "synthetic recovery history",
+      ]);
+      return git(["rev-parse", "HEAD"]);
+    };
+    git(["init"]);
+    context.write(path, original);
+    const baseRef = commit();
+    context.write(path, corrected);
+    const run = (command, args, options) => {
+      context.calls.push({ command, args, options });
+      assert.equal(command, "git", "history must be checked before any stack command");
+      return spawnSync(command, args, { ...options, env: isolatedEnv(options.env) });
+    };
+    const check = (options = {}) =>
+      checkDb({ ...context, run, baseRef, validateOnly: true, ...options });
+    return { ...context, corrected, original, commit, check };
+  }
+
+  it("accepts only the real original-to-corrected byte change while the pure validator stays strict", (t) => {
+    const context = recoveryFixture(t);
+    const messages = [];
+    context.check({ log: (message) => messages.push(message) });
+    assert.equal(messages[0], `Verified pinned failed-migration recovery: ${name}.`);
+    assert.ok(
+      context.calls.some(({ args, options }) => args[0] === "show" && options.encoding === null),
+    );
+    assert.throws(() => validateMigrationHistory([name], [name], [name]), /changed or removed/);
+    context.write(first, "-- another published migration changed\n");
+    assert.throws(() => context.check({ validateOnly: false, reset: true }), /changed or removed/);
+  });
+
+  it("rejects a different base blob even when the replacement has the approved bytes", (t) => {
+    const context = recoveryFixture(t);
+    context.write(path, `${context.original}\n-- unapproved original bytes\n`);
+    const baseRef = context.commit();
+    context.write(path, context.corrected);
+    assert.throws(
+      () => context.check({ baseRef, validateOnly: false, reset: true }),
+      /changed or removed/,
+    );
+  });
+
+  it("rejects a different replacement even when the base has the approved bytes", (t) => {
+    const context = recoveryFixture(t);
+    context.write(path, Buffer.concat([context.corrected, Buffer.from("\n-- later edit\n")]));
+    assert.throws(() => context.check({ validateOnly: false, reset: true }), /changed or removed/);
+  });
+
+  it("accepts an unchanged corrected base and rejects subsequent edits", (t) => {
+    const context = recoveryFixture(t);
+    const baseRef = context.commit();
+    context.check({ baseRef });
+    context.write(path, Buffer.concat([context.corrected, Buffer.from("\n-- later edit\n")]));
+    assert.throws(
+      () => context.check({ baseRef, validateOnly: false, reset: true }),
+      /changed or removed/,
+    );
+  });
+
+  it("rejects deletion, renaming and backdated additions alongside the approved correction", (t) => {
+    const context = recoveryFixture(t);
+    rmSync(join(context.root, path));
+    assert.throws(() => context.check({ validateOnly: false, reset: true }), /changed or removed/);
+    context.write("supabase/migrations/20261019120000_renamed.sql", context.corrected);
+    assert.throws(() => context.check({ validateOnly: false, reset: true }), /changed or removed/);
+    rmSync(join(context.root, "supabase/migrations/20261019120000_renamed.sql"));
+    context.write(path, context.corrected);
+    context.write("supabase/migrations/20261019110000_backdated.sql");
+    assert.throws(() => context.check({ validateOnly: false, reset: true }), /must be newer/);
+  });
+
+  it("fails closed if the base blob cannot be read", (t) => {
+    const context = recoveryFixture(t);
+    assert.throws(
+      () =>
+        context.check({
+          validateOnly: false,
+          reset: true,
+          run(command, args, options) {
+            assert.equal(command, "git");
+            if (args[0] === "show") return { status: 1, stdout: "", stderr: "missing blob" };
+            return spawnSync(command, args, {
+              ...options,
+              env: Object.fromEntries(
+                Object.entries(options.env).filter(([key]) => !key.startsWith("GIT_")),
+              ),
+            });
+          },
+        }),
+      /git show .* failed/,
+    );
+  });
+});
+
 describe("local database gate", () => {
   it("uses local targets, lint warning failures, a nonmutating type check, and cleanup", (t) => {
     const context = fixture(t);

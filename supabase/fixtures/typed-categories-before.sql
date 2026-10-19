@@ -58,3 +58,39 @@ where budget.client_request_id='upgrade-budget';
 create table category_upgrade_fixture.undo as
 select action_id,operation_state,created_at,expires_at from public.agent_action_states
 where action_id in ('96000000-0000-4000-8000-000000000001','96000000-0000-4000-8000-000000000002','96000000-0000-4000-8000-000000000003');
+
+-- Keep the real irreversible-deletion lifecycle in the upgrade input. Auth remains
+-- until external cleanup finishes, while the accepted product graph is erased.
+insert into auth.users(id,email,raw_user_meta_data) values
+ ('97000000-0000-4000-8000-000000000001','upgrade-deleting@test.monara.local','{"full_name":"Synthetic Deleting User"}'),
+ ('97000000-0000-4000-8000-000000000002','upgrade-active@test.monara.local','{"full_name":"Synthetic Active User"}');
+insert into auth.sessions(id,user_id) values
+ ('98000000-0000-4000-8000-000000000001','97000000-0000-4000-8000-000000000001');
+insert into public.gmail_connections(user_id,composio_connected_account_id,gmail_address,status,composio_trigger_id)
+values('97000000-0000-4000-8000-000000000001','synthetic_upgrade_cleanup_account',
+ 'upgrade-deleting@test.monara.local','active','synthetic_upgrade_cleanup_trigger');
+begin;
+set local role authenticated;
+set local request.jwt.claims='{"sub":"97000000-0000-4000-8000-000000000001","role":"authenticated","session_id":"98000000-0000-4000-8000-000000000001"}';
+select public.begin_user_deletion('DELETE MY ACCOUNT',true);
+commit;
+-- Local role and claims ended with the transaction. The migration runs without
+-- a deleted User's JWT, so the fixture distinguishes identity state from claims.
+create table category_upgrade_fixture.pending_deletion as
+select identity.id,identity.email,identity.banned_until,identity.created_at,identity.updated_at,
+ to_jsonb(deletion) as deletion_facts
+from auth.users as identity join public.user_deletions as deletion on deletion.user_id=identity.id
+where identity.id='97000000-0000-4000-8000-000000000001';
+create table category_upgrade_fixture.active_users as
+select id from auth.users where public.monara_user_is_active(id);
+do $$
+begin
+ if (select count(*) from category_upgrade_fixture.pending_deletion)<>1
+   or public.monara_user_is_active('97000000-0000-4000-8000-000000000001')
+   or exists(select 1 from auth.sessions where user_id='97000000-0000-4000-8000-000000000001')
+   or exists(select 1 from public.categories where user_id='97000000-0000-4000-8000-000000000001')
+   or exists(select 1 from public.profiles where id='97000000-0000-4000-8000-000000000001')
+ then raise exception 'Real deletion acceptance did not leave the intended pending-cleanup identity.'; end if;
+ if not public.monara_user_is_active('97000000-0000-4000-8000-000000000002')
+ then raise exception 'Synthetic active control identity is unavailable.'; end if;
+end; $$;
