@@ -175,7 +175,10 @@ function toReceiptValues(
   const account = matchAccount(accountHint, context.accounts);
   const categoryName = reading.categoryName?.toLowerCase();
   const category = categoryName
-    ? context.categories.find((candidate) => candidate.name.toLowerCase() === categoryName)
+    ? context.categories.find(
+        (candidate) =>
+          candidate.kind === reading.kind && candidate.name.toLowerCase() === categoryName,
+      )
     : undefined;
 
   return {

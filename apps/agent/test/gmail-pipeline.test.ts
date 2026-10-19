@@ -13,6 +13,7 @@ import type {
   RecordGmailExtractionInput,
   RecordGmailExtractionsInput,
   ReportGmailConnectionErrorInput,
+  ReportGmailProcessingRetryInput,
   ReportGmailSyncFailureInput,
 } from "@monara/contracts";
 import {
@@ -72,6 +73,7 @@ const receipt = {
 
 interface Overrides {
   inactive?: boolean;
+  retryReportFails?: boolean;
   alreadyFinished?: boolean;
   readFails?: boolean;
   /** HTTP status Composio answers a read with. */
@@ -108,6 +110,8 @@ function setup(overrides: Overrides = {}) {
     record: [] as RecordGmailExtractionInput[],
     recordCalls: [] as RecordGmailExtractionsInput[],
     resolved: 0,
+    contextSnapshots: 0,
+    activeChecks: 0,
     synced: [] as MarkGmailConnectionSyncedInput[],
     enqueued: [] as GmailJobInput[],
     fetched: [] as string[],
@@ -118,6 +122,8 @@ function setup(overrides: Overrides = {}) {
     syncFailures: [] as ReportGmailSyncFailureInput[],
     merchantJobs: [] as MerchantCategorizeJob[],
     discovered: [] as string[],
+    retryReports: [] as ReportGmailProcessingRetryInput[],
+    retryReportErrors: [] as unknown[],
     later: [] as { jobs: GmailJob[]; delaySeconds: number }[],
     modelCalls: 0,
   };
@@ -132,6 +138,7 @@ function setup(overrides: Overrides = {}) {
     },
     async resolveConnection(id) {
       calls.resolved += 1;
+      calls.contextSnapshots += 1;
       if (overrides.inactive) {
         throw new BackendOperationError("gmail.resolve-connection", 404, "NOT_FOUND");
       }
@@ -143,6 +150,12 @@ function setup(overrides: Overrides = {}) {
         holderName: overrides.holderName ?? null,
         institutionKeys: overrides.institutionKeys ?? ["BCA_CC"],
       };
+    },
+    async checkConnectionActive(_id) {
+      calls.resolved += 1;
+      calls.activeChecks += 1;
+      if (overrides.inactive)
+        throw new BackendOperationError("gmail.check-connection-active", 404, "NOT_FOUND");
     },
     async discover(id) {
       calls.discovered.push(id);
@@ -175,6 +188,11 @@ function setup(overrides: Overrides = {}) {
         pending: pending.map((id) => ({ gmailMessageId: id, processedMessageId: claimId(id) })),
         uncategorizedTransactionIds: overrides.recoveredUncategorized ?? [],
       };
+    },
+    async reportProcessingRetry(input) {
+      calls.retryReports.push(input);
+      if (overrides.retryReportFails)
+        throw new BackendOperationError("gmail.report-processing-retry", null, null);
     },
     async reportSyncFailure(input) {
       calls.syncFailures.push(input);
@@ -258,6 +276,7 @@ function setup(overrides: Overrides = {}) {
   };
   const pipeline = createGmailPipeline({
     backend,
+    onRetryReportError: (error) => calls.retryReportErrors.push(error),
     reader,
     llm,
     enqueue: async (jobs) => {
@@ -317,7 +336,7 @@ describe("processMessage", () => {
     }
   });
 
-  it("queues categorization for items the User's history could not categorize", async () => {
+  it("queues classification for newly imported items", async () => {
     const { pipeline, calls } = setup({ uncategorized: [transactionId] });
     await pipeline.runJob(extractJob, notFinal);
     assert.deepEqual(calls.merchantJobs, [
@@ -330,6 +349,21 @@ describe("processMessage", () => {
     assert.equal(await pipeline.runJob(extractJob, notFinal), "already_finished");
     assert.deepEqual(calls.fetched, []);
     assert.deepEqual(calls.record, []);
+  });
+
+  it("recovers category enqueue after a finished legacy single-message job retries", async () => {
+    const { pipeline, calls } = setup({
+      alreadyFinished: true,
+      recoveredUncategorized: [transactionId],
+    });
+    assert.equal(
+      await pipeline.runJob(extractJob, { isFinalAttempt: false, isRetry: true }),
+      "already_finished",
+    );
+    assert.deepEqual(calls.merchantJobs, [
+      { kind: "merchant.categorize", transactionIds: [transactionId] },
+    ]);
+    assert.equal(calls.modelCalls, 0);
   });
 
   it("drops the job when the connection is no longer active", async () => {
@@ -679,6 +713,17 @@ describe("processBatch", () => {
     assert.equal(calls.record[0]?.outcome, "skipped");
   });
 
+  it("keeps the exact model deferral when retry-deadline reporting is unavailable", async () => {
+    const { pipeline, calls } = setup({
+      retryReportFails: true,
+      llmError: { error: new LlmError("busy", 429, "rate_limited", 900000), calls: [1] },
+    });
+    assert.equal(await pipeline.runJob(parseJob(["m1"]), notFinal), "deferred");
+    assert.equal(calls.later[0]?.delaySeconds, 900);
+    assert.deepEqual(calls.retryReports, [{ connectionId, delaySeconds: 900 }]);
+    assert.equal(calls.retryReportErrors.length, 1);
+  });
+
   it("puts emails back when the model is rate limited, without sending the rest or failing them", async () => {
     const busy = new LlmError("The model request failed.", 429, "rate_limited", 40_000);
     const { pipeline, calls } = setup({
@@ -707,6 +752,7 @@ describe("processBatch", () => {
     // The provider asked for 40 s; the backoff for a second deferral is 60 s.
     const delay = later?.delaySeconds ?? 0;
     assert.ok(delay >= 60 && delay < 75);
+    assert.deepEqual(calls.retryReports, [{ connectionId, delaySeconds: delay }]);
   });
 
   it("treats a model that answers with a cut-off body like a busy one", async () => {
@@ -738,6 +784,7 @@ describe("processBatch", () => {
     const recordCalls: RecordGmailExtractionsInput[] = [];
     const pipeline = createGmailPipeline({
       backend: {
+        async checkConnectionActive() {},
         async resolveConnection() {
           return {
             connectionId,
@@ -797,6 +844,14 @@ describe("processBatch", () => {
     assert.equal(recordCalls[0]?.results.length, 5);
   });
 
+  it("loads prompt context once per parse job and uses narrow guards before provider work", async () => {
+    const { pipeline, calls } = setup();
+    await pipeline.runJob(parseJob(["m1", "m2", "m3", "m4", "m5"]), notFinal);
+    assert.equal(calls.contextSnapshots, 1);
+    assert.equal(calls.modelCalls, 5);
+    assert.equal(calls.activeChecks, 10);
+  });
+
   it("records a one-time code email as skipped without the model", async () => {
     const { pipeline, calls } = setup({ subject: "Kode OTP transaksi Anda" });
     assert.equal(await pipeline.runJob(parseJob(["m1"]), notFinal), "skipped");
@@ -804,7 +859,7 @@ describe("processBatch", () => {
     assert.equal(calls.record[0]?.institutionKey, "BCA_CC");
   });
 
-  it("turns a transfer to the holder's own name into an exclusion", async () => {
+  it("keeps a truncated holder name pending as an expense", async () => {
     const { pipeline, calls } = setup({
       holderName: "Adlyn Fakhreyz",
       llmOutput: {
@@ -813,7 +868,7 @@ describe("processBatch", () => {
       },
     });
     await pipeline.runJob(parseJob(["m1"]), notFinal);
-    assert.equal(calls.record[0]?.items[0]?.kind, "exclusion");
+    assert.equal(calls.record[0]?.items[0]?.kind, "expense");
     assert.equal(calls.record[0]?.items[0]?.flowDirection, "out");
   });
 

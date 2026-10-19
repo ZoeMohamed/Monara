@@ -132,6 +132,10 @@ describe("extractTransactions", () => {
         kind: "expense",
         flowDirection: "out",
         merchantName: "Kopi Contoh",
+        counterpartyName: null,
+        counterpartyType: "unknown",
+        isTransfer: false,
+        internalTransfer: false,
         money: { amountMinor: "25000", currency: "IDR" },
         occurredOn: "2026-10-12",
         occurredTime: "10:14",
@@ -142,6 +146,59 @@ describe("extractTransactions", () => {
         confidence: 0.9,
       },
     ]);
+  });
+
+  it("preserves missing dates and only derives Internal from explicit raw-email evidence", async () => {
+    for (const fixture of [
+      {
+        body: "Transfer Rp 25.000 ke ADLYN FAKHREYZ PRATAMA",
+        name: "ADLYN FAKHREYZ PRATAMA",
+        type: "person",
+        expected: true,
+      },
+      {
+        body: "Pembelian Rp 25.000 ADLYN FAKHREYZ PRATAMA",
+        name: "ADLYN FAKHREYZ PRATAMA",
+        type: "person",
+        expected: false,
+      },
+      {
+        body: "Transfer Rp 25.000 ke ADLYN FAKHREYZ",
+        name: "ADLYN FAKHREYZ",
+        type: "person",
+        expected: false,
+      },
+      {
+        body: "Transfer Rp 25.000 ke BUDI SANTOSO",
+        name: "ADLYN FAKHREYZ PRATAMA",
+        type: "person",
+        expected: false,
+      },
+      {
+        body: "Transfer Rp 25.000 ke ADLYN FAKHREYZ PRATAMA",
+        name: "ADLYN FAKHREYZ PRATAMA",
+        type: "business",
+        expected: false,
+      },
+    ]) {
+      const llm = fakeLlm({
+        isTransactionEmail: true,
+        items: [
+          item({
+            occurredOn: null,
+            counterpartyName: fixture.name,
+            counterpartyType: fixture.type,
+            isTransfer: true,
+          }),
+        ],
+      });
+      const result = await extractTransactions(llm, email(fixture.body), {
+        holderName: "Adlyn Fakhreyz Pratama",
+        institutionName: "BCA",
+      });
+      assert.equal(result.items[0]?.occurredOn, null);
+      assert.equal(result.items[0]?.internalTransfer, fixture.expected);
+    }
   });
 
   it("reads the card ending from the account hint, never from elsewhere", () => {
@@ -207,10 +264,10 @@ describe("extractTransactions", () => {
     assert.equal(result.money, null);
   });
 
-  it("replaces an invalid future date with the email's Jakarta date", async () => {
+  it("leaves an invalid future date missing for review", async () => {
     const llm = fakeLlm({ isTransactionEmail: true, items: [item({ occurredOn: "2026-11-30" })] });
     const [result] = (await extractTransactions(llm, email("Total Rp 25.000"))).items;
-    assert.equal(result.occurredOn, "2026-10-12");
+    assert.equal(result.occurredOn, null);
     assert.equal(result.occurredTime, null);
     assert.equal(result.money?.amountMinor, "25000");
   });

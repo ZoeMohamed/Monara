@@ -180,7 +180,7 @@
     position: fixed;
     z-index: 40;
     right: max(16px, env(safe-area-inset-right, 0px));
-    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     left: max(16px, env(safe-area-inset-left, 0px));
     max-width: 480px;
     margin-inline: auto;

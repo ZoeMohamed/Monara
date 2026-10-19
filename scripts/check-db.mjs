@@ -1,11 +1,20 @@
 // Replay and validate only this checkout's disposable local database.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 const typesPath = "packages/db/src/types/database.types.ts";
+// User-approved exception for the failed pending-deletion default-category backfill.
+// Both byte hashes are pinned; all other published migration changes remain forbidden.
+// See docs/gmail-categorization-deployment-diagnosis-2026-10-19.md.
+const approvedRecovery = {
+  name: "20261019120000_typed_gmail_categorization.sql",
+  before: "b840b8e55c3df13e5a14e61a87286714262ef0c35dc342a7228dee6d2a5f2f28",
+  after: "5f0cdb85de8cae932133b785a1867235ef702f970d78c6fab61e6152b6486dd2",
+};
 
 function sqlFiles(directory) {
   if (!existsSync(directory)) return [];
@@ -74,10 +83,10 @@ export function checkDb({
   log = console.log,
 }) {
   root = realpathSync(root);
-  const invoke = (command, args, capture = false) => {
+  const invoke = (command, args, capture = false, encoding = "utf8") => {
     const result = run(command, args, {
       cwd: root,
-      encoding: "utf8",
+      encoding,
       maxBuffer: 10 * 1024 * 1024,
       shell: process.platform === "win32" && command === "pnpm",
       stdio: capture ? "pipe" : "inherit",
@@ -130,10 +139,29 @@ export function checkDb({
           .filter(Boolean)
           .map((path) => path.slice(prefix.length))
       : [];
+    let checkedChanges = changedNames;
+    if (
+      changedNames.includes(approvedRecovery.name) &&
+      baseNames.includes(approvedRecovery.name) &&
+      migrations.some((entry) => entry.name === approvedRecovery.name)
+    ) {
+      const before = invoke(
+        "git",
+        ["show", `${sha}:${prefix}${approvedRecovery.name}`],
+        true,
+        null,
+      ).stdout;
+      const after = readFileSync(join(directory, approvedRecovery.name));
+      const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+      if (digest(before) === approvedRecovery.before && digest(after) === approvedRecovery.after) {
+        checkedChanges = changedNames.filter((name) => name !== approvedRecovery.name);
+        log(`Verified pinned failed-migration recovery: ${approvedRecovery.name}.`);
+      }
+    }
     validateMigrationHistory(
       migrations.map((entry) => entry.name),
       baseNames,
-      changedNames,
+      checkedChanges,
     );
   }
   if (validateOnly) {

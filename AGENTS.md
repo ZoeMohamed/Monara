@@ -2,7 +2,7 @@
 
 ## Scope and current state
 
-Monara is a personal-finance PWA. The existing UI uses sample data and browser state. Workspace scaffolding does not mean auth, financial persistence, Gmail, WhatsApp, or agent workflows are implemented.
+Monara is a personal-finance PWA. Demo routes use sample data and browser state; the signed-in ledger uses backend persistence. Source implementation does not establish deployed provider configuration or live integration acceptance.
 
 Read this file and the nearest AGENTS.md and CLAUDE.md before editing. The accepted architecture is in docs/adr/0001-initial-runtime-boundaries.md; ownership and local commands are in docs/repository-structure.md. CONTEXT.md is the domain glossary.
 
@@ -26,7 +26,10 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 - Verify identity and resource ownership on the server. Never trust a user ID, phone number, or connection ID supplied by a caller as proof of authorization.
 - Supabase Auth uses Google sign-in. Composio Gmail authorization is a separate connection.
 - A WhatsApp number must be explicitly linked and verified by the signed-in User.
-- Extracted transactions start pending review; confirmed transactions affect totals. The only exception is a Gmail expense or income from a sender Gmail authenticated (DKIM or SPF) that the extractor is confident about (`public.gmail_auto_confirm_confidence()`), with an amount, a date, and a Financial Account mapped from the sender's institution; it is confirmed on import. Gmail sync reads only the senders listed for the User's own accounts in `packages/contracts/src/institutions/institution-senders.json`. Duplicate email processing must not create duplicate transactions.
+- Each Category belongs to expense, income, or exclusion and must match the transaction's type. Budgets use expense Categories. Category type is immutable after creation; use stable identity rather than display names for Internal semantics.
+- Extracted transactions start pending review. A Gmail import may auto-confirm only with an authenticated sender (DKIM or SPF), complete stated facts, a mapped active Financial Account, extraction confidence at `public.gmail_auto_confirm_confidence()`, and compatible classification confidence of at least 0.95. Internal is the only automatic exclusion: require explicit transfer evidence, cash direction, and an exact normalized match to the confirmed profile full name. Other exclusions require review. Confirmed exclusions stay out of totals.
+- Gmail sync reads only the senders listed for the User's own accounts in `packages/contracts/src/institutions/institution-senders.json`. Duplicate email processing must not create duplicate transactions. Search only canonical public business names matched exactly against the bundled brand catalog; a model business label alone is insufficient. Never send personal names, account identifiers, or financial/email content to Brave. Reuse public business-search evidence, not past AI classifications. User corrections apply to the edited transaction only.
+- Import completion includes classification or a terminal needs-review outcome. Review-pending transactions must not keep import progress running forever. No historical reclassification sweep or generalized transfer-fee reconstruction is part of v1.
 - Keep database access behind repositories, with ownership checks and RLS. Never treat a service-role key as a replacement for authorization.
 - Real data operations require connectivity initially. Do not cache financial data or auth responses in the service worker.
 - Never invent financial amounts, dates, currencies, or account mappings when extraction is uncertain.

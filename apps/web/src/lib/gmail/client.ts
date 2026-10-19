@@ -17,11 +17,19 @@ export type GmailMailbox = {
   /** Banks found after the first scan with no account yet. */
   newAccounts: number;
   sync:
-    | { state: "idle" | "queued" | "running" }
+    | { state: "idle" | "queued" }
+    | {
+        state: "running";
+        transactions: number;
+        emailsRead: number;
+        categorizing: number;
+        needsReview: number;
+      }
     | {
         state: "completed";
         transactions: number;
         confirmed: number;
+        needsReview: number;
         skipped: number;
         failed: number;
       }
@@ -42,16 +50,33 @@ const SYNC_ERROR_MESSAGES: Record<NonNullable<GmailSyncStatus["error"]>, string>
 };
 
 function toMailboxSync(sync: GmailSyncStatus): GmailMailbox["sync"] {
+  if (sync.state === "completed" && sync.counts.categorizing > 0) {
+    return {
+      state: "running",
+      transactions: sync.counts.importedTransactions,
+      emailsRead: sync.counts.imported + sync.counts.skipped + sync.counts.failed,
+      categorizing: sync.counts.categorizing,
+      needsReview: sync.counts.needsReview,
+    };
+  }
   switch (sync.state) {
     case "idle":
     case "queued":
-    case "running":
       return { state: sync.state };
+    case "running":
+      return {
+        state: "running",
+        transactions: sync.counts.importedTransactions,
+        emailsRead: sync.counts.imported + sync.counts.skipped + sync.counts.failed,
+        categorizing: sync.counts.categorizing,
+        needsReview: sync.counts.needsReview,
+      };
     case "completed":
       return {
         state: "completed",
         transactions: sync.counts.importedTransactions,
         confirmed: sync.counts.confirmedTransactions,
+        needsReview: sync.counts.needsReview,
         skipped: sync.counts.skipped,
         failed: sync.counts.failed,
       };

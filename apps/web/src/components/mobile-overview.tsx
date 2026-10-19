@@ -252,7 +252,7 @@ function SceneHero({
         </p>
 
         <div className={styles.askWrap} data-tour="ask">
-          <MonaraMascot className={styles.mascot} />
+          <MonaraMascot className={styles.mascot} pose="peek" />
           <OverviewComposer openChat={openChat} />
         </div>
         <nav aria-label="Ask Monara" className={styles.prompts}>
@@ -452,7 +452,7 @@ function SpendingBlock({
 
       {categories.length === 0 ? (
         <div className={styles.empty}>
-          <MonaraMascot className={styles.emptyMascot} />
+          <MonaraMascot className={styles.emptyMascot} pose="curious" />
           <p>
             <strong>{model.emptyTitle}</strong>
             Add a payment or bring in receipts from Gmail.
