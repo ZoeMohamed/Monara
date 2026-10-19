@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
       options: {
         redirectTo: callback.toString(),
         skipBrowserRedirect: true,
+        queryParams: { prompt: "select_account" },
       },
     });
 
