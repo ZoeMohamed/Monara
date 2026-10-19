@@ -23,7 +23,8 @@
   border-top: 1px solid var(--separator);
 }
 
-/* Not happened yet, so the whole row, mark and text included, is drawn faint. */
+/* Not happened yet: the mark is drawn faint and the text is muted. Text is never made translucent,
+   because faded text falls below the 4.5:1 contrast it needs. */
 .row {
   display: flex;
   min-width: 0;
@@ -31,6 +32,9 @@
   gap: 10px;
   min-height: 52px;
   padding: 8px 10px;
+}
+
+.row > :first-child {
   opacity: 0.55;
 }
 
@@ -41,6 +45,7 @@
 
 .merchant {
   display: block;
+  color: var(--muted);
   overflow: hidden;
   font-size: 14px;
   font-weight: 600;
@@ -67,6 +72,7 @@
 
 .amount > strong {
   display: block;
+  color: var(--muted);
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;

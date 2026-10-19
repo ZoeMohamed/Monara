@@ -9,14 +9,9 @@
 
 .header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.header h2 {
-  font-size: 15px;
-  font-weight: 750;
 }
 
 .header > span {
@@ -161,68 +156,44 @@
   margin-top: 14px;
 }
 
-/* Home styles: see mobile-overview.module.css. The flat style has no box and a hairline below. */
-[data-home="flat"] .card {
-  margin: 0;
-  padding: 28px 0;
-  border: 0;
-  border-bottom: 1px solid var(--separator);
-  border-radius: 0;
-  background: none;
-}
+/* On a phone the card has no box: a thick dashed rule below separates it from the next section. */
+@media (max-width: 1023.98px) {
+  .card {
+    margin: 0;
+    padding: 28px 0;
+    border: 0;
+    border-bottom: 3px dashed var(--line-strong);
+    border-radius: 0;
+    background: none;
+  }
 
-[data-home="flat"] .header h2 {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
+  .totals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin-top: 18px;
+    border-top: 1px solid var(--separator);
+    border-bottom: 1px solid var(--separator);
+  }
 
-[data-home="flat"] .totals {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  margin-top: 18px;
-  border-top: 1px solid var(--separator);
-  border-bottom: 1px solid var(--separator);
-}
+  .totals > div,
+  .totals > div:last-child {
+    grid-column: auto;
+    padding: 14px 8px;
+    border-radius: 0;
+    background: none;
+  }
 
-[data-home="flat"] .totals > div,
-[data-home="flat"] .totals > div:last-child {
-  grid-column: auto;
-  padding: 14px 12px;
-  border-radius: 0;
-  background: none;
-}
+  .totals > div:first-child {
+    padding-left: 0;
+  }
 
-[data-home="flat"] .totals > div:first-child {
-  padding-left: 0;
-}
+  .totals > div + div {
+    border-left: 1px solid var(--separator);
+  }
 
-[data-home="flat"] .totals > div + div {
-  border-left: 1px solid var(--separator);
-}
-
-[data-home="flat"] .totals > div dd {
-  font-size: 16px;
-  white-space: nowrap;
-}
-
-[data-home="flat"] .totals > div:last-child dd {
-  font-size: 16px;
-}
-
-[data-home="cards"] .card {
-  margin-top: 0;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 28px;
-  background: var(--surface);
-  box-shadow:
-    0 1px 2px rgb(23 37 84 / 4%),
-    0 14px 34px rgb(23 37 84 / 7%);
-}
-
-[data-home="cards"] .header h2 {
-  font-size: 17px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  .totals > div dd,
+  .totals > div:last-child dd {
+    font-size: clamp(13px, 4.4vw, 16px);
+    white-space: nowrap;
+  }
 }

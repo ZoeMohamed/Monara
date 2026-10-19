@@ -377,12 +377,6 @@
   gap: 12px;
 }
 
-.quiet {
-  color: var(--muted);
-  font-size: 15px;
-  font-weight: 650;
-}
-
 .monthPicker {
   position: relative;
   display: inline-flex;
@@ -600,12 +594,6 @@
   background: var(--surface-secondary);
 }
 
-.todayCard h2 {
-  font-size: 18px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-}
-
 .todayCard p {
   margin-top: 2px;
   color: var(--muted);
@@ -682,45 +670,8 @@
 }
 
 .featureName {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: flex;
   margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.featureIcon {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--accent);
-}
-
-.featureIcon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.featureIcon[data-tone="green"] {
-  color: var(--success);
-}
-
-.featureIcon[data-tone="violet"] {
-  color: #7356c7;
-}
-
-.featureIcon[data-tone="amber"] {
-  color: #a86b12;
-}
-
-.featureIcon[data-tone="red"] {
-  color: var(--danger);
 }
 
 .featureGrid strong {
@@ -750,9 +701,6 @@
 
 .cardLabel {
   margin: 18px 18px 0;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 650;
 }
 
 .alerts {
@@ -1316,98 +1264,42 @@
   }
 }
 
-/* Home styles on a phone ---------------------------------------------------
-   data-home on the sheet picks how the cards are drawn. "current" is the original
-   tinted cards (no rules here). "flat" drops the boxes: sections sit on the page and a
-   hairline separates them, so each one gets the full width. "cards" keeps boxes but
-   draws them as light, raised surfaces with the daily guide as the one blue card. */
+/* Home on a phone ----------------------------------------------------------
+   No card boxes: sections sit on the page and a thick dashed rule separates them, so each
+   one gets the full width. Desktop keeps its tinted cards. */
 @media (max-width: 1023.98px) {
-  .sheet[data-home="flat"] [data-home-card] {
+  .sheet [data-home-card] {
     margin: 0;
     padding: 28px 0;
     border: 0;
-    border-bottom: 1px solid var(--separator);
+    border-bottom: 3px dashed var(--line-strong);
     border-radius: 0;
     background: none;
     box-shadow: none;
   }
 
-  .sheet[data-home="flat"] .cardLabel {
-    margin: 0 0 6px;
-    color: var(--foreground);
-    font-size: 18px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
+  .sheet .slotWhere [data-home-card] {
+    border-bottom: 0;
   }
 
-  .sheet[data-home="flat"] .alerts {
+  .sheet .cardLabel {
+    margin: 0 0 6px;
+  }
+
+  .sheet .alerts {
     margin: 4px -10px 0;
     padding: 0;
   }
 
-  .sheet[data-home="flat"] .pace {
+  .sheet .pace {
     background: var(--surface-tertiary);
   }
 
-  .sheet[data-home="flat"] .safeAmount strong {
+  .sheet .safeAmount strong {
     font-size: 38px;
   }
 
-  .sheet[data-home="flat"] .activityItem {
+  .sheet .activityItem {
     border-radius: 0;
-  }
-
-  .sheet[data-home="cards"] [data-home-card] {
-    margin: 16px 0 0;
-    padding: 20px;
-    border: 1px solid var(--border);
-    border-radius: 28px;
-    background: var(--surface);
-    box-shadow:
-      0 1px 2px rgb(23 37 84 / 4%),
-      0 14px 34px rgb(23 37 84 / 7%);
-  }
-
-  .sheet[data-home="cards"] .slotForecast [data-home-card] {
-    margin-top: 0;
-  }
-
-  .sheet[data-home="cards"] .cardLabel {
-    margin: 0 0 6px;
-    color: var(--foreground);
-    font-size: 17px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
-
-  .sheet[data-home="cards"] .alerts {
-    margin: 4px -10px -10px;
-    padding: 0;
-  }
-
-  .sheet[data-home="cards"] .pace {
-    background: var(--surface-tertiary);
-  }
-
-  /* The daily guide is the one blue card: the question Home answers first. */
-  .sheet[data-home="cards"] [data-home-card="safe"] {
-    border: 0;
-    background: linear-gradient(150deg, #3b7bff 0%, #2358d6 100%);
-    box-shadow: 0 16px 36px rgb(49 113 253 / 30%);
-    color: #fff;
-    --foreground: #fff;
-    --muted: rgb(255 255 255 / 78%);
-    --success: #86efac;
-    --warning: #fde68a;
-    --warning-soft-foreground: #fde68a;
-    --ink: #fff;
-  }
-
-  .sheet[data-home="cards"] [data-home-card="safe"] .pace {
-    background: rgb(255 255 255 / 24%);
-  }
-
-  .sheet[data-home="flat"] .slotWhere [data-home-card] {
-    border-bottom: 0;
   }
 }

@@ -97,20 +97,13 @@
   opacity: 0.55;
 }
 
-/* In the flat Home style the chart runs edge to edge, past the page gutter. */
-[data-home="flat"] .figure {
-  margin-inline: -20px;
-}
+/* On a phone the chart runs edge to edge, past the page gutter. */
+@media (max-width: 1023.98px) {
+  .figure {
+    margin-inline: -20px;
+  }
 
-[data-home="flat"] .legend {
-  margin-inline: 20px;
-}
-
-/* In the card style it runs edge to edge inside its card. */
-[data-home="cards"] .figure {
-  margin-inline: -20px;
-}
-
-[data-home="cards"] .legend {
-  margin-inline: 20px;
+  .legend {
+    margin-inline: 20px;
+  }
 }

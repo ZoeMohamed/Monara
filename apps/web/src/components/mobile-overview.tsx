@@ -9,6 +9,7 @@ import { CategoryAvatar } from "@/components/category-symbol";
 
 import { Icon, type IconName } from "@/components/icon";
 import { MonaraMascot } from "@/components/monara-mascot";
+import { SectionLabel, SectionTitle } from "@/components/section-title";
 import { SpendingForecastCard } from "@/components/spending-forecast-card";
 import { TransactionRow } from "@/components/transaction-row";
 import { categoryColor } from "@/data/category-style";
@@ -333,9 +334,9 @@ function SpendingBlock({
   return (
     <section aria-labelledby="spending-title" className={styles.block} data-home-card="where">
       <div className={styles.blockHead}>
-        <h2 className={styles.quiet} id="spending-title">
+        <SectionTitle icon="reports" id="spending-title">
           Where it went
-        </h2>
+        </SectionTitle>
         <Select
           className={styles.monthPicker}
           onChange={(value) => {
@@ -471,9 +472,9 @@ function ActivityCard({
       data-home-card="activity"
     >
       <div className={styles.activityHead}>
-        <h2 id="activity-title">
+        <SectionTitle icon="history" id="activity-title">
           {model.isCurrentMonth ? "Latest activity" : `Latest in ${monthName(month)}`}
-        </h2>
+        </SectionTitle>
         {openTransactions && model.recent.length > 0 ? (
           <Button
             variant="ghost"
@@ -545,10 +546,7 @@ function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
       type="button"
     >
       <span className={styles.featureName}>
-        <span aria-hidden className={styles.featureIcon} data-tone="green">
-          <Icon name="budgets" />
-        </span>
-        Safe to spend today
+        <SectionLabel icon="budgets">Safe to spend today</SectionLabel>
       </span>
       <strong className={styles.safeEmpty}>Set monthly budgets</strong>
       <span className={styles.safeNote}>Monara will turn them into a daily spending guide.</span>
@@ -608,10 +606,7 @@ function SafeToSpendCard({
       type="button"
     >
       <span className={styles.featureName}>
-        <span aria-hidden className={styles.featureIcon} data-tone="green">
-          <Icon name="budgets" />
-        </span>
-        {safe ? "Safe to spend today" : "Budgets left"}
+        <SectionLabel icon="budgets">{safe ? "Safe to spend today" : "Budgets left"}</SectionLabel>
       </span>
       <span className={styles.safeAmount}>
         <strong data-amount>{formatRupiah(safe ? safe.perDay : model.remaining)}</strong>
@@ -747,9 +742,9 @@ function AttentionCard({
       className={styles.attention}
       data-home-card="attention"
     >
-      <h2 className={styles.cardLabel} id="attention-title">
+      <SectionTitle className={styles.cardLabel} icon="bell" id="attention-title">
         Needs attention
-      </h2>
+      </SectionTitle>
       {items.length === 0 ? (
         <p className={styles.allClear}>
           <span aria-hidden className={styles.alertIcon} data-tone="success">
@@ -842,9 +837,9 @@ function BackendInsightsCard({
       className={styles.attention}
       data-home-card="flags"
     >
-      <h2 className={styles.cardLabel} id="backend-insights-title">
+      <SectionTitle className={styles.cardLabel} icon="sparkle" id="backend-insights-title">
         Forecasts and flags
-      </h2>
+      </SectionTitle>
       <ul className={styles.alerts}>
         {insights.overspendForecasts.slice(0, 2).map((forecast) => (
           <Fact icon="trend-up" key={forecast.budgetId} onOpen={openBudgets} tone="down">
@@ -873,12 +868,6 @@ function BackendInsightsCard({
     </section>
   );
 }
-
-/**
- * How the cards of Home are drawn. "flat" has no card boxes, only section separators; "cards" keeps
- * boxes with a lighter look; "current" is the original tinted cards.
- */
-const HOME_STYLE: "flat" | "cards" | "current" = "flat";
 
 export function MobileOverview({
   setup,
@@ -926,7 +915,7 @@ export function MobileOverview({
         toggleAmounts={toggleAmounts}
       />
 
-      <div className={styles.sheet} data-home={HOME_STYLE}>
+      <div className={styles.sheet}>
         {setup}
         <div className={styles.columns}>
           <div className={styles.lead}>

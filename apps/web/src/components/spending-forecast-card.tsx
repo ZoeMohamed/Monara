@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { useAmountDisplay, useAppSession } from "@/components/app-session-context";
 import { ForecastProjectionChart } from "@/components/forecast-projection-chart";
 import { Icon } from "@/components/icon";
+import { SectionTitle } from "@/components/section-title";
 import { type ForecastState, useForecast } from "@/components/use-forecast";
 import { demoForecastFor } from "@/data/demo-forecast";
 import { formatDay, type Transaction } from "@/data/demo-ledger";
@@ -196,7 +197,9 @@ function DemoCard({ context }: { context: Context }) {
       data-tour="forecast"
     >
       <div className={styles.header}>
-        <h2 id={titleId}>Spending forecast</h2>
+        <SectionTitle icon="pulse" id={titleId}>
+          Spending forecast
+        </SectionTitle>
         <span>Sample data</span>
       </div>
       <Body context={context} forecast={demoForecastFor(spent)} />
@@ -216,7 +219,9 @@ function LiveCard({ context }: { context: Context }) {
       data-tour="forecast"
     >
       <div className={styles.header}>
-        <h2 id={titleId}>Spending forecast</h2>
+        <SectionTitle icon="pulse" id={titleId}>
+          Spending forecast
+        </SectionTitle>
         <span>Expected, not confirmed</span>
       </div>
       <Notice hasForecast={forecast !== null} state={state} />
