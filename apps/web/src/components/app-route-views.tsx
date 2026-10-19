@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useAppSession } from "@/components/app-session-context";
 import { BudgetManager, type BudgetManagerPanel } from "@/components/budget-manager";
+import { BudgetPlanningScreen } from "@/components/budget-planning-screen";
 import { BudgetsScreen } from "@/components/budgets-screen";
 import { CategoryManager, DemoCategoryManager } from "@/components/category-manager";
 import type { ChatReply } from "@/components/chat-action-result";
@@ -14,6 +15,7 @@ import {
   DemoFinancialAccountSetup,
   FinancialAccountSetup,
 } from "@/components/financial-account-setup";
+import { GoalPlanner } from "@/components/goal-planner";
 import { ProfileScreen } from "@/components/profile-screen";
 import { ReportsScreen } from "@/components/reports-screen";
 import { TransactionsScreen } from "@/components/transactions-screen";
@@ -125,47 +127,60 @@ export function BudgetsRoute() {
   const session = useAppSession();
   const [budgetPanel, setBudgetPanel] = useState<BudgetManagerPanel>(null);
   return (
-    <BudgetsScreen
-      demo={session.dataMode === "demo"}
-      insights={
-        session.financeSnapshot?.month === session.navigation.view.month
-          ? session.financeSnapshot.dashboard.insights
-          : undefined
+    <BudgetPlanningScreen
+      goals={
+        <GoalPlanner
+          demo={session.dataMode === "demo"}
+          goals={session.financeSnapshot?.financialGoals ?? []}
+          runMutation={session.financeSnapshot ? session.runMutation : undefined}
+          today={session.today}
+          transactions={session.transactions}
+        />
       }
-      onEditBudget={session.dataMode === "demo" ? session.updateDemoBudget : undefined}
-      demoCategories={session.dataMode === "demo" ? session.categories : undefined}
-      onCreateBudget={session.dataMode === "demo" ? session.createDemoBudget : undefined}
-      onRequestCreateBudget={
-        session.financeSnapshot ? () => setBudgetPanel({ kind: "create" }) : undefined
+      budgets={
+        <BudgetsScreen
+          demo={session.dataMode === "demo"}
+          insights={
+            session.financeSnapshot?.month === session.navigation.view.month
+              ? session.financeSnapshot.dashboard.insights
+              : undefined
+          }
+          onEditBudget={session.dataMode === "demo" ? session.updateDemoBudget : undefined}
+          demoCategories={session.dataMode === "demo" ? session.categories : undefined}
+          onCreateBudget={session.dataMode === "demo" ? session.createDemoBudget : undefined}
+          onRequestCreateBudget={
+            session.financeSnapshot ? () => setBudgetPanel({ kind: "create" }) : undefined
+          }
+          onRequestEditBudget={
+            session.financeSnapshot ? (id) => setBudgetPanel({ kind: "edit", id }) : undefined
+          }
+          onRequestDeleteBudget={
+            session.financeSnapshot ? (id) => setBudgetPanel({ kind: "delete", id }) : undefined
+          }
+          management={
+            session.financeSnapshot ? (
+              <BudgetManager
+                collapseList
+                hiddenBudgetIds={session.budgets.map((budget) => budget.id)}
+                panel={budgetPanel}
+                onPanelChange={setBudgetPanel}
+                snapshot={session.financeSnapshot}
+                runMutation={session.runMutation}
+                refreshRequired={session.refreshRequired}
+                onRefreshRecords={session.refreshFinance}
+              />
+            ) : undefined
+          }
+          month={session.navigation.view.month}
+          setMonth={session.navigation.setMonth}
+          bills={session.bills}
+          budgets={session.budgets}
+          transactions={session.transactions}
+          today={session.today}
+          onConfirmBill={session.confirmBill}
+          onDismissBill={session.dismissBill}
+        />
       }
-      onRequestEditBudget={
-        session.financeSnapshot ? (id) => setBudgetPanel({ kind: "edit", id }) : undefined
-      }
-      onRequestDeleteBudget={
-        session.financeSnapshot ? (id) => setBudgetPanel({ kind: "delete", id }) : undefined
-      }
-      management={
-        session.financeSnapshot ? (
-          <BudgetManager
-            collapseList
-            hiddenBudgetIds={session.budgets.map((budget) => budget.id)}
-            panel={budgetPanel}
-            onPanelChange={setBudgetPanel}
-            snapshot={session.financeSnapshot}
-            runMutation={session.runMutation}
-            refreshRequired={session.refreshRequired}
-            onRefreshRecords={session.refreshFinance}
-          />
-        ) : undefined
-      }
-      month={session.navigation.view.month}
-      setMonth={session.navigation.setMonth}
-      bills={session.bills}
-      budgets={session.budgets}
-      transactions={session.transactions}
-      today={session.today}
-      onConfirmBill={session.confirmBill}
-      onDismissBill={session.dismissBill}
     />
   );
 }

@@ -9,7 +9,9 @@ import {
   type DashboardSummary,
   dashboardSummarySchema,
   type FinancialAccount,
+  type FinancialGoal,
   financialAccountPageSchema,
+  financialGoalPageSchema,
   type Transaction,
   transactionPageSchema,
 } from "@monara/contracts";
@@ -27,6 +29,7 @@ export type FinanceSnapshot = {
   transactions: OwnedTransaction[];
   budgets: OwnedBudget[];
   financialAccounts: FinancialAccount[];
+  financialGoals: FinancialGoal[];
   categories: Category[];
   allBudgets: Budget[];
   dashboard: DashboardSummary;
@@ -133,6 +136,7 @@ function mapOwnedBudget(usage: BudgetUsage, categories: Category[], month: strin
 type ListOperation =
   | "list_transactions"
   | "list_financial_accounts"
+  | "list_financial_goals"
   | "list_categories"
   | "list_budgets";
 export type FinanceReader = (
@@ -143,6 +147,7 @@ export type FinanceReader = (
 const pageSchemas = {
   list_transactions: transactionPageSchema,
   list_financial_accounts: financialAccountPageSchema,
+  list_financial_goals: financialGoalPageSchema,
   list_categories: categoryPageSchema,
   list_budgets: budgetPageSchema,
 } as const;
@@ -151,13 +156,13 @@ async function loadAllPages<Operation extends ListOperation>(
   operation: Operation,
   read: FinanceReader,
 ): Promise<ReturnType<(typeof pageSchemas)[Operation]["parse"]>["items"]> {
-  const items: (Transaction | FinancialAccount | Category | Budget)[] = [];
+  const items: (Transaction | FinancialAccount | FinancialGoal | Category | Budget)[] = [];
   const cursors = new Set<string>();
   const ids = new Set<string>();
   let cursor: string | null = null;
   for (let pageIndex = 0; pageIndex < 1_000; pageIndex += 1) {
     const page: {
-      items: (Transaction | FinancialAccount | Category | Budget)[];
+      items: (Transaction | FinancialAccount | FinancialGoal | Category | Budget)[];
       nextCursor: string | null;
     } = pageSchemas[operation].parse(await read(operation, { limit: 100, cursor }));
     for (const item of page.items) {
@@ -189,13 +194,15 @@ export async function loadFinanceSnapshot(
 ): Promise<FinanceSnapshot> {
   calendarMonthSchema.parse(month);
   calendarDateSchema.parse(today);
-  const [records, financialAccounts, categories, allBudgets, dashboardResult] = await Promise.all([
-    loadAllPages("list_transactions", read),
-    loadAllPages("list_financial_accounts", read),
-    loadAllPages("list_categories", read),
-    loadAllPages("list_budgets", read),
-    read("get_dashboard", { month }),
-  ]);
+  const [records, financialAccounts, financialGoals, categories, allBudgets, dashboardResult] =
+    await Promise.all([
+      loadAllPages("list_transactions", read),
+      loadAllPages("list_financial_accounts", read),
+      loadAllPages("list_financial_goals", read),
+      loadAllPages("list_categories", read),
+      loadAllPages("list_budgets", read),
+      read("get_dashboard", { month }),
+    ]);
   const dashboard = dashboardSummarySchema.parse(dashboardResult);
   if (dashboard.month !== month) {
     throw new FinancePresentationError("The requested month could not be loaded. Try again.");
@@ -208,6 +215,7 @@ export async function loadFinanceSnapshot(
       .filter((usage) => usage.budget.cadence === "monthly")
       .map((usage) => mapOwnedBudget(usage, categories, month)),
     financialAccounts,
+    financialGoals,
     categories,
     allBudgets,
     dashboard,

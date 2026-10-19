@@ -151,6 +151,20 @@ isOneToOne: false
       referencedColumns: ["id","user_id"]
     }
                   ]
+                },"financial_goals": {
+                  Row: {
+                    "client_request_id": string,"created_at": string,"currency": string,"deleted_at": string | null,"id": string,"image_path": string | null,"name": string,"saved_amount": number,"status": string | null,"target_amount": number,"target_date": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "client_request_id": string,"created_at"?: string,"currency"?: string,"deleted_at"?: string | null,"id"?: string,"image_path"?: string | null,"name": string,"saved_amount"?: number,"status"?: never,"target_amount": number,"target_date": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "client_request_id"?: string,"created_at"?: string,"currency"?: string,"deleted_at"?: string | null,"id"?: string,"image_path"?: string | null,"name"?: string,"saved_amount"?: number,"status"?: never,"target_amount"?: number,"target_date"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"gmail_connections": {
                   Row: {
                     "composio_connected_account_id": string,"composio_trigger_id": string | null,"created_at": string,"discovery_first_completed_at": string | null,"discovery_state": string,"discovery_updated_at": string | null,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"sync_error": string | null,"sync_pending_runs": number,"sync_requested_at": string | null,"sync_state": string,"sync_updated_at": string | null,"updated_at": string,"user_id": string

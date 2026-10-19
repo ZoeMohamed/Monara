@@ -5,6 +5,7 @@ The Next.js backend lives here. Financial writes belong to these routes, includi
 | Route | Implemented boundary |
 | --- | --- |
 | `POST /api/finance/operations/[operation]` | Verifies the Google session, validates the operation input, and calls owned financial account, category, transaction/review, budget, dashboard and notification list/read/dismiss services. |
+| `GET, POST, DELETE /api/goals/[goalId]/image` | Verifies goal ownership, issues a short-lived private read URL, and uploads or removes a validated goal image. |
 | `POST /api/agent/operations/[operation]` | Requires the server-only Agent/backend credential, validates the trusted runtime caller and input, and rechecks resource ownership in the financial service. Transaction/budget deletion requires a bound destructive confirmation. |
 | `/api/gmail/connections`, `/api/gmail/connections/[connectionId]`, `/api/gmail/connections/callback` | Owned Gmail list, separate consent, callback verification, and disconnect lifecycle. |
 | `GET/POST /api/gmail/connections/[connectionId]/discovery` | Reads or reruns owned mailbox discovery; the institution child route accepts or dismisses a discovered account. |
