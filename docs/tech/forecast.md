@@ -1,88 +1,46 @@
 # Spending forecast
 
-Owner: Abhip. Features: F17. Status: Draft.
+Owner: Abhip. Features: forecast extension (repository label F17; outside PRD v2.1 F1-F16). Status: Draft.
 
 ## Purpose
 
-The forecast tells a User what they are likely to spend for the rest of the month, before they spend it. It lists the payments they are expected to make, such as Spotify on the 25th or chicken rice every Monday, Wednesday and Friday, each with a confidence, and it totals what is expected this week and this month. It runs weekly and on demand, so a demo can trigger it by hand. A forecast is a prediction. It is always labelled as expected, and it never counts toward confirmed spending, income or Budget usage.
+The forecast predicts remaining payments this month from confirmed expense history. It shows expected totals and confidence separately from spending, income and Budget usage. This extension is called F17 in repository code, but the authorized PRD v2.1 defines F1-F16 only. This account freezes parent #85 at `e74524752c538ca8866295c91bdc456e17842eb3`; owner review and deployed acceptance remain outstanding.
 
 ## How it works
 
-```mermaid
-flowchart LR
-  Hist["Confirmed expenses, last 130 days"] --> Rules["Rules find bills and habits"]
-  Rules --> Cand["Candidates with a rule confidence"]
-  Cand --> Model["Model judges each one"]
-  Model --> Band["Confidence moved by at most 0.25 down or 0.15 up"]
-  Cand -. "model unavailable" .-> Band
-  Band --> Cut{"At least 0.6?"}
-  Cut -- yes --> Items["Forecast items"]
-  Cut -- no --> Drop["Dropped and only counted"]
-  Items --> Store["Saved, replacing the old forecast"]
-```
+**Rules.** [forecast.ts](../../packages/core/src/forecast.ts) groups confirmed, non-deleted expenses from the preceding 130 days by normalized merchant name. It proposes only dates from today through month end:
 
-**Rules** (`packages/core/src/forecast.ts`). The rules read the User's confirmed expenses from the last 130 days and group them by merchant name.
+- Monthly patterns need payments in at least two distinct months, roughly one per month, at least 66% within two days of the median day, and a latest payment within 45 days. A merchant already paid this month is not predicted again.
+- Weekly patterns need a weekday hit in at least four of the last eight weeks. Remaining occurrences of that weekday become candidates. When both patterns fit, six or more payments favor the weekly pattern.
+- Amounts use the rounded median of up to six recent payments, with their minimum/maximum as a range. Confidence combines date regularity, amount stability and history depth. These scores are heuristics, not calibrated probabilities.
 
-- *Monthly bills.* A merchant paid about once a month, in at least two different months, on days within two days of each other, and recently enough to still be live (the last payment within 45 days). Its expected date is its usual day of the month, and it is skipped if it was already paid this month. A forecast never goes past the end of the month.
-- *Weekly habits.* A merchant bought on the same weekday in at least four of the last eight weeks. Every such weekday left in the month becomes an expected date. A merchant that fits both is a habit when it appears six or more times.
-- *Amount.* The median of the recent payments, with the lowest and highest as the range. An amount is never made up.
-- *Rule confidence.* Monthly: 0.4 for date consistency, 0.3 for steady amounts and 0.3 for how many months it has been seen (up to four). Weekly: 0.5 for how often the weekday is hit, 0.3 for steady amounts and 0.2 for how many times it was seen.
+**Bounded model refinement.** The backend calls the credential-protected `/forecast/refine` in [the Worker](../../apps/agent/src/forecast.ts). The model receives candidate merchant names, dates and amounts without a User id. Validated judgments can change confidence by at most -0.25 or +0.15 and supply a short reason; they cannot add candidates, amounts or dates. Unknown/duplicate candidate keys are discarded. Missing configuration, provider failure or invalid output falls back to rules. The stored run/API exposes `usedModel`; the card does not identify the fallback.
 
-**Model** (`apps/agent/src/forecast.ts`). The web backend sends the candidates to the Agent worker (`POST /forecast/refine`, with the shared secret). The model sees only each candidate's merchant name, dates and amounts, never the User's identity. It returns a confidence and a one-line reason per candidate. The backend then keeps that confidence only within a small band around the rule confidence, down by at most 0.25 and up by at most 0.15, so the model can only mark a candidate down or up, never decide alone, and it can never add an item or change an amount. If the model is unavailable, the rule confidence and reason are used, and the forecast is stored with `usedModel` false. The card does not show which path ran; the flag is in the stored run and the API response.
+Items below 0.6 are omitted and counted. Because the maximum reduction is 0.25, a rule score of at least 0.85 cannot be vetoed below this threshold. Kept amounts form expected totals through Sunday and through month end; projected month end adds confirmed spending so far. Predictions never enter ledger or Budget totals.
 
-**Threshold.** Items below 0.6 are dropped and only counted ("2 unsure payments left out"). At 0.6 the model can only remove a candidate whose rule confidence is under 0.85, because it can lower a score by at most 0.25.
+**Storage and realization.** [forecast-service.ts](../../packages/core/src/forecast-service.ts) saves one run and its items using atomic replacement in [the migration](../../supabase/migrations/20261019150000_spending_forecast.sql). On read it matches due items one-to-one against confirmed expenses from the forecast's creation date onward, for the same normalized merchant, within three days and 35% of the predicted amount. A match marks an item Paid and removes it from remaining totals. Matching is derived rather than stored, so ledger corrections can change the result.
 
-**Totals.** Expected this week (to Sunday), expected this month (to the last day of the month), confirmed spending so far, and the projected month end, which is the confirmed total plus what is still expected this month.
+**Refresh and presentation.** Signed-in `/api/forecast` reads the current result or refreshes it on demand. The Home card and History Forecast filter show predictions separately; public demo routes show synthetic samples. An older-month forecast triggers a Home refresh. Both Agent forecast tools use T0, but refresh still writes derived forecast state and can incur a provider call; it is not a side-effect-free read.
 
-**A forecast for a past month.** Every date in it has gone by, so the Home card replaces it once, automatically, when it opens and sees a forecast from an earlier month, and the weekly run treats it as due however new it is.
-
-**Did it come true?** When a prediction's date has passed, it is matched to a confirmed expense from the same merchant, made on or after the day the forecast was made, within 3 days and within 35% of the amount. A payment from before the forecast cannot fulfil it. A matched prediction shows as Paid and leaves the remaining total. The forecast reports how many earlier predictions came true. Nothing is stored for this, so it is worked out when the forecast is read.
-
-**Where it runs.**
-
-| Piece | Location |
-| --- | --- |
-| Tables `forecast_runs` and `forecast_items`, and `replace_forecast` | `supabase/migrations/20261019150000_spending_forecast.sql` |
-| Service and repository | `packages/core/src/forecast-service.ts`, `supabase-forecast-repository.ts` |
-| Routes | `apps/web/src/app/api/forecast/route.ts` (read and refresh), `api/agent/forecast/refresh/route.ts` (weekly run) |
-| Weekly trigger | Worker cron, Mondays 02:00 UTC (09:00 Jakarta) |
-| Agent tools | `get_spending_forecast` and `refresh_spending_forecast` (read tier) |
-| Interface | A Home card with this week, this month, month end, the list of payments still ahead with confidence chips and a Refresh button (`spending-forecast-card.tsx`), and a Forecast filter in History that lists every expected payment of the rest of the month by day, drawn faint because none has happened (`forecast-ledger.tsx`). The public demo shows a sample |
+The frozen Worker cron is **Monday 02:00 UTC (09:00 Jakarta)**. [The weekly backend route](../../apps/web/src/app/api/agent/forecast/refresh/route.ts) considers Users with recent confirmed expenses, prioritizes missing/oldest results and refreshes at most 25 per invocation in groups of five. Forecasts over six days old or covering a past month are due. Open [#91](https://github.com/ZoeMohamed/Monara/pull/91) proposes nightly refresh, paginated batches and immediate projections; those behaviors are outside this source freeze.
 
 ## Key decisions
 
-- **Rules first, the model second.** The alternative was asking the model to predict spending. We rejected it because a model can invent a payment or an amount, and Monara never invents financial data. Here every item and amount comes from a payment the User really made.
-- **The model can only nudge confidence.** It could have been allowed to add fuzzy patterns. We kept it to judging and explaining, inside a fixed band, so a wrong or manipulated model answer cannot create a forecast out of nothing.
-- **A threshold of 0.6, with dropped items only counted.** Showing every guess would make the forecast noisy and less trusted. We started at 0.7 and lowered it so bills with a short history or uneven amounts still appear; the cost is a smaller model veto (see above). Counting the dropped ones keeps it honest about what it left out. The threshold is a setting of the run and is stored with it.
-- **One forecast per User, replaced atomically.** Keeping history would add storage and a screen nobody asked for. A single database function replaces the old forecast in one transaction, so a refresh never leaves half a forecast.
-- **Realization is derived, not stored.** The match is cheap to compute on read, and storing it would mean writing on every new transaction.
-- **The model runs in the Agent worker.** The backend could have called the model itself. The worker already holds the model credentials, so no new secret is needed on the web host.
-- **Weekly run through the Worker cron.** The cron already exists for Reminders and Gmail. A separate scheduler would be new infrastructure.
+- Detect patterns in code instead of asking a model to invent payments. Every candidate amount comes from observed history; future dates are explicitly predictions.
+- Limit model confidence changes instead of giving it a final veto. This bounds manipulation but can retain a confident rule mistake, such as a cancelled subscription.
+- Replace one forecast atomically instead of retaining a history screen. Reads see a complete run, while older forecasts are unavailable for longitudinal evaluation.
+- Derive realization on read instead of writing matches for each new transaction. Corrections are reflected automatically, at the cost of approximate merchant/amount matching.
 
 ## Security and risks
 
-- The forecast tables are backend-only: row-level security is forced and the browser has no grant, like the chat history tables. Every query includes the User's id, and an item cannot point at another User's run (composite key).
-- Forecast routes need a signed-in session and a same-origin request. The weekly route and the model route need the shared agent secret. A refresh made twice within 20 seconds returns the forecast just made, so a double tap does not call the model twice, and a User is limited to 10 refreshes a minute.
-- The model receives merchant names, dates and amounts but not the User's identity. Merchant names are treated as untrusted text in the prompt, and the answer is validated and limited to the candidates that were sent.
-- The Agent presents a forecast as expected, never as spent. Forecast tools only read and recompute. They do not change the User's records.
+Forecast storage is backend-only with forced RLS and no browser grants; repository queries use an owned User id and composite ownership prevents cross-User run/item references. Web refresh checks session and origin, with an in-process limit of ten requests per minute. A twenty-second service cooldown reuses a recent result; it is not an atomic concurrent-refresh lock. Weekly/refinement endpoints require the Agent credential.
 
-Open risks:
-
-- Merchant names reach the model provider, as they do in extraction. The provider's retention terms are not assessed here.
-- The rules need history. A new User with under two months of confirmed expenses gets an empty forecast, and the card says so.
-- Matching is by merchant name, so a merchant paid under two different names is treated as two merchants.
-- The weekly run refreshes up to 25 Users per call, Users without a forecast first and then the oldest, so no one is starved. With more than 25 stale Users it takes several weeks to catch up.
-- The forecast was not measured on real spending, only on synthetic history (see below).
+The model prompt treats merchant fields as untrusted data, and schema/key filtering bounds output. Merchant information still reaches the model provider; retention is not assessed here. The rules use JavaScript numbers for statistics, unlike exact ledger arithmetic. Name normalization can split one merchant or merge unrelated merchants, and new/irregular spending is missed. A new User may have too little history. The weekly route limits discovery and refresh batches, so large populations or repeated failures can remain stale. Configured cron/provider acceptance is separate from source tests.
 
 ## How to verify
 
-```sh
-pnpm --filter @monara/core test     # includes forecast.test.mjs and forecast-service.test.mjs
-pnpm --filter @monara/agent test    # includes test/forecast.test.ts
-pnpm --filter @monara/web test      # includes src/lib/forecast
-pnpm db:check --reset --base-ref origin/main   # runs supabase/tests/database/spending_forecast.test.sql
-```
+Run `pnpm --filter @monara/core test`, `pnpm --filter @monara/agent test` and `pnpm --filter @monara/web test`. Inspect [rule tests](../../packages/core/src/forecast.test.mjs), [service tests](../../packages/core/src/forecast-service.test.mjs), Worker refinement tests and web forecast boundary tests. Database ownership/atomic-replacement checks are in [spending_forecast.test.sql](../../supabase/tests/database/spending_forecast.test.sql), requiring an agreed disposable local stack.
 
-On synthetic history, forecasting on 1 October against what then happened in October gave **14 of 16 predictions matched**, with a **mean amount error of 5.2%** among them. In that October the person cancelled Netflix, skipped one chicken-rice day, paid more for Spotify, and started a new subscription that no earlier payment could predict, so the two misses are the cancellation and the skipped day. The backtest is deterministic and lives in `packages/core/src/forecast.test.mjs`. It shows the rules behave as designed on a constructed history. It is not evidence about real spending.
+The deterministic synthetic backtest asserts **14 of 16 due predictions matched** and **5.2% mean absolute amount error among matches**. Its constructed October includes a cancellation, skipped meal, changed amount and new subscription. This checks fixture behavior, not real spending accuracy, model benefit or a deployed scheduler.
 
-In the app, open Home, press Refresh forecast, and check that the totals and the list appear and that Month end equals confirmed spending so far plus the remaining total. Then confirm a matching payment and refresh: the prediction shows as Paid and leaves the remaining total.
+For integrated acceptance, refresh as one signed-in User, verify projected totals and derived Paid matches, then test another User's isolation, unavailable model fallback and prior-month replacement. Confirm expected items never change financial totals. No new paid-model run, real send or deployment is part of this documentation task.

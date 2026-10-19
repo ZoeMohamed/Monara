@@ -38,8 +38,8 @@ const DOCUMENTS = {
       {
         title: "Core algorithms",
         intro:
-          "How emails become transactions, how the Agent plans and acts within its permission tiers, and how Reminders are chosen.",
-        files: ["extraction", "agent", "reminders"],
+          "How emails become transactions, how the Agent plans and acts within its permission tiers, how Reminders are chosen, and how spending forecasts are derived.",
+        files: ["extraction", "agent", "reminders", "forecast"],
       },
       {
         title: "Security design",
