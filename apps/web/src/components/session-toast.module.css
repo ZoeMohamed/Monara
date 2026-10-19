@@ -3,7 +3,7 @@
   position: fixed;
   z-index: 60;
   right: max(16px, env(safe-area-inset-right, 0px));
-  bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
   left: max(16px, env(safe-area-inset-left, 0px));
   display: flex;
   justify-content: center;
