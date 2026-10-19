@@ -4,10 +4,12 @@ import type { ForecastItem, ForecastSummary } from "@monara/contracts";
 import { Button } from "@monara/ui";
 import { useId, useState } from "react";
 import { useAmountDisplay, useAppSession } from "@/components/app-session-context";
+import { ForecastProjectionChart } from "@/components/forecast-projection-chart";
 import { Icon } from "@/components/icon";
 import { type ForecastState, useForecast } from "@/components/use-forecast";
-import { demoForecast } from "@/data/demo-forecast";
-import { formatDay } from "@/data/demo-ledger";
+import { demoForecastFor } from "@/data/demo-forecast";
+import { formatDay, type Transaction } from "@/data/demo-ledger";
+import { financialMonth } from "@/data/finance-analytics";
 import styles from "./spending-forecast-card.module.css";
 
 /** How many predictions show before the User asks for the rest. */
@@ -164,9 +166,17 @@ function RefreshButton({
   );
 }
 
-function Body({ forecast }: { forecast: ForecastSummary }) {
+interface Context {
+  transactions: Transaction[];
+  month: string;
+  today: string;
+}
+
+function Body({ forecast, context }: { forecast: ForecastSummary; context: Context }) {
+  const days = financialMonth(context.transactions, context.month, context.today).days;
   return (
     <>
+      <ForecastProjectionChart days={days} items={forecast.items} today={context.today} />
       <Totals totals={forecast.totals} />
       <Items items={forecast.items} />
       <Footnote forecast={forecast} />
@@ -175,20 +185,21 @@ function Body({ forecast }: { forecast: ForecastSummary }) {
 }
 
 /** The public demo shows a sample forecast, because it has no signed-in User to forecast for. */
-function DemoCard() {
+function DemoCard({ context }: { context: Context }) {
   const titleId = useId();
+  const spent = financialMonth(context.transactions, context.month, context.today).spending;
   return (
     <section aria-labelledby={titleId} className={styles.card}>
       <div className={styles.header}>
         <h2 id={titleId}>Spending forecast</h2>
         <span>Sample data</span>
       </div>
-      <Body forecast={demoForecast} />
+      <Body context={context} forecast={demoForecastFor(spent)} />
     </section>
   );
 }
 
-function LiveCard() {
+function LiveCard({ context }: { context: Context }) {
   const titleId = useId();
   const { state, refreshing, refresh } = useForecast();
   const forecast = state.status === "loading" ? null : state.forecast;
@@ -199,7 +210,7 @@ function LiveCard() {
         <span>Expected, not confirmed</span>
       </div>
       <Notice hasForecast={forecast !== null} state={state} />
-      {forecast ? <Body forecast={forecast} /> : null}
+      {forecast ? <Body context={context} forecast={forecast} /> : null}
       {state.status === "loading" ? null : (
         <RefreshButton hasForecast={forecast !== null} refresh={refresh} refreshing={refreshing} />
       )}
@@ -211,6 +222,10 @@ function LiveCard() {
  * What the User is expected to spend for the rest of the month (PRD F17). Everything here is a
  * prediction, so it is labelled as expected and kept apart from confirmed spending.
  */
-export function SpendingForecastCard() {
-  return useAppSession().dataMode === "live" ? <LiveCard /> : <DemoCard />;
+export function SpendingForecastCard(context: Context) {
+  return useAppSession().dataMode === "live" ? (
+    <LiveCard context={context} />
+  ) : (
+    <DemoCard context={context} />
+  );
 }

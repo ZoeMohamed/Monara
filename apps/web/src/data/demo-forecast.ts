@@ -88,25 +88,29 @@ const upcoming = items
 const sum = (list: ForecastItem[]) =>
   list.reduce((total, entry) => total + Number(entry.amount.amountMinor), 0);
 const weekEnd = addDays(demoToday, 7 - weekday(demoToday));
-const spentSoFar = 1_820_000;
 
-/** A synthetic forecast for the public demo, which has no signed-in User to forecast for. */
-export const demoForecast: ForecastSummary = {
-  runId: "a1000000-0000-4000-8000-000000000001",
-  generatedAt: `${demoToday}T03:00:00.000Z`,
-  source: "manual",
-  month: demoToday.slice(0, 7),
-  threshold: 0.7,
-  usedModel: true,
-  candidateCount: 6,
-  discardedCount: 1,
-  items: upcoming,
-  // Worked out from the items, so the totals always add up to what the list shows.
-  totals: {
-    weekRemaining: money(String(sum(upcoming.filter((entry) => entry.predictedOn <= weekEnd)))),
-    monthRemaining: money(String(sum(upcoming))),
-    monthSpentSoFar: money(String(spentSoFar)),
-    projectedMonthEnd: money(String(spentSoFar + sum(upcoming))),
-  },
-  accuracy: { due: 0, realized: 0, meanAbsoluteErrorPercent: null },
-};
+/**
+ * A synthetic forecast for the public demo, which has no signed-in User to forecast for. The
+ * confirmed spending comes from the demo ledger shown beside it, so the totals and the chart agree.
+ */
+export function demoForecastFor(spentSoFar: bigint): ForecastSummary {
+  return {
+    runId: "a1000000-0000-4000-8000-000000000001",
+    generatedAt: `${demoToday}T03:00:00.000Z`,
+    source: "manual",
+    month: demoToday.slice(0, 7),
+    threshold: 0.7,
+    usedModel: true,
+    candidateCount: 6,
+    discardedCount: 1,
+    items: upcoming,
+    // Worked out from the items, so the totals always add up to what the list shows.
+    totals: {
+      weekRemaining: money(String(sum(upcoming.filter((entry) => entry.predictedOn <= weekEnd)))),
+      monthRemaining: money(String(sum(upcoming))),
+      monthSpentSoFar: money(spentSoFar.toString()),
+      projectedMonthEnd: money((spentSoFar + BigInt(sum(upcoming))).toString()),
+    },
+    accuracy: { due: 0, realized: 0, meanAbsoluteErrorPercent: null },
+  };
+}

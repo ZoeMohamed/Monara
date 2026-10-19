@@ -9,7 +9,7 @@ import { Icon } from "@/components/icon";
 import { useMerchantLogo } from "@/components/use-brand-logo";
 import { type ForecastState, useForecast } from "@/components/use-forecast";
 import { categoryIcon } from "@/data/category-style";
-import { demoForecast } from "@/data/demo-forecast";
+import { demoForecastFor } from "@/data/demo-forecast";
 import { groupForecastByDay, upcomingForecastItems } from "@/lib/forecast/upcoming";
 
 const dayFormatter = new Intl.DateTimeFormat("en-US", {
@@ -143,7 +143,7 @@ function List({
 }
 
 function DemoForecastLedger({ today, query }: { today: string; query: string }) {
-  return <List forecast={demoForecast} query={query} today={today} />;
+  return <List forecast={demoForecastFor(BigInt(0))} query={query} today={today} />;
 }
 
 function LiveForecastLedger({ today, query }: { today: string; query: string }) {

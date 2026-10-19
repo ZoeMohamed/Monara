@@ -1146,7 +1146,9 @@ export function MobileOverview({
             {model.weekly ? (
               <WeeklySpendingCard week={model.weekly} openBudgets={openBudgets} />
             ) : null}
-            {model.isCurrentMonth ? <SpendingForecastCard /> : null}
+            {model.isCurrentMonth ? (
+              <SpendingForecastCard month={month} today={today} transactions={transactions} />
+            ) : null}
             {model.isCurrentMonth ? (
               <AttentionCard
                 items={model.attention}
