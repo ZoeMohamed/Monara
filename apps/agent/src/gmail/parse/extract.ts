@@ -28,7 +28,7 @@ export interface ExtractionContext {
 }
 
 const NO_CONTEXT: ExtractionContext = { holderName: null, institutionName: null };
-const MAX_HOLDER_NAME = 100;
+const MAX_HOLDER_NAME = 150;
 
 // Identical for every User and email, so a provider that caches prompts can reuse it.
 const SYSTEM_PROMPT = `You extract financial transactions from one bank or e-wallet email for a personal finance app in Indonesia.
@@ -40,7 +40,9 @@ Rules:
 - One item per transaction the email confirms. Most emails have one.
 - kind: "expense" for money leaving the holder, "income" for money the holder received, and "exclusion" for reimbursements, internal transfers, duplicates, or non-personal activity. Never invent a kind when it is unclear.
 - flowDirection: "out" when money left the holder and "in" when money reached the holder. Keep this direction for exclusions. Null only when the direction is not stated.
-- Internal transfer: when money moves between two accounts that both belong to the holder, kind is "exclusion". It is internal when the sender and the recipient are both the holder, or when the other party's name is the holder's name in <holder>. A shared family name alone does not make it internal.
+- Internal transfer: when money moves between two accounts that both belong to the holder, kind is "exclusion". It is internal when the sender and the recipient are both the holder, or when the other party's name is the holder's name in <holder>. Require an explicit transfer and an exact full-name match. A partial, shortened, or shared family name does not make it internal.
+- isTransfer: true only when the email explicitly states a transfer or top-up between accounts. Purchases, bill payments, and refunds are false.
+- counterpartyType: "business" only for an identifiable business name; "person" for a personal name; "unknown" when unclear. Never treat bank routing text, account numbers, or a payment reference as a business name.
 - counterpartyName: the other person or business in the transaction, as payer or recipient, copied exactly as written. Null if not stated.
 - amountText: the amount copied exactly as written in the email, including its currency symbol, for example "Rp 150.000" or "IDR 1,250,000.00". Null if no amount is stated. Never calculate or convert.
 - currency: the ISO code the email uses, such as "IDR" or "USD". Null if not stated.
@@ -67,6 +69,8 @@ const RESPONSE_SCHEMA = {
           "kind",
           "flowDirection",
           "counterpartyName",
+          "counterpartyType",
+          "isTransfer",
           "amountText",
           "currency",
           "occurredOn",
@@ -81,6 +85,8 @@ const RESPONSE_SCHEMA = {
           kind: { type: ["string", "null"], enum: ["expense", "income", "exclusion", null] },
           flowDirection: { type: ["string", "null"], enum: ["in", "out", null] },
           counterpartyName: nullableString,
+          counterpartyType: { type: "string", enum: ["business", "person", "unknown"] },
+          isTransfer: { type: "boolean" },
           amountText: nullableString,
           currency: nullableString,
           occurredOn: nullableString,
@@ -104,6 +110,9 @@ const modelOutputSchema = z.object({
       kind: z.enum(["expense", "income", "exclusion"]).nullable(),
       flowDirection: z.enum(["in", "out"]).nullable().default(null),
       counterpartyName: z.string().nullable().default(null),
+      counterpartyType: z.enum(["business", "person", "unknown"]).default("unknown"),
+      isTransfer: z.boolean().default(false),
+      internalTransfer: z.boolean().default(false),
       amountText: z.string().nullable(),
       currency: z.string().nullable(),
       occurredOn: z.string().nullable(),
@@ -183,11 +192,6 @@ function guardDate(value: string | null, receivedAt: string): string | null {
   return value;
 }
 
-/** Jakarta has no daylight-saving changes, so a received instant has one stable ledger date. */
-function jakartaDate(instant: string): string {
-  return new Date(Date.parse(instant) + 7 * 60 * 60 * 1_000).toISOString().slice(0, 10);
-}
-
 /** The card or account ending in a hint such as "BCA ****1234", when it shows one. */
 export function lastFourFromHint(hint: string | null): string | null {
   return hint?.match(/(?:^|\D)(\d{4})\D*$/)?.[1] ?? null;
@@ -208,7 +212,7 @@ function toExtractedTransaction(item: ModelItem, email: EmailForExtraction): Ext
 
   const statedDate = guardDate(item.occurredOn, email.receivedAt);
   const rejectedDate = item.occurredOn !== null && statedDate === null;
-  const occurredOn = statedDate ?? jakartaDate(email.receivedAt);
+  const occurredOn = statedDate;
   if (rejectedDate) guarded = true;
 
   // Like amounts, a location must be copied from the email, never inferred from a merchant.
@@ -232,6 +236,10 @@ function toExtractedTransaction(item: ModelItem, email: EmailForExtraction): Ext
     flowDirection:
       item.kind === "expense" ? "out" : item.kind === "income" ? "in" : item.flowDirection,
     merchantName: cleanText(item.merchantName, 200),
+    counterpartyName: cleanText(item.counterpartyName, 200),
+    counterpartyType: item.counterpartyType,
+    isTransfer: item.isTransfer,
+    internalTransfer: item.internalTransfer,
     money: amountMinor === null ? null : { amountMinor, currency: "IDR" },
     occurredOn,
     occurredTime,
@@ -289,8 +297,23 @@ export async function extractTransactions(
   if (!parsed.data.isTransactionEmail) return { isTransactionEmail: false, items: [] };
   return {
     isTransactionEmail: true,
-    items: applyHolderRules(parsed.data.items.slice(0, MAX_ITEMS), context.holderName).map((item) =>
-      toExtractedTransaction(item, email),
-    ),
+    items: applyHolderRules(
+      parsed.data.items.slice(0, MAX_ITEMS).map((item) => ({
+        ...item,
+        // These guards constrain the model's assertions; sender/recipient roles still
+        // depend on the extractor's semantic reading of this email, not keyword proof.
+        // A model's holder-name guess must be supported by the actual email text.
+        counterpartyName:
+          item.counterpartyName && appearsInEmail(item.counterpartyName, email)
+            ? item.counterpartyName
+            : null,
+        isTransfer:
+          item.isTransfer &&
+          /\b(?:transfer|pemindahbukuan|top[ -]?up|isi saldo)\b/i.test(
+            `${email.subject ?? ""} ${email.body}`,
+          ),
+      })),
+      context.holderName,
+    ).map((item) => toExtractedTransaction(item, email)),
   };
 }

@@ -21,6 +21,8 @@ import { createGmailPipeline } from "./pipeline.ts";
 
 /** Matches max_retries for the Gmail queue consumer in wrangler.jsonc. */
 const GMAIL_QUEUE_MAX_RETRIES = 3;
+/** Matches merchant consumer max_retries in wrangler.jsonc. */
+const MERCHANT_QUEUE_MAX_RETRIES = 5;
 /** A busy merchant is usually searched within seconds by the job that claimed it. */
 const MERCHANT_BUSY_RETRY_SECONDS = 15;
 const QUEUE_SEND_BATCH_LIMIT = 100;
@@ -121,6 +123,9 @@ function createPipeline(env: Env) {
       SAFE_PARSE_BATCH_SIZE,
     ),
     parseConcurrency: smallCount(env.GMAIL_PARSE_CONCURRENCY),
+    observe: (metric) => logEvent("info", { event: "gmail.stage", ...metric }),
+    onRetryReportError: (error) =>
+      logEvent("error", { event: "gmail.retry_deadline_failed", ...failureFields(error) }),
   });
 }
 
@@ -288,7 +293,16 @@ export async function consumeGmailJobs(batch: MessageBatch<unknown>, env: Env): 
         message.ack();
       } catch (error) {
         logEvent("error", { event: "gmail.job_failed", ...ids, ...failureFields(error) });
-        message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
+        const delaySeconds = retryDelaySeconds(message.attempts);
+        await createBackend(env)
+          .reportProcessingRetry({ connectionId: job.data.connectionId, delaySeconds })
+          .catch((reportError: unknown) =>
+            logEvent("error", {
+              event: "gmail.retry_deadline_failed",
+              ...failureFields(reportError),
+            }),
+          );
+        message.retry({ delaySeconds });
       }
     }),
   );
@@ -299,10 +313,12 @@ export async function consumeGmailJobs(batch: MessageBatch<unknown>, env: Env): 
  * another job is searching, or a rate-limited search, is retried after a short wait.
  */
 export async function consumeMerchantJobs(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+  const backend = createBackend(env);
   const pipeline = createMerchantPipeline({
-    backend: createBackend(env),
+    backend,
     llm: createLlm(env),
     search: createBraveSearchClient({ apiKey: env.BRAVE_SEARCH_API_KEY ?? "" }),
+    observe: (metric) => logEvent("info", { event: "merchant.stage", ...metric }),
   });
   await Promise.all(
     batch.messages.map(async (message) => {
@@ -314,23 +330,39 @@ export async function consumeMerchantJobs(batch: MessageBatch<unknown>, env: Env
       }
       const ids = { kind: job.data.kind, attempt: message.attempts };
       try {
-        const outcome = await pipeline.runJob(job.data);
+        const outcome = await pipeline.runJob(job.data, {
+          isFinalAttempt: message.attempts > MERCHANT_QUEUE_MAX_RETRIES,
+        });
         logEvent("info", { event: "merchant.job_done", ...ids, outcome });
         message.ack();
       } catch (error) {
         logEvent("error", { event: "merchant.job_failed", ...ids, ...failureFields(error) });
-        message.retry({
-          delaySeconds:
-            error instanceof MerchantBusyError
-              ? MERCHANT_BUSY_RETRY_SECONDS
-              : Math.max(
-                  retryDelaySeconds(message.attempts),
-                  // A busy model said how long to wait; asking sooner only fails again.
-                  isTemporaryLlmError(error) && error.retryAfterMs !== null
-                    ? Math.min(Math.ceil(error.retryAfterMs / 1000), 900)
-                    : 0,
-                ),
-        });
+        const delaySeconds =
+          error instanceof MerchantBusyError
+            ? MERCHANT_BUSY_RETRY_SECONDS
+            : Math.max(
+                retryDelaySeconds(message.attempts),
+                // A busy model said how long to wait; asking sooner only fails again.
+                (isTemporaryLlmError(error) || error instanceof BraveSearchError) &&
+                  error.retryAfterMs !== null
+                  ? Math.min(Math.ceil(error.retryAfterMs / 1000), 900)
+                  : 0,
+              );
+        const transactionIds =
+          "transactionIds" in job.data ? job.data.transactionIds : [job.data.transactionId];
+        await Promise.all(
+          transactionIds.map((transactionId) =>
+            backend
+              .reportProcessingRetry({ transactionId, delaySeconds })
+              .catch((reportError: unknown) =>
+                logEvent("error", {
+                  event: "merchant.retry_deadline_failed",
+                  ...failureFields(reportError),
+                }),
+              ),
+          ),
+        );
+        message.retry({ delaySeconds });
       }
     }),
   );

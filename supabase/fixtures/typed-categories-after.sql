@@ -1,0 +1,57 @@
+-- Apply 20261019120000 first. Every assertion raises on a changed financial fact.
+do $$
+begin
+ if exists(
+  select 1 from category_upgrade_fixture.transactions as expected
+  join public.transactions as item on item.id=expected.id
+  join public.categories as category on category.id=item.category_id
+  where expected.facts is distinct from (to_jsonb(item)-array['category_id','gmail_classification_status','gmail_classification_confidence','gmail_extraction_evidence'])
+    or expected.category_name<>category.name or expected.is_archived<>category.is_archived
+    or category.kind<>item.transaction_type
+ ) then raise exception 'Typed migration changed transaction facts, labels, archive state, timestamps, or kind compatibility.'; end if;
+ if exists(
+  select 1 from category_upgrade_fixture.budgets as expected join public.budgets as budget on budget.id=expected.id
+  join public.categories as category on category.id=budget.category_id
+  where expected.facts is distinct from to_jsonb(budget)-'category_id'
+    or expected.category_name<>category.name or category.kind<>'expense'
+ ) then raise exception 'Typed migration changed budget semantics or timestamps.'; end if;
+ if not exists(
+  select 1 from public.agent_action_states as state join category_upgrade_fixture.undo as expected using(action_id)
+  join public.categories as category on category.id=(state.operation_state #>> '{values,categoryId}')::uuid
+  where state.action_id='96000000-0000-4000-8000-000000000001'
+    and category.kind='income' and category.name='Shared historic label'
+    and state.operation_state #- '{values,categoryId}'=expected.operation_state #- '{values,categoryId}'
+    and state.created_at=expected.created_at and state.expires_at=expected.expires_at
+ ) then raise exception 'Transaction undo snapshot lost compatible identity or financial state.'; end if;
+ if not exists(
+  select 1 from public.agent_action_states as state join category_upgrade_fixture.undo as expected using(action_id)
+  join public.categories as category on category.id=((state.operation_state ->> 'values')::jsonb ->> 'categoryId')::uuid
+  where state.action_id='96000000-0000-4000-8000-000000000002'
+    and category.kind='expense' and category.name='Internal'
+    and state.operation_state-'values'=expected.operation_state-'values'
+    and (state.operation_state ->> 'values')::jsonb-'categoryId'=(expected.operation_state ->> 'values')::jsonb-'categoryId'
+    and state.created_at=expected.created_at and state.expires_at=expected.expires_at
+ ) then raise exception 'Budget undo snapshot lost expense category or prior financial state.'; end if;
+ if exists(select 1 from public.transactions where client_request_id like 'upgrade-%' and gmail_classification_status is not null)
+ then raise exception 'Migration scheduled forbidden historical reclassification.'; end if;
+ if not exists(
+  select 1 from public.agent_action_states as state join category_upgrade_fixture.undo as expected using(action_id)
+  where state.action_id='96000000-0000-4000-8000-000000000003'
+    and state.operation_state=expected.operation_state
+    and state.created_at=expected.created_at and state.expires_at=expected.expires_at
+ ) then raise exception 'Unknown pending type and category hint undo snapshot was changed.'; end if;
+ -- Exercise the restore shape after verifying the migration left original facts untouched.
+ update public.transactions set transaction_type='expense'
+   where id='94000000-0000-4000-8000-000000000007';
+ update public.transactions set transaction_type=null,
+   category_id=(select (operation_state #>> '{values,categoryId}')::uuid from public.agent_action_states
+     where action_id='96000000-0000-4000-8000-000000000003')
+   where id='94000000-0000-4000-8000-000000000007';
+ if not exists(select 1 from public.transactions where id='94000000-0000-4000-8000-000000000007'
+   and transaction_type is null and review_status='pending'
+   and category_id='93000000-0000-4000-8000-000000000001')
+ then raise exception 'Unknown pending type plus category hint cannot be restored.'; end if;
+ update public.transactions set description='Edited legacy unknown pending record'
+   where id='94000000-0000-4000-8000-000000000008';
+end; $$;
+drop schema category_upgrade_fixture cascade;

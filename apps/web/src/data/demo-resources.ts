@@ -3,6 +3,7 @@ import {
   exclusionCategoryPresets,
   expenseCategoryPresets,
   type FinancialAccount,
+  incomeCategoryPresets,
 } from "@monara/contracts";
 import type { Transaction } from "./demo-ledger.ts";
 import { type Budget, demoMethods } from "./demo-ledger.ts";
@@ -27,7 +28,11 @@ export function initialDemoAccounts(): FinancialAccount[] {
 
 // Demo category IDs are editor choices only; the synthetic ledger groups by name.
 export function demoEditorCategories(budgets: Budget[]): Category[] {
-  const presets = [...expenseCategoryPresets, ...exclusionCategoryPresets];
+  const presets = [
+    ...expenseCategoryPresets.map((preset) => ({ ...preset, kind: "expense" as const })),
+    ...incomeCategoryPresets.map((preset) => ({ ...preset, kind: "income" as const })),
+    ...exclusionCategoryPresets.map((preset) => ({ ...preset, kind: "exclusion" as const })),
+  ];
   const names = [
     ...new Set([
       ...presets.map((preset) => preset.name),
@@ -37,6 +42,7 @@ export function demoEditorCategories(budgets: Budget[]): Category[] {
   return names.map((name, index) => ({
     id: `c0000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     name,
+    kind: presets.find((preset) => preset.name === name)?.kind ?? "expense",
     slug: presets.find((preset) => preset.name === name)?.slug ?? `demo-category-${index + 1}`,
     icon:
       budgets.find((budget) => budget.category === name)?.icon ??
@@ -65,6 +71,7 @@ export function demoTransactionSelection(
   return {
     category: category?.name ?? null,
     categoryIcon: category?.icon,
+    categoryKind: category?.kind,
     method: payment?.name ?? null,
     financialAccountId: payment?.id ?? null,
   };

@@ -56,12 +56,25 @@ const hooks = registerHooks({
 const { useEditorStateForTest } = await import(editorUrl);
 hooks.deregister();
 
+const originalDomGlobals = new Map(
+  ["SubmitEvent", "HTMLButtonElement"].map((name) => [
+    name,
+    Object.getOwnPropertyDescriptor(globalThis, name),
+  ]),
+);
+for (const name of originalDomGlobals.keys()) {
+  Object.defineProperty(globalThis, name, { configurable: true, value: class {} });
+}
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 Object.defineProperty(globalThis, "window", {
   configurable: true,
   value: { addEventListener() {}, removeEventListener() {} },
 });
 after(() => {
+  for (const [name, descriptor] of originalDomGlobals) {
+    if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+    else Reflect.deleteProperty(globalThis, name);
+  }
   if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
   else Reflect.deleteProperty(globalThis, "window");
   delete globalThis[runtimeKey];
@@ -73,7 +86,7 @@ const originalVersion = "2026-10-17T10:00:00Z";
 const latestVersion = "2026-10-17T10:01:00Z";
 const resources = {
   financialAccounts: [{ id: accountId, name: "Daily bank", isActive: true }],
-  categories: [{ id: categoryId, name: "Resto & Cafe", isArchived: false }],
+  categories: [{ id: categoryId, name: "Resto & Cafe", kind: "expense", isArchived: false }],
 };
 
 function transaction(version = originalVersion, merchant = "Original lunch", amount = 25000) {
@@ -187,6 +200,63 @@ function submitEvent() {
 }
 
 describe("transaction editor recovery", () => {
+  it("requires an account before submitting a new live manual exclusion", async () => {
+    const editor = mountEditor({
+      transaction: undefined,
+      initialDraft: {
+        merchant: "My wallet transfer",
+        amount: "25000",
+        date: "2026-10-17",
+        time: "",
+        kind: "exclusion",
+        currency: "IDR",
+        category: null,
+        method: null,
+      },
+    });
+    const event = submitEvent();
+    await editor.render().submit(event);
+    assert.equal(editor.saved.length, 0);
+    assert.equal(editor.render().state.errors.method, "Choose an account.");
+    assert.match(event.focused[0], /data-field="method"/);
+  });
+
+  it("allows reviewing an existing pending exclusion without an assigned account", async () => {
+    const original = transaction();
+    const editor = mountEditor({
+      transaction: {
+        ...original,
+        kind: "exclusion",
+        status: "pending",
+        category: null,
+        method: null,
+        backend: { ...original.backend, categoryId: null, financialAccountId: null },
+      },
+    });
+    await editor.render().submit(submitEvent());
+    assert.equal(editor.saved.length, 1);
+    assert.equal(editor.saved[0][0].financialAccountId, null);
+    assert.equal(editor.saved[0][1], "confirm");
+  });
+
+  it("rejects an incompatible typed category even when its name looks like an expense", async () => {
+    const incompatible = structuredClone(resources);
+    incompatible.categories[0].kind = "income";
+    const editor = mountEditor({ resources: incompatible });
+    await editor.render().submit(submitEvent());
+    assert.equal(editor.saved.length, 0);
+    assert.match(editor.render().state.errors.category, /matching this transaction type/);
+  });
+
+  it("keeps a live exclusion's canonical category id when opening the editor", () => {
+    const exclusions = structuredClone(resources);
+    exclusions.categories[0].kind = "exclusion";
+    exclusions.categories[0].name = "My transfer";
+    const original = { ...transaction(), kind: "exclusion", category: "My transfer" };
+    const editor = mountEditor({ resources: exclusions, transaction: original });
+    assert.equal(editor.render().state.draft.category, categoryId);
+  });
+
   it("blocks a changed record until the user reviews it, then preserves their draft explicitly", async () => {
     const editor = mountEditor();
     editor.render().changeDraft({ merchant: "My corrected lunch", amount: "30000" });
@@ -258,7 +328,7 @@ describe("transaction editor recovery", () => {
       assert.equal(editor.saved.length, 0);
       assert.match(
         editor.render().state.errors[field],
-        field === "method" ? /active account/ : /archived or removed/,
+        field === "method" ? /active account/ : /matching this transaction type/,
       );
       assert.equal(event.focused.length, 1);
       assert.match(event.focused[0], new RegExp(`data-field="${field}"`));

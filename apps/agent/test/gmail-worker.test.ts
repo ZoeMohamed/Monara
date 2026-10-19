@@ -4,6 +4,7 @@ import type { GmailJob, MerchantCategorizeJob } from "@monara/contracts";
 import type { Env } from "../src/env.ts";
 import {
   consumeGmailJobs,
+  consumeMerchantJobs,
   handleGmailIngestRequest,
   handleGmailSyncRequest,
 } from "../src/gmail/worker.ts";
@@ -192,6 +193,7 @@ describe("manual Gmail sync worker boundary", () => {
           institutionKeys: ["BCA_CC"],
         });
       }
+      if (url.endsWith("/api/agent/gmail/check-connection-active")) return Response.json({});
       if (url.endsWith("/tools/execute/GMAIL_FETCH_EMAILS")) {
         return Response.json({ successful: true, data: { messages: [] } });
       }
@@ -215,4 +217,168 @@ describe("manual Gmail sync worker boundary", () => {
     assert.ok(background);
     await background;
   });
+});
+
+describe("merchant queue provider backoff", () => {
+  for (const fixture of [
+    {
+      name: "honors Brave Retry-After and persists its deadline",
+      deadlineStatus: 200,
+      busy: false,
+      delay: 125,
+    },
+    {
+      name: "keeps the provider retry when deadline reporting fails",
+      deadlineStatus: 503,
+      busy: false,
+      delay: 125,
+    },
+    {
+      name: "persists a busy merchant profile wait without searching",
+      deadlineStatus: 200,
+      busy: true,
+      delay: 15,
+    },
+  ]) {
+    it(fixture.name, async (t) => {
+      let retrySeconds = 0;
+      let searches = 0;
+      const reports: unknown[] = [];
+      const transactionIds = [
+        "00000000-0000-4000-8000-000000000030",
+        "00000000-0000-4000-8000-000000000031",
+      ];
+      t.mock.method(
+        globalThis,
+        "fetch",
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = String(input);
+          if (url.endsWith("/resolve-imported-transaction"))
+            return Response.json({
+              merchantName: "Synthetic Cafe",
+              location: null,
+              needsCategory: true,
+              categoryNames: [],
+              kind: "expense",
+              flowDirection: "out",
+              counterpartyName: "Synthetic Cafe",
+              counterpartyType: "business",
+              categories: [
+                {
+                  id: "00000000-0000-4000-8000-000000000040",
+                  name: "Food",
+                  kind: "expense",
+                  slug: "food",
+                  isDefault: true,
+                },
+              ],
+            });
+          if (url.endsWith("/claim-merchant-profile"))
+            return Response.json({ status: fixture.busy ? "busy" : "claimed" });
+          if (url.endsWith("/release-merchant-profile")) return Response.json({});
+          if (url.endsWith("/report-processing-retry")) {
+            reports.push(JSON.parse(String(init?.body)));
+            return Response.json({}, { status: fixture.deadlineStatus });
+          }
+          if (url.startsWith("https://api.search.brave.com/")) {
+            searches += 1;
+            return new Response(null, { status: 429, headers: { "Retry-After": "125" } });
+          }
+          throw new Error("Unexpected synthetic request");
+        },
+      );
+      await consumeMerchantJobs(
+        {
+          messages: [
+            {
+              body: { kind: "merchant.categorize", transactionIds },
+              attempts: 1,
+              ack() {
+                assert.fail("transient work must retry");
+              },
+              retry(options: { delaySeconds: number }) {
+                retrySeconds = options.delaySeconds;
+              },
+            },
+          ],
+        } as unknown as MessageBatch<unknown>,
+        {
+          MONARA_BACKEND_URL: "https://backend.test",
+          MONARA_AGENT_BACKEND_SECRET: "synthetic",
+          LLM_BASE_URL: "https://llm.test",
+          LLM_API_KEY: "synthetic",
+          LLM_MODEL: "synthetic",
+          BRAVE_SEARCH_API_KEY: "synthetic",
+        },
+      );
+      assert.equal(searches, fixture.busy ? 0 : 1);
+      assert.equal(retrySeconds, fixture.delay);
+      assert.deepEqual(
+        reports,
+        transactionIds.map((transactionId) => ({ transactionId, delaySeconds: fixture.delay })),
+      );
+    });
+  }
+});
+
+describe("Gmail queue retry deadline", () => {
+  for (const deadlineStatus of [200, 503]) {
+    it(`preserves the ordinary queue retry when deadline HTTP status is ${deadlineStatus}`, async (t) => {
+      let retrySeconds = 0;
+      const reports: unknown[] = [];
+      t.mock.method(
+        globalThis,
+        "fetch",
+        async (input: string | URL | Request, init?: RequestInit) => {
+          if (String(input).endsWith("/resolve-connection"))
+            return Response.json({}, { status: 503 });
+          if (String(input).endsWith("/report-processing-retry")) {
+            reports.push(JSON.parse(String(init?.body)));
+            return Response.json({}, { status: deadlineStatus });
+          }
+          throw new Error("Unexpected synthetic request");
+        },
+      );
+      await consumeGmailJobs(
+        {
+          messages: [
+            {
+              body: {
+                kind: "gmail.parse",
+                connectionId,
+                deferrals: 0,
+                emails: [
+                  {
+                    processedMessageId: "00000000-0000-4000-8000-000000000020",
+                    gmailMessageId: "synthetic",
+                    receivedAt: "2026-10-19T00:00:00Z",
+                  },
+                ],
+              },
+              attempts: 2,
+              ack() {
+                assert.fail("unavailable work must retry");
+              },
+              retry(options: { delaySeconds: number }) {
+                retrySeconds = options.delaySeconds;
+              },
+            },
+          ],
+        } as unknown as MessageBatch<unknown>,
+        {
+          GMAIL_JOBS: {} as Queue<GmailJob>,
+          MERCHANT_JOBS: {} as Queue<MerchantCategorizeJob>,
+          MONARA_BACKEND_URL: "https://backend.test",
+          MONARA_AGENT_BACKEND_SECRET: "synthetic",
+          COMPOSIO_API_URL: "https://composio.test/api/v3.1",
+          COMPOSIO_API_KEY: "synthetic",
+          LLM_BASE_URL: "https://llm.test",
+          LLM_API_KEY: "synthetic",
+          LLM_MODEL: "synthetic",
+        },
+      );
+      assert.equal(retrySeconds, 60);
+      assert.deepEqual(reports, [{ connectionId, delaySeconds: 60 }]);
+    });
+  }
 });

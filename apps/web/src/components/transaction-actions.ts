@@ -75,13 +75,6 @@ export function useTransactionActions(context: ActionContext) {
     values: TransactionValues,
     existing?: Transaction,
   ): BackendTransactionValues => {
-    if (values.kind === "exclusion") {
-      throw new FinanceClientError(
-        "DEPENDENCY_UNAVAILABLE",
-        "Exclusions are ready in the demo. Saving them to your private ledger is not connected yet.",
-        null,
-      );
-    }
     const previous = existing?.backend;
     const categoryId =
       values.categoryId === undefined ? (previous?.categoryId ?? null) : values.categoryId;
@@ -89,10 +82,15 @@ export function useTransactionActions(context: ActionContext) {
       values.financialAccountId === undefined
         ? (previous?.financialAccountId ?? null)
         : values.financialAccountId;
-    if (categoryId && !resources?.categories.some((category) => category.id === categoryId))
+    if (
+      categoryId &&
+      !resources?.categories.some(
+        (category) => category.id === categoryId && category.kind === values.kind,
+      )
+    )
       throw new FinanceClientError(
         "VALIDATION_FAILED",
-        "Choose a category from your account.",
+        "Choose a compatible category from your account.",
         null,
       );
     if (
@@ -114,6 +112,15 @@ export function useTransactionActions(context: ActionContext) {
       description: previous?.description ?? null,
       location: previous?.location ?? null,
       accountHint: previous?.accountHint ?? null,
+      flowDirection:
+        values.kind === "exclusion"
+          ? (previous?.flowDirection ??
+            (previous?.kind === "expense" ? "out" : previous?.kind === "income" ? "in" : null))
+          : values.kind === "expense"
+            ? "out"
+            : values.kind === "income"
+              ? "in"
+              : null,
       categoryId,
       financialAccountId,
     });
@@ -131,12 +138,6 @@ export function useTransactionActions(context: ActionContext) {
         tone: "warning",
         recovery: "refresh",
       });
-      return;
-    }
-    if (live && item.kind === "exclusion") {
-      const message = "Saving exclusions to your private ledger is not connected yet.";
-      setConfirmError(message);
-      setNotice({ message, tone: "warning" });
       return;
     }
     if (
@@ -161,6 +162,7 @@ export function useTransactionActions(context: ActionContext) {
               description: item.backend?.description,
               location: item.backend?.location,
               accountHint: item.backend?.accountHint,
+              flowDirection: item.backend?.flowDirection,
               categoryId: item.backend?.categoryId,
               financialAccountId: item.backend?.financialAccountId,
             }),

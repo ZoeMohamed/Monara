@@ -166,9 +166,9 @@ test("an exclusion can close an incomplete import without inventing financial fa
   assert.equal(demoSummary([excluded]).spending, 0n);
 });
 
-test("exclusion reasons are optional and an excluded import may keep its category", () => {
+test("exclusion categories are optional and display names do not determine their type", () => {
   for (const category of [null, "Groceries", ...exclusionCategoryPresets.map(({ name }) => name)]) {
-    const item = syntheticTransaction({ kind: "exclusion", category });
+    const item = syntheticTransaction({ kind: "exclusion", category, categoryKind: "exclusion" });
     assert.deepEqual(transactionErrors(item), {});
     const confirmed = updatePendingTransaction([item], item.id, valuesOf(item), "confirm");
     assert.equal(confirmed[0].amount, item.amount);
@@ -178,10 +178,19 @@ test("exclusion reasons are optional and an excluded import may keep its categor
   }
 });
 
-test("expense and income cannot use an exclusion reason", () => {
+test("expense and income cannot use a category typed as exclusion", () => {
   for (const kind of ["expense", "income"]) {
-    assert.ok(transactionErrors(syntheticTransaction({ kind, category: "Internal" })).category);
+    assert.ok(
+      transactionErrors(
+        syntheticTransaction({ kind, category: "Internal", categoryKind: "exclusion" }),
+      ).category,
+    );
   }
+  assert.equal(
+    transactionErrors(syntheticTransaction({ category: "Internal", categoryKind: "expense" }))
+      .category,
+    undefined,
+  );
 });
 
 test("the removed transfer direction cannot be edited or confirmed", () => {
@@ -255,7 +264,15 @@ test("exclusion retains the record as confirmed and cannot be reviewed twice", (
   const original = Object.freeze([pending]);
   const rejected = excludePendingTransaction(original, pending.id);
   assert.equal(rejected.length, 1);
-  assert.deepEqual(rejected[0], { ...pending, kind: "exclusion", status: "confirmed" });
+  assert.deepEqual(rejected[0], {
+    ...pending,
+    kind: "exclusion",
+    status: "confirmed",
+    category: null,
+    categoryId: null,
+    categoryKind: undefined,
+    categoryIcon: undefined,
+  });
   assert.equal(pending.status, "pending");
   assert.equal(demoSummary(rejected).confirmed.length, 0);
   assert.equal(demoSummary(rejected).spending, 0n);

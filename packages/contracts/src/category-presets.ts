@@ -23,6 +23,15 @@ export const expenseCategoryPresets = [
   { slug: "misc", name: "Misc", group: "Others", icon: "dot" },
 ] as const;
 
+export const incomeCategoryPresets = [
+  { slug: "salary", name: "Salary", icon: "income" },
+  { slug: "freelance", name: "Freelance", icon: "income" },
+  { slug: "business", name: "Business", icon: "store" },
+  { slug: "interest", name: "Interest", icon: "income" },
+  { slug: "gifts", name: "Gifts", icon: "giving" },
+  { slug: "other-income", name: "Other Income", icon: "income" },
+] as const;
+
 export const exclusionCategoryPresets = [
   { slug: "repayment", name: "Repayment", icon: "repayment", automated: false },
   { slug: "internal", name: "Internal", icon: "internal", automated: true },

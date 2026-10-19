@@ -26,6 +26,7 @@ const account = (id: string, name: string, lastFour: string | null) => ({
 const bca = account("40000000-0000-4000-8000-000000000004", "BCA", "1234");
 const gopay = account("40000000-0000-4000-8000-000000000005", "GoPay", null);
 const groceries = {
+  kind: "expense",
   id: "50000000-0000-4000-8000-000000000005",
   name: "Groceries",
   slug: "groceries",

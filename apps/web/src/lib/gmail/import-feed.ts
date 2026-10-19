@@ -19,6 +19,7 @@ export type GmailImportFeedItem = {
   amount: number;
   date: string;
   kind: TransactionKind;
+  needsReview?: boolean;
 };
 
 type FeedCandidate = {
@@ -54,6 +55,7 @@ function feedItem(
     amount,
     date: transaction.occurredOn,
     kind: transaction.kind,
+    needsReview: transaction.reviewStatus === "pending",
   };
 }
 

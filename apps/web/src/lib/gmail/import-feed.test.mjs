@@ -93,6 +93,7 @@ describe("Gmail onboarding import feed", () => {
         amount: 25000,
         date: "2026-10-18",
         kind: "expense",
+        needsReview: false,
       },
     ]);
     assert.deepEqual(state.accountCursors, [null, "100"]);

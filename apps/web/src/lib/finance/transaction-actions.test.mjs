@@ -99,7 +99,7 @@ function backendTransaction() {
   };
 }
 
-function mountActions(respond) {
+function mountActions(respond, categoryKind = "expense") {
   const references = [];
   let cursor = 0;
   const requests = [];
@@ -144,7 +144,10 @@ function mountActions(respond) {
     globalThis[runtimeKey] = runtime;
     return useTransactionActions({
       live: true,
-      resources: { financialAccounts: [{ id: accountId }], categories: [{ id: categoryId }] },
+      resources: {
+        financialAccounts: [{ id: accountId }],
+        categories: [{ id: categoryId, kind: categoryKind }],
+      },
       transactions: state.transactions,
       editing: state.editing,
       rejecting: undefined,
@@ -178,6 +181,71 @@ function mountActions(respond) {
 }
 
 describe("transaction action recovery", () => {
+  it("edits a live exclusion and preserves the imported cash direction", async () => {
+    const original = { ...backendTransaction(), kind: "exclusion", flowDirection: "out" };
+    const actions = mountActions(
+      async (_path, input) =>
+        Response.json({
+          transaction: { ...original, ...input.changes },
+          action: receipt,
+        }),
+      "exclusion",
+    );
+    actions.state.editing = {
+      ...values,
+      kind: "exclusion",
+      id: transactionId,
+      status: "confirmed",
+      backend: original,
+    };
+    await actions
+      .render()
+      .save(
+        { ...values, kind: "exclusion", merchant: "My own wallet" },
+        "correct",
+        reviewedVersion,
+      );
+    assert.equal(actions.requests[0].path, "/api/finance/operations/edit_transaction");
+    assert.equal(actions.requests[0].input.changes.kind, "exclusion");
+    assert.equal(actions.requests[0].input.changes.flowDirection, "out");
+    assert.equal(actions.requests[0].input.expectedUpdatedAt, reviewedVersion);
+  });
+
+  it("confirms a live pending exclusion through the owned backend operation", async () => {
+    const original = {
+      ...backendTransaction(),
+      kind: "exclusion",
+      flowDirection: "in",
+      reviewStatus: "pending",
+    };
+    const actions = mountActions(
+      async (_path, input) =>
+        Response.json({
+          transaction: { ...original, ...input.values, reviewStatus: "confirmed" },
+          action: receipt,
+        }),
+      "exclusion",
+    );
+    actions.state.transactions = [
+      { ...values, kind: "exclusion", id: transactionId, status: "pending", backend: original },
+    ];
+    await actions.render().confirm(transactionId);
+    assert.equal(actions.requests[0].path, "/api/finance/operations/confirm_pending");
+    assert.equal(actions.requests[0].input.values.flowDirection, "in");
+    assert.match(actions.state.notice.message, /exclusion/);
+  });
+
+  it("rejects a category of another type before transport", async () => {
+    const actions = mountActions(async () => {
+      throw new Error("Must not be called");
+    }, "income");
+    await assert.rejects(
+      actions.render().add(values),
+      (error) => error.code === "VALIDATION_FAILED",
+    );
+    assert.equal(actions.requests.length, 0);
+  });
+
   it("keeps an uncertain create locked across closing and reuses its original request on retry", async () => {
     const savedByRequest = new Map();
     let physicalWrites = 0;

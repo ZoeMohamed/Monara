@@ -322,6 +322,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
         {
           id,
           name,
+          kind: input.kind,
           slug: `custom-${id}`,
           icon: input.icon,
           color: "#2865e5",
@@ -474,6 +475,8 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       const savedCategory = demoCategories.find(
         (item) => item.name.toLowerCase() === category.toLowerCase(),
       );
+      if (savedCategory && savedCategory.kind !== "expense")
+        throw new Error("Choose an expense category for this budget.");
       if (savedCategory?.isArchived)
         throw new Error("This category was removed. Choose another category.");
       if (!savedCategory) {
@@ -484,6 +487,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
           {
             id,
             name: category,
+            kind: "expense",
             slug: `custom-${id}`,
             icon: input.icon ?? "auto",
             color: "#2865e5",

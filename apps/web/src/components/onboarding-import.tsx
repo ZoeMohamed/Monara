@@ -185,11 +185,45 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
   );
 }
 
+function ImportSummary({ progress }: { progress: ImportProgress }) {
+  const done = progress.state === "completed";
+  const failed = progress.state === "failed";
+  const { title, text } = copy[progress.state];
+  return (
+    <div className={styles.top}>
+      <div>
+        <h2 className={styles.title} id={onboardingTitleId}>
+          {title}
+        </h2>
+        <p aria-live="polite" className={styles.sub}>
+          {failed && progress.message
+            ? progress.message
+            : (progress.categorizing ?? 0) > 0
+              ? "Categorizing your transactions. You can leave this running."
+              : text}
+        </p>
+        {!failed && hasCounts(progress) ? (
+          <p className={styles.counts}>{countsLine(progress)}</p>
+        ) : done && progress.transactions !== null ? (
+          <p className={styles.counts}>{progress.transactions} transactions imported</p>
+        ) : null}
+        {(progress.needsReview ?? 0) > 0 ? (
+          <p className={styles.counts} role="status">
+            {progress.needsReview} need review in Pending.
+          </p>
+        ) : null}
+      </div>
+      <div aria-hidden className={styles.avatar}>
+        <OnboardingAvatar scene={done ? "done" : failed ? "empty" : "import"} tight />
+      </div>
+    </div>
+  );
+}
+
 /** No button while the import runs; closing the sheet leaves it running behind a banner. */
 export function ImportStep({ progress, onNext }: { progress: ImportProgress; onNext: () => void }) {
   const done = progress.state === "completed";
   const failed = progress.state === "failed";
-  const { title, text } = copy[progress.state];
   return (
     <StepFrame
       actions={
@@ -203,22 +237,7 @@ export function ImportStep({ progress, onNext }: { progress: ImportProgress; onN
       step={3}
     >
       <div className={styles.import}>
-        <div className={styles.top}>
-          <div>
-            <h2 className={styles.title} id={onboardingTitleId}>
-              {title}
-            </h2>
-            <p aria-live="polite" className={styles.sub}>
-              {failed && progress.message ? progress.message : text}
-            </p>
-            {!failed && hasCounts(progress) ? (
-              <p className={styles.counts}>{countsLine(progress)}</p>
-            ) : null}
-          </div>
-          <div aria-hidden className={styles.avatar}>
-            <OnboardingAvatar scene={done ? "done" : failed ? "empty" : "import"} tight />
-          </div>
-        </div>
+        <ImportSummary progress={progress} />
         <Stats progress={progress} />
         <ImportTable progress={progress} />
       </div>

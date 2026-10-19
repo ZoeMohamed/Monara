@@ -9,7 +9,7 @@ export { applyHolderRules, isHolderName } from "./holder.ts";
 export { shouldParse } from "./prefilter.ts";
 
 export interface ParseContext {
-  /** profiles.full_name, else the Google account name; null when neither is known. */
+  /** Confirmed profiles.full_name only; null until supplied by the User. */
   holderName: string | null;
   /** The sender's registry entry, already checked against the User's accounts. */
   institution: Institution;

@@ -1,6 +1,6 @@
 "use client";
 
-import { type Category, type FinancialAccount, isExclusionCategoryName } from "@monara/contracts";
+import type { Category, FinancialAccount } from "@monara/contracts";
 import { Button, FieldError, Form, Input, Label, ListBox, Select, TextField } from "@monara/ui";
 import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { BrandLogoField } from "@/components/brand-logo-field";
@@ -11,6 +11,7 @@ import { ModalDialog } from "@/components/modal-dialog";
 import {
   demoCategoryNames,
   demoExclusionNames,
+  demoIncomeNames,
   demoMethods,
   demoToday,
   type Transaction,
@@ -131,16 +132,13 @@ function draftOf(
     time: transaction?.time ?? "",
     kind: transaction?.kind ?? null,
     currency: transaction ? transaction.currency : "IDR",
-    category:
-      transaction?.kind === "exclusion" && !resources?.demo
-        ? transaction.category
-        : resources
-          ? (transaction?.backend?.categoryId ??
-            (resources.demo
-              ? resources.categories.find((category) => category.name === transaction?.category)?.id
-              : null) ??
-            null)
-          : (transaction?.category ?? null),
+    category: resources
+      ? (transaction?.backend?.categoryId ??
+        (resources.demo
+          ? resources.categories.find((category) => category.name === transaction?.category)?.id
+          : null) ??
+        null)
+      : (transaction?.category ?? null),
     method: resources
       ? (transaction?.backend?.financialAccountId ??
         transaction?.financialAccountId ??
@@ -300,6 +298,8 @@ function valuesOf(
           category: draft.category,
           categoryIcon: resources?.categories.find((category) => category.id === draft.category)
             ?.icon,
+          categoryKind: resources?.categories.find((category) => category.id === draft.category)
+            ?.kind,
           method: draft.method,
           ...(resources
             ? {
@@ -340,7 +340,8 @@ function validateDraft(
       validation.merchant =
         values.kind === "income" ? "Enter an income source." : "Enter a merchant.";
     }
-    if (values.kind !== "exclusion" && !values.method) validation.method = "Choose an account.";
+    if ((values.kind !== "exclusion" || (resources && !resources.demo)) && !values.method)
+      validation.method = "Choose an account.";
   }
   if (
     resources &&
@@ -351,10 +352,12 @@ function validateDraft(
   if (
     resources &&
     draft.category &&
-    draft.kind !== "exclusion" &&
-    !resources.categories.some((category) => category.id === draft.category && !category.isArchived)
+    !resources.categories.some(
+      (category) =>
+        category.id === draft.category && !category.isArchived && category.kind === draft.kind,
+    )
   )
-    validation.category = "This category was archived or removed. Choose another category.";
+    validation.category = "Choose an available category matching this transaction type.";
   return validation;
 }
 
@@ -396,13 +399,15 @@ function kindChange(
         : label === "Exclusion"
           ? "exclusion"
           : null;
-  const categoryName =
-    resources?.categories.find((category) => category.id === draft.category)?.name ??
-    draft.category;
-  const compatibleCategory =
-    kind === "exclusion"
-      ? isExclusionCategoryName(categoryName)
-      : !isExclusionCategoryName(categoryName);
+  const category = resources?.categories.find((category) => category.id === draft.category);
+  const compatibleCategory = resources
+    ? category?.kind === kind
+    : (kind === "exclusion"
+        ? demoExclusionNames
+        : kind === "income"
+          ? demoIncomeNames
+          : demoCategoryNames
+      ).some((name) => name === draft.category);
   return { kind, category: compatibleCategory ? draft.category : null };
 }
 
@@ -463,10 +468,10 @@ function TransactionCategoryChoice({
   resources,
 }: TransactionChoiceProps) {
   const exclusion = draft.kind === "exclusion";
-  // Exclusion reasons and spending categories never mix, so a type change cannot leave a mismatch.
+  // Each category belongs to exactly one transaction type.
   const options = resources
     ? resources.categories
-        .filter((category) => exclusion === isExclusionCategoryName(category.name))
+        .filter((category) => category.kind === draft.kind)
         .map((category) => ({
           id: category.id,
           label: category.name,
@@ -475,7 +480,9 @@ function TransactionCategoryChoice({
         }))
     : exclusion
       ? demoExclusionNames
-      : demoCategoryNames;
+      : draft.kind === "income"
+        ? demoIncomeNames
+        : demoCategoryNames;
   if (options.length === 0) return null;
   return (
     <ChoiceField
@@ -698,8 +705,6 @@ export function TransactionEditor(props: TransactionEditorProps) {
   const isSaving = state.phase === "saving";
   const locked = isSaving || state.uncertain || changedElsewhere || Boolean(props.refreshRequired);
   const labels = editorLabels(props.transaction, isSaving);
-  const unsupportedExclusion =
-    draft.kind === "exclusion" && Boolean(props.resources && !props.resources.demo);
 
   return (
     <ModalDialog labelledBy="transaction-editor-title" onClose={requestClose}>
@@ -764,7 +769,6 @@ export function TransactionEditor(props: TransactionEditorProps) {
             onClose={requestClose}
             locked={locked}
             reviewRequired={changedElsewhere || Boolean(props.refreshRequired)}
-            unsupportedExclusion={unsupportedExclusion}
           />
         </Form>
       )}
@@ -778,14 +782,12 @@ function EditorFooter({
   onClose,
   locked,
   reviewRequired,
-  unsupportedExclusion,
 }: {
   labels: ReturnType<typeof editorLabels>;
   state: EditorState;
   onClose: () => void;
   locked: boolean;
   reviewRequired: boolean;
-  unsupportedExclusion: boolean;
 }) {
   const isSaving = state.phase === "saving";
   return (
@@ -800,16 +802,12 @@ function EditorFooter({
           type="submit"
           name="action"
           value="edit"
-          isDisabled={locked || unsupportedExclusion}
+          isDisabled={locked}
         >
           Save changes
         </Button>
       ) : null}
-      <Button
-        className="min-h-11"
-        type="submit"
-        isDisabled={isSaving || reviewRequired || unsupportedExclusion}
-      >
+      <Button className="min-h-11" type="submit" isDisabled={isSaving || reviewRequired}>
         {state.uncertain && !isSaving ? "Retry same change" : labels.save}
       </Button>
     </div>

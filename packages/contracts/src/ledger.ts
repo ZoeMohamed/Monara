@@ -10,6 +10,7 @@ import {
   reversibleActionReceiptSchema,
 } from "./common.ts";
 import { institutionKeySchema } from "./institutions.ts";
+import { transactionKindSchema } from "./transactions.ts";
 
 export const financialAccountTypeSchema = z.enum(["bank", "wallet", "cash"]);
 
@@ -103,6 +104,7 @@ export const financialAccountMutationResultSchema = z
 export const categorySchema = z
   .object({
     id: categoryIdSchema,
+    kind: transactionKindSchema,
     name: z.string().trim().min(1).max(100),
     slug: z.string().trim().min(1).max(100),
     icon: z.string().trim().min(1).max(100),
@@ -117,6 +119,7 @@ export const categorySchema = z
 // Category IDs double as client request IDs for retry-safe creation without a new table.
 export const createCategoryInputSchema = z
   .object({
+    kind: transactionKindSchema,
     name: categorySchema.shape.name,
     icon: categorySchema.shape.icon,
     color: categorySchema.shape.color,

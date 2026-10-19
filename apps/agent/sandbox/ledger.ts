@@ -96,6 +96,7 @@ export function createSandboxLedger(now: Date) {
   ];
   const category = (id: string, name: string): Category => ({
     id,
+    kind: name === "Salary" ? "income" : "expense",
     name,
     slug: name.toLowerCase(),
     icon: "circle",

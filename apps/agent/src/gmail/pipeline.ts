@@ -49,6 +49,12 @@ export interface GmailPipelineDependencies {
   /** Emails a parse job works on at once. */
   parseConcurrency?: number;
   now?: () => Date;
+  onRetryReportError?: (error: unknown) => void;
+  observe?: (metric: {
+    stage: "read" | "extraction" | "record";
+    durationMs: number;
+    count: number;
+  }) => void;
 }
 
 const DEFAULT_PARSE_CONCURRENCY = 2;
@@ -208,9 +214,16 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
     gmailMessageId: string,
     prefetched: GmailMessageContent | null = null,
   ): Promise<RecordGmailExtractionInput> {
+    const readStarted = performance.now();
     const message =
       prefetched ??
       (await read(connection, () => reader.getMessage(toMailbox(connection), gmailMessageId)));
+    dependencies.observe?.({
+      stage: "read",
+      durationMs: performance.now() - readStarted,
+      count: 1,
+    });
+    const extractStarted = performance.now();
     const institution = message.fromAddress ? findInstitutionBySender(message.fromAddress) : null;
     const owned =
       institution !== null && connection.institutionKeys.includes(institution.key)
@@ -223,9 +236,9 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
         ? await parseEmail(
             {
               completeJson: async (request) => {
-                await backend.resolveConnection(connection.connectionId);
+                await backend.checkConnectionActive(connection.connectionId);
                 return llm.completeJson(request, () =>
-                  backend.resolveConnection(connection.connectionId),
+                  backend.checkConnectionActive(connection.connectionId),
                 );
               },
             },
@@ -233,6 +246,11 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
             { holderName: connection.holderName, institution: owned },
           )
         : null;
+    dependencies.observe?.({
+      stage: "extraction",
+      durationMs: performance.now() - extractStarted,
+      count: extraction?.items.length ?? 0,
+    });
     const outcome = extraction && extraction.items.length > 0 ? "transactions" : "skipped";
     return {
       processedMessageId,
@@ -249,12 +267,12 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
    * confirms it is unusable. A bad API key fails that check too, so it never marks Users.
    */
   async function read<T>(connection: ResolvedGmailConnection, run: () => Promise<T>): Promise<T> {
-    await backend.resolveConnection(connection.connectionId);
+    await backend.checkConnectionActive(connection.connectionId);
     try {
       return await run();
     } catch (error) {
       if (!mayBeAuthorizationLoss(error)) throw error;
-      await backend.resolveConnection(connection.connectionId);
+      await backend.checkConnectionActive(connection.connectionId);
       if (await reader.isConnectionUsable(connection.composioConnectedAccountId)) throw error;
       await backend.reportConnectionError({
         connectionId: connection.connectionId,
@@ -366,7 +384,15 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       gmailMessageId: job.gmailMessageId,
       receivedAt,
     });
-    if (claim.alreadyFinished) return "already_finished";
+    if (claim.alreadyFinished) {
+      // Legacy one-message jobs can have persisted extraction before their category enqueue failed.
+      const recovery = await backend.claimMessages({
+        connectionId: job.connectionId,
+        messages: [{ gmailMessageId: job.gmailMessageId, receivedAt }],
+      });
+      await queueCategorization(recovery.uncategorizedTransactionIds);
+      return "already_finished";
+    }
 
     try {
       const result = await extractOne(
@@ -376,9 +402,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
         message,
       );
       const recorded = await backend.recordExtraction(result);
-      if (!recorded.alreadyFinished) {
-        await queueCategorization(recorded.uncategorizedTransactionIds);
-      }
+      await queueCategorization(recorded.uncategorizedTransactionIds);
       return result.outcome;
     } catch (error) {
       // A lost connection leaves the message claimed but unfinished, so it is read again after reconnecting.
@@ -466,7 +490,13 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
     });
 
     if (results.length > 0) {
+      const recordStarted = performance.now();
       const recorded = await backend.recordExtractions({ results });
+      dependencies.observe?.({
+        stage: "record",
+        durationMs: performance.now() - recordStarted,
+        count: results.length,
+      });
       await queueCategorization(
         recorded.results.flatMap((entry) => entry.uncategorizedTransactionIds),
       );
@@ -482,9 +512,13 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
     }
     if (busy && deferred.length > 0) {
       // A fresh job starts its retries over, so a busy model never uses them up.
+      const delaySeconds = deferSeconds(busy, job.deferrals);
+      await backend
+        .reportProcessingRetry({ connectionId: job.connectionId, delaySeconds })
+        .catch((error: unknown) => dependencies.onRetryReportError?.(error));
       await enqueueLater(
         [{ ...job, emails: deferred, deferrals: job.deferrals + 1 }],
-        deferSeconds(busy, job.deferrals),
+        delaySeconds,
       );
     }
     if (results.some((result) => result.outcome === "transactions")) return "transactions";

@@ -240,8 +240,8 @@ select is(
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     left join public.financial_accounts as account on account.id = item.financial_account_id
     where source.gmail_message_id = 'inst-004'),
-  array['Second card', null, null],
-  'several accounts map by ending only; no ending and exclusions stay unmapped'
+  array['Second card', null, 'Second card'],
+  'several accounts map by ending only; missing ending stays unmapped while exclusions retain the source account'
 );
 select is(
   (select cardinality(uncategorized_transaction_ids)
@@ -251,8 +251,8 @@ select is(
       '[]'::jsonb,
       p_sender_verified => false
     )),
-  2,
-  'exclusions never enter the merchant categorization queue'
+  3,
+  'every new extraction including exclusions enters categorization'
 );
 select is(
   (select applied
@@ -328,9 +328,9 @@ select is(
   array[
     row('inst-007', 'pending', false)::text,
     row('inst-008', 'pending', true)::text,
-    row('inst-009', 'pending', true)::text
+    row('inst-009', 'pending', false)::text
   ],
-  'below 95 percent never qualifies and dates missing from email content use the received date'
+  'below 95 percent and missing original dates never qualify'
 );
 
 select is(
@@ -338,14 +338,14 @@ select is(
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     where source.gmail_message_id = 'inst-009'),
-  row('2026-10-13'::date, 'out')::text,
-  'Gmail fallback dates use the received instant in Jakarta and expenses retain outflow direction'
+  row(null::date, 'out')::text,
+  'missing email dates remain unknown and expenses retain outflow direction'
 );
 
 -- Categorization write-back.
 select is(
   (select row(applied, review_status)::text
-    from public.set_imported_category((select transaction_ids[1] from recorded_001), 'resto & CAFE')),
+    from public.set_imported_category((select transaction_ids[1] from recorded_001), (select id from public.categories where user_id='10000000-0000-4000-8000-000000000001' and slug='resto-cafe'), 'expense', 0.99)),
   row(true, 'confirmed')::text,
   'categorization fills an empty category with the owner''s own Category'
 );
@@ -355,7 +355,7 @@ select is(
     join public.categories as category on category.id = item.category_id
     where item.id = (select transaction_ids[1] from recorded_001)),
   row('resto-cafe', false)::text,
-  'the Category matched by name ignoring case, and the transaction stopped waiting'
+  'the owned Category ID matched and the transaction stopped waiting'
 );
 select is(
   (select applied from public.set_imported_category((select transaction_ids[1] from recorded_001), 'Transport')),
@@ -405,7 +405,7 @@ select is(
   'a qualifying transaction the User edited is never confirmed by categorization'
 );
 
--- The owner's own history comes first.
+-- New imports do not learn from previously confirmed history.
 select public.record_gmail_extraction(
   (select id from public.processed_gmail_messages where gmail_message_id = 'inst-006'),
   'transactions',
@@ -420,17 +420,17 @@ select is(
   (select row(category.slug, item.review_status, item.gmail_auto_confirm_pending)::text
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
-    join public.categories as category on category.id = item.category_id
+    left join public.categories as category on category.id = item.category_id
     where source.gmail_message_id = 'inst-006'),
-  row('resto-cafe', 'confirmed', false)::text,
-  'a merchant the owner confirmed before gets the same Category and confirms on import'
+  row(null::text, 'pending', true)::text,
+  'merchant history is not used as implicit learning on new imports'
 );
 select is(
   (select cardinality(uncategorized_transaction_ids) from public.record_gmail_extraction(
     (select id from public.processed_gmail_messages where gmail_message_id = 'inst-006'),
     'skipped', '[]'::jsonb, p_sender_verified => false)),
-  0,
-  'a recorded message returns nothing new to categorize'
+  1,
+  'a recorded message exposes still-pending category work for enqueue recovery'
 );
 
 -- Shared merchant cache.

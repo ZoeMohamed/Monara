@@ -90,6 +90,7 @@ export function mapOwnedTransaction(
     merchant: transaction.merchantName ?? transaction.description,
     category: category?.name ?? null,
     categoryIcon: category?.icon,
+    categoryKind: category?.kind,
     amount:
       transaction.money === null ? null : safePresentationAmount(transaction.money.amountMinor),
     currency: transaction.money?.currency ?? null,
