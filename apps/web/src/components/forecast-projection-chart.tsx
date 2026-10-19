@@ -7,11 +7,11 @@ import { projectSpending, type SpendingDay } from "@/lib/forecast/projection";
 import styles from "./forecast-projection-chart.module.css";
 
 const WIDTH = 300;
-const HEIGHT = 104;
-const LEFT = 6;
-const RIGHT = 6;
-const TOP = 22;
-const BOTTOM = 20;
+const HEIGHT = 168;
+const LEFT = 14;
+const RIGHT = 16;
+const TOP = 34;
+const BOTTOM = 24;
 
 const points = (list: { x: number; y: number }[]) =>
   list.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
@@ -61,6 +61,19 @@ export function ForecastProjectionChart({
             <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
           </linearGradient>
         </defs>
+        {[0.33, 0.66].map((fraction) => {
+          const height = baseline - fraction * (HEIGHT - TOP - BOTTOM);
+          return (
+            <line
+              className={styles.grid}
+              key={fraction}
+              x1={LEFT}
+              x2={WIDTH - RIGHT}
+              y1={height}
+              y2={height}
+            />
+          );
+        })}
         <line
           className={styles.baseline}
           x1={LEFT}
@@ -77,23 +90,32 @@ export function ForecastProjectionChart({
           className={styles.value}
           textAnchor="end"
           x={WIDTH - RIGHT}
-          y={Math.max(end.y - 8, 11)}
+          y={Math.max(end.y - 9, 12)}
           data-amount
         >
           {compactAmount(projection.projected, false)}
         </text>
-        <text className={styles.axis} textAnchor="start" x={LEFT} y={HEIGHT - 5}>
+        <text
+          className={styles.soFar}
+          data-amount
+          textAnchor="middle"
+          x={Math.min(Math.max(now.x, 30), WIDTH - 70)}
+          y={now.y - 11}
+        >
+          {compactAmount(projection.spentSoFar, false)}
+        </text>
+        <text className={styles.axis} textAnchor="start" x={LEFT} y={HEIGHT - 6}>
           1
         </text>
         <text
           className={styles.axis}
           textAnchor="middle"
           x={Math.min(Math.max(now.x, 22), WIDTH - 26)}
-          y={HEIGHT - 5}
+          y={HEIGHT - 6}
         >
           Today
         </text>
-        <text className={styles.axis} textAnchor="end" x={WIDTH - RIGHT} y={HEIGHT - 5}>
+        <text className={styles.axis} textAnchor="end" x={WIDTH - RIGHT} y={HEIGHT - 6}>
           {projection.lastDay}
         </text>
       </svg>

@@ -15,6 +15,13 @@
   stroke-width: 1;
 }
 
+.grid {
+  stroke: var(--border);
+  stroke-dasharray: 2 5;
+  stroke-width: 1;
+  opacity: 0.7;
+}
+
 .spent {
   stroke: var(--accent);
   stroke-width: 2.5;
@@ -45,16 +52,23 @@
   opacity: 0.7;
 }
 
+.soFar {
+  fill: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
 .value {
   fill: var(--foreground);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
 
 .axis {
   fill: var(--muted);
-  font-size: 9.5px;
+  font-size: 10.5px;
 }
 
 .legend {
@@ -81,4 +95,22 @@
 .legend > span[data-kind="expected"]::before {
   border-top-style: dashed;
   opacity: 0.55;
+}
+
+/* In the flat Home style the chart runs edge to edge, past the page gutter. */
+[data-home="flat"] .figure {
+  margin-inline: -20px;
+}
+
+[data-home="flat"] .legend {
+  margin-inline: 20px;
+}
+
+/* In the card style it runs edge to edge inside its card. */
+[data-home="cards"] .figure {
+  margin-inline: -20px;
+}
+
+[data-home="cards"] .legend {
+  margin-inline: 20px;
 }

@@ -331,7 +331,7 @@ function SpendingBlock({
   const months = Array.from({ length: 13 }, (_, index) => shiftMonth(currentMonth, -index));
 
   return (
-    <section aria-labelledby="spending-title" className={styles.block}>
+    <section aria-labelledby="spending-title" className={styles.block} data-home-card="where">
       <div className={styles.blockHead}>
         <h2 className={styles.quiet} id="spending-title">
           Where it went
@@ -465,7 +465,11 @@ function ActivityCard({
   openAdd?: () => void;
 }) {
   return (
-    <section aria-labelledby="activity-title" className={styles.todayCard}>
+    <section
+      aria-labelledby="activity-title"
+      className={styles.todayCard}
+      data-home-card="activity"
+    >
       <div className={styles.activityHead}>
         <h2 id="activity-title">
           {model.isCurrentMonth ? "Latest activity" : `Latest in ${monthName(month)}`}
@@ -533,7 +537,13 @@ function paceOf(model: OverviewModel) {
 
 function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
   return (
-    <Button variant="ghost" className={styles.safe} onPress={openBudgets} type="button">
+    <Button
+      variant="ghost"
+      className={styles.safe}
+      data-home-card="safe"
+      onPress={openBudgets}
+      type="button"
+    >
       <span className={styles.featureName}>
         <span aria-hidden className={styles.featureIcon} data-tone="green">
           <Icon name="budgets" />
@@ -590,7 +600,13 @@ function SafeToSpendCard({
   if (model.budgetTotal === BigInt(0)) return <SafeToSpendSetup openBudgets={openBudgets} />;
   const safe = model.safeToSpend;
   return (
-    <Button variant="ghost" className={styles.safe} onPress={openBudgets} type="button">
+    <Button
+      variant="ghost"
+      className={styles.safe}
+      data-home-card="safe"
+      onPress={openBudgets}
+      type="button"
+    >
       <span className={styles.featureName}>
         <span aria-hidden className={styles.featureIcon} data-tone="green">
           <Icon name="budgets" />
@@ -726,7 +742,11 @@ function AttentionCard({
 }) {
   const display = useAmountDisplay();
   return (
-    <section aria-labelledby="attention-title" className={styles.attention}>
+    <section
+      aria-labelledby="attention-title"
+      className={styles.attention}
+      data-home-card="attention"
+    >
       <h2 className={styles.cardLabel} id="attention-title">
         Needs attention
       </h2>
@@ -817,7 +837,11 @@ function BackendInsightsCard({
     return null;
   }
   return (
-    <section aria-labelledby="backend-insights-title" className={styles.attention}>
+    <section
+      aria-labelledby="backend-insights-title"
+      className={styles.attention}
+      data-home-card="flags"
+    >
       <h2 className={styles.cardLabel} id="backend-insights-title">
         Forecasts and flags
       </h2>
@@ -849,6 +873,12 @@ function BackendInsightsCard({
     </section>
   );
 }
+
+/**
+ * How the cards of Home are drawn. "flat" has no card boxes, only section separators; "cards" keeps
+ * boxes with a lighter look; "current" is the original tinted cards.
+ */
+const HOME_STYLE: "flat" | "cards" | "current" = "flat";
 
 export function MobileOverview({
   setup,
@@ -896,7 +926,7 @@ export function MobileOverview({
         toggleAmounts={toggleAmounts}
       />
 
-      <div className={styles.sheet}>
+      <div className={styles.sheet} data-home={HOME_STYLE}>
         {setup}
         <div className={styles.columns}>
           <div className={styles.lead}>

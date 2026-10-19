@@ -189,7 +189,12 @@ function DemoCard({ context }: { context: Context }) {
   const titleId = useId();
   const spent = financialMonth(context.transactions, context.month, context.today).spending;
   return (
-    <section aria-labelledby={titleId} className={styles.card} data-tour="forecast">
+    <section
+      aria-labelledby={titleId}
+      className={styles.card}
+      data-home-card="forecast"
+      data-tour="forecast"
+    >
       <div className={styles.header}>
         <h2 id={titleId}>Spending forecast</h2>
         <span>Sample data</span>
@@ -204,7 +209,12 @@ function LiveCard({ context }: { context: Context }) {
   const { state, refreshing, refresh } = useForecast();
   const forecast = state.status === "loading" ? null : state.forecast;
   return (
-    <section aria-labelledby={titleId} className={styles.card} data-tour="forecast">
+    <section
+      aria-labelledby={titleId}
+      className={styles.card}
+      data-home-card="forecast"
+      data-tour="forecast"
+    >
       <div className={styles.header}>
         <h2 id={titleId}>Spending forecast</h2>
         <span>Expected, not confirmed</span>
