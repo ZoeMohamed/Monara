@@ -4,6 +4,8 @@ import { Button, ProgressBar } from "@monara/ui";
 import { type CSSProperties, type KeyboardEvent, useId, useRef, useState } from "react";
 
 import { useAmountDisplay } from "@/components/app-session-context";
+import { CategoryAvatar } from "@/components/category-symbol";
+import { Icon, type IconName } from "@/components/icon";
 import { OnboardingAvatar } from "@/components/onboarding-avatar";
 import { BankBadge } from "@/components/onboarding-bank-badge";
 import styles from "@/components/onboarding-import.module.css";
@@ -17,11 +19,18 @@ import { formatDay } from "@/data/demo-ledger";
 
 const badgeSize = 28;
 
-const kinds: { kind: ImportedKind; label: string }[] = [
-  { kind: "expense", label: "Expense" },
-  { kind: "income", label: "Income" },
-  { kind: "exclusion", label: "Exclusion" },
+type ImportTab = ImportedKind | "review";
+
+const kinds: { kind: ImportTab; label: string; icon: IconName }[] = [
+  { kind: "expense", label: "Expense", icon: "trend-up" },
+  { kind: "income", label: "Income", icon: "income" },
+  { kind: "exclusion", label: "Exclusion", icon: "eye-off" },
+  { kind: "review", label: "To review", icon: "inbox" },
 ];
+
+function matchesTab(item: ImportedTransaction, tab: ImportTab) {
+  return tab === "review" ? item.needsReview === true : !item.needsReview && item.kind === tab;
+}
 
 const copy: Record<ImportProgress["state"], { title: string; text: string }> = {
   waiting: {
@@ -82,6 +91,7 @@ const staggeredRows = 8;
 function ImportRow({ item, index }: { item: ImportedTransaction; index: number }) {
   const { formatRupiah } = useAmountDisplay();
   const sign = item.kind === "income" ? "+" : item.kind === "expense" ? "−" : "";
+  const category = item.category ?? "Uncategorized";
   const style = { "--row-index": Math.min(index, staggeredRows) } as CSSProperties;
   return (
     <li className={styles.row} data-kind={item.kind} style={style}>
@@ -97,26 +107,39 @@ function ImportRow({ item, index }: { item: ImportedTransaction; index: number }
         <span className={styles.rowName} title={item.merchant}>
           {item.merchant}
         </span>
-        <span className={styles.rowDate}>{formatDay(item.date)}</span>
+        <span className={styles.rowCategory}>
+          <CategoryAvatar
+            className={styles.categoryIcon}
+            iconClassName={styles.categoryIcon}
+            icon={item.categoryIcon}
+            name={category}
+            size={12}
+          />
+          <span className={styles.categoryName}>{category}</span>
+        </span>
       </span>
-      <span className={styles.rowAmount}>
-        {sign}
-        {formatRupiah(item.amount)}
+      <span className={styles.rowValue}>
+        <span className={styles.rowAmount}>
+          {sign}
+          {formatRupiah(item.amount)}
+        </span>
+        <span className={styles.rowDate}>{formatDay(item.date)}</span>
       </span>
     </li>
   );
 }
 
-function emptyText(progress: ImportProgress, kind: ImportedKind) {
+function emptyText(progress: ImportProgress, kind: ImportTab) {
+  if (kind === "review") return "No transactions to review yet.";
   if (progress.state === "completed") return `No ${kind} transactions found.`;
   return "Transactions appear here as they are found.";
 }
 
 function ImportTable({ progress }: { progress: ImportProgress }) {
   const id = useId();
-  const [selected, setSelected] = useState<ImportedKind>("expense");
-  const tabRefs = useRef<Partial<Record<ImportedKind, HTMLButtonElement | null>>>({});
-  const items = progress.feed.filter((item) => item.kind === selected);
+  const [selected, setSelected] = useState<ImportTab>("expense");
+  const tabRefs = useRef<Partial<Record<ImportTab, HTMLButtonElement | null>>>({});
+  const items = progress.feed.filter((item) => matchesTab(item, selected));
 
   const move = (event: KeyboardEvent, index: number) => {
     const next =
@@ -133,13 +156,15 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
     if (!target) return;
     event.preventDefault();
     setSelected(target.kind);
-    tabRefs.current[target.kind]?.focus();
+    const tab = tabRefs.current[target.kind];
+    tab?.focus();
+    tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
   };
 
   return (
     <>
       <div aria-label="Imported transactions" className={styles.tabs} role="tablist">
-        {kinds.map(({ kind, label }, index) => (
+        {kinds.map(({ kind, label, icon }, index) => (
           <button
             aria-controls={`${id}-panel`}
             aria-selected={selected === kind}
@@ -155,9 +180,10 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
             tabIndex={selected === kind ? 0 : -1}
             type="button"
           >
+            <Icon className={styles.tabIcon} name={icon} />
             {label}
             <span className={styles.count}>
-              {progress.feed.filter((item) => item.kind === kind).length}
+              {progress.feed.filter((item) => matchesTab(item, kind)).length}
             </span>
           </button>
         ))}
@@ -206,11 +232,6 @@ function ImportSummary({ progress }: { progress: ImportProgress }) {
           <p className={styles.counts}>{countsLine(progress)}</p>
         ) : done && progress.transactions !== null ? (
           <p className={styles.counts}>{progress.transactions} transactions imported</p>
-        ) : null}
-        {(progress.needsReview ?? 0) > 0 ? (
-          <p className={styles.counts} role="status">
-            {progress.needsReview} need review in Pending.
-          </p>
         ) : null}
       </div>
       <div aria-hidden className={styles.avatar}>

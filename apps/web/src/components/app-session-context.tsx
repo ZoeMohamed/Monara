@@ -5,6 +5,7 @@ import { createContext, useContext } from "react";
 import type { DemoBudgetChanges } from "@/components/demo-budget-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
 import type { MutationOptions } from "@/components/use-finance-sync";
+import type { ImportProgress } from "@/components/use-onboarding-engine";
 import { amountDisplay } from "@/data/amount-display";
 import type { Budget, RecurringBill, Reminder, Transaction } from "@/data/demo-ledger";
 import type { FinancialAttention } from "@/data/financial-attention";
@@ -14,6 +15,11 @@ import type { FinanceSnapshot } from "@/lib/finance/presentation";
 import { transactionAccount } from "@/lib/finance/transaction-account";
 
 export type AppSession = {
+  gmailImport: {
+    progress: ImportProgress;
+    onOpen: () => void;
+    onFinish: () => void;
+  } | null;
   profile: AuthenticatedProfile;
   navigation: AppNavigation;
   transactions: Transaction[];

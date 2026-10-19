@@ -22,6 +22,8 @@ export type ImportedTransaction = {
   /** YYYY-MM-DD */
   date: string;
   kind: ImportedKind;
+  category?: string | null;
+  categoryIcon?: string | null;
   needsReview?: boolean;
 };
 
