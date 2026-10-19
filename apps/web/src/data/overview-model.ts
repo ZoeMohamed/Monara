@@ -1,4 +1,3 @@
-import { type Budget as BackendBudget, budgetPeriodForDate } from "@monara/contracts";
 import {
   type Budget,
   budgetUsage,
@@ -127,127 +126,18 @@ function monthFacts(transactions: Transaction[], month: string, today: string, s
   };
 }
 
-function shiftDays(date: string, offset: number): string {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + offset);
-  return value.toISOString().slice(0, 10);
-}
-
-// A weekly guide is a labelled allocation of monthly limits, never an invented budget.
-// Count each covered monthly period together so fractions are rounded only once per period.
-function monthlyWeekGuide(budgets: Budget[], dates: string[]): bigint {
-  let guide = BigInt(0);
-  for (const budget of budgets) {
-    const periods = new Map<string, { days: number; length: number }>();
-    for (const date of dates) {
-      const period = budgetPeriodForDate(
-        { cadence: budget.cadence, startsOn: budget.startsOn ?? `${date.slice(0, 7)}-01` },
-        date,
-      );
-      if (!period) continue;
-      const covered = periods.get(period.startsOn) ?? {
-        days: 0,
-        length: daysBetween(period.startsOn, period.endsOn) + 1,
-      };
-      covered.days += 1;
-      periods.set(period.startsOn, covered);
-    }
-    for (const period of periods.values()) {
-      guide += (BigInt(budget.limit) * BigInt(period.days)) / BigInt(period.length);
-    }
-  }
-  return guide;
-}
-
-function weeklySpending(
-  transactions: Transaction[],
-  budgets: Budget[],
-  weeklyBudgets: BackendBudget[],
-  today: string,
-) {
-  const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
-  const calendarStart = shiftDays(today, -((weekday + 6) % 7));
-  const activeWeekly = weeklyBudgets.flatMap((budget) => {
-    if (!budget.isActive || budget.deletedAt !== null || budget.cadence !== "weekly") return [];
-    const period = budgetPeriodForDate(budget, today);
-    return period ? [{ budget, period }] : [];
-  });
-  const firstPeriod = activeWeekly[0]?.period;
-  // Different start days represent different seven-day windows and cannot share a gauge.
-  const sharedWeeklyPeriod =
-    firstPeriod &&
-    activeWeekly.every(
-      ({ period }) =>
-        period.startsOn === firstPeriod.startsOn && period.endsOn === firstPeriod.endsOn,
-    )
-      ? firstPeriod
-      : null;
-  const startsOn = sharedWeeklyPeriod?.startsOn ?? calendarStart;
-  const dates = Array.from({ length: 7 }, (_, index) => shiftDays(startsOn, index));
-  const categoryIds = new Set(activeWeekly.map(({ budget }) => budget.categoryId));
-  const expenses = transactions.filter(
-    (transaction) =>
-      transaction.status === "confirmed" &&
-      transaction.kind === "expense" &&
-      Object.keys(transactionErrors(transaction)).length === 0 &&
-      transaction.date !== null &&
-      transaction.date >= startsOn &&
-      transaction.date <= dates[6] &&
-      transaction.date <= today &&
-      (!sharedWeeklyPeriod || categoryIds.has(transaction.categoryId ?? "")),
-  );
-  const days = dates.map((date) => ({
-    date,
-    spending: expenses
-      .filter((transaction) => transaction.date === date)
-      .reduce((total, transaction) => total + BigInt(transaction.amount ?? 0), BigInt(0)),
-    future: date > today,
-    today: date === today,
-  }));
-  const spending = days.reduce((total, day) => total + day.spending, BigInt(0));
-  const limit = sharedWeeklyPeriod
-    ? activeWeekly.reduce(
-        (total, { budget }) => total + BigInt(budget.limit.amountMinor),
-        BigInt(0),
-      )
-    : monthlyWeekGuide(
-        budgets.filter((budget) => budget.cadence === "monthly"),
-        dates,
-      );
-  const basis = sharedWeeklyPeriod ? "weekly-budgets" : limit > BigInt(0) ? "monthly-guide" : null;
-  return {
-    startsOn,
-    endsOn: dates[6],
-    days,
-    spending,
-    count: expenses.length,
-    limit,
-    basis,
-    hasDifferentWeeklyPeriods: activeWeekly.length > 0 && !sharedWeeklyPeriod,
-    budgetCount: activeWeekly.length,
-    remaining: limit > spending ? limit - spending : BigInt(0),
-    over: spending > limit && limit > BigInt(0) ? spending - limit : BigInt(0),
-    percent: limit > BigInt(0) ? Number((spending * BigInt(100)) / limit) : null,
-    elapsedPercent: Math.round(((daysBetween(startsOn, today) + 1) / 7) * 100),
-    maximumDay: days.reduce(
-      (largest, day) => (day.spending > largest ? day.spending : largest),
-      BigInt(0),
-    ),
-  };
-}
-
 export function overviewModel(
   transactions: Transaction[],
   budgets: Budget[],
   bills: RecurringBill[],
   month: string,
   today = demoToday,
-  weeklyBudgets: BackendBudget[] = [],
 ) {
   const currentMonth = today.slice(0, 7);
   const summary = demoSummary(transactions, month);
   const expenses = summary.confirmed.filter((item) => item.kind === "expense");
-  const usage = budgets
+  const monthlyBudgets = budgets.filter((budget) => budget.cadence === "monthly");
+  const usage = monthlyBudgets
     .map((budget) => ({ ...budgetUsage(transactions, budget, month, today), budget }))
     .filter((item) => item.periodStartsOn !== null);
   const budgetTotal = usage.reduce((total, item) => total + item.limit, BigInt(0));
@@ -279,15 +169,14 @@ export function overviewModel(
         : 0;
 
   const pendingCount = transactions.filter((item) => item.status === "pending").length;
-  const calendarBudgetPeriods = budgets.every(
+  const calendarBudgetPeriods = monthlyBudgets.every(
     (budget) => !budget.startsOn || budget.startsOn.endsWith("-01"),
   );
-  const dailyGuide = month === currentMonth ? safeToSpendToday(transactions, budgets, today) : null;
+  const dailyGuide =
+    month === currentMonth ? safeToSpendToday(transactions, monthlyBudgets, today) : null;
 
   return {
     summary,
-    weekly:
-      month === currentMonth ? weeklySpending(transactions, budgets, weeklyBudgets, today) : null,
     attention: month === currentMonth ? attentionItems(usage, bills, pendingCount, today) : [],
     facts: monthFacts(transactions, month, today, summary.spending),
     usage,

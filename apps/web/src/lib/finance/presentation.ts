@@ -11,6 +11,7 @@ import {
   type FinancialAccount,
   type FinancialGoal,
   financialAccountPageSchema,
+  financialCalendarDate,
   financialGoalPageSchema,
   type Transaction,
   transactionPageSchema,
@@ -95,7 +96,8 @@ export function mapOwnedTransaction(
       transaction.money === null ? null : safePresentationAmount(transaction.money.amountMinor),
     currency: transaction.money?.currency ?? null,
     date: transaction.occurredOn,
-    time: transaction.occurredTime,
+    // SQL returns HH:mm:ss. Keep compact display time separate from the exact source value below.
+    time: transaction.occurredTime?.slice(0, 5) ?? null,
     method: account?.name ?? null,
     kind: transaction.kind,
     emoji: transaction.kind === "exclusion" ? "⊘" : transaction.kind === "income" ? "↗" : "•",
@@ -115,15 +117,12 @@ function mapOwnedBudget(usage: BudgetUsage, categories: Category[], month: strin
       "A budget category could not be loaded. Refresh your records and try again.",
     );
   }
-  if (budget.cadence !== "monthly") {
-    throw new FinancePresentationError("This view supports monthly budgets only.");
-  }
   return {
     id: budget.id,
     category: category.name,
     icon: category.icon,
     emoji: "•",
-    cadence: "monthly",
+    cadence: budget.cadence,
     limit: safePresentationAmount(budget.limit.amountMinor),
     warningPercent: budget.warningPercent,
     categoryId: budget.categoryId,
@@ -191,7 +190,7 @@ async function loadAllPages<Operation extends ListOperation>(
 export async function loadFinanceSnapshot(
   read: FinanceReader,
   month: string,
-  today = new Date().toISOString().slice(0, 10),
+  today = financialCalendarDate(),
 ): Promise<FinanceSnapshot> {
   calendarMonthSchema.parse(month);
   calendarDateSchema.parse(today);
@@ -212,9 +211,7 @@ export async function loadFinanceSnapshot(
     transactions: records
       .filter((record) => record.deletedAt === null)
       .map((record) => mapOwnedTransaction(record, financialAccounts, categories)),
-    budgets: dashboard.budgetUsage
-      .filter((usage) => usage.budget.cadence === "monthly")
-      .map((usage) => mapOwnedBudget(usage, categories, month)),
+    budgets: dashboard.budgetUsage.map((usage) => mapOwnedBudget(usage, categories, month)),
     financialAccounts,
     financialGoals,
     categories,

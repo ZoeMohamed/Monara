@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --test src/lib/auth/*.test.mjs src/lib/chat/*.test.mjs src/lib/finance/*.test.mjs src/lib/gmail/*.test.mjs src/lib/http/*.test.mjs src/lib/legal/*.test.mjs src/lib/onboarding/*.test.mjs src/lib/whatsapp/*.test.mjs",
+    "test": "node --test src/lib/auth/*.test.mjs src/lib/chat/*.test.mjs src/lib/finance/*.test.mjs src/lib/gmail/*.test.mjs src/lib/goals/*.test.mjs src/lib/http/*.test.mjs src/lib/legal/*.test.mjs src/lib/onboarding/*.test.mjs src/lib/whatsapp/*.test.mjs",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {

@@ -13,12 +13,7 @@ function transactionRowModel(
   formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
 ) {
   const date = showDate && transaction.date ? formatDay(transaction.date) : null;
-  const metadata = [
-    transaction.status === "pending" ? "Needs review" : null,
-    transaction.kind === "exclusion" ? "Excluded" : null,
-    date,
-    transaction.time,
-  ]
+  const metadata = [transaction.kind === "exclusion" ? "Excluded" : null, date, transaction.time]
     .filter(Boolean)
     .join(" · ");
   const category =
@@ -87,6 +82,7 @@ export function TransactionRow({
       data-kind={transaction.kind ?? "unknown"}
       data-status={status}
       onPress={onClick}
+      aria-label={transaction.status === "pending" ? `${model.merchant}, to review` : undefined}
       type="button"
       variant="ghost"
     >

@@ -4,9 +4,11 @@ import { Alert, Button } from "@monara/ui";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AppSessionContext } from "@/components/app-session-context";
+import { BudgetDraftSessionProvider } from "@/components/budget-draft-session-context";
 import { FinanceRecovery } from "@/components/budget-manager";
 import { ChatSessionProvider } from "@/components/chat-session-context";
 import { DemoIndicator } from "@/components/demo-indicator";
+import { GoalDraftSessionProvider } from "@/components/goal-draft-session-context";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
 import { ModalDialog } from "@/components/modal-dialog";
@@ -328,9 +330,13 @@ export function MonaraApp({
   const workspace = useMonaraSession(profile, initialFinance);
   return (
     <AppSessionContext value={workspace.session}>
-      <ChatSessionProvider>
-        <AppChrome workspace={workspace}>{children}</AppChrome>
-      </ChatSessionProvider>
+      <BudgetDraftSessionProvider>
+        <GoalDraftSessionProvider>
+          <ChatSessionProvider persistent={Boolean(initialFinance)}>
+            <AppChrome workspace={workspace}>{children}</AppChrome>
+          </ChatSessionProvider>
+        </GoalDraftSessionProvider>
+      </BudgetDraftSessionProvider>
     </AppSessionContext>
   );
 }

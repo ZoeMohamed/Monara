@@ -18,12 +18,12 @@ import { MonthSelector } from "@/components/month-selector";
 import { RecurringBillSuggestion } from "@/components/recurring-bill-suggestion";
 import { useMerchantLogo } from "@/components/use-brand-logo";
 import { SectionTitle } from "@/components/visual";
+import { summarizeBudgetPeriod } from "@/data/budget-period-model";
 import { categoryColor, categoryIcon } from "@/data/category-style";
 import {
   type Budget,
   budgetUsage,
   daysBetween,
-  daysInMonth,
   demoMonth,
   demoToday,
   formatDay,
@@ -60,18 +60,20 @@ function BudgetProgress({
   label,
   color,
   state = "on-track",
+  periodLabel = "period",
 }: {
   percent: number;
   elapsedPercent?: number;
   label: string;
   color?: string;
   state?: "on-track" | "warning" | "at-limit" | "over";
+  periodLabel?: string;
 }) {
   return (
     <div className="relative">
       <ProgressBar
         aria-label={label}
-        aria-valuetext={`${percent}% used${elapsedPercent === undefined ? "" : `; ${elapsedPercent}% of the month elapsed`}`}
+        aria-valuetext={`${percent}% used${elapsedPercent === undefined ? "" : `; ${elapsedPercent}% of the ${periodLabel} elapsed`}`}
         value={Math.min(percent, 100)}
       >
         <ProgressBar.Track className="h-2 bg-surface-tertiary">
@@ -266,35 +268,19 @@ function BillRow({ bill, today }: { bill: RecurringBill; today: string }) {
   );
 }
 
-function summarizeBudgets(
-  transactions: Transaction[],
-  budgets: Budget[],
-  month: string,
-  today: string,
-) {
-  let totalLimit = BigInt(0);
-  let totalUsed = BigInt(0);
-  let remaining = BigInt(0);
-  let overBudget = BigInt(0);
-  for (const budget of budgets) {
-    const usage = budgetUsage(transactions, budget, month, today);
-    if (usage.periodStartsOn === null) continue;
-    totalLimit += usage.limit;
-    totalUsed += usage.used;
-    if (usage.remaining > BigInt(0)) remaining += usage.remaining;
-    if (usage.remaining < BigInt(0)) overBudget -= usage.remaining;
-  }
-  const usedPercent = totalLimit > BigInt(0) ? Number((totalUsed * BigInt(100)) / totalLimit) : 0;
-  let elapsedPercent = month < today.slice(0, 7) ? 100 : 0;
-  if (month === today.slice(0, 7)) {
-    elapsedPercent = Math.round((Number(today.slice(8, 10)) / daysInMonth(month)) * 100);
-  }
-  return { totalLimit, totalUsed, remaining, overBudget, usedPercent, elapsedPercent };
-}
+type BudgetSummary = ReturnType<typeof summarizeBudgetPeriod>;
 
-type BudgetSummary = ReturnType<typeof summarizeBudgets>;
-
-function BudgetGauge({ used, elapsed, over }: { used: number; elapsed?: number; over: boolean }) {
+function BudgetGauge({
+  used,
+  elapsed,
+  over,
+  cadence,
+}: {
+  used: number;
+  elapsed?: number;
+  over: boolean;
+  cadence: Budget["cadence"];
+}) {
   const angle = Math.PI * (1 - Math.min(elapsed ?? 0, 100) / 100);
   // Rounded coordinates keep the server and browser render identical.
   const at = (radius: number) => ({
@@ -309,9 +295,9 @@ function BudgetGauge({ used, elapsed, over }: { used: number; elapsed?: number; 
       ? "#b37b15"
       : "var(--accent)";
   return (
-    <figure className="w-32 shrink-0 sm:w-36">
+    <figure className="w-24 shrink-0 sm:w-28">
       <svg
-        aria-label={`${used}% of category budgets used${elapsed === undefined ? "" : `; needle shows ${elapsed}% of the month elapsed`}`}
+        aria-label={`${used}% of category budgets used${elapsed === undefined ? "" : `; needle shows ${elapsed}% of the budget ${cadence === "weekly" ? "week" : "month"} elapsed`}`}
         className="w-full"
         role="img"
         viewBox="0 0 200 108"
@@ -362,9 +348,11 @@ function BudgetGauge({ used, elapsed, over }: { used: number; elapsed?: number; 
 function BudgetSummaryProgress({
   summary,
   elapsedPercent,
+  cadence,
 }: {
   summary: BudgetSummary;
   elapsedPercent?: number;
+  cadence: Budget["cadence"];
 }) {
   const state =
     summary.totalUsed > summary.totalLimit
@@ -376,14 +364,17 @@ function BudgetSummaryProgress({
     <div className="mt-4">
       <BudgetProgress
         elapsedPercent={elapsedPercent}
-        label="Total category budget used"
+        label={`${cadence === "weekly" ? "Weekly" : "Monthly"} category budgets used`}
+        periodLabel={cadence === "weekly" ? "budget week" : "budget month"}
         percent={summary.usedPercent}
         state={state}
       />
       <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted tabular-nums">
         <span>{summary.usedPercent}% of budgets used</span>
         {elapsedPercent !== undefined && (
-          <span>Needle / marker: {elapsedPercent}% of month elapsed</span>
+          <span>
+            Marker: {elapsedPercent}% of budget {cadence === "weekly" ? "week" : "month"} elapsed
+          </span>
         )}
       </div>
     </div>
@@ -418,38 +409,67 @@ function BudgetSummaryCard({
   month,
   summary,
   today,
-  monthlyOnly,
+  cadence,
   calendarPeriods,
+  onCreate,
 }: {
   transactions: Transaction[];
   budgets: Budget[];
   month: string;
   summary: BudgetSummary;
   today: string;
-  monthlyOnly: boolean;
+  cadence: Budget["cadence"];
   calendarPeriods: boolean;
+  onCreate: () => void;
 }) {
   const { formatRupiah } = useAmountDisplay();
   const currentMonth = month === today.slice(0, 7);
   const safe = safeToSpendToday(transactions, budgets, today);
-  const elapsedPercent = currentMonth && calendarPeriods ? summary.elapsedPercent : undefined;
+  const elapsedPercent = summary.elapsedPercent;
+  if (budgets.length === 0)
+    return (
+      <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface-secondary p-5">
+        <h2 className="text-base font-semibold">
+          {cadence === "weekly" ? "Weekly" : "Monthly"} budgets
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          {cadence === "weekly"
+            ? "Give everyday spending a little structure with a weekly limit."
+            : "Plan ahead for the categories you spend on each month."}
+        </p>
+        <Button className="mt-4 min-h-11 rounded-full" onPress={onCreate} variant="secondary">
+          <Icon className="h-4 w-4" name="plus" />
+          Add {cadence} budget
+        </Button>
+      </Card>
+    );
   return (
     <Card className="block min-w-0 gap-0 rounded-2xl border border-border p-5 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-4">
-        <div className="min-w-0 flex-1 basis-[13rem]">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+        <div className="min-w-0">
           <h2 className="text-sm font-medium text-muted">
-            {monthlyOnly ? "Monthly category budgets remaining" : "Remaining in category budgets"}
+            {cadence === "weekly" ? "Weekly budgets remaining" : "Monthly budgets remaining"}
           </h2>
           <p className="mt-2 text-3xl font-extrabold leading-tight tracking-[-0.03em] tabular-nums [overflow-wrap:anywhere] sm:text-4xl">
             {formatRupiah(summary.remaining)}
           </p>
         </div>
         <BudgetGauge
+          cadence={cadence}
           elapsed={elapsedPercent}
           over={summary.overBudget > BigInt(0)}
           used={summary.usedPercent}
         />
       </div>
+      <p className="mt-3 text-xs leading-5 text-muted">
+        {summary.sharedPeriod
+          ? `${formatDay(summary.sharedPeriod.startsOn)} – ${formatDay(summary.sharedPeriod.endsOn)}`
+          : summary.activeCount > 0
+            ? "Each budget follows its own reset date, shown below."
+            : budgets.length === 0
+              ? `Add a ${cadence} budget below to see its spending and remaining limit here.`
+              : `Your ${cadence} budgets will appear here once their periods start.`}
+      </p>
       <dl className="mt-5 grid grid-cols-2 gap-4">
         <div className="min-w-0">
           <dt className="text-xs text-muted">Spent</dt>
@@ -464,7 +484,16 @@ function BudgetSummaryCard({
           </dd>
         </div>
       </dl>
-      <BudgetSummaryProgress elapsedPercent={elapsedPercent} summary={summary} />
+      <details className="mt-4 text-sm text-muted">
+        <summary className="flex min-h-11 cursor-pointer items-center rounded-lg font-medium focus-visible:outline-2 focus-visible:outline-focus">
+          How this period is tracking
+        </summary>
+        <BudgetSummaryProgress
+          cadence={cadence}
+          elapsedPercent={elapsedPercent}
+          summary={summary}
+        />
+      </details>
       {summary.overBudget > BigInt(0) ? (
         <div className="mt-4 rounded-xl bg-warning-soft p-3 text-sm leading-6 text-warning-soft-foreground">
           <p>
@@ -479,7 +508,9 @@ function BudgetSummaryCard({
           </p>
         </div>
       ) : null}
-      {currentMonth && calendarPeriods ? <DailyBudgetGuide safe={safe} /> : null}
+      {cadence === "monthly" && currentMonth && calendarPeriods && safe.dailyGuideAvailable ? (
+        <DailyBudgetGuide safe={safe} />
+      ) : null}
     </Card>
   );
 }
@@ -492,10 +523,12 @@ function CategoryBudgets({
   onEditBudget,
   today,
   onCreate,
+  cadence,
 }: {
   transactions: Transaction[];
   budgets: Budget[];
   month: string;
+  cadence: Budget["cadence"];
   onOpenBudget: (budget: Budget) => void;
   onEditBudget: (budget: Budget) => void;
   today: string;
@@ -505,12 +538,12 @@ function CategoryBudgets({
   const [editing, setEditing] = useState(false);
   const empty = budgets.length === 0;
   return (
-    <section aria-labelledby="category-budgets" className="mt-5">
+    <section aria-labelledby={`${cadence}-category-budgets`} className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SectionTitle
-          id="category-budgets"
+          id={`${cadence}-category-budgets`}
           meta={`${budgets.length} ${budgets.length === 1 ? "category" : "categories"}`}
-          title="By category"
+          title={`${cadence === "weekly" ? "Weekly" : "Monthly"} by category`}
         />
         {empty ? null : (
           <Button
@@ -687,12 +720,16 @@ export function BudgetsScreen({
   onRequestEditBudget?: (budgetId: string) => void;
   onRequestDeleteBudget?: (budgetId: string) => void;
   onCreateBudget?: (input: CreateDemoBudgetInput) => void;
-  onRequestCreateBudget?: () => void;
+  onRequestCreateBudget?: (cadence: Budget["cadence"]) => void;
   demoCategories?: Category[];
 }) {
-  const summary = summarizeBudgets(transactions, budgets, month, today);
+  const periods = (["weekly", "monthly"] as const).map((cadence) => ({
+    cadence,
+    summary: summarizeBudgetPeriod(transactions, budgets, cadence, month, today),
+  }));
+  const monthly = periods[1].summary;
   const [editing, setEditing] = useState<Budget | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<Budget["cadence"] | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     message: string;
@@ -735,6 +772,7 @@ export function BudgetsScreen({
     const current = budgets.find((budget) => budget.id === budgetId);
     if (
       !current ||
+      current.cadence !== after.cadence ||
       current.limit !== after.limit ||
       current.startsOn !== after.startsOn ||
       current.warningPercent !== after.warningPercent ||
@@ -768,7 +806,7 @@ export function BudgetsScreen({
     if (onRequestEditBudget) onRequestEditBudget(detail.id);
     else setEditing(detail);
   };
-  const calendarPeriods = budgets.every(
+  const calendarPeriods = monthly.budgets.every(
     (budget) => !budget.startsOn || budget.startsOn.endsWith("-01"),
   );
   const suggested = bills.filter((bill) => bill.status === "suggested");
@@ -789,6 +827,10 @@ export function BudgetsScreen({
           <p className="text-xs font-semibold text-muted sm:text-sm">{formatMonth(month)}</p>
         )}
       </div>
+
+      <p className="mt-2 text-sm leading-6 text-muted">
+        Your week and month, together. Each limit keeps its own reset date.
+      </p>
 
       {feedback && (
         <div
@@ -841,28 +883,49 @@ export function BudgetsScreen({
         className={`mt-4 grid min-w-0 gap-5 ${showBills ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" : ""} lg:gap-6`}
       >
         <div className="min-w-0">
-          <BudgetSummaryCard
-            budgets={budgets}
+          <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+            {periods.map(({ cadence, summary }) => (
+              <BudgetSummaryCard
+                key={cadence}
+                budgets={summary.budgets}
+                cadence={cadence}
+                month={month}
+                summary={summary}
+                today={today}
+                calendarPeriods={calendarPeriods}
+                transactions={transactions}
+                onCreate={() =>
+                  onRequestCreateBudget ? onRequestCreateBudget(cadence) : setCreating(cadence)
+                }
+              />
+            ))}
+          </div>
+          {periods
+            .filter(({ summary }) => summary.budgets.length > 0)
+            .map(({ cadence, summary }) => (
+              <CategoryBudgets
+                key={cadence}
+                cadence={cadence}
+                budgets={summary.budgets}
+                month={month}
+                transactions={transactions}
+                today={today}
+                onOpenBudget={(budget) => setDetailId(budget.id)}
+                onEditBudget={(budget) => {
+                  if (onRequestEditBudget) onRequestEditBudget(budget.id);
+                  else setEditing(budget);
+                }}
+                onCreate={() =>
+                  onRequestCreateBudget ? onRequestCreateBudget(cadence) : setCreating(cadence)
+                }
+              />
+            ))}
+          <CategorySpendingGuide
+            budgetIds={monthly.budgets.map((budget) => budget.id)}
+            insights={insights}
             month={month}
-            summary={summary}
             today={today}
-            monthlyOnly={demo || Boolean(management)}
-            calendarPeriods={calendarPeriods}
-            transactions={transactions}
           />
-          <CategoryBudgets
-            budgets={budgets}
-            month={month}
-            transactions={transactions}
-            today={today}
-            onOpenBudget={(budget) => setDetailId(budget.id)}
-            onEditBudget={(budget) => {
-              if (onRequestEditBudget) onRequestEditBudget(budget.id);
-              else setEditing(budget);
-            }}
-            onCreate={onRequestCreateBudget ?? (() => setCreating(true))}
-          />
-          <CategorySpendingGuide insights={insights} month={month} today={today} />
           {management}
         </div>
         {showBills && (
@@ -900,6 +963,7 @@ export function BudgetsScreen({
       {creating && onCreateBudget && (
         <DemoBudgetCreator
           budgets={budgets}
+          initialCadence={creating}
           transactions={transactions}
           today={today}
           onSave={(input) => {
@@ -909,7 +973,7 @@ export function BudgetsScreen({
               category: input.category,
             });
           }}
-          onClose={() => setCreating(false)}
+          onClose={() => setCreating(null)}
           demoCategories={demoCategories}
         />
       )}

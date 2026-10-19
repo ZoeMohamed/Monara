@@ -8,6 +8,12 @@ function fail(message: string, error?: { code?: string } | null): never {
   if (error?.code === "23503") {
     throw new FinanceOperationError("FORBIDDEN", "That chat belongs to another account.");
   }
+  if (error?.code === "23505") {
+    throw new FinanceOperationError(
+      "CONFLICT",
+      "This chat reply was already saved differently. Reload your saved chats before continuing.",
+    );
+  }
   throw new FinanceOperationError("INTERNAL", message);
 }
 
@@ -23,6 +29,8 @@ export function createSupabaseChatHistoryRepository(
       const query = client.rpc("append_chat_exchange", {
         p_user_id: input.userId,
         p_conversation_id: input.conversationId,
+        p_exchange_id: input.exchangeId,
+        p_created_at: input.createdAt,
         p_title: input.title,
         p_user_text: input.userText,
         p_agent_text: input.agentText,
@@ -56,6 +64,7 @@ export function createSupabaseChatHistoryRepository(
         .select("id, role, text, result, closed_confirmation")
         .eq("user_id", userId)
         .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: false })
         .order("seq", { ascending: false })
         .limit(limit);
       if (error) fail("This chat could not be read.");
@@ -66,8 +75,9 @@ export function createSupabaseChatHistoryRepository(
           role: row.role === "user" ? "user" : "agent",
           text: row.text,
           // A row that no longer matches the contract still shows its text.
-          result: result.success ? result.data : null,
-          closedConfirmation: row.closed_confirmation,
+          result: result.success ? { ...result.data, confirmation: null } : null,
+          closedConfirmation:
+            row.closed_confirmation || (result.success && result.data.confirmation !== null),
         };
       });
     },

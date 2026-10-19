@@ -66,7 +66,7 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
   if (!values.kind || !["expense", "income", "exclusion"].includes(values.kind)) {
     errors.kind = "Choose the transaction type.";
   }
-  // Exclusions may omit an amount or date; anything that is entered must still be valid.
+  // Exclusions may omit an amount; every confirmed record still needs its actual date.
   const isExclusion = values.kind === "exclusion";
   if (
     (!isExclusion || values.amount !== null) &&
@@ -77,7 +77,7 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
   if (!isExclusion && values.currency !== "IDR") {
     errors.currency = "Choose IDR. Monara supports rupiah only.";
   }
-  if ((!isExclusion || values.date) && !isCalendarDate(values.date)) {
+  if (!isCalendarDate(values.date)) {
     errors.date = "Enter a valid transaction date.";
   }
   if (values.kind && values.category && values.categoryKind && values.categoryKind !== values.kind)
@@ -181,6 +181,9 @@ export function undoTransactionDeletion(
 }
 
 export function excludePendingTransaction(transactions: Transaction[], id: string): Transaction[] {
+  const pending = transactions.find((item) => item.id === id && item.status === "pending");
+  if (!pending || Object.keys(transactionErrors({ ...pending, kind: "exclusion" })).length > 0)
+    return transactions;
   return transactions.map((transaction) =>
     transaction.id === id && transaction.status === "pending"
       ? {

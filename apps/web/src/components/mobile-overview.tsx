@@ -10,7 +10,6 @@ import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon, type IconName } from "@/components/icon";
 import { MonaraMascot } from "@/components/monara-mascot";
 import { TransactionRow } from "@/components/transaction-row";
-import { WeeklySpendingCard } from "@/components/weekly-spending-card";
 import { categoryColor } from "@/data/category-style";
 import {
   daysInMonth,
@@ -1142,9 +1141,6 @@ export function MobileOverview({
               openBudgets={openBudgets}
               openReports={openReports}
             />
-            {model.weekly ? (
-              <WeeklySpendingCard week={model.weekly} openBudgets={openBudgets} />
-            ) : null}
             {model.isCurrentMonth ? (
               <AttentionCard
                 items={model.attention}

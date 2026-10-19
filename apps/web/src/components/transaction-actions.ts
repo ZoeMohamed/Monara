@@ -150,7 +150,7 @@ export function useTransactionActions(context: ActionContext) {
     }
     if (
       Object.keys(transactionErrors(item)).length > 0 ||
-      (item.kind !== "exclusion" && !item.method)
+      (!item.method && item.kind !== "exclusion")
     ) {
       navigation.openEdit(id);
       return;
@@ -281,7 +281,8 @@ export function useTransactionActions(context: ActionContext) {
     if (
       Object.keys(transactionErrors(values)).length > 0 ||
       !values.merchant ||
-      (values.kind !== "exclusion" && !values.method)
+      !values.method ||
+      values.amount === null
     )
       throw new Error("Check the transaction details.");
     if (live) {
@@ -320,7 +321,10 @@ export function useTransactionActions(context: ActionContext) {
         return next;
       });
       setNotice({
-        message: "Transaction added. You can edit its details anytime.",
+        message:
+          values.kind === "exclusion"
+            ? "Exclusion saved. Kept in History, with totals unchanged."
+            : "Transaction added. You can edit its details anytime.",
         undo: { kind: "backend", receipt: result.action },
       });
       navigation.navigate({ adding: false, transactionId: result.transaction.id }, "replace");
@@ -340,7 +344,10 @@ export function useTransactionActions(context: ActionContext) {
       return next;
     });
     setNotice({
-      message: "Transaction added. You can edit its details anytime.",
+      message:
+        values.kind === "exclusion"
+          ? "Exclusion saved. Kept in History, with totals unchanged."
+          : "Transaction added. You can edit its details anytime.",
       undo: { kind: "create", transaction: record },
     });
     navigation.navigate({ adding: false, transactionId: record.id }, "replace");
@@ -470,18 +477,26 @@ export function useTransactionActions(context: ActionContext) {
     if (!rejecting) return;
 
     setRejectError(null);
+    if (transactionErrors({ ...rejecting, kind: "exclusion" }).date) {
+      setRejectError(
+        "Add the actual transaction date in Edit, then try Exclude again. Your record is still waiting for review.",
+      );
+      return;
+    }
     if (live && !rejecting.backend) {
       setRejectError("This record could not be verified. Refresh your records.");
       return;
     }
+    let action: TransactionMutationResult["action"] | undefined;
     if (live && rejecting.backend) {
       try {
-        await mutate(() =>
+        const result = await mutate(() =>
           callFinanceOperation("exclude_pending", {
             transactionId: rejecting.id,
             expectedUpdatedAt: rejecting.backend?.updatedAt,
           }),
         );
+        action = result.action;
       } catch (error) {
         setRejectError(
           error instanceof FinanceClientError
@@ -498,9 +513,11 @@ export function useTransactionActions(context: ActionContext) {
     navigation.closePopup();
     setNotice({
       message: "Moved to Exclusions. It won’t count toward your totals.",
-      ...(!live && expected
-        ? { undo: { kind: "update" as const, before: rejecting, expected } }
-        : {}),
+      ...(action
+        ? { undo: { kind: "backend" as const, receipt: action } }
+        : expected
+          ? { undo: { kind: "update" as const, before: rejecting, expected } }
+          : {}),
     });
   };
 

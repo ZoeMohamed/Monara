@@ -3,6 +3,8 @@
 import {
   type AgentChatResponse,
   agentChatResponseSchema,
+  type ChatExchange,
+  chatExchangeSchema,
   type SavedChatConversation,
   type SavedChatList,
   type SavedChatMessage,
@@ -12,9 +14,6 @@ import {
   savedChatMessageLimit,
   savedChatMessagesSchema,
   userIdSchema,
-  type WebChatRequest,
-  type WebChatResponse,
-  webChatRequestSchema,
 } from "@monara/contracts";
 import { z } from "zod";
 import { FinanceOperationError } from "./finance.ts";
@@ -24,6 +23,8 @@ export interface ChatHistoryRepository {
   appendExchange(input: {
     userId: string;
     conversationId: string;
+    exchangeId: string;
+    createdAt: string;
     title: string;
     userText: string;
     agentText: string;
@@ -38,12 +39,7 @@ export interface ChatHistoryRepository {
 }
 
 export interface ChatHistoryService {
-  saveExchange(
-    userId: string,
-    request: Pick<WebChatRequest, "conversationId" | "text">,
-    response: WebChatResponse,
-    signal?: AbortSignal,
-  ): Promise<void>;
+  saveExchange(userId: string, exchange: ChatExchange, signal?: AbortSignal): Promise<void>;
   conversations(userId: string): Promise<SavedChatList>;
   messages(userId: string, conversationId: string): Promise<SavedChatMessages>;
 }
@@ -57,16 +53,17 @@ function chatTitle(text: string): string {
 
 export function createChatHistoryService(repository: ChatHistoryRepository): ChatHistoryService {
   return {
-    async saveExchange(userId, request, response, signal) {
+    async saveExchange(userId, input, signal) {
       const owner = userIdSchema.parse(userId);
-      const conversationId = webChatRequestSchema.shape.conversationId.parse(
-        request.conversationId,
-      );
+      const { conversationId, exchangeId, createdAt, text, response } =
+        chatExchangeSchema.parse(input);
       await repository.appendExchange({
         userId: owner,
         conversationId,
-        title: chatTitle(request.text),
-        userText: request.text.trim(),
+        exchangeId,
+        createdAt,
+        title: chatTitle(text),
+        userText: text,
         agentText: response.reply,
         // A restored chat is context, never renewed permission: an open confirmation is
         // saved as closed, and a signed image link is dropped because it expires.

@@ -53,6 +53,7 @@ type ChatScreenProps = {
   /** Chats are kept in the User's account. False in the demo, which keeps them in the page. */
   saved?: boolean;
   savedLoadFailed?: boolean;
+  onRetrySavedList?: () => void;
 };
 
 function ConversationMessage({
@@ -474,12 +475,19 @@ function ChatComposer({
           </InputGroup>
         </TextField>
         <Button
-          aria-label={receipt.receipt ? "Send receipt" : "Send message"}
+          aria-label={
+            receipt.receipt
+              ? receiptAvailable
+                ? "Send receipt"
+                : "Receipt import unavailable"
+              : "Send message"
+          }
           className={styles.sendButton}
           isDisabled={
             sending ||
             recovery?.requiresRecordCheck ||
             recovery?.signInRequired ||
+            (Boolean(receipt.receipt) && !receiptAvailable) ||
             (!receipt.receipt && draft.trim() === "")
           }
           isIconOnly
@@ -489,6 +497,39 @@ function ChatComposer({
         </Button>
       </div>
     </form>
+  );
+}
+
+function ChatHistorySaveNotice() {
+  const { history } = useChatSession();
+  if (!history.error && !history.notice) return null;
+  return (
+    <div
+      className={`mx-4 mt-2 flex items-center gap-3 rounded-2xl p-3 text-xs ${history.error ? "bg-warning/10" : "bg-success/10"}`}
+      role="status"
+    >
+      <p className="flex-1">{history.error ?? history.notice}</p>
+      {history.error ? (
+        <Button
+          className="min-h-11 shrink-0"
+          isDisabled={history.loading || history.saving}
+          onPress={history.retry}
+          variant="ghost"
+        >
+          Save history
+        </Button>
+      ) : (
+        <Button
+          aria-label="Dismiss history saved message"
+          className="min-h-11 shrink-0"
+          isIconOnly
+          onPress={history.dismissNotice}
+          variant="ghost"
+        >
+          <Icon name="close" />
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -512,6 +553,7 @@ export function ChatScreen({
   onRetryLoad,
   saved = false,
   savedLoadFailed = false,
+  onRetrySavedList,
 }: ChatScreenProps) {
   const { dispatch } = useChatSession();
   const conversation = conversations.find((item) => item.id === activeConversationId);
@@ -529,11 +571,11 @@ export function ChatScreen({
   const conversationRef = useRef<HTMLDivElement>(null);
   const promptSent = useRef(false);
   const sendingRef = useRef(false);
+  const busy = sending || pending;
+  const locked = busy || status !== "ready";
   const latest = messages.at(-1);
   const activeConfirmationId =
     latest?.role === "agent" ? (latest.result?.confirmation?.confirmationId ?? null) : null;
-  const busy = sending || pending;
-  const locked = busy || status !== "ready";
   useEffect(() => {
     if (messages.length === 0 && !busy) return;
     const conversation = conversationRef.current;
@@ -623,13 +665,16 @@ export function ChatScreen({
       return;
     }
     onPromptUsed?.();
-    void sendText(prompt);
+    // A gated send would drop the prompt; keep it as a draft the user can send later.
+    if (receipt.isPreparing() || recovery?.requiresRecordCheck || recovery?.signInRequired)
+      setDraft(prompt);
+    else void sendText(prompt);
   });
   useEffect(() => {
-    if (!initialPrompt || promptSent.current || pending) return;
+    if (!initialPrompt || promptSent.current || pending || status !== "ready") return;
     promptSent.current = true;
     sendPrompt(initialPrompt);
-  }, [initialPrompt, pending]);
+  }, [initialPrompt, pending, status]);
   return (
     <div className={`${styles.shell} flex flex-col`} ref={shellRef}>
       <div aria-hidden className={styles.handle} />
@@ -640,6 +685,7 @@ export function ChatScreen({
         onNewChat={onNewChat}
         sending={locked || receipt.preparing}
       />
+      <ChatHistorySaveNotice />
       <div
         aria-label="Conversation"
         aria-live="polite"
@@ -698,6 +744,7 @@ export function ChatScreen({
           pending={busy || receipt.preparing}
           saved={saved}
           savedLoadFailed={savedLoadFailed}
+          onRetrySavedList={onRetrySavedList}
         />
       ) : null}
     </div>

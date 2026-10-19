@@ -3,6 +3,7 @@
 import { Button } from "@monara/ui";
 import { useAmountDisplay } from "@/components/app-session-context";
 import styles from "@/components/chat-screen.module.css";
+import { useChatSession } from "@/components/chat-session-context";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import type { ChatConversation } from "@/lib/chat/session";
@@ -21,6 +22,7 @@ export function ChatHistory({
   onNewChat,
   saved,
   savedLoadFailed,
+  onRetrySavedList,
 }: {
   conversations: ChatConversation[];
   activeId: string;
@@ -30,8 +32,10 @@ export function ChatHistory({
   onNewChat?: () => void;
   saved: boolean;
   savedLoadFailed: boolean;
+  onRetrySavedList?: () => void;
 }) {
   const { maskAmountText } = useAmountDisplay();
+  const { history } = useChatSession();
   const recent = conversations
     .filter(
       (conversation) =>
@@ -52,13 +56,29 @@ export function ChatHistory({
         </div>
         <p className={styles.historyNote}>
           {saved
-            ? "Your chats are saved to your account. Drafts stay on this page, and reloading clears them."
-            : "Chats and drafts stay here while this page is open. Reloading or signing out clears them."}
+            ? "Your chats are saved privately to your account. Unsent drafts and photos stay on this page."
+            : "Demo chats stay here while this page is open. Reloading clears them."}
         </p>
         {savedLoadFailed ? (
-          <p className={styles.historyNote} role="alert">
-            Your saved chats couldn’t be loaded. Close and reopen Ask Monara to try again.
-          </p>
+          <div className="mt-3 rounded-2xl bg-warning/10 p-4 text-sm" role="status">
+            <p>Your saved chats couldn’t be loaded. Your current chat and drafts are still here.</p>
+            <Button className="mt-2 min-h-11" onPress={onRetrySavedList} variant="secondary">
+              Load saved chats
+            </Button>
+          </div>
+        ) : null}
+        {history.error ? (
+          <div className="mt-3 rounded-2xl bg-warning/10 p-4 text-sm" role="status">
+            <p>{history.error}</p>
+            <Button
+              className="mt-2 min-h-11"
+              isDisabled={history.loading || history.saving}
+              onPress={history.retry}
+              variant="secondary"
+            >
+              Try again
+            </Button>
+          </div>
         ) : null}
         {onNewChat ? (
           <Button
@@ -74,7 +94,9 @@ export function ChatHistory({
         ) : null}
         {pending ? (
           <p className={styles.historyNote} role="status">
-            Finishing your message. You can switch chats when it’s done.
+            {history.loading
+              ? "Loading your saved chats. You can switch chats when they’re ready."
+              : "Finishing your message. You can switch chats when it’s done."}
           </p>
         ) : null}
         {recent.length === 0 ? (
@@ -113,6 +135,9 @@ export function ChatHistory({
             ))}
           </ul>
         )}
+        {history.persistent && recent.length >= 50 ? (
+          <p className={styles.historyNote}>Your 50 most recent chats are shown.</p>
+        ) : null}
       </section>
     </ModalDialog>
   );

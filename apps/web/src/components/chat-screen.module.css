@@ -65,10 +65,12 @@
 .conversation {
   min-width: 0;
   min-height: 0;
-  margin-top: 28px;
+  /* Keep the greeting in place while reserving its full upward motion inside
+     the scrollport, where overflow would otherwise cut off the cat's ears. */
+  margin-top: 12px;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  padding: 0 max(24px, env(safe-area-inset-right, 0px)) 24px
+  padding: 16px max(24px, env(safe-area-inset-right, 0px)) 24px
     max(24px, env(safe-area-inset-left, 0px));
   scrollbar-width: thin;
 }
@@ -401,7 +403,7 @@
   }
 
   .conversation {
-    padding: 0 48px 24px;
+    padding: 16px 48px 24px;
   }
 
   .composer {

@@ -137,12 +137,44 @@ test("an unknown account is left empty and the User is asked which one paid", as
   assert.match(reply, /Which account paid for it\?/);
 });
 
-test("a future date falls back to today's Jakarta date and lowers confidence", async () => {
-  const { saved } = await run({ ...reading, occurredOn: "2027-01-01" });
+test("missing receipt dates stay unknown for every transaction type and ask the User for the date", async () => {
+  for (const kind of ["expense", "income", "exclusion"]) {
+    const { reply, saved } = await run({ ...reading, kind, occurredOn: null });
+    const values = saved?.values as Record<string, unknown> | undefined;
+    assert.equal(values?.occurredOn, null);
+    assert.equal(values?.occurredTime, null);
+    assert.equal(saved?.confidence, 0.5);
+    assert.match(reply, /What date was this\?/);
+    assert.match(reply, /saved in your Review Queue/);
+    assert.doesNotMatch(reply, /on 17 Oct|reply confirm/);
+  }
+});
+
+test("invalid, future and implausibly old receipt dates never become today's date", async () => {
+  for (const occurredOn of ["2027-01-01", "2026-02-30", "2024-10-17", "unreadable"]) {
+    const { saved, reply } = await run({ ...reading, occurredOn });
+    const values = saved?.values as Record<string, unknown> | undefined;
+    assert.equal(values?.occurredOn, null);
+    assert.equal(values?.occurredTime, null);
+    assert.equal(saved?.confidence, 0.5);
+    assert.match(reply, /What date was this\?/);
+  }
+});
+
+test("a valid printed date stays on its actual day rather than the day the photo was sent", async () => {
+  const { saved, reply } = await run({ ...reading, occurredOn: "2026-10-15" });
   const values = saved?.values as Record<string, unknown> | undefined;
-  assert.equal(values?.occurredOn, "2026-10-17");
-  assert.equal(values?.occurredTime, null);
-  assert.equal(saved?.confidence, 0.5);
+  assert.equal(values?.occurredOn, "2026-10-15");
+  assert.equal(values?.occurredTime, "12:41");
+  assert.equal(saved?.confidence, 0.9);
+  assert.match(reply, /on 15 Oct, 12:41/);
+});
+
+test("date uncertainty does not invent a confidence or raise a lower score", async () => {
+  for (const confidence of [null, 0.2]) {
+    const { saved } = await run({ ...reading, occurredOn: null, confidence });
+    assert.equal(saved?.confidence, confidence);
+  }
 });
 
 test("nothing is saved for a non-receipt, an unreadable total, or a file that is not a photo", async () => {

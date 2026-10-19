@@ -11,6 +11,7 @@ import {
 } from "@monara/integrations";
 import { cookies } from "next/headers";
 import { DELETION_COOKIE, userIdFromDeletionReceipt } from "@/lib/auth/deletion-receipt";
+import { cleanUserGoalImages } from "@/lib/goals/storage-cleanup";
 import { publicSupabaseConfig } from "@/lib/supabase/config";
 
 function client() {
@@ -50,8 +51,10 @@ export async function deletionStatus(): Promise<"pending" | "complete" | null> {
 }
 
 function service() {
+  const backend = client();
   return createUserDeletionService({
-    repository: createSupabaseUserDeletionRepository(client()),
+    repository: createSupabaseUserDeletionRepository(backend),
+    cleanStorageUser: (userId) => cleanUserGoalImages(backend, userId),
     cleanProviderUser: (userId) => {
       return createComposioUserCleanup({
         apiUrl: process.env.COMPOSIO_API_URL ?? "",

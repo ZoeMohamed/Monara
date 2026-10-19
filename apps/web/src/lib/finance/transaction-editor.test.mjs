@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { after, describe, it } from "node:test";
+import { transactionSchema, updateTransactionInputSchema } from "@monara/contracts";
 import ts from "typescript";
+import { mapOwnedTransaction } from "./presentation.ts";
 
 const editorUrl = new URL("../../components/transaction-editor.tsx", import.meta.url).href;
 const runtimeKey = Symbol.for("monara.transaction-editor-test");
@@ -353,6 +355,46 @@ describe("transaction editor recovery", () => {
     assert.equal(editor.render().state.draft.category, categoryId);
   });
 
+  it("round-trips SQL seconds through a compact display and an unrelated edit without inventing time", async () => {
+    for (const occurredTime of ["12:00:00", "12:34:56", "00:00:00", null]) {
+      const source = transactionSchema.parse({
+        id: transaction().id,
+        kind: "expense",
+        flowDirection: "out",
+        merchantName: "Original lunch",
+        money: { amountMinor: "25000", currency: "IDR" },
+        occurredOn: "2026-10-17",
+        occurredTime,
+        description: null,
+        location: null,
+        accountHint: null,
+        categoryId,
+        financialAccountId: accountId,
+        reviewStatus: "confirmed",
+        source: "gmail_email",
+        confidence: 0.96,
+        deletedAt: null,
+        createdAt: originalVersion,
+        updatedAt: originalVersion,
+      });
+      const mapped = mapOwnedTransaction(source, resources.financialAccounts, resources.categories);
+      assert.equal(mapped.time, occurredTime?.slice(0, 5) ?? null);
+      const editor = mountEditor({ transaction: mapped });
+      editor.render().changeDraft({ merchant: "Corrected lunch" });
+      await editor.render().submit(submitEvent());
+      assert.equal(editor.saved.length, 1);
+      const [values, action, expectedUpdatedAt] = editor.saved[0];
+      assert.equal(action, "correct");
+      assert.equal(values.time, occurredTime);
+      const request = updateTransactionInputSchema.parse({
+        transactionId: source.id,
+        expectedUpdatedAt,
+        changes: { merchantName: values.merchant, occurredTime: values.time },
+      });
+      assert.equal(request.changes.occurredTime, occurredTime);
+    }
+  });
+
   it("blocks a changed record until the user reviews it, then preserves their draft explicitly", async () => {
     const editor = mountEditor();
     editor.render().changeDraft({ merchant: "My corrected lunch", amount: "30000" });
@@ -424,11 +466,53 @@ describe("transaction editor recovery", () => {
       assert.equal(editor.saved.length, 0);
       assert.match(
         editor.render().state.errors[field],
-        field === "method" ? /active account/ : /matching this transaction type/,
+        field === "method" ? /active account/ : /archived or removed/,
       );
       assert.equal(event.focused.length, 1);
       assert.match(event.focused[0], new RegExp(`data-field="${field}"`));
       assert.equal(editor.render().state.phase, "editing");
     }
+  });
+});
+
+describe("live exclusion editor", () => {
+  it("keeps a live reason as its owned UUID and saves an exclusion without an account", async () => {
+    const item = transaction();
+    item.kind = "exclusion";
+    item.status = "pending";
+    item.category = "Internal";
+    item.method = null;
+    item.backend.financialAccountId = null;
+    const editor = mountEditor({
+      transaction: item,
+      resources: {
+        financialAccounts: [],
+        categories: [
+          { id: categoryId, name: "My own accounts", kind: "exclusion", isArchived: false },
+        ],
+      },
+    });
+    assert.equal(editor.render().state.draft.category, categoryId);
+    await editor.render().submit(submitEvent());
+    assert.equal(editor.saved.length, 1);
+    assert.equal(editor.saved[0][0].kind, "exclusion");
+    assert.equal(editor.saved[0][0].categoryId, categoryId);
+    assert.equal(editor.saved[0][0].financialAccountId, null);
+  });
+
+  it("blocks an archived exclusion reason and keeps the entered details", async () => {
+    const item = transaction();
+    item.kind = "exclusion";
+    const editor = mountEditor({
+      transaction: item,
+      resources: {
+        ...resources,
+        categories: [{ id: categoryId, name: "Internal", kind: "exclusion", isArchived: true }],
+      },
+    });
+    await editor.render().submit(submitEvent());
+    assert.equal(editor.saved.length, 0);
+    assert.match(editor.render().state.errors.category, /archived or removed/);
+    assert.equal(editor.render().state.draft.category, categoryId);
   });
 });
