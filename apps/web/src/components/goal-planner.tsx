@@ -317,8 +317,11 @@ function GoalEditor({
       const nextErrors = validateGoalDraft(draft);
       if (Object.keys(nextErrors).length > 0) {
         setErrors(nextErrors);
-        const first = Object.keys(nextErrors)[0];
-        event.currentTarget.querySelector<HTMLInputElement>(`[name="${first}"]`)?.focus();
+        const first = ["name", "target", "saved", "targetDate", "image"].find(
+          (field) => nextErrors[field],
+        );
+        if (first)
+          event.currentTarget.querySelector<HTMLInputElement>(`[name="${first}"]`)?.focus();
         return;
       }
       setErrors({});
