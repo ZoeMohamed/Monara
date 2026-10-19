@@ -27,6 +27,8 @@ interface Outbound {
 
 /** Everything `drain` owns. `receive` never writes it, so the two cannot overwrite each other. */
 interface SessionState {
+  /** Older outboxes without an owner cannot safely be delivered after upgrade. */
+  userId?: string;
   /** The message the Agent is working on. Still set after a crash, never run twice. */
   inFlight: QueuedMessage | null;
   outbox: Outbound[];
@@ -89,6 +91,7 @@ export class ConversationSession {
   private readonly readReceipt: ReadReceipt | null;
   private readonly send: (message: Outbound) => Promise<void>;
   private readonly now: () => number;
+  private readonly isActive: (userId: string) => Promise<boolean>;
 
   constructor(dependencies: {
     storage: SessionStorage;
@@ -96,16 +99,19 @@ export class ConversationSession {
     readReceipt?: ReadReceipt;
     send: (message: Outbound) => Promise<void>;
     now: () => number;
+    isActive: (userId: string) => Promise<boolean>;
   }) {
     this.storage = dependencies.storage;
     this.respond = dependencies.respond;
     this.readReceipt = dependencies.readReceipt ?? null;
     this.send = dependencies.send;
     this.now = dependencies.now;
+    this.isActive = dependencies.isActive;
   }
 
   /** Queues a message and returns at once, so the webhook can answer Kapso in time. */
   async receive(message: QueuedMessage): Promise<void> {
+    if (!(await this.isActive(message.userId))) return;
     const seenKey = `${SEEN_PREFIX}${message.messageId}`;
     if (await this.storage.get(seenKey)) return;
     sequence = (sequence + 1) % 1_000_000;
@@ -122,6 +128,7 @@ export class ConversationSession {
     if (!next) return null;
     const [key, message] = next;
     state.inFlight = message;
+    state.userId = message.userId;
     // Saved before the inbox entry goes, so a crash in between cannot lose the message silently.
     await this.storage.put(STATE_KEY, state);
     await this.storage.delete(key);
@@ -133,6 +140,7 @@ export class ConversationSession {
     const state = (await this.storage.get<SessionState>(STATE_KEY)) ?? emptyState();
 
     if (state.inFlight) {
+      state.userId ??= state.inFlight.userId;
       // The last run stopped partway, so what it saved is unknown. Say so instead of redoing it.
       state.outbox.push({ ...state.inFlight, text: FAILURE_REPLY });
       state.inFlight = null;
@@ -141,6 +149,10 @@ export class ConversationSession {
 
     for (;;) {
       for (let next = state.outbox[0]; next; next = state.outbox[0]) {
+        if (!state.userId || !(await this.isActive(state.userId))) {
+          await this.storage.deleteAll();
+          return;
+        }
         await this.send(next);
         state.outbox.shift();
         await this.storage.put(STATE_KEY, state);
@@ -149,6 +161,10 @@ export class ConversationSession {
       if (this.now() - state.lastActiveAt > IDLE_MS) state.history = [];
       const message = await this.takeNext(state);
       if (!message) break;
+      if (!(await this.isActive(message.userId))) {
+        await this.storage.deleteAll();
+        return;
+      }
 
       let text = FAILURE_REPLY;
       if (message.media) {
@@ -157,6 +173,10 @@ export class ConversationSession {
           text = await this.readReceipt(message);
         } catch {
           text = RECEIPT_FAILURE_REPLY;
+        }
+        if (!(await this.isActive(message.userId))) {
+          await this.storage.deleteAll();
+          return;
         }
         // The reply goes into the history so "confirm" or "it was BCA" can follow it.
         state.history = [
@@ -192,6 +212,10 @@ export class ConversationSession {
         ].slice(-MAX_HISTORY_TURNS);
       } catch {
         // The Agent may have changed something before it failed, so the turn is not replayed.
+      }
+      if (!(await this.isActive(message.userId))) {
+        await this.storage.deleteAll();
+        return;
       }
       state.inFlight = null;
       state.outbox.push({ to: message.to, phoneNumberId: message.phoneNumberId, text });

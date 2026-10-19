@@ -188,7 +188,7 @@ function harness(
   const stored = new Map<string, unknown>();
   const sent: string[] = [];
   const asked: { text: string; history: AgentChatTurn[]; channel: string }[] = [];
-  const clock = { now: 1_000_000, failSends: 0, alarm: null as number | null };
+  const clock = { now: 1_000_000, failSends: 0, alarm: null as number | null, active: true };
   const storage: SessionStorage = {
     get: async <T>(key: string) => structuredClone(stored.get(key)) as T | undefined,
     put: async (key, value) => {
@@ -210,6 +210,7 @@ function harness(
   const session = () =>
     new ConversationSession({
       storage,
+      isActive: async () => clock.active,
       now: () => clock.now,
       ...(readReceipt ? { readReceipt } : {}),
       respond: async ({ caller, history, text }) => {
@@ -239,6 +240,36 @@ const echo = async (text: string): Promise<AgentChatResponse> => ({
   reply: `You said ${text}`,
   actions: [],
   confirmation: null,
+});
+
+test("deletion discards a pending outbox instead of retrying its WhatsApp reply", async () => {
+  const h = harness(echo);
+  h.clock.failSends = 1;
+  await h.session().receive(message("delete-outbox", "hello"));
+  await assert.rejects(() => h.session().drain());
+  h.clock.active = false;
+  await h.session().drain();
+  assert.deepEqual(h.sent, []);
+  assert.equal(h.stored.size, 0);
+});
+
+test("a model reply finishing after deletion is neither stored nor sent", async () => {
+  const h = harness(async (text) => {
+    h.clock.active = false;
+    return echo(text);
+  });
+  await h.session().receive(message("delete-inflight", "hello"));
+  await h.session().drain();
+  assert.deepEqual(h.sent, []);
+  assert.equal(h.stored.size, 0);
+});
+
+test("a stale webhook for a deleted User cannot create conversation storage", async () => {
+  const h = harness(echo);
+  h.clock.active = false;
+  await h.session().receive(message("delete-inbound", "hello"));
+  assert.equal(h.stored.size, 0);
+  assert.deepEqual(h.sent, []);
 });
 
 test("messages are answered in order, with earlier turns as history", async () => {

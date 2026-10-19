@@ -12,6 +12,10 @@ _Avoid_: Account when referring to a person's identity
 A bank account, wallet, or cash balance whose transactions and balance a User tracks in Monara.
 _Avoid_: User account, login account
 
+**User Deletion**:
+The permanent removal of a User's Monara identity and all their personal Monara data, including Financial Accounts, transactions, settings, connections, and conversations. It has no recovery grace period or undo.
+_Avoid_: Financial Account deletion when referring to deleting the entire identity
+
 **Pending Transaction**:
 A transaction extracted from a source that awaits review and does not contribute to confirmed dashboard totals.
 _Avoid_: Confirmed transaction when review is outstanding

@@ -1,5 +1,6 @@
 import type { AgentChatResponse, AgentChatTurn } from "@monara/contracts";
 import type { Env } from "../env.ts";
+import { createUserIsActive } from "../user-deletion.ts";
 import { runAgent } from "./agent.ts";
 import { type Caller, createCallOperation } from "./backend.ts";
 import { destructiveTools } from "./destructive-tools.ts";
@@ -30,17 +31,32 @@ export function createRespond(env: Env): Respond | null {
   ) {
     return null;
   }
-  const complete = createComplete({ baseUrl: LLM_BASE_URL, apiKey: LLM_API_KEY, model: LLM_MODEL });
   const callOperation = createCallOperation({
     baseUrl: MONARA_BACKEND_URL,
     secret: MONARA_AGENT_BACKEND_SECRET,
   });
-  return (input) =>
-    runAgent({
+  const isActive = createUserIsActive(env);
+  return async (input) => {
+    async function requireActive() {
+      if (!(await isActive(input.caller.userId))) throw new Error("This account is unavailable.");
+    }
+    await requireActive();
+    const result = await runAgent({
       ...input,
-      complete,
-      callOperation,
+      complete: createComplete({
+        baseUrl: LLM_BASE_URL,
+        apiKey: LLM_API_KEY,
+        model: LLM_MODEL,
+        beforeRequest: requireActive,
+      }),
+      callOperation: async (...args) => {
+        await requireActive();
+        return callOperation(...args);
+      },
       tools: [...readTools, ...writeTools, ...destructiveTools],
       now: new Date(),
     });
+    await requireActive();
+    return result;
+  };
 }

@@ -43,7 +43,9 @@ export { createSupabaseChatHistoryRepository } from "./supabase-chat-history-rep
 export { createSupabaseFinanceRepository } from "./supabase-finance-repository.ts";
 export { createSupabaseGmailIngestionRepository } from "./supabase-gmail-ingestion-repository.ts";
 export { createSupabaseProfileRepository } from "./supabase-profile-repository.ts";
+export { createSupabaseUserDeletionRepository } from "./supabase-user-deletion-repository.ts";
 export { createSupabaseWhatsAppLinkRepository } from "./supabase-whatsapp-link-repository.ts";
+export { createUserDeletionService, type UserDeletionRepository } from "./user-deletion.ts";
 export * from "./whatsapp-link.ts";
 export {
   createWhatsAppLinkService,

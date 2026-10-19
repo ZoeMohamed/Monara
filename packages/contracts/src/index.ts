@@ -14,3 +14,4 @@ export * from "./profile.ts";
 export * from "./recurring-bills.ts";
 export * from "./reminders.ts";
 export * from "./transactions.ts";
+export * from "./user-deletion.ts";

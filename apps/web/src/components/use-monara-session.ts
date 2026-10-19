@@ -186,6 +186,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const { onboarding, tourPending, startReplay, finishTour } = useFirstRun({
     live,
     email: profile.email,
+    setupKey: profile.setupKey,
     displayName: profile.displayName,
     homeOpen: homeIsUncovered(view),
     homeScreen: view.screen === "home",

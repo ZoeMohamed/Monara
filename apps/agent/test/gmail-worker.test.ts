@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { GmailJob, MerchantCategorizeJob } from "@monara/contracts";
 import type { Env } from "../src/env.ts";
-import { handleGmailIngestRequest, handleGmailSyncRequest } from "../src/gmail/worker.ts";
+import {
+  consumeGmailJobs,
+  handleGmailIngestRequest,
+  handleGmailSyncRequest,
+} from "../src/gmail/worker.ts";
 
 const connectionId = "00000000-0000-4000-8000-000000000010";
 const secret = "synthetic-test-secret";
@@ -25,6 +29,53 @@ function setup() {
 }
 
 describe("manual Gmail sync worker boundary", () => {
+  it("splits older large parse batches before provider work without dropping email identifiers", async () => {
+    const jobs: GmailJob[] = [];
+    let acked = false;
+    const emails = Array.from({ length: 8 }, (_, index) => ({
+      processedMessageId: `d1900000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      gmailMessageId: `synthetic-${index}`,
+      receivedAt: "2026-10-19T00:00:00Z",
+    }));
+    const env: Env = {
+      GMAIL_JOBS: {
+        sendBatch: async (batch: { body: GmailJob }[]) => {
+          jobs.push(...batch.map((entry) => entry.body));
+        },
+      } as unknown as Queue<GmailJob>,
+      MERCHANT_JOBS: {} as Queue<MerchantCategorizeJob>,
+      MONARA_AGENT_BACKEND_SECRET: secret,
+      MONARA_BACKEND_URL: "https://backend.test",
+      COMPOSIO_API_URL: "https://provider.test/api/v3.1",
+      COMPOSIO_API_KEY: "synthetic-only",
+      LLM_API_KEY: "synthetic-only",
+      LLM_BASE_URL: "https://model.test",
+      LLM_MODEL: "synthetic-model",
+    };
+    await consumeGmailJobs(
+      {
+        messages: [
+          {
+            body: { kind: "gmail.parse", connectionId, emails, deferrals: 0 },
+            attempts: 1,
+            ack: () => {
+              acked = true;
+            },
+          },
+        ],
+      } as unknown as MessageBatch<unknown>,
+      env,
+    );
+    assert.equal(acked, true);
+    assert.deepEqual(
+      jobs.map((job) => (job.kind === "gmail.parse" ? job.emails.length : 0)),
+      [5, 3],
+    );
+    assert.deepEqual(
+      jobs.flatMap((job) => (job.kind === "gmail.parse" ? job.emails : [])),
+      emails,
+    );
+  });
   it("preserves the backend-provided cursor in the queued job", async () => {
     const { env, jobs, request } = setup();
     const since = "2026-10-14T04:00:00Z";

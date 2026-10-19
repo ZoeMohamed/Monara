@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { GmailConnectionsClient } from "@/components/gmail-connections-client";
+import { UserSessionGuard } from "@/components/user-session-guard";
+import { setupKeyForUser } from "@/lib/auth/setup-key";
 import { gmailPageTunnelRedirect } from "@/lib/gmail/callback";
 import { gmailCallbackError } from "@/lib/gmail/client";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
@@ -18,5 +20,10 @@ export default async function GmailConnectionsPage({
   if (!identity) redirect("/sign-in?next=/connections/gmail");
 
   const params = await searchParams;
-  return <GmailConnectionsClient callbackError={gmailCallbackError(params.result)} />;
+  return (
+    <>
+      <UserSessionGuard setupKey={setupKeyForUser(identity.id)} />
+      <GmailConnectionsClient callbackError={gmailCallbackError(params.result)} />
+    </>
+  );
 }

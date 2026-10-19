@@ -1,0 +1,74 @@
+# User deletion design
+
+Status: confirmed by the User and implemented locally. Production deployment and real-provider verification have not been performed.
+
+## Settled decisions
+
+- Put a Delete account control in Profile Settings.
+- Delete the entire User identity and all its personal Monara data, including every Financial Account, transaction, setting, connection, and conversation.
+- Deletion is permanent after explicit confirmation, with no recovery grace period or undo. Warn that Monara cannot recover the data.
+- Confirmation requires typing the exact phrase `DELETE MY ACCOUNT`, checking an acknowledgement checkbox, and pressing Delete permanently. No fresh Google authentication is required; a verified signed-in User is still required.
+- The acknowledgement reads: "I understand that deleting my account permanently removes my Monara data and cannot be undone."
+- Once the server accepts deletion, block account access and background activity immediately. Cleanup may take time; automatically retry failures and show Deletion in progress until all required cleanup succeeds. Do not report completion after only the database delete.
+- Delete Monara-controlled personal data and revoke connections. Leave the Google account, source Gmail emails, messages already delivered through WhatsApp, and the shared public merchant cache intact. Accurately disclose provider and backup retention limits; do not promise erasure of copies outside Monara's control.
+- After deletion completes, signing in with the same Google identity creates a new User and follows first-time onboarding. Do not restore the previous User ID, financial data, conversations, settings, Gmail Connections, or WhatsApp Link. A pending deletion cannot be bypassed by signing in again.
+
+The [permanence decision](adr/0004-permanent-user-deletion.md) records the retention trade-off. Domain terminology lives in [CONTEXT.md](../CONTEXT.md).
+
+## Initial repository evidence
+
+This inventory records the source audit before implementation, not current production behavior. The implementation below closes the identified gaps.
+
+| Surface | Existing behavior | Deletion requirement or unresolved boundary |
+| --- | --- | --- |
+| Supabase identity and product records | User-owned records cascade from `auth.users`; [deferred ownership references](../supabase/migrations/20261012154020_allow_owner_cascade_cleanup.sql) permit whole-User cleanup. [Web chat](../supabase/migrations/20261018130000_web_chat_history.sql) also cascades. | Cover profiles, Financial Accounts, Categories, Gmail Connections and discoveries, processed email identifiers, transactions, Budgets, Recurring Bills, Reminders and delivery preferences, WhatsApp Links, Agent action state/logs, and web conversations/messages. |
+| Gmail authorization | [Disconnect service](../packages/core/src/gmail-connections.ts) revokes/deletes the external connection; disconnected local rows remain for deduplication. [Trigger cleanup](../apps/web/src/lib/gmail/trigger.ts) is currently best effort. | Account cleanup must inspect all owned connections, preserve cleanup identifiers until needed, and define retry behavior for failed revocation or trigger removal. |
+| WhatsApp conversation state | [Durable Object](../apps/agent/src/whatsapp/conversation.ts) and [session storage](../apps/agent/src/whatsapp/session.ts) retain history, inbox/outbox, phone numbers and receipt-media links outside Supabase. No purge method exists. | Explicitly purge stored state and alarms, and prevent queued or in-flight work from restoring state or issuing new replies. Already-issued provider requests cannot be recalled by database deletion. |
+| Background processing | [Gmail processing](../apps/agent/src/gmail/pipeline.ts) stops on missing/inactive connections; [merchant enrichment](../apps/agent/src/merchant/pipeline.ts) stops on missing transactions. | Fence in-flight work and prevent stale jobs from recreating personal data. Define what completion means for residual queue identifiers. |
+| Authentication | [Identity verification](../apps/web/src/lib/supabase/server.ts) currently checks JWT claims; [sign-out](../apps/web/src/app/auth/sign-out/route.ts) uses local scope. | Reject deleted/deleting identities even when a signed token has not expired. Use the existing authenticated session for confirmation and permit fresh registration only after deletion completes. |
+| Browser state | Preferences and onboarding/tour flags persist locally; chat drafts and working history live in React memory. | Clear User-related local state and visible records, notify other tabs, and ensure other devices reject the deleted identity when they reconnect. |
+| Shared merchant cache | [Merchant profiles](../supabase/migrations/20261016190100_gmail_institution_flow.sql) contain shared merchant facts without User ownership. | Preserve shared public merchant facts while deleting the User's transaction associations and personal enrichment state. |
+| Source/provider copies, logs and backups | Existing adapters do not establish erasure guarantees for all provider-held copies, source messages, logs or backups. | Establish an honest deletion boundary; do not promise immediate erasure of copies outside Monara's control. Provider retention has not been verified. |
+| Profile and public copy | [Profile Account group](../apps/web/src/components/profile-screen.tsx) currently provides sign-out. [Privacy](../apps/web/src/lib/legal/privacy.ts) and [Terms](../apps/web/src/lib/legal/terms.ts) direct deletion requests to support. | Add the control and update deletion instructions once the complete behavior is accepted. |
+
+## Confirmation and completion
+
+The destructive confirmation is available from the signed-in Profile Account section. Explain the deletion scope and permanence before the input, acknowledgement, and final button. Enable Delete permanently only when the exact phrase and checkbox are both satisfied. Cancel leaves the User and data unchanged. Do not expose a working deletion action in demo mode.
+
+The server must derive the User identity from the verified session and enforce confirmation as well as authorization. Deletion acceptance is irreversible and distinct from cleanup completion. A failed or interrupted browser request must not abandon an accepted deletion; cleanup retries must survive the browser closing and be safe to repeat. Keep only the minimum restricted cleanup metadata needed to finish outstanding steps, then remove it when no longer needed. A pending deletion must prevent new imports, Agent operations, reminders and account writes.
+
+After completion, clear the current browser's User-related persisted preferences, onboarding flags, drafts and visible data, and invalidate other open tabs. Other devices must reject the old identity when next connected; Monara cannot remotely clear a disconnected browser's memory. Returning registration must have first-time behavior even in the same browser.
+
+## Acceptance checks for implementation
+
+- On a 390 by 844 mobile viewport, verify Profile placement, warning, exact phrase matching, acknowledgement, cancel, disabled/pending states, and final confirmation. Confirm no extra Google authentication step is introduced.
+- Verify server authorization, confirmation validation, request-origin protection, and rejection of attempts to delete another User. A signed token for a deleting/deleted User must not authorize further operations.
+- With synthetic data, verify every owned database table, web chat, WhatsApp conversation state, local preferences and relevant provider connections are cleaned up while another User's data remains unchanged.
+- Include disconnected Gmail Connection rows and trigger removal. Test already-removed provider resources as successful cleanup and transient failures as retryable failures.
+- Interrupt cleanup between steps, close the browser, retry requests and deliver stale background jobs. Verify deletion still completes, cannot be undone, and neither data nor new outgoing activity is recreated. Requests already issued to providers are outside cancellation guarantees.
+- Verify all required cleanup succeeds before reporting completion. Retention disclosures must reflect verified capabilities; queued identifiers or provider copies must not be silently treated as erased.
+- Sign in again with the same Google identity after completion, including in the same browser: verify a new User identity, empty personal state, first-time onboarding, and no automatic reconnection or restoration of old records.
+- Update Privacy and Terms deletion instructions to match the implemented flow.
+
+## Implemented boundaries
+
+- The [migration](../supabase/migrations/20261019090000_user_deletion.sql) accepts deletion using the current authenticated identity, exact phrase and acknowledgement. It atomically bans further sign-in, revokes refresh sessions, captures only needed provider identifiers and erases owned product records. Shared per-User transaction locks and write triggers fence stale service-role writes; restrictive RLS and server identity checks reject the deleted/deleting User even with an unexpired JWT.
+- [Cleanup orchestration](../packages/core/src/user-deletion.ts) runs leased, checkpointed steps through the [repository](../packages/core/src/supabase-user-deletion-repository.ts). A crashed lease expires after 90 seconds; failures retry after one minute. Worker scheduling wakes the backend every minute; the acceptance response also starts an immediate attempt. Browser polling only reads status and is not the retry mechanism.
+- Known WhatsApp, Gmail trigger and connection cleanup begins immediately. The final upstream inventory waits until at least two minutes after acceptance so previously issued consent and trigger requests can settle. This is an irreversible operational drain window, not a grace period. The [provider sweep](../packages/integrations/src/gmail-cleanup.ts) removes orphan triggers and connections, including abandoned consent attempts, before the final Auth hard delete removes the retained identity and cleanup metadata. Missing configuration or unverified provider failures keep deletion pending.
+- [WhatsApp purge](../apps/agent/src/whatsapp/conversation.ts) stops new conversation work, waits for existing invocations, and erases storage and alarms. User activity is rechecked before provider/model operations and replies. Gmail/merchant jobs stop against removed resources; model retries also recheck permission. Gmail parse jobs are capped at five emails with queue-owned retries to leave room for activity checks; older larger jobs are split without dropping items.
+- The [Profile control](../apps/web/src/components/delete-account-control.tsx) enforces the confirmed interaction. The server validates confirmation and same-origin requests and derives ownership from the session. Auth cookies are cleared after acceptance; a signed HttpOnly status-only receipt remains available for up to 30 days to track cleanup after revocation. It grants no application access. Lost acceptance responses are reconciled using that receipt or the idempotent acceptance operation.
+- [Session invalidation](../apps/web/src/components/user-session-guard.tsx) handles matching deletion broadcasts, changed identities, focus, page restoration, reconnection and periodic online checks. Personal local/session storage and stale auth cookies are cleared, and hard navigation discards React drafts/history. [Setup keys](../apps/web/src/lib/auth/setup-key.ts) derive from the immutable User identity rather than email, so returning registration receives first-time onboarding even on a browser with old flags.
+
+## Retention and completion limits
+
+Completion covers Monara's live owned records, Auth identity, WhatsApp store, Gmail authorizations and provider connection/trigger inventory. Source Google/Gmail/WhatsApp records and shared public merchant facts remain as agreed. Requests already issued to external providers cannot be recalled.
+
+Cloudflare Queues do not expose a per-User purge. Already-queued processing identifiers contain no raw email bodies, are unusable against removed connection/transaction identities, and are discarded on delivery or expire under queue retention. Completion does not imply those queued identifiers were selectively erased. The [Cloudflare queue settings documentation](https://developers.cloudflare.com/queues/configuration/configure-queues/) specifies a default retention of four days and a configurable range up to 14 days; live queue configuration has not been inspected or changed. The privacy policy discloses this boundary. Operational logs, provider-held copies and backups follow their actual retention rules; no unverified numeric promise is made for them.
+
+## Verification and rollout
+
+Local checks cover migrations, SQL lint, ownership/RLS, owned-table erasure, stale-token access, service-role write rejection, leases, cleanup failure/retry, hard deletion, isolated User data, worker/model guards, strict confirmation and local-state reset. See the [verification evidence](evidence/user-deletion-2026-10-19.md).
+
+Apply the migration before releasing backend code that requires the new identity checks. Release the matching Worker endpoints and cron configuration with the backend; otherwise required cleanup stays pending. Production must use matching backend credentials and the correct environment's Composio project. No remote migration, queue configuration, provisioning, real-user deletion, messaging or deployment was performed.
+
+This design interview does not authorize deleting real users, running remote migrations, provisioning services, or deploying.

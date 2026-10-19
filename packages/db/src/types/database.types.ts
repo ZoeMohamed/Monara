@@ -351,6 +351,20 @@ isOneToOne: false
       referencedColumns: ["id","user_id"]
     }
                   ]
+                },"user_deletions": {
+                  Row: {
+                    "attempts": number,"connected_account_ids": (string)[],"created_at": string,"lease_token": string | null,"lease_until": string | null,"next_attempt_at": string,"trigger_ids": (string)[],"user_id": string,"whatsapp_purged": boolean
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"connected_account_ids"?: (string)[],"created_at"?: string,"lease_token"?: string | null,"lease_until"?: string | null,"next_attempt_at"?: string,"trigger_ids"?: (string)[],"user_id": string,"whatsapp_purged"?: boolean
+                  }
+                  Update: {
+                    "attempts"?: number,"connected_account_ids"?: (string)[],"created_at"?: string,"lease_token"?: string | null,"lease_until"?: string | null,"next_attempt_at"?: string,"trigger_ids"?: (string)[],"user_id"?: string,"whatsapp_purged"?: boolean
+                  }
+                  Relationships: [
+
+                  ]
                 },"whatsapp_links": {
                   Row: {
                     "created_at": string,"id": string,"kapso_contact_id": string | null,"last_inbound_at": string | null,"phone_e164_ciphertext": string | null,"phone_e164_hmac": string,"phone_last_four": string,"status": string,"updated_at": string,"user_id": string,"verification_attempts": number,"verification_code_digest": string | null,"verification_expires_at": string | null,"verified_at": string | null
@@ -374,6 +388,9 @@ isOneToOne: false
             "append_chat_exchange":
 { Args: { "p_agent_result": Json,"p_agent_text": string,"p_closed_confirmation": boolean,"p_conversation_id": string,"p_title": string,"p_user_id": string,"p_user_text": string }; Returns: undefined
                            },
+"begin_user_deletion":
+{ Args: { "p_acknowledged": boolean,"p_confirmation": string }; Returns: undefined
+                           },
 "claim_gmail_message":
 { Args: { "p_connection_id": string,"p_gmail_message_id": string,"p_received_at": string }; Returns: {
               "already_finished": boolean,"processed_message_id": string
@@ -387,6 +404,24 @@ isOneToOne: false
               "status": string,"summary": string
             }[]
                            },
+"claim_user_deletion":
+{ Args: { "p_user_id"?: string }; Returns: {
+              "attempts": number,
+"connected_account_ids": (string)[],
+"created_at": string,
+"lease_token": string | null,
+"lease_until": string | null,
+"next_attempt_at": string,
+"trigger_ids": (string)[],
+"user_id": string,
+"whatsapp_purged": boolean
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "user_deletions"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "fail_gmail_discovery":
 { Args: { "p_connection_id": string }; Returns: undefined
                            },
@@ -422,6 +457,12 @@ isOneToOne: false
                            },
 "mark_gmail_connection_synced":
 { Args: { "p_connection_id": string,"p_synced_at": string }; Returns: undefined
+                           },
+"monara_session_is_active":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"monara_user_is_active":
+{ Args: { "p_user_id": string }; Returns: boolean
                            },
 "normalize_merchant_name":
 { Args: { "p_name": string }; Returns: string

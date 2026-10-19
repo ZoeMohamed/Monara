@@ -9,6 +9,7 @@ import {
 } from "./gmail/index.ts";
 import { healthResponse, notFoundResponse } from "./http.ts";
 import { dispatchReminders } from "./reminders.ts";
+import { handleUserPurge, processUserDeletions } from "./user-deletion.ts";
 import { handleKapsoWebhook } from "./whatsapp/index.ts";
 
 export { WhatsAppConversation } from "./whatsapp/conversation.ts";
@@ -19,6 +20,9 @@ const MERCHANT_QUEUE = "monara-merchant-jobs";
 export default {
   fetch(request: Request, env: Env, context: ExecutionContext) {
     const path = new URL(request.url).pathname;
+    if (request.method === "POST" && path === "/users/purge") {
+      return handleUserPurge(request, env);
+    }
     if (request.method === "GET" && path === "/health") {
       return healthResponse();
     }
@@ -38,6 +42,7 @@ export default {
   },
 
   scheduled(controller, env) {
+    if (controller.cron === "* * * * *") return processUserDeletions(env);
     if (controller.cron === "0 1 * * *") return scheduleGmailDaily(env);
     if (controller.cron === "*/15 * * * *") return dispatchReminders(env);
   },

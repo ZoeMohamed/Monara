@@ -29,6 +29,8 @@ export interface LlmConfig {
   reasoningEffort?: string;
   fetcher?: Fetcher;
   sleep?: (ms: number) => Promise<void>;
+  /** Queue consumers retry durably instead of spending extra subrequests inline. */
+  maxInlineRetries?: 0;
 }
 
 /**
@@ -247,13 +249,21 @@ export function createLlmClient(config: LlmConfig) {
      * A busy provider that asks for a short wait is retried here; a longer wait is
      * left to the caller, which can put the work back on its queue.
      */
-    async completeJson(request: JsonCompletionRequest): Promise<unknown> {
+    async completeJson(
+      request: JsonCompletionRequest,
+      beforeRetry?: () => Promise<unknown>,
+    ): Promise<unknown> {
       for (let retry = 0; ; retry += 1) {
+        if (retry > 0) await beforeRetry?.();
         try {
           return await attempt(request);
         } catch (error) {
           // An unreachable model already used up the request timeout; leave it to the queue.
-          if (!isTemporaryLlmError(error) || error.status === null || retry >= MAX_INLINE_RETRIES) {
+          if (
+            !isTemporaryLlmError(error) ||
+            error.status === null ||
+            retry >= (config.maxInlineRetries ?? MAX_INLINE_RETRIES)
+          ) {
             throw error;
           }
           const wait = error.retryAfterMs ?? DEFAULT_BUSY_WAIT_MS * 2 ** retry;
