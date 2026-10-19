@@ -30,8 +30,13 @@ export async function GET(request: NextRequest) {
     if (error) return callbackError(request, "oauth_callback_failed");
 
     const { data, error: claimsError } = await supabase.auth.getClaims();
+    if (claimsError || !identityFromVerifiedClaims(data?.claims)) {
+      await supabase.auth.signOut({ scope: "local" });
+      return callbackError(request, "session_invalid");
+    }
     const active = await supabase.rpc("monara_session_is_active");
-    if (claimsError || !identityFromVerifiedClaims(data?.claims) || active.error || !active.data) {
+    if (active.error) return callbackError(request, "oauth_callback_failed");
+    if (!active.data) {
       await supabase.auth.signOut({ scope: "local" });
       return callbackError(request, "session_invalid");
     }
