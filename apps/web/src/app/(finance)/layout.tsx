@@ -6,7 +6,6 @@ import { MonaraApp } from "@/components/monara-app";
 import { UserSessionGuard } from "@/components/user-session-guard";
 import { profileFromIdentity } from "@/lib/auth/identity";
 import { setupKeyForUser } from "@/lib/auth/setup-key";
-import { deletionStatus } from "@/lib/auth/user-deletion";
 import {
   FinancePresentationError,
   type FinanceSnapshot,
@@ -17,8 +16,7 @@ import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 export default async function FinanceLayout({ children }: { children: React.ReactNode }) {
   const identity = await getAuthenticatedIdentity();
-  if (!identity)
-    redirect((await deletionStatus()) === "pending" ? "/account-deletion" : "/sign-in?next=/");
+  if (!identity) redirect("/sign-in?next=/");
   const today = new Date().toISOString().slice(0, 10);
   let initialFinance: FinanceSnapshot;
   try {

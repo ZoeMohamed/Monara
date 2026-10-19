@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 
 import { SignInScreen } from "@/components/sign-in-screen";
 import { safeAuthenticatedNextPath, safeNextPath, signInErrorMessage } from "@/lib/auth/redirect";
-import { deletionStatus } from "@/lib/auth/user-deletion";
 import { availablePublicSupabaseConfig } from "@/lib/supabase/config";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
@@ -13,7 +12,6 @@ export default async function SignInPage({ searchParams }: PageProps<"/sign-in">
   const params = await searchParams;
   const next = safeNextPath(typeof params.next === "string" ? params.next : null);
   const identity = await getAuthenticatedIdentity();
-  if (!identity && (await deletionStatus()) === "pending") redirect("/account-deletion");
   if (identity) {
     redirect(safeAuthenticatedNextPath(typeof params.next === "string" ? params.next : null));
   }
