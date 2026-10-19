@@ -300,6 +300,13 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   }
 
   const session: AppSession = {
+    gmailImport: onboarding.bannerOpen
+      ? {
+          progress: onboarding.engine.progress,
+          onOpen: onboarding.reopenImport,
+          onFinish: onboarding.finish,
+        }
+      : null,
     profile,
     navigation,
     transactions,
