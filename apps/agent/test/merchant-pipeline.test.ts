@@ -10,7 +10,7 @@ import {
 } from "@monara/contracts";
 import { type BraveSearchClient, BraveSearchError } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "../src/gmail/backend.ts";
-import type { JsonCompletionRequest, LlmClient } from "../src/gmail/llm.ts";
+import { type JsonCompletionRequest, type LlmClient, LlmError } from "../src/gmail/llm.ts";
 import { summarizeSearchResults } from "../src/merchant/categorize.ts";
 import { createMerchantPipeline, MerchantBusyError } from "../src/merchant/pipeline.ts";
 
@@ -105,6 +105,102 @@ function setup(overrides: Overrides = {}) {
 }
 
 describe("transaction categorization", () => {
+  it("stops sending more classifications from the same job after a model rate limit", async () => {
+    const busy = new LlmError("The model request failed.", 429, "rate_limited", 60_000);
+    const { pipeline, calls } = setup({
+      transaction: { counterpartyName: "Synthetic Recipient", counterpartyType: "person" },
+      modelForRequest() {
+        throw busy;
+      },
+    });
+    const ids = Array.from(
+      { length: 10 },
+      (_, index) => `00000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
+    );
+    await assert.rejects(
+      pipeline.runJob({ kind: "merchant.categorize", transactionIds: ids }),
+      (error) => error === busy,
+    );
+    assert.equal(
+      calls.prompts.length,
+      1,
+      "a rate-limited job must yield after its first rejection",
+    );
+    assert.deepEqual(calls.set, [], "retryable rows must remain unfinished until retry");
+  });
+  it("finishes all rows for review after the final model outage without repeating provider calls", async () => {
+    const busy = new LlmError("The model could not be reached.", null, "unavailable");
+    const { pipeline, calls } = setup({
+      transaction: { counterpartyName: "Synthetic Recipient", counterpartyType: "person" },
+      modelForRequest() {
+        throw busy;
+      },
+    });
+    const other = "00000000-0000-4000-8000-000000000031";
+    assert.deepEqual(
+      await pipeline.runJob(
+        { kind: "merchant.categorize", transactionIds: [transactionId, other] },
+        { isFinalAttempt: true },
+      ),
+      ["uncategorized", "uncategorized"],
+    );
+    assert.equal(calls.prompts.length, 1);
+    assert.deepEqual(
+      calls.set,
+      [transactionId, other].map((id) => ({
+        transactionId: id,
+        categoryId: null,
+        kind: null,
+        confidence: null,
+      })),
+    );
+  });
+  it("still categorizes a later deterministic Internal transfer after a model outage", async () => {
+    const other = "00000000-0000-4000-8000-000000000031";
+    const busy = new LlmError("The model request failed.", 429, "rate_limited", 60_000);
+    const { pipeline, calls } = setup({
+      transaction: { counterpartyName: "Synthetic Recipient", counterpartyType: "person" },
+      transactions: {
+        [other]: { counterpartyName: "Adlyn Fakhreyz Pratama", isTransfer: true },
+      },
+      modelForRequest() {
+        throw busy;
+      },
+    });
+    assert.deepEqual(
+      await pipeline.runJob(
+        { kind: "merchant.categorize", transactionIds: [transactionId, other] },
+        { isFinalAttempt: true },
+      ),
+      ["uncategorized", "categorized"],
+    );
+    assert.equal(calls.prompts.length, 1);
+    assert.deepEqual(calls.set[1], {
+      transactionId: other,
+      categoryId: internalId,
+      kind: "exclusion",
+      confidence: 1,
+    });
+  });
+  it("preserves a provider Retry-After ahead of an earlier merchant-profile wait", async () => {
+    const other = "00000000-0000-4000-8000-000000000031";
+    const busy = new LlmError("The model request failed.", 429, "rate_limited", 125_000);
+    const { pipeline, calls } = setup({
+      claim: { status: "busy" },
+      transactions: {
+        [other]: { counterpartyName: "Synthetic Recipient", counterpartyType: "person" },
+      },
+      modelForRequest() {
+        throw busy;
+      },
+    });
+    await assert.rejects(
+      pipeline.runJob({ kind: "merchant.categorize", transactionIds: [transactionId, other] }),
+      (error) => error === busy,
+    );
+    assert.equal(calls.prompts.length, 1);
+    assert.deepEqual(calls.set, []);
+  });
   it("searches only an identifiable business and submits a typed owned Category ID", async () => {
     const { pipeline, calls } = setup();
     assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
@@ -122,6 +218,15 @@ describe("transaction categorization", () => {
     const { pipeline, calls } = setup({ claim: { status: "ready", summary: "Coffee shop" } });
     await pipeline.runJob(job);
     assert.deepEqual(calls.searches, []);
+  });
+  it("loads classification context once and rechecks activity once immediately before the model", async () => {
+    const { pipeline, calls } = setup({
+      transaction: { counterpartyName: "Synthetic Recipient", counterpartyType: "person" },
+    });
+    await pipeline.runJob(job);
+    assert.equal(calls.prompts.length, 1);
+    assert.equal(calls.resolves, 2, "one context snapshot and one fresh provider-boundary guard");
+    assert.equal(calls.set.length, 1);
   });
   it("waits for another job and releases failed searches for retry", async () => {
     const busy = setup({ claim: { status: "busy" } });
@@ -175,11 +280,85 @@ describe("transaction categorization", () => {
     assert.deepEqual(calls.searches, []);
     assert.deepEqual(calls.prompts, []);
   });
-  it("never accepts Internal for shortened names, missing holder, nontransfers or business labels", async () => {
+  it("deterministically classifies a two-word profile subset without Brave or the second LLM", async () => {
+    const { pipeline, calls } = setup({
+      transaction: {
+        holderName: "Satria Wibowo",
+        counterpartyName: "SATRIA WIBOWO PRATAMA",
+        counterpartyType: "person",
+        isTransfer: true,
+      },
+      model: { categoryId: internalId, kind: "exclusion", confidence: 0.99 },
+    });
+    assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+    assert.deepEqual(calls.set, [
+      { transactionId, categoryId: internalId, kind: "exclusion", confidence: 1 },
+    ]);
+    assert.deepEqual(calls.searches, []);
+    assert.equal(calls.prompts.length, 0);
+  });
+  it("deterministically accepts one-letter typos in two name words", async () => {
+    const { pipeline, calls } = setup({
+      transaction: {
+        holderName: "Satria Wibowo Pratama",
+        counterpartyName: "SATRIA WIBOWA PRATAMO",
+        counterpartyType: "person",
+        isTransfer: true,
+      },
+    });
+    assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+    assert.deepEqual(calls.set, [
+      { transactionId, categoryId: internalId, kind: "exclusion", confidence: 1 },
+    ]);
+    assert.deepEqual(calls.searches, []);
+    assert.deepEqual(calls.prompts, []);
+  });
+  it("classifies a matching counterparty name regardless of description or transfer labels", async () => {
+    for (const evidence of [
+      { isTransfer: false, description: "Synthetic purchase receipt" },
+      { isTransfer: false, counterpartyType: "business" as const },
+      { isTransfer: false, kind: null, flowDirection: null },
+    ]) {
+      const { pipeline, calls } = setup({
+        transaction: {
+          holderName: "Satria Wibowo",
+          counterpartyName: "SATRIA WIBOWO PRATAMA",
+          counterpartyType: "person",
+          ...evidence,
+        },
+      });
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+      assert.deepEqual(calls.set, [
+        { transactionId, categoryId: internalId, kind: "exclusion", confidence: 1 },
+      ]);
+      assert.deepEqual(calls.searches, []);
+      assert.deepEqual(calls.prompts, []);
+    }
+  });
+  it("classifies a matching counterparty without inventing missing cash direction", async () => {
+    const { pipeline, calls } = setup({
+      transaction: {
+        holderName: "Satria Wibowo Pratama",
+        counterpartyName: "SATRIA WIBOWO PRATAMA",
+        counterpartyType: "person",
+        isTransfer: true,
+        kind: null,
+        flowDirection: null,
+      },
+      model: { categoryId: internalId, kind: "exclusion", confidence: 0.99 },
+    });
+    assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+    assert.deepEqual(calls.set, [
+      { transactionId, categoryId: internalId, kind: "exclusion", confidence: 1 },
+    ]);
+    assert.deepEqual(calls.searches, []);
+    assert.deepEqual(calls.prompts, []);
+  });
+  it("rejects Internal for single-word names, wrong names or a missing holder", async () => {
     for (const transaction of [
-      { counterpartyName: "Adlyn Fakhreyz", isTransfer: true },
+      { counterpartyName: "Adlyn", isTransfer: true },
+      { counterpartyName: "Adlyn Wijaya", isTransfer: true },
       { counterpartyName: "Adlyn Fakhreyz Pratama", holderName: null, isTransfer: true },
-      { counterpartyName: "Adlyn Fakhreyz Pratama", isTransfer: false },
     ]) {
       const { pipeline, calls } = setup({
         transaction: { counterpartyType: "person", ...transaction },
@@ -204,7 +383,10 @@ describe("transaction categorization", () => {
       const { pipeline, calls } = setup({ transaction });
       await pipeline.runJob(job);
       assert.deepEqual(calls.searches, []);
-      assert.equal(calls.prompts.length, 1);
+      assert.equal(
+        calls.prompts.length,
+        transaction.counterpartyName === "Adlyn Fakhreyz Pratama Cafe" ? 0 : 1,
+      );
     }
   });
   it("searches canonical public names only for exact bundled names and aliases", async () => {
@@ -262,7 +444,7 @@ describe("transaction categorization", () => {
       assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
       assert.deepEqual(calls.searches, []);
       assert.equal(calls.claims, 0);
-      assert.equal(calls.prompts.length, 1);
+      assert.equal(calls.prompts.length, "holderName" in transaction ? 0 : 1);
     }
   });
   it("reuses only business evidence while each transaction is classified from its own facts", async () => {

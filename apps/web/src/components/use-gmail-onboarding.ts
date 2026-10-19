@@ -23,6 +23,9 @@ import type { OnboardingPhase } from "@/lib/onboarding/flow";
 import { saveFullName } from "@/lib/profile/client";
 
 const POLL_MS = 3_000;
+const FIRST_RESULT_POLL_MS = 1_000;
+/** Faster initial feedback is bounded so a slow provider cannot cause endless rapid polling. */
+const FIRST_RESULT_FAST_WINDOW_MS = 15_000;
 /** Detection reads a few hundred headers; past this Gmail is probably not answering. */
 const DETECTION_TIMEOUT_MS = 90_000;
 
@@ -135,17 +138,24 @@ function useImportProgress(mailboxId: string | null | undefined, enabled: boolea
     if (!enabled || !mailboxId || finished) return;
     const controller = new AbortController();
     const { signal } = controller;
+    const fastUntil = Date.now() + FIRST_RESULT_FAST_WINDOW_MS;
+    let hasRows = false;
+    let keepPolling = true;
+    let timer: number | undefined;
     const poll = () =>
       loadImportSnapshot(mailboxId, signal).then((snapshot) => {
         if (signal.aborted || !snapshot) return;
         const { sync, feed } = snapshot;
+        hasRows ||= feed.length > 0;
+        keepPolling = sync.state !== "completed" && sync.state !== "failed";
         setProgress((current) => {
           const merged = mergeImportFeed(current.feed, feed);
           if (sync.state === "completed") {
             return {
               state: "completed",
-              emailsRead: null,
-              totalEmails: null,
+              emailsRead: sync.emailsRead,
+              totalEmails: sync.totalEmails,
+              totalEmailsFinal: true,
               transactions: sync.transactions,
               totalTransactions: sync.transactions,
               needsReview: sync.needsReview,
@@ -170,6 +180,8 @@ function useImportProgress(mailboxId: string | null | undefined, enabled: boolea
             ...(sync.state === "running"
               ? {
                   emailsRead: sync.emailsRead,
+                  totalEmails: sync.totalEmails,
+                  totalEmailsFinal: false,
                   transactions: sync.transactions,
                   categorizing: sync.categorizing,
                   needsReview: sync.needsReview,
@@ -179,22 +191,22 @@ function useImportProgress(mailboxId: string | null | undefined, enabled: boolea
           };
         });
       });
-    // A failed check keeps the last known state; the next one tries again.
-    let polling = false;
+    // Schedule after each response, so slow reads never overlap. A failed check
+    // keeps the last known state and follows the same bounded refresh schedule.
     const check = () => {
-      if (polling) return;
-      polling = true;
+      if (signal.aborted) return;
       void poll()
         .catch(() => undefined)
         .finally(() => {
-          polling = false;
+          if (signal.aborted || !keepPolling) return;
+          const delay = !hasRows && Date.now() < fastUntil ? FIRST_RESULT_POLL_MS : POLL_MS;
+          timer = window.setTimeout(check, delay);
         });
     };
     check();
-    const timer = window.setInterval(check, POLL_MS);
     return () => {
       controller.abort();
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
   }, [enabled, mailboxId, finished]);
 

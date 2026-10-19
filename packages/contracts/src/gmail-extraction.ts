@@ -136,12 +136,16 @@ export const merchantCategorizeJobSchema = z.union([
     .object({
       kind: z.literal("merchant.categorize"),
       transactionIds: z.array(transactionIdSchema).min(1).max(MERCHANT_JOB_MAX_TRANSACTIONS),
+      // Preserve retries when an old delivery is split. Five previous attempts
+      // already exhaust the merchant consumer's configured retry budget.
+      priorAttempts: z.number().int().min(0).max(5).optional(),
     })
     .strict(),
   z
     .object({
       kind: z.literal("merchant.categorize"),
       transactionId: transactionIdSchema,
+      priorAttempts: z.number().int().min(0).max(5).optional(),
     })
     .strict(),
 ]);

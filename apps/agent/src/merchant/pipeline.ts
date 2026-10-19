@@ -1,13 +1,16 @@
 import { type MerchantCategorizeJob, merchantKey } from "@monara/contracts";
 import type { BraveSearchClient } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "../gmail/backend.ts";
-import type { LlmClient } from "../gmail/llm.ts";
+import { isTemporaryLlmError, type LlmClient, type LlmError } from "../gmail/llm.ts";
 import {
   businessSearchName,
   chooseCategory,
   internalCategory,
   summarizeSearchResults,
 } from "./categorize.ts";
+
+/** Five cold business lookups leave room below the Worker's 50-subrequest budget. */
+export const MERCHANT_PROCESSING_BATCH_SIZE = 5;
 
 export type MerchantJobOutcome = "categorized" | "uncategorized" | "not_needed";
 export class MerchantBusyError extends Error {
@@ -64,6 +67,7 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
   async function runTransaction(
     transactionId: string,
     summaries: Map<string, Promise<string | null>> = new Map(),
+    modelUnavailable: LlmError | null = null,
   ): Promise<MerchantJobOutcome> {
     let transaction: Awaited<ReturnType<GmailBackend["resolveImportedTransaction"]>>;
     try {
@@ -84,6 +88,9 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
     if (choice)
       dependencies.observe?.({ stage: "internal", durationMs: performance.now() - started });
     else {
+      // Deterministic Internal decisions remain available during an outage.
+      // Only rows that need provider work must wait for the same model to recover.
+      if (modelUnavailable) throw modelUnavailable;
       const businessName = businessSearchName(transaction);
       let summary: string | null = null;
       if (businessName) {
@@ -107,7 +114,6 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
           throw error;
         }
       }
-      await checkActive();
       const classificationStarted = performance.now();
       choice = await chooseCategory(
         {
@@ -142,12 +148,14 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
       const transactionIds = "transactionIds" in job ? job.transactionIds : [job.transactionId];
       const outcomes: MerchantJobOutcome[] = [];
       const failures: unknown[] = [];
+      let modelUnavailable: LlmError | null = null;
       // Cache business evidence only. Each transaction receives its own fact-based classification.
       const summaries = new Map<string, Promise<string | null>>();
       for (const transactionId of transactionIds) {
         try {
-          outcomes.push(await runTransaction(transactionId, summaries));
+          outcomes.push(await runTransaction(transactionId, summaries, modelUnavailable));
         } catch (error) {
+          if (isTemporaryLlmError(error)) modelUnavailable = error;
           if (error instanceof BackendOperationError && error.isNotFound)
             outcomes.push("not_needed");
           else if (options.isFinalAttempt) {
@@ -162,7 +170,12 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
         }
       }
       if (failures.length)
-        throw failures.find((error) => error instanceof MerchantBusyError) ?? failures[0];
+        // A provider's Retry-After takes precedence over a shorter profile-lock wait.
+        throw (
+          modelUnavailable ??
+          failures.find((error) => error instanceof MerchantBusyError) ??
+          failures[0]
+        );
       return outcomes;
     },
   };

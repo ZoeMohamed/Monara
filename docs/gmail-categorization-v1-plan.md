@@ -14,7 +14,7 @@ The User accepted the [reduced design](gmail-categorization-design-2026-10-19.md
 
 ## Worker and integrations
 
-1. Extend extraction with structured business/person/unknown counterparty type and explicit transfer evidence. Tighten Internal matching to exact normalized confirmed full name with transfer evidence.
+1. Extend extraction with structured business/person/unknown counterparty type and explicit transfer evidence. Use deterministic counterparty-name matching against the confirmed profile name, independently of transfer evidence, description, counterparty type or cash direction. The onboarding follow-up accepts complete subsets with at least two distinct substantive words and one character edit in each of at most two words.
 2. Extend the existing second LLM with transaction context and typed Category IDs. Do not add another model stage or reuse classification solely by merchant name.
 3. Search only identifiable businesses, retaining the existing public search-summary cache. Personal and uncertain counterparties classify without external search. Clear Internal transfers bypass both Brave and the second LLM.
 4. Record terminal uncertain classification rather than leaving work pending forever. Preserve bounded durable retries for temporary provider failures and safe compatibility with existing jobs.

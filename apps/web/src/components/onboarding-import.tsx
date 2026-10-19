@@ -51,8 +51,16 @@ const copy: Record<ImportProgress["state"], { title: string; text: string }> = {
   },
 };
 
+const avatarScene = {
+  waiting: "import",
+  running: "import",
+  completed: "done",
+  failed: "empty",
+} as const;
+
 function percent(progress: ImportProgress): number | null {
   if (progress.state === "completed") return 100;
+  if (!progress.totalEmailsFinal || (progress.categorizing ?? 0) > 0) return null;
   if (progress.emailsRead === null || !progress.totalEmails) return null;
   return Math.min(100, Math.round((progress.emailsRead / progress.totalEmails) * 100));
 }
@@ -62,8 +70,34 @@ function hasCounts(progress: ImportProgress) {
 }
 
 function countsLine(progress: ImportProgress) {
-  const of = progress.totalEmails ? ` of ${progress.totalEmails}` : "";
-  return `${progress.emailsRead}${of} emails · ${progress.transactions} found`;
+  const total = progress.totalEmails === null ? "" : ` / ${progress.totalEmails}`;
+  const provisional =
+    progress.totalEmails !== null && !progress.totalEmailsFinal && progress.state !== "completed"
+      ? " (found so far)"
+      : "";
+  return `${progress.emailsRead}${total} emails processed${provisional} · ${progress.transactions} transactions found`;
+}
+
+function classificationLine(progress: ImportProgress): string | null {
+  if (progress.state !== "running" || progress.transactions === null || !progress.categorizing)
+    return null;
+  const processed = Math.max(0, progress.transactions - progress.categorizing);
+  return `${processed} / ${progress.transactions} transactions processed`;
+}
+
+function summaryText(progress: ImportProgress): string {
+  if (progress.state === "failed" && progress.message) return progress.message;
+  if ((progress.categorizing ?? 0) > 0)
+    return "Categorizing your transactions. You can leave this running.";
+  return copy[progress.state].text;
+}
+
+function summaryCounts(progress: ImportProgress): string | null {
+  if (progress.state === "failed") return null;
+  if (hasCounts(progress)) return countsLine(progress);
+  if (progress.state === "completed" && progress.transactions !== null)
+    return `${progress.transactions} transactions imported`;
+  return null;
 }
 
 function Stats({ progress }: { progress: ImportProgress }) {
@@ -212,9 +246,9 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
 }
 
 function ImportSummary({ progress }: { progress: ImportProgress }) {
-  const done = progress.state === "completed";
-  const failed = progress.state === "failed";
-  const { title, text } = copy[progress.state];
+  const { title } = copy[progress.state];
+  const counts = summaryCounts(progress);
+  const classification = classificationLine(progress);
   return (
     <div className={styles.top}>
       <div>
@@ -222,20 +256,17 @@ function ImportSummary({ progress }: { progress: ImportProgress }) {
           {title}
         </h2>
         <p aria-live="polite" className={styles.sub}>
-          {failed && progress.message
-            ? progress.message
-            : (progress.categorizing ?? 0) > 0
-              ? "Categorizing your transactions. You can leave this running."
-              : text}
+          {summaryText(progress)}
         </p>
-        {!failed && hasCounts(progress) ? (
-          <p className={styles.counts}>{countsLine(progress)}</p>
-        ) : done && progress.transactions !== null ? (
-          <p className={styles.counts}>{progress.transactions} transactions imported</p>
+        {counts ? <p className={styles.counts}>{counts}</p> : null}
+        {classification ? (
+          <p className={styles.counts} role="status">
+            {classification}
+          </p>
         ) : null}
       </div>
       <div aria-hidden className={styles.avatar}>
-        <OnboardingAvatar scene={done ? "done" : failed ? "empty" : "import"} tight />
+        <OnboardingAvatar scene={avatarScene[progress.state]} tight />
       </div>
     </div>
   );
