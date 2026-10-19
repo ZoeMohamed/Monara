@@ -41,6 +41,18 @@ const FINANCE_OPERATIONS = [
   "get_dashboard",
 ] as const;
 
+async function cleanUpDeletedGoalImage(remove: () => Promise<{ error: unknown }>): Promise<void> {
+  try {
+    const cleanup = await remove();
+    if (!cleanup.error) return;
+  } catch {
+    // The goal is already soft-deleted, so storage cleanup cannot roll it back.
+  }
+  process.emitWarning("A deleted goal image could not be cleaned up.", {
+    code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
+  });
+}
+
 export type FinanceOperation = (typeof FINANCE_OPERATIONS)[number];
 type AgentFinanceOperation = Exclude<
   FinanceOperation,
@@ -146,13 +158,11 @@ export async function runFinanceOperation(
       return service.updateFinancialGoal(caller, input);
     case "delete_financial_goal": {
       const goal = await service.deleteFinancialGoal(caller, input);
-      if (goal.imagePath) {
-        const cleanup = await client.storage.from(GOAL_IMAGE_BUCKET).remove([goal.imagePath]);
-        if (cleanup.error)
-          process.emitWarning("A deleted goal image could not be cleaned up.", {
-            code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
-          });
-      }
+      const deletedImagePath = goal.imagePath;
+      if (deletedImagePath)
+        await cleanUpDeletedGoalImage(() =>
+          client.storage.from(GOAL_IMAGE_BUCKET).remove([deletedImagePath]),
+        );
       return goal;
     }
     case "list_categories":

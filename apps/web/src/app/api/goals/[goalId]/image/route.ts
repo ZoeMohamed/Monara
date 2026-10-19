@@ -14,6 +14,19 @@ import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
+async function cleanUpGoalImage(
+  remove: () => Promise<{ error: unknown }>,
+  warning: string,
+): Promise<void> {
+  try {
+    const cleanup = await remove();
+    if (!cleanup.error) return;
+  } catch {
+    // Cleanup is best-effort and must not change the result of the primary operation.
+  }
+  process.emitWarning(warning, { code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED" });
+}
+
 async function authenticatedGoal(goalIdValue: string) {
   const identity = await getAuthenticatedIdentity();
   if (!identity) throw new FinanceOperationError("UNAUTHENTICATED", "Sign in to continue.");
@@ -73,29 +86,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ goa
     });
     if (uploaded.error)
       throw new FinanceOperationError("DEPENDENCY_UNAVAILABLE", "The image could not be uploaded.");
+    let updated: Awaited<ReturnType<typeof repository.setFinancialGoalImage>>;
     try {
-      const updated = await repository.setFinancialGoalImage({
+      updated = await repository.setFinancialGoalImage({
         userId,
         goalId: goal.id,
         expectedUpdatedAt,
         imagePath: path,
       });
-      if (goal.imagePath) {
-        const cleanup = await client.storage.from(GOAL_IMAGE_BUCKET).remove([goal.imagePath]);
-        if (cleanup.error)
-          process.emitWarning("A replaced goal image could not be cleaned up.", {
-            code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
-          });
-      }
-      return financeSuccessResponse(updated);
     } catch (error) {
-      const cleanup = await client.storage.from(GOAL_IMAGE_BUCKET).remove([path]);
-      if (cleanup.error)
-        process.emitWarning("A failed goal image upload could not be cleaned up.", {
-          code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
-        });
+      await cleanUpGoalImage(
+        () => client.storage.from(GOAL_IMAGE_BUCKET).remove([path]),
+        "A failed goal image upload could not be cleaned up.",
+      );
       throw error;
     }
+    const previousImagePath = goal.imagePath;
+    if (previousImagePath)
+      await cleanUpGoalImage(
+        () => client.storage.from(GOAL_IMAGE_BUCKET).remove([previousImagePath]),
+        "A replaced goal image could not be cleaned up.",
+      );
+    return financeSuccessResponse(updated);
   } catch (error) {
     return financeErrorResponse(error);
   }
@@ -124,13 +136,12 @@ export async function DELETE(
       expectedUpdatedAt,
       imagePath: null,
     });
-    if (goal.imagePath) {
-      const cleanup = await client.storage.from(GOAL_IMAGE_BUCKET).remove([goal.imagePath]);
-      if (cleanup.error)
-        process.emitWarning("A removed goal image could not be cleaned up.", {
-          code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
-        });
-    }
+    const removedImagePath = goal.imagePath;
+    if (removedImagePath)
+      await cleanUpGoalImage(
+        () => client.storage.from(GOAL_IMAGE_BUCKET).remove([removedImagePath]),
+        "A removed goal image could not be cleaned up.",
+      );
     return financeSuccessResponse(updated);
   } catch (error) {
     return financeErrorResponse(error);
