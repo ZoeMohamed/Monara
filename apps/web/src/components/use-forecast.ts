@@ -4,7 +4,10 @@ import type { ForecastSummary } from "@monara/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Transaction } from "@/data/demo-ledger";
 import { ForecastClientError, fetchForecast, refreshForecast } from "@/lib/forecast/client";
-import { forecastNeedsRefresh } from "@/lib/forecast/due";
+import {
+  settleAutomaticForecastAttempt,
+  shouldAutomaticallyRefreshForecast,
+} from "@/lib/forecast/due";
 
 export type ForecastState =
   | { status: "loading" }
@@ -22,17 +25,19 @@ export function useForecast(today: string, transactions?: Transaction[]) {
   const inFlight = useRef(false);
 
   const generate = useCallback(async (automatic = false) => {
-    if (inFlight.current) return;
+    if (inFlight.current) return false;
     inFlight.current = true;
     setRefreshing(true);
     try {
       setState({ status: "ready", forecast: await refreshForecast(undefined, automatic) });
+      return true;
     } catch (error) {
       setState((previous) => ({
         status: "failed",
         message: messageOf(error),
         forecast: previous.status === "loading" ? null : previous.forecast,
       }));
+      return false;
     } finally {
       inFlight.current = false;
       setRefreshing(false);
@@ -50,9 +55,15 @@ export function useForecast(today: string, transactions?: Transaction[]) {
         .then((forecast) => {
           if (!current || request !== read || inFlight.current) return;
           setState({ status: "ready", forecast });
-          if (attemptedDate.current !== today && forecastNeedsRefresh(forecast, today)) {
+          if (shouldAutomaticallyRefreshForecast(forecast, today, attemptedDate.current)) {
             attemptedDate.current = today;
-            void generate(true);
+            void generate(true).then((succeeded) => {
+              attemptedDate.current = settleAutomaticForecastAttempt(
+                attemptedDate.current,
+                today,
+                succeeded,
+              );
+            });
           }
         })
         .catch((error: unknown) => {

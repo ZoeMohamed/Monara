@@ -10,6 +10,25 @@ export function forecastNeedsRefresh(
   );
 }
 
+/** A stale Home forecast gets one automatic attempt per day, unless its last attempt failed. */
+export function shouldAutomaticallyRefreshForecast(
+  forecast: { generatedAt: string; month: string } | null,
+  today: string,
+  attemptedDate: string | null,
+): boolean {
+  return attemptedDate !== today && forecastNeedsRefresh(forecast, today);
+}
+
+/** Keep successful automatic refreshes rate-limited for the day, but allow retries after errors. */
+export function settleAutomaticForecastAttempt(
+  attemptedDate: string | null,
+  today: string,
+  succeeded: boolean,
+): string | null {
+  if (succeeded) return today;
+  return attemptedDate === today ? null : attemptedDate;
+}
+
 /** A User the nightly run might refresh, and the forecast they have (null when none). */
 export interface ForecastDueCandidate {
   userId: string;
