@@ -11,14 +11,22 @@ type GoalPlanItem = {
   progressPercent: number;
   remaining: bigint;
   requiredMonthly: bigint;
+  projectedMonthlyContribution: bigint;
+  projectedMonths: bigint | null;
+  monthlyShortfall: bigint;
   daysLeft: number;
 };
 export type GoalPlan = {
   active: GoalPlanItem[];
   completed: GoalPlanItem[];
   confirmedMonths: number;
+  monthlyIncome: bigint;
+  monthlyExpense: bigint;
   monthlySurplus: bigint;
+  savingsRatePercent: number | null;
   totalRequiredMonthly: bigint;
+  monthlyGap: bigint;
+  paceCoveragePercent: number;
   state: "no-history" | "on-track" | "tight" | "needs-adjustment" | "complete";
 };
 
@@ -30,7 +38,8 @@ export function buildGoalPlan(
 ): GoalPlan {
   const todayDay = dayNumber(today);
   const earliest = todayDay - 89;
-  let net = 0n;
+  let income = 0n;
+  let expense = 0n;
   let eligible = 0;
   let earliestSeen = todayDay;
   for (const transaction of transactions) {
@@ -46,12 +55,22 @@ export function buildGoalPlan(
       continue;
     eligible += 1;
     earliestSeen = Math.min(earliestSeen, transactionDay);
-    net += transaction.kind === "income" ? BigInt(transaction.amount) : -BigInt(transaction.amount);
+    if (transaction.kind === "income") income += BigInt(transaction.amount);
+    else expense += BigInt(transaction.amount);
   }
   const coveredDays = eligible === 0 ? 0 : todayDay - earliestSeen + 1;
   const confirmedMonths =
     coveredDays === 0 ? 0 : Math.min(3, Math.max(1, Math.ceil(coveredDays / 30)));
-  const monthlySurplus = net > 0n && confirmedMonths > 0 ? net / BigInt(confirmedMonths) : 0n;
+  const monthDivisor = BigInt(Math.max(1, confirmedMonths));
+  const monthlyIncome = confirmedMonths > 0 ? income / monthDivisor : 0n;
+  const monthlyExpense = confirmedMonths > 0 ? expense / monthDivisor : 0n;
+  const net = income - expense;
+  const monthlySurplus = net > 0n && confirmedMonths > 0 ? net / monthDivisor : 0n;
+  const rawSavingsRate = income > 0n ? (net * 100n) / income : null;
+  const savingsRatePercent =
+    rawSavingsRate === null
+      ? null
+      : Number(rawSavingsRate > 999n ? 999n : rawSavingsRate < -999n ? -999n : rawSavingsRate);
   const items = goals
     .filter((goal) => goal.deletedAt === null)
     .map((goal): GoalPlanItem => {
@@ -65,12 +84,38 @@ export function buildGoalPlan(
         progressPercent: Number((saved * 100n) / target),
         remaining,
         requiredMonthly: divideUp(remaining, monthsLeft),
+        projectedMonthlyContribution: 0n,
+        projectedMonths: goal.status === "completed" ? 0n : null,
+        monthlyShortfall: 0n,
         daysLeft,
       };
     });
-  const active = items.filter((item) => item.goal.status === "active");
+  const activeItems = items.filter((item) => item.goal.status === "active");
   const completed = items.filter((item) => item.goal.status === "completed");
-  const totalRequiredMonthly = active.reduce((sum, item) => sum + item.requiredMonthly, 0n);
+  const totalRequiredMonthly = activeItems.reduce((sum, item) => sum + item.requiredMonthly, 0n);
+  const active = activeItems.map((item) => {
+    const projectedMonthlyContribution =
+      totalRequiredMonthly > 0n
+        ? (monthlySurplus * item.requiredMonthly) / totalRequiredMonthly
+        : 0n;
+    return {
+      ...item,
+      projectedMonthlyContribution,
+      projectedMonths:
+        projectedMonthlyContribution > 0n
+          ? divideUp(item.remaining, projectedMonthlyContribution)
+          : null,
+      monthlyShortfall:
+        item.requiredMonthly > projectedMonthlyContribution
+          ? item.requiredMonthly - projectedMonthlyContribution
+          : 0n,
+    };
+  });
+  const monthlyGap =
+    totalRequiredMonthly > monthlySurplus ? totalRequiredMonthly - monthlySurplus : 0n;
+  const rawCoverage =
+    totalRequiredMonthly === 0n ? 100n : (monthlySurplus * 100n) / totalRequiredMonthly;
+  const paceCoveragePercent = Number(rawCoverage > 999n ? 999n : rawCoverage);
   const state =
     active.length === 0
       ? "complete"
@@ -81,5 +126,17 @@ export function buildGoalPlan(
           : totalRequiredMonthly * 5n > monthlySurplus * 4n
             ? "tight"
             : "on-track";
-  return { active, completed, confirmedMonths, monthlySurplus, totalRequiredMonthly, state };
+  return {
+    active,
+    completed,
+    confirmedMonths,
+    monthlyIncome,
+    monthlyExpense,
+    monthlySurplus,
+    savingsRatePercent,
+    totalRequiredMonthly,
+    monthlyGap,
+    paceCoveragePercent,
+    state,
+  };
 }

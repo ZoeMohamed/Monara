@@ -16,7 +16,7 @@ import type { Transaction } from "@/data/demo-ledger";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
 import { parseDraftAmount } from "@/lib/finance/presentation";
 import { goalImageUrl, uploadGoalImage } from "@/lib/goals/client";
-import { buildGoalPlan } from "@/lib/goals/plan";
+import { buildGoalPlan, type GoalPlan } from "@/lib/goals/plan";
 
 type RunMutation = <Result>(operation: () => Promise<Result>) => Promise<Result>;
 type GoalDraft = {
@@ -227,6 +227,162 @@ function GoalEditor({
   );
 }
 
+type FormatRupiah = (amount: bigint) => string;
+
+function GoalPlanSummary({
+  plan,
+  status,
+  formatRupiah,
+  onAdd,
+}: {
+  plan: GoalPlan;
+  status: string;
+  formatRupiah: FormatRupiah;
+  onAdd: () => void;
+}) {
+  return (
+    <Card className="block rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">
+            Monthly pace
+          </p>
+          <h2 className="mt-1 text-xl font-extrabold" id="goal-planner-title">
+            {formatRupiah(plan.totalRequiredMonthly)}{" "}
+            <span className="text-sm font-medium text-muted">needed</span>
+          </h2>
+          <p className="mt-1 text-xs leading-5 text-muted">{status}</p>
+        </div>
+        <Button className="min-h-10 shrink-0 rounded-full" onPress={onAdd}>
+          <Icon className="h-4 w-4" name="plus" /> Add
+        </Button>
+      </div>
+      {plan.confirmedMonths > 0 && (
+        <>
+          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-separator pt-3">
+            <GoalMetric label="Avg income" value={formatRupiah(plan.monthlyIncome)} />
+            <GoalMetric label="Avg spend" value={formatRupiah(plan.monthlyExpense)} />
+            <GoalMetric accent label="Surplus" value={formatRupiah(plan.monthlySurplus)} />
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted">
+            <span>
+              {plan.savingsRatePercent === null
+                ? "No income rate"
+                : `${plan.savingsRatePercent}% savings rate`}
+              {" · "}
+              {plan.paceCoveragePercent === 999 ? "999%+" : `${plan.paceCoveragePercent}%`} of goal
+              pace covered
+            </span>
+            {plan.monthlyGap > 0n && (
+              <strong className="shrink-0 text-warning">{formatRupiah(plan.monthlyGap)} gap</strong>
+            )}
+          </div>
+          <p className="mt-2 text-[11px] leading-4 text-muted">
+            Based on {plan.confirmedMonths} month{plan.confirmedMonths === 1 ? "" : "s"} of
+            confirmed activity. Pending and exclusions stay out.
+          </p>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function GoalMetric({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className={`min-w-0 rounded-xl p-2 ${accent ? "bg-accent-soft" : "bg-surface-secondary"}`}>
+      <p
+        className={`text-[10px] font-semibold uppercase tracking-wide ${accent ? "text-accent" : "text-muted"}`}
+      >
+        {label}
+      </p>
+      <p className="mt-1 truncate text-xs font-bold" title={value}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function GoalPlanCard({
+  item,
+  localUrl,
+  formatRupiah,
+  onEdit,
+  onDelete,
+}: {
+  item: GoalPlan["active"][number];
+  localUrl?: string;
+  formatRupiah: FormatRupiah;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const forecast =
+    item.projectedMonths === null
+      ? "Add confirmed surplus to forecast"
+      : item.monthlyShortfall > 0n
+        ? `${formatRupiah(item.monthlyShortfall)} short/month · ≈${item.projectedMonths} months`
+        : `≈${item.projectedMonths} months at recent surplus`;
+  return (
+    <Card className="block rounded-2xl border border-border bg-surface p-4">
+      <div className="flex min-w-0 gap-3">
+        <GoalImage goal={item.goal} localUrl={localUrl} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-bold">{item.goal.name}</h3>
+              <p className="mt-0.5 text-xs text-muted">Target {item.goal.targetDate}</p>
+            </div>
+            <Button
+              aria-label={`Edit ${item.goal.name}`}
+              isIconOnly
+              onPress={onEdit}
+              size="sm"
+              variant="ghost"
+            >
+              <Icon className="h-4 w-4" name="pencil" />
+            </Button>
+          </div>
+          <ProgressBar
+            aria-label={`${item.goal.name} progress`}
+            className="mt-3"
+            value={item.progressPercent}
+          >
+            <ProgressBar.Track className="h-2 bg-surface-tertiary">
+              <ProgressBar.Fill className="bg-accent" />
+            </ProgressBar.Track>
+          </ProgressBar>
+          <div className="mt-2 flex justify-between gap-2 text-xs">
+            <span>{formatRupiah(BigInt(item.goal.saved.amountMinor))} saved</span>
+            <strong>{item.progressPercent}%</strong>
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between border-t border-separator pt-3 text-xs">
+        <div className="min-w-0 pr-2">
+          <p className="text-muted">
+            {formatRupiah(item.requiredMonthly)}/month · {item.daysLeft} days
+          </p>
+          <p
+            className={`mt-1 font-semibold ${item.monthlyShortfall > 0n ? "text-warning" : "text-success"}`}
+          >
+            {forecast}
+          </p>
+        </div>
+        <Button className="min-h-9 text-danger" onPress={onDelete} size="sm" variant="ghost">
+          Delete
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export function GoalPlanner({
   goals,
   transactions,
@@ -391,29 +547,12 @@ export function GoalPlanner({
 
   return (
     <section aria-labelledby="goal-planner-title" className="mt-4">
-      <Card className="block rounded-2xl border border-border bg-surface p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-accent">
-              Monthly pace
-            </p>
-            <h2 className="mt-1 text-xl font-extrabold" id="goal-planner-title">
-              {formatRupiah(plan.totalRequiredMonthly)}{" "}
-              <span className="text-sm font-medium text-muted">needed</span>
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-muted">{status}</p>
-          </div>
-          <Button className="min-h-10 shrink-0 rounded-full" onPress={openNewEditor}>
-            <Icon className="h-4 w-4" name="plus" /> Add
-          </Button>
-        </div>
-        {plan.confirmedMonths > 0 && (
-          <p className="mt-3 border-t border-separator pt-3 text-xs text-muted">
-            Recent monthly surplus:{" "}
-            <strong className="text-foreground">{formatRupiah(plan.monthlySurplus)}</strong>
-          </p>
-        )}
-      </Card>
+      <GoalPlanSummary
+        formatRupiah={formatRupiah}
+        onAdd={openNewEditor}
+        plan={plan}
+        status={status}
+      />
 
       {error && (
         <p className="mt-3 rounded-xl bg-danger-soft p-3 text-sm text-danger" role="alert">
@@ -422,57 +561,14 @@ export function GoalPlanner({
       )}
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {plan.active.map((item) => (
-          <Card
-            className="block rounded-2xl border border-border bg-surface p-4"
+          <GoalPlanCard
+            formatRupiah={formatRupiah}
+            item={item}
             key={item.goal.id}
-          >
-            <div className="flex min-w-0 gap-3">
-              <GoalImage goal={item.goal} localUrl={localImages[item.goal.id]} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-bold">{item.goal.name}</h3>
-                    <p className="mt-0.5 text-xs text-muted">Target {item.goal.targetDate}</p>
-                  </div>
-                  <Button
-                    aria-label={`Edit ${item.goal.name}`}
-                    isIconOnly
-                    onPress={() => openExistingEditor(item.goal)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    <Icon className="h-4 w-4" name="pencil" />
-                  </Button>
-                </div>
-                <ProgressBar
-                  aria-label={`${item.goal.name} progress`}
-                  className="mt-3"
-                  value={item.progressPercent}
-                >
-                  <ProgressBar.Track className="h-2 bg-surface-tertiary">
-                    <ProgressBar.Fill className="bg-accent" />
-                  </ProgressBar.Track>
-                </ProgressBar>
-                <div className="mt-2 flex justify-between gap-2 text-xs">
-                  <span>{formatRupiah(BigInt(item.goal.saved.amountMinor))} saved</span>
-                  <strong>{item.progressPercent}%</strong>
-                </div>
-              </div>
-            </div>
-            <div className="mt-3 flex items-center justify-between border-t border-separator pt-3 text-xs">
-              <span className="text-muted">
-                {formatRupiah(item.requiredMonthly)}/month · {item.daysLeft} days
-              </span>
-              <Button
-                className="min-h-9 text-danger"
-                onPress={() => setDeleting(item.goal)}
-                size="sm"
-                variant="ghost"
-              >
-                Delete
-              </Button>
-            </div>
-          </Card>
+            localUrl={localImages[item.goal.id]}
+            onDelete={() => setDeleting(item.goal)}
+            onEdit={() => openExistingEditor(item.goal)}
+          />
         ))}
       </div>
       {plan.active.length === 0 && (
