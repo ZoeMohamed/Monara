@@ -25,6 +25,7 @@ const hooks = registerHooks({
           export const useState = (...args) => runtime().useState(...args);
           export const useRef = (...args) => runtime().useRef(...args);
           export const useId = () => "goal-test";
+          export const useEffect = () => {};
           export const useMemo = (calculate) => calculate();`)}`,
         shortCircuit: true,
       };
@@ -45,7 +46,7 @@ const hooks = registerHooks({
       format: "module",
       shortCircuit: true,
       source: ts.transpileModule(
-        `${readFileSync(new URL(url), "utf8")}\nexport { GoalEditor as GoalEditorForTest };`,
+        `${readFileSync(new URL(url), "utf8")}\nexport { GoalEditor as GoalEditorForTest, GoalPlanCard as GoalCardForTest };`,
         {
           fileName: "goal-planner.tsx",
           compilerOptions: { module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX },
@@ -54,7 +55,7 @@ const hooks = registerHooks({
     };
   },
 });
-const { GoalEditorForTest, GoalPlanner } = await import(goalUrl);
+const { GoalEditorForTest, GoalPlanner, GoalCardForTest } = await import(goalUrl);
 hooks.deregister();
 after(() => delete globalThis[runtimeKey]);
 
@@ -231,4 +232,30 @@ it("keeps completed goals editable so a corrected saved amount returns the goal 
     find(render(), (node) => node.type?.name === "GoalPlanCard").props.item.goal.status,
     "active",
   );
+});
+
+it("describes saved amount, target, progress and date on the actionable goal card for screen readers", () => {
+  const view = runtime();
+  const tree = view.render(GoalCardForTest, {
+    item: { goal, progressPercent: 50 },
+    formatRupiah: (amount) => String(amount),
+    onEdit() {},
+    onDelete() {},
+    pending: false,
+  });
+  const action = find(tree, (node) => node.type === "button");
+  const descriptionId = action.props["aria-describedby"];
+  assert.match(descriptionId, new RegExp(goal.id));
+  const description = find(tree, (node) => node.props?.id === descriptionId);
+  const textOf = (node) => {
+    if (typeof node === "string" || typeof node === "number") return String(node);
+    if (Array.isArray(node)) return node.map(textOf).join("");
+    return node ? textOf(node.props?.children) : "";
+  };
+  assert.equal(description.props.className, "sr-only");
+  const text = textOf(description);
+  assert.match(text, /6000000 saved of 12000000/);
+  assert.match(text, /50% complete/);
+  assert.match(text, /19 Apr 2027/);
+  assert.match(action.props["aria-label"], /Update progress for Laptop/);
 });

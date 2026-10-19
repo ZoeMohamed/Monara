@@ -25,10 +25,10 @@ import {
 } from "@/lib/chat/session";
 
 const suggestions = [
-  "kopi 25rb",
-  "Summarize my spending this week",
-  "Visualize my spending",
-  "Can I afford a 300k dinner?",
+  { label: "kopi 25rb", prompt: "kopi 25rb" },
+  { label: "Weekly summary", prompt: "Summarize my spending this week" },
+  { label: "Spending chart", prompt: "Visualize my spending" },
+  { label: "Can I afford 300k?", prompt: "Can I afford a 300k dinner?" },
 ];
 
 type ChatScreenProps = {
@@ -148,10 +148,6 @@ function ConversationBody({
           <MonaraMascot className="h-16 w-16 shrink-0" pose="hello" />
           <h2>Hey, I’m Monara.</h2>
         </div>
-        <p>
-          Need a quick money check? Ask for a summary, or drop a note like “kopi 25rb”. I’ll work
-          from your confirmed records.
-        </p>
       </div>
     );
   }
@@ -410,7 +406,7 @@ function ChatComposer({
       />
       <ul aria-label="Prompt shortcuts" className={styles.suggestions}>
         {suggestions.map((suggestion) => (
-          <li key={suggestion}>
+          <li key={suggestion.prompt}>
             <Button
               className={styles.suggestion}
               isDisabled={
@@ -419,11 +415,11 @@ function ChatComposer({
                 recovery?.requiresRecordCheck ||
                 recovery?.signInRequired
               }
-              onPress={() => void sendText(suggestion, draft.trim() !== "")}
+              onPress={() => void sendText(suggestion.prompt, draft.trim() !== "")}
               type="button"
               variant="ghost"
             >
-              {suggestion}
+              {suggestion.label}
             </Button>
           </li>
         ))}
@@ -466,11 +462,7 @@ function ChatComposer({
               className={`${styles.input} text-base`}
               enterKeyHint="send"
               maxLength={4_000}
-              placeholder={
-                receipt.receipt
-                  ? "Add a note, or just send the photo…"
-                  : "Ask, or tell me what you spent…"
-              }
+              placeholder={receipt.receipt ? "Note (optional)" : "Message Monara…"}
             />
           </InputGroup>
         </TextField>

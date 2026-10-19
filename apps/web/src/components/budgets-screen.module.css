@@ -1,3 +1,11 @@
+.periodGrid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21.25rem), 1fr));
+  align-items: start;
+  gap: 1.5rem;
+}
+
 .categoryCard {
   display: block;
   min-width: 0;
@@ -50,28 +58,6 @@
 .budgetRow:active,
 .budgetRow[data-pressed="true"] {
   background: var(--surface-tertiary);
-  transform: none;
-}
-
-.addRow {
-  display: flex;
-  width: 100%;
-  min-height: 3.5rem;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-  border: 1.5px dashed var(--border);
-  border-radius: 1.125rem;
-  color: var(--accent);
-  font-size: 0.875rem;
-  font-weight: 700;
-  --button-bg-hover: var(--accent-soft);
-  --button-bg-pressed: var(--accent-soft);
-}
-
-.addRow:active,
-.addRow[data-pressed="true"] {
   transform: none;
 }
 

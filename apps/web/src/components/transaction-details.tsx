@@ -411,13 +411,7 @@ function TransactionInformation({
       <p className={styles.source}>
         <Icon name={source.icon} />
         {source.label}
-        {transaction.backend ? " · your private ledger" : ""}
       </p>
-      {source.kind === "gmail_email" && details.editable ? (
-        <p className={styles.sourceHelp}>
-          You can edit this record. Its Gmail source stays unchanged.
-        </p>
-      ) : null}
       <details className={styles.more}>
         <summary>More details</summary>
         <dl>
@@ -428,6 +422,9 @@ function TransactionInformation({
             </div>
           ))}
         </dl>
+        {source.kind === "gmail_email" && details.editable ? (
+          <p className={styles.sourceHelp}>Edits won’t change the original email.</p>
+        ) : null}
       </details>
       {transaction.kind === "exclusion" ? (
         <p className="mt-3 text-sm text-muted">
