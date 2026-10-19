@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { dueForecastUsers } from "./due.ts";
+import { dueForecastUsers, forecastNeedsRefresh } from "./due.ts";
 
 const day = 86_400_000;
 const now = Date.parse("2026-10-19T02:00:00Z");
@@ -74,5 +74,23 @@ describe("dueForecastUsers", () => {
       month,
     );
     assert.deepEqual(due, ["a", "z"]);
+  });
+});
+
+describe("nightly catch-up", () => {
+  it("refreshes missing forecasts and ones from before Jakarta midnight", () => {
+    assert.equal(forecastNeedsRefresh(null, "2026-10-19"), true);
+    assert.equal(
+      forecastNeedsRefresh({ month, generatedAt: "2026-10-18T16:59:59.999Z" }, "2026-10-19"),
+      true,
+    );
+    assert.equal(
+      forecastNeedsRefresh({ month, generatedAt: "2026-10-18T17:00:00.000Z" }, "2026-10-19"),
+      false,
+    );
+    assert.equal(
+      forecastNeedsRefresh({ month: "2026-09", generatedAt: "2026-10-19T01:00:00Z" }, "2026-10-19"),
+      true,
+    );
   });
 });

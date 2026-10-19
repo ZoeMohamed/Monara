@@ -44,7 +44,10 @@ export async function POST(request: Request) {
     return refused;
   }
   try {
-    const forecast = await forecastService().service.refresh(identity.id, "manual");
+    const forecast = await forecastService().service.refresh(
+      identity.id,
+      request.headers.get("X-Forecast-Trigger") === "daily" ? "daily" : "manual",
+    );
     return financeSuccessResponse(forecastResponseSchema.parse({ forecast }));
   } catch (error) {
     return financeErrorResponse(error);

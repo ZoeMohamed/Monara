@@ -11,6 +11,7 @@ export class ForecastClientError extends Error {
 async function request(
   method: "GET" | "POST",
   fetcher: typeof fetch,
+  automatic = false,
 ): Promise<ForecastSummary | null> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     throw new ForecastClientError("You're offline. Reconnect, then try again.");
@@ -19,6 +20,7 @@ async function request(
   try {
     response = await fetcher("/api/forecast", {
       method,
+      headers: automatic ? { "X-Forecast-Trigger": "daily" } : undefined,
       cache: "no-store",
       credentials: "same-origin",
       signal: AbortSignal.timeout(method === "POST" ? 60_000 : 20_000),
@@ -47,8 +49,11 @@ async function request(
 export const fetchForecast = (fetcher: typeof fetch = fetch) => request("GET", fetcher);
 
 /** Makes a new forecast and returns it. */
-export async function refreshForecast(fetcher: typeof fetch = fetch): Promise<ForecastSummary> {
-  const forecast = await request("POST", fetcher);
+export async function refreshForecast(
+  fetcher: typeof fetch = fetch,
+  automatic = false,
+): Promise<ForecastSummary> {
+  const forecast = await request("POST", fetcher, automatic);
   if (!forecast) throw new ForecastClientError("The forecast could not be made. Try again.");
   return forecast;
 }

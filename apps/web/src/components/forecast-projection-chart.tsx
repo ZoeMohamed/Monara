@@ -1,9 +1,8 @@
 "use client";
 
-import type { ForecastItem } from "@monara/contracts";
 import { useId } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
-import { projectSpending, type SpendingDay } from "@/lib/forecast/projection";
+import type { Projection } from "@/lib/forecast/projection";
 import styles from "./forecast-projection-chart.module.css";
 
 const WIDTH = 300;
@@ -20,20 +19,9 @@ const points = (list: { x: number; y: number }[]) =>
  * This month's confirmed spending as a solid line, and the path the forecast expects to month end
  * as a dashed one. Both start from the same day, so the gap between them is what is still to come.
  */
-export function ForecastProjectionChart({
-  days,
-  items,
-  today,
-}: {
-  days: SpendingDay[];
-  items: ForecastItem[];
-  today: string;
-}) {
+export function ForecastProjectionChart({ projection }: { projection: Projection }) {
   const { formatRupiah, compactAmount } = useAmountDisplay();
   const gradient = useId();
-  const projection = projectSpending(days, items, today);
-  if (!projection) return null;
-
   const x = (day: number) =>
     LEFT + ((day - 1) / Math.max(projection.lastDay - 1, 1)) * (WIDTH - LEFT - RIGHT);
   const y = (value: number) =>

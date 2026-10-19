@@ -2,7 +2,9 @@
 
 import type { ForecastSummary } from "@monara/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Transaction } from "@/data/demo-ledger";
 import { ForecastClientError, fetchForecast, refreshForecast } from "@/lib/forecast/client";
+import { forecastNeedsRefresh } from "@/lib/forecast/due";
 
 export type ForecastState =
   | { status: "loading" }
@@ -12,30 +14,19 @@ export type ForecastState =
 const messageOf = (error: unknown) =>
   error instanceof ForecastClientError ? error.message : "Try again.";
 
-/**
- * Loads the signed-in User's forecast and offers a manual refresh. A saved forecast for a month
- * that is over describes dates that have all gone by, so it is replaced once, automatically.
- */
-export function useForecast(today: string) {
+/** Read updated realization matches after ledger changes; generate only when missing or stale. */
+export function useForecast(today: string, transactions?: Transaction[]) {
   const [state, setState] = useState<ForecastState>({ status: "loading" });
   const [refreshing, setRefreshing] = useState(false);
+  const attemptedDate = useRef<string | null>(null);
+  const inFlight = useRef(false);
 
-  useEffect(() => {
-    let current = true;
-    fetchForecast()
-      .then((forecast) => current && setState({ status: "ready", forecast }))
-      .catch((error: unknown) => {
-        if (current) setState({ status: "failed", message: messageOf(error), forecast: null });
-      });
-    return () => {
-      current = false;
-    };
-  }, []);
-
-  const refresh = useCallback(async () => {
+  const generate = useCallback(async (automatic = false) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setRefreshing(true);
     try {
-      setState({ status: "ready", forecast: await refreshForecast() });
+      setState({ status: "ready", forecast: await refreshForecast(undefined, automatic) });
     } catch (error) {
       setState((previous) => ({
         status: "failed",
@@ -43,17 +34,51 @@ export function useForecast(today: string) {
         forecast: previous.status === "loading" ? null : previous.forecast,
       }));
     } finally {
+      inFlight.current = false;
       setRefreshing(false);
     }
   }, []);
 
-  const replacedOldMonth = useRef(false);
+  const refresh = useCallback(() => generate(false), [generate]);
+
   useEffect(() => {
-    if (replacedOldMonth.current || state.status !== "ready" || !state.forecast) return;
-    if (state.forecast.month >= today.slice(0, 7)) return;
-    replacedOldMonth.current = true;
-    void refresh();
-  }, [state, today, refresh]);
+    let current = true;
+    let read = 0;
+    const load = () => {
+      const request = ++read;
+      void fetchForecast()
+        .then((forecast) => {
+          if (!current || request !== read || inFlight.current) return;
+          setState({ status: "ready", forecast });
+          if (attemptedDate.current !== today && forecastNeedsRefresh(forecast, today)) {
+            attemptedDate.current = today;
+            void generate(true);
+          }
+        })
+        .catch((error: unknown) => {
+          if (current && request === read && !inFlight.current) {
+            setState((previous) => ({
+              status: "failed",
+              message: messageOf(error),
+              forecast: previous.status === "loading" ? null : previous.forecast,
+            }));
+          }
+        });
+    };
+    // Ledger changes re-read realization matches without forcing a model run.
+    void transactions;
+    load();
+    const onFocus = () => {
+      if (!document.hidden) load();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      current = false;
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [today, transactions, generate]);
 
   return { state, refreshing, refresh };
 }

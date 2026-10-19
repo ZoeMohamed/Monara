@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import type { ForecastCandidate } from "@monara/contracts";
 import type { Env } from "../src/env.ts";
 import {
-  dispatchWeeklyForecast,
+  dispatchDailyForecast,
+  FORECAST_CRON,
   handleForecastRefine,
   judgeForecastCandidates,
 } from "../src/forecast.ts";
@@ -122,16 +123,16 @@ describe("POST /forecast/refine", () => {
   });
 });
 
-describe("weekly forecast cron", () => {
+describe("nightly forecast cron", () => {
   it("asks the backend to refresh with the shared secret, and never throws", async () => {
     const original = globalThis.fetch;
     const calls: { url: string; auth: string | null }[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       calls.push({ url: String(input), auth: new Headers(init?.headers).get("Authorization") });
-      return Response.json({ refreshed: 3 });
+      return Response.json({ refreshed: 3, failed: 0, nextCursor: null });
     }) as typeof fetch;
     try {
-      await dispatchWeeklyForecast({
+      await dispatchDailyForecast({
         MONARA_BACKEND_URL: "https://monara.test/",
         MONARA_AGENT_BACKEND_SECRET: "backend-secret",
       });
@@ -139,15 +140,66 @@ describe("weekly forecast cron", () => {
         { url: "https://monara.test/api/agent/forecast/refresh", auth: "Bearer backend-secret" },
       ]);
       calls.length = 0;
-      await dispatchWeeklyForecast({ MONARA_BACKEND_URL: "https://monara.test" });
+      await dispatchDailyForecast({ MONARA_BACKEND_URL: "https://monara.test" });
       assert.equal(calls.length, 0);
       globalThis.fetch = (async () => {
         throw new Error("network down");
       }) as typeof fetch;
-      await dispatchWeeklyForecast({
+      await dispatchDailyForecast({
         MONARA_BACKEND_URL: "https://monara.test",
         MONARA_AGENT_BACKEND_SECRET: "backend-secret",
       });
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});
+
+describe("nightly forecast batches", () => {
+  it("uses Jakarta midnight and continues beyond the first 25 Users", async () => {
+    assert.equal(FORECAST_CRON, "0 17 * * *");
+    const original = globalThis.fetch;
+    const calls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return Response.json({
+        refreshed: calls.length === 1 ? 25 : 4,
+        failed: 0,
+        nextCursor: calls.length === 1 ? "91000000-0000-4000-8000-000000000025" : null,
+      });
+    }) as typeof fetch;
+    try {
+      await dispatchDailyForecast({
+        MONARA_BACKEND_URL: "https://monara.test",
+        MONARA_AGENT_BACKEND_SECRET: "synthetic-secret",
+      });
+      assert.equal(calls.length, 2);
+      assert.equal(
+        new URL(calls[1] ?? "").searchParams.get("after"),
+        "91000000-0000-4000-8000-000000000025",
+      );
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("stops when a backend returns a repeated cursor", async () => {
+    const original = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return Response.json({
+        refreshed: 0,
+        failed: 0,
+        nextCursor: "91000000-0000-4000-8000-000000000025",
+      });
+    }) as typeof fetch;
+    try {
+      await dispatchDailyForecast({
+        MONARA_BACKEND_URL: "https://monara.test",
+        MONARA_AGENT_BACKEND_SECRET: "synthetic-secret",
+      });
+      assert.equal(calls, 2);
     } finally {
       globalThis.fetch = original;
     }

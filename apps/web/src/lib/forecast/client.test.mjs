@@ -89,3 +89,12 @@ describe("forecast client", () => {
     );
   });
 });
+
+it("marks an automatic catch-up as daily while keeping the session request private", async () => {
+  await refreshForecast(async (_url, init) => {
+    assert.equal(init.headers["X-Forecast-Trigger"], "daily");
+    assert.equal(init.cache, "no-store");
+    assert.equal(init.credentials, "same-origin");
+    return Response.json({ forecast: { ...summary, source: "daily" } });
+  }, true);
+});

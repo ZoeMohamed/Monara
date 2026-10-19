@@ -1,6 +1,7 @@
 import {
   type ForecastCandidate,
   type ForecastJudgement,
+  forecastBatchResponseSchema,
   forecastRefineRequestSchema,
   forecastRefineResponseSchema,
 } from "@monara/contracts";
@@ -107,14 +108,14 @@ function defaultLlm(env: Env): LlmClient | null {
   });
 }
 
-/** Monday 02:00 UTC, which is 09:00 in Jakarta. Keep in sync with wrangler.jsonc. */
-export const FORECAST_CRON = "0 2 * * 1";
+/** Daily 17:00 UTC, which is midnight in Jakarta. Keep in sync with wrangler.jsonc. */
+export const FORECAST_CRON = "0 17 * * *";
 
 /**
  * Cron step: asks the backend to refresh the forecasts that are due. The backend decides which
  * Users and runs the model step; the Agent only knocks. Logs counts and status codes only.
  */
-export async function dispatchWeeklyForecast(env: Env): Promise<void> {
+export async function dispatchDailyForecast(env: Env): Promise<void> {
   const baseUrl = env.MONARA_BACKEND_URL?.replace(/\/+$/, "");
   const secret = env.MONARA_AGENT_BACKEND_SECRET;
   const log = (level: "info" | "error", fields: Record<string, unknown>) =>
@@ -125,19 +126,41 @@ export async function dispatchWeeklyForecast(env: Env): Promise<void> {
     return;
   }
   try {
-    const response = await fetch(`${baseUrl}/api/agent/forecast/refresh`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${secret}` },
-      signal: AbortSignal.timeout(280_000),
+    let cursor: string | null = null;
+    let refreshed = 0;
+    let failed = 0;
+    // Stay within the scheduled Worker's 15-minute wall-time limit. Home catches up failures.
+    const deadline = Date.now() + 12 * 60_000;
+    do {
+      const url = new URL(`${baseUrl}/api/agent/forecast/refresh`);
+      if (cursor) url.searchParams.set("after", cursor);
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${secret}` },
+        signal: AbortSignal.timeout(Math.min(280_000, Math.max(1, deadline - Date.now()))),
+      });
+      if (!response.ok) {
+        log("error", { event: "forecast.refresh_failed", status: response.status });
+        return;
+      }
+      const parsed = forecastBatchResponseSchema.safeParse(await response.json().catch(() => null));
+      if (
+        !parsed.success ||
+        (parsed.data.nextCursor !== null && cursor !== null && parsed.data.nextCursor <= cursor)
+      ) {
+        log("error", { event: "forecast.refresh_invalid_batch" });
+        return;
+      }
+      refreshed += parsed.data.refreshed;
+      failed += parsed.data.failed;
+      cursor = parsed.data.nextCursor;
+    } while (cursor !== null && Date.now() < deadline);
+    log(failed || cursor ? "error" : "info", {
+      event: "forecast.refreshed",
+      refreshed,
+      failed,
+      incomplete: cursor !== null,
     });
-    if (!response.ok) {
-      log("error", { event: "forecast.refresh_failed", status: response.status });
-      return;
-    }
-    const body: unknown = await response.json().catch(() => null);
-    const refreshed =
-      typeof body === "object" && body !== null && "refreshed" in body ? body.refreshed : null;
-    log("info", { event: "forecast.refreshed", refreshed });
   } catch (error) {
     log("error", {
       event: "forecast.refresh_failed",

@@ -4,13 +4,14 @@ import {
   categoryIdSchema,
   moneySchema,
   transactionIdSchema,
+  userIdSchema,
 } from "./common.ts";
 
 /** Items below this confidence are dropped from a forecast and only counted. */
 export const DEFAULT_FORECAST_THRESHOLD = 0.6;
 
 export const forecastPatternSchema = z.enum(["monthly", "weekly"]);
-export const forecastSourceSchema = z.enum(["manual", "weekly", "agent"]);
+export const forecastSourceSchema = z.enum(["manual", "weekly", "daily", "agent"]);
 
 export const forecastItemSchema = z
   .object({
@@ -116,3 +117,12 @@ export const forecastRefineResponseSchema = z
 
 export type ForecastCandidate = z.infer<typeof forecastCandidateSchema>;
 export type ForecastJudgement = z.infer<typeof forecastJudgementSchema>;
+
+/** Internal nightly batch response. A cursor lets the Worker continue past the first batch. */
+export const forecastBatchResponseSchema = z
+  .object({
+    refreshed: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    nextCursor: userIdSchema.nullable(),
+  })
+  .strict();
