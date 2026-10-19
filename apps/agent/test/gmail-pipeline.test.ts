@@ -13,6 +13,7 @@ import type {
   RecordGmailExtractionInput,
   RecordGmailExtractionsInput,
   ReportGmailConnectionErrorInput,
+  ReportGmailProcessingRetryInput,
   ReportGmailSyncFailureInput,
 } from "@monara/contracts";
 import {
@@ -72,6 +73,7 @@ const receipt = {
 
 interface Overrides {
   inactive?: boolean;
+  retryReportFails?: boolean;
   alreadyFinished?: boolean;
   readFails?: boolean;
   /** HTTP status Composio answers a read with. */
@@ -81,6 +83,9 @@ interface Overrides {
   llmOutput?: unknown;
   /** Thrown by the model on these calls (1-based); every call when set to "all". */
   llmError?: { error: unknown; calls: number[] | "all" };
+  modelForCall?: (call: number) => Promise<unknown>;
+  recordError?: unknown;
+  failMerchantEnqueueCalls?: number[];
   page?: GmailMessagePage;
   /** Registry entries the User has as accounts. */
   institutionKeys?: string[];
@@ -108,6 +113,8 @@ function setup(overrides: Overrides = {}) {
     record: [] as RecordGmailExtractionInput[],
     recordCalls: [] as RecordGmailExtractionsInput[],
     resolved: 0,
+    contextSnapshots: 0,
+    activeChecks: 0,
     synced: [] as MarkGmailConnectionSyncedInput[],
     enqueued: [] as GmailJobInput[],
     fetched: [] as string[],
@@ -117,7 +124,10 @@ function setup(overrides: Overrides = {}) {
     claimedPages: [] as ClaimGmailMessagesInput[],
     syncFailures: [] as ReportGmailSyncFailureInput[],
     merchantJobs: [] as MerchantCategorizeJob[],
+    merchantEnqueueCalls: 0,
     discovered: [] as string[],
+    retryReports: [] as ReportGmailProcessingRetryInput[],
+    retryReportErrors: [] as unknown[],
     later: [] as { jobs: GmailJob[]; delaySeconds: number }[],
     modelCalls: 0,
   };
@@ -132,6 +142,7 @@ function setup(overrides: Overrides = {}) {
     },
     async resolveConnection(id) {
       calls.resolved += 1;
+      calls.contextSnapshots += 1;
       if (overrides.inactive) {
         throw new BackendOperationError("gmail.resolve-connection", 404, "NOT_FOUND");
       }
@@ -143,6 +154,12 @@ function setup(overrides: Overrides = {}) {
         holderName: overrides.holderName ?? null,
         institutionKeys: overrides.institutionKeys ?? ["BCA_CC"],
       };
+    },
+    async checkConnectionActive(_id) {
+      calls.resolved += 1;
+      calls.activeChecks += 1;
+      if (overrides.inactive)
+        throw new BackendOperationError("gmail.check-connection-active", 404, "NOT_FOUND");
     },
     async discover(id) {
       calls.discovered.push(id);
@@ -176,6 +193,11 @@ function setup(overrides: Overrides = {}) {
         uncategorizedTransactionIds: overrides.recoveredUncategorized ?? [],
       };
     },
+    async reportProcessingRetry(input) {
+      calls.retryReports.push(input);
+      if (overrides.retryReportFails)
+        throw new BackendOperationError("gmail.report-processing-retry", null, null);
+    },
     async reportSyncFailure(input) {
       calls.syncFailures.push(input);
     },
@@ -190,6 +212,7 @@ function setup(overrides: Overrides = {}) {
     },
     async recordExtractions(input) {
       calls.recordCalls.push(input);
+      if (overrides.recordError) throw overrides.recordError;
       calls.record.push(...input.results);
       const uncategorized = overrides.uncategorized ?? [];
       return {
@@ -253,11 +276,13 @@ function setup(overrides: Overrides = {}) {
       if (failing && (failing.calls === "all" || failing.calls.includes(calls.modelCalls))) {
         throw failing.error;
       }
+      if (overrides.modelForCall) return overrides.modelForCall(calls.modelCalls);
       return overrides.llmOutput ?? receipt;
     },
   };
   const pipeline = createGmailPipeline({
     backend,
+    onRetryReportError: (error) => calls.retryReportErrors.push(error),
     reader,
     llm,
     enqueue: async (jobs) => {
@@ -267,6 +292,9 @@ function setup(overrides: Overrides = {}) {
       calls.later.push({ jobs, delaySeconds });
     },
     enqueueMerchant: async (jobs) => {
+      calls.merchantEnqueueCalls += 1;
+      if (overrides.failMerchantEnqueueCalls?.includes(calls.merchantEnqueueCalls))
+        throw new Error("Synthetic merchant queue unavailable");
       calls.merchantJobs.push(...jobs);
     },
     now: () => now,
@@ -317,7 +345,7 @@ describe("processMessage", () => {
     }
   });
 
-  it("queues categorization for items the User's history could not categorize", async () => {
+  it("queues classification for newly imported items", async () => {
     const { pipeline, calls } = setup({ uncategorized: [transactionId] });
     await pipeline.runJob(extractJob, notFinal);
     assert.deepEqual(calls.merchantJobs, [
@@ -330,6 +358,21 @@ describe("processMessage", () => {
     assert.equal(await pipeline.runJob(extractJob, notFinal), "already_finished");
     assert.deepEqual(calls.fetched, []);
     assert.deepEqual(calls.record, []);
+  });
+
+  it("recovers category enqueue after a finished legacy single-message job retries", async () => {
+    const { pipeline, calls } = setup({
+      alreadyFinished: true,
+      recoveredUncategorized: [transactionId],
+    });
+    assert.equal(
+      await pipeline.runJob(extractJob, { isFinalAttempt: false, isRetry: true }),
+      "already_finished",
+    );
+    assert.deepEqual(calls.merchantJobs, [
+      { kind: "merchant.categorize", transactionIds: [transactionId] },
+    ]);
+    assert.equal(calls.modelCalls, 0);
   });
 
   it("drops the job when the connection is no longer active", async () => {
@@ -569,6 +612,38 @@ describe("syncConnection", () => {
 });
 
 describe("processBatch", () => {
+  it("publishes a fast email before the next email's slow model response completes", async () => {
+    let releaseSlow = () => {};
+    const slow = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    const { pipeline, calls } = setup({
+      uncategorized: [transactionId],
+      async modelForCall(call) {
+        if (call === 2) await slow;
+        return receipt;
+      },
+    });
+    const processing = pipeline.runJob(parseJob(["fast", "slow"]), notFinal);
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(calls.modelCalls, 2, "both emails have reached the provider");
+      assert.deepEqual(
+        calls.record.map((result) => result.processedMessageId),
+        [claimId("fast")],
+        "the first result must not wait for the second response",
+      );
+      assert.equal(
+        calls.merchantJobs.length,
+        1,
+        "classification starts as soon as the first result is persisted",
+      );
+    } finally {
+      releaseSlow();
+      await processing;
+    }
+    assert.equal(calls.record.length, 2);
+  });
   function parseJob(ids: string[]): GmailParseJob {
     return {
       kind: "gmail.parse",
@@ -582,24 +657,43 @@ describe("processBatch", () => {
     };
   }
 
-  it("resolves once, parses every email, and records them in one call", async () => {
+  it("rechecks connection activity at provider boundaries and publishes each finished email", async () => {
     const { pipeline, calls } = setup({ uncategorized: [transactionId] });
     assert.equal(await pipeline.runJob(parseJob(["m1", "m2", "m3"]), notFinal), "transactions");
-    assert.equal(calls.resolved, 1);
+    assert.ok(calls.resolved > calls.modelCalls, "activity is not cached across provider calls");
     assert.deepEqual(calls.claim, [], "the first delivery needs no claim call");
     assert.equal(calls.modelCalls, 3);
-    assert.equal(calls.recordCalls.length, 1);
+    assert.equal(calls.recordCalls.length, 3);
+    assert.ok(calls.recordCalls.every((call) => call.results.length === 1));
     assert.deepEqual(
       calls.record.map((result) => result.processedMessageId),
       [claimId("m1"), claimId("m2"), claimId("m3")],
     );
-    // Categorization is queued in batches, not one job per transaction.
-    assert.deepEqual(calls.merchantJobs, [
-      {
+    assert.deepEqual(
+      calls.merchantJobs,
+      Array.from({ length: 3 }, () => ({
         kind: "merchant.categorize",
-        transactionIds: [transactionId, transactionId, transactionId],
-      },
-    ]);
+        transactionIds: [transactionId],
+      })),
+    );
+  });
+  it("queues large extracted transaction sets in five-row merchant jobs", async () => {
+    const ids = Array.from(
+      { length: 8 },
+      (_, index) => `00000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
+    );
+    const { pipeline, calls } = setup({ uncategorized: ids });
+    await pipeline.runJob(parseJob(["m1"]), notFinal);
+    assert.deepEqual(
+      calls.merchantJobs.map((job) => ("transactionIds" in job ? job.transactionIds.length : 1)),
+      [5, 3],
+    );
+    assert.deepEqual(
+      calls.merchantJobs.flatMap((job) =>
+        "transactionIds" in job ? job.transactionIds : [job.transactionId],
+      ),
+      ids,
+    );
   });
 
   it("records the emails that worked, then throws so the job retries", async () => {
@@ -619,7 +713,9 @@ describe("processBatch", () => {
     });
     assert.equal(outcome, "transactions");
     assert.deepEqual(
-      calls.record.map((result) => [result.processedMessageId, result.outcome]),
+      calls.record
+        .map((result) => [result.processedMessageId, result.outcome])
+        .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
       [
         [claimId("m1"), "transactions"],
         [claimId("m2"), "failed"],
@@ -671,12 +767,53 @@ describe("processBatch", () => {
       { kind: "merchant.categorize", transactionIds: [transactionId] },
     ]);
   });
+  it("recovers each committed email's classification after its immediate enqueue fails", async () => {
+    const overrides: Overrides = { uncategorized: [transactionId], failMerchantEnqueueCalls: [1] };
+    const { pipeline, calls } = setup(overrides);
+    await assert.rejects(
+      pipeline.runJob(parseJob(["m1", "m2"]), final),
+      /Synthetic merchant queue unavailable/,
+    );
+    assert.equal(calls.record.length, 2, "both successful extractions remain committed");
+    assert.ok(calls.record.every((result) => result.outcome === "transactions"));
+    assert.equal(calls.merchantJobs.length, 1, "the other email can finish its own enqueue");
+    overrides.finishedOnClaim = ["m1", "m2"];
+    overrides.recoveredUncategorized = [transactionId];
+    assert.equal(
+      await pipeline.runJob(parseJob(["m1", "m2"]), { ...final, isRetry: true }),
+      "already_finished",
+    );
+    assert.equal(calls.modelCalls, 2, "already persisted messages are never extracted again");
+    assert.equal(calls.merchantJobs.length, 2, "retry claiming recovers committed category work");
+  });
+  it("never turns a final-attempt persistence failure into a failed extraction", async () => {
+    const recordError = new BackendOperationError("gmail.record-extractions", 503, null);
+    const { pipeline, calls } = setup({ recordError });
+    await assert.rejects(
+      pipeline.runJob(parseJob(["m1"]), final),
+      (error) => error === recordError,
+    );
+    assert.equal(calls.record.length, 0);
+    assert.equal(calls.recordCalls.length, 1);
+    assert.equal(calls.recordCalls[0]?.results[0]?.outcome, "transactions");
+  });
 
   it("skips mail from senders the User has no account for, without the model", async () => {
     const { pipeline, calls } = setup({ fromAddress: "promo@shop.example" });
     assert.equal(await pipeline.runJob(parseJob(["m1"]), notFinal), "skipped");
     assert.equal(calls.modelCalls, 0);
     assert.equal(calls.record[0]?.outcome, "skipped");
+  });
+
+  it("keeps the exact model deferral when retry-deadline reporting is unavailable", async () => {
+    const { pipeline, calls } = setup({
+      retryReportFails: true,
+      llmError: { error: new LlmError("busy", 429, "rate_limited", 900000), calls: [1] },
+    });
+    assert.equal(await pipeline.runJob(parseJob(["m1"]), notFinal), "deferred");
+    assert.equal(calls.later[0]?.delaySeconds, 900);
+    assert.deepEqual(calls.retryReports, [{ connectionId, delaySeconds: 900 }]);
+    assert.equal(calls.retryReportErrors.length, 1);
   });
 
   it("puts emails back when the model is rate limited, without sending the rest or failing them", async () => {
@@ -707,6 +844,7 @@ describe("processBatch", () => {
     // The provider asked for 40 s; the backoff for a second deferral is 60 s.
     const delay = later?.delaySeconds ?? 0;
     assert.ok(delay >= 60 && delay < 75);
+    assert.deepEqual(calls.retryReports, [{ connectionId, delaySeconds: delay }]);
   });
 
   it("treats a model that answers with a cut-off body like a busy one", async () => {
@@ -738,6 +876,7 @@ describe("processBatch", () => {
     const recordCalls: RecordGmailExtractionsInput[] = [];
     const pipeline = createGmailPipeline({
       backend: {
+        async checkConnectionActive() {},
         async resolveConnection() {
           return {
             connectionId,
@@ -794,7 +933,16 @@ describe("processBatch", () => {
     });
     await pipeline.runJob(parseJob(["a", "b", "c", "d", "e"]), notFinal);
     assert.equal(peak, 2);
-    assert.equal(recordCalls[0]?.results.length, 5);
+    assert.equal(recordCalls.length, 5);
+    assert.equal(recordCalls.flatMap((call) => call.results).length, 5);
+  });
+
+  it("loads prompt context once per parse job and uses narrow guards before provider work", async () => {
+    const { pipeline, calls } = setup();
+    await pipeline.runJob(parseJob(["m1", "m2", "m3", "m4", "m5"]), notFinal);
+    assert.equal(calls.contextSnapshots, 1);
+    assert.equal(calls.modelCalls, 5);
+    assert.equal(calls.activeChecks, 10);
   });
 
   it("records a one-time code email as skipped without the model", async () => {
@@ -804,7 +952,7 @@ describe("processBatch", () => {
     assert.equal(calls.record[0]?.institutionKey, "BCA_CC");
   });
 
-  it("turns a transfer to the holder's own name into an exclusion", async () => {
+  it("keeps a truncated holder name pending as an expense", async () => {
     const { pipeline, calls } = setup({
       holderName: "Adlyn Fakhreyz",
       llmOutput: {
@@ -813,7 +961,7 @@ describe("processBatch", () => {
       },
     });
     await pipeline.runJob(parseJob(["m1"]), notFinal);
-    assert.equal(calls.record[0]?.items[0]?.kind, "exclusion");
+    assert.equal(calls.record[0]?.items[0]?.kind, "expense");
     assert.equal(calls.record[0]?.items[0]?.flowDirection, "out");
   });
 

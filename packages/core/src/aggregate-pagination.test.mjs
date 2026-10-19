@@ -15,6 +15,7 @@ function rows(count = 1_001) {
     id: uuid(index + 1),
     user_id: owner,
     name: `Category ${index + 1}`,
+    kind: "expense",
     slug: `category-${index + 1}`,
     icon: "palette",
     color: "#4c2a86",

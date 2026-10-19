@@ -19,6 +19,8 @@ export const gmailSyncCountsSchema = z
     failed: countSchema,
     inProgress: countSchema,
     importedTransactions: countSchema,
+    categorizing: countSchema.default(0),
+    needsReview: countSchema.default(0),
   })
   .strict();
 

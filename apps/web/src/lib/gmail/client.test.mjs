@@ -33,6 +33,34 @@ const connection = {
 };
 
 describe("Gmail connection response boundary", () => {
+  it("keeps polling while categorization remains and reports terminal review separately", async () => {
+    for (const categorizing of [2, 0]) {
+      const mailboxes = await loadGmailConnections({
+        fetcher: async () =>
+          Response.json({
+            connections: [
+              {
+                ...connection,
+                sync: {
+                  ...connection.sync,
+                  state: "completed",
+                  counts: {
+                    ...connection.sync.counts,
+                    imported: 3,
+                    importedTransactions: 3,
+                    categorizing,
+                    needsReview: 1,
+                  },
+                },
+              },
+            ],
+          }),
+      });
+      assert.equal(mailboxes[0].sync.state, categorizing > 0 ? "running" : "completed");
+      assert.equal(mailboxes[0].sync.needsReview, 1);
+    }
+  });
+
   it("maps public active/error records and removes disconnected records", async () => {
     const mailboxes = await loadGmailConnections({
       fetcher: async (path, init) => {
@@ -111,8 +139,24 @@ describe("Gmail connection response boundary", () => {
     assert.deepEqual(
       mailboxes.map((mailbox) => mailbox.sync),
       [
-        { state: "running" },
-        { state: "completed", transactions: 3, confirmed: 2, skipped: 7, failed: 0 },
+        {
+          state: "running",
+          transactions: 0,
+          emailsRead: 0,
+          totalEmails: 0,
+          categorizing: 0,
+          needsReview: 0,
+        },
+        {
+          state: "completed",
+          emailsRead: 7,
+          totalEmails: 7,
+          transactions: 3,
+          confirmed: 2,
+          needsReview: 0,
+          skipped: 7,
+          failed: 0,
+        },
         {
           state: "failed",
           message: "The import stopped making progress. Monara tries again tonight.",

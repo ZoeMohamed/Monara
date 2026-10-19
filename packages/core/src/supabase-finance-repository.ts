@@ -4,7 +4,9 @@ import {
   type Category,
   categorySchema,
   type FinancialAccount,
+  type FinancialGoal,
   financialAccountSchema,
+  financialGoalSchema,
   type Reminder,
   reminderSchema,
   type Transaction,
@@ -33,6 +35,7 @@ type CategoryRow = Pick<
   | "id"
   | "name"
   | "slug"
+  | "kind"
   | "icon"
   | "color"
   | "is_default"
@@ -41,6 +44,7 @@ type CategoryRow = Pick<
   | "updated_at"
 >;
 type BudgetRow = Database["public"]["Tables"]["budgets"]["Row"];
+type FinancialGoalRow = Database["public"]["Tables"]["financial_goals"]["Row"];
 type ReminderRow = Pick<
   Database["public"]["Tables"]["reminders"]["Row"],
   | "id"
@@ -65,14 +69,20 @@ const TRANSACTION_COLUMNS =
 const ACCOUNT_COLUMNS =
   "id, name, institution, account_type, currency, last_four, institution_key, gmail_connection_id, is_active, created_at, updated_at";
 const CATEGORY_COLUMNS =
-  "id, name, slug, icon, color, is_default, is_archived, created_at, updated_at";
+  "id, kind, name, slug, icon, color, is_default, is_archived, created_at, updated_at";
 const BUDGET_COLUMNS =
   "id, category_id, name, cadence, limit_amount::text, currency, warning_percent, starts_on, is_active, deleted_at, created_at, updated_at";
+const FINANCIAL_GOAL_COLUMNS =
+  "id, name, target_amount::text, saved_amount::text, currency, target_date, status, image_path, deleted_at, created_at, updated_at";
 const REMINDER_COLUMNS =
   "id, budget_id, recurring_bill_id, kind, status, dedupe_key, period_starts_on, threshold_percent, offset_days, title, message, scheduled_for, read_at, created_at, updated_at";
 
 type ExactTransactionRow = Omit<TransactionRow, "amount"> & { amount: string | null };
 type ExactBudgetRow = Omit<BudgetRow, "limit_amount"> & { limit_amount: string };
+type ExactFinancialGoalRow = Omit<FinancialGoalRow, "target_amount" | "saved_amount"> & {
+  target_amount: string;
+  saved_amount: string;
+};
 
 function fail(error: { code?: string }): never {
   if (error.code === "23505") {
@@ -185,6 +195,7 @@ function toCategory(row: CategoryRow): Category {
   return categorySchema.parse({
     id: row.id,
     name: row.name,
+    kind: row.kind,
     slug: row.slug,
     icon: row.icon,
     color: row.color,
@@ -205,6 +216,21 @@ function toBudget(row: ExactBudgetRow): Budget {
     warningPercent: row.warning_percent,
     startsOn: row.starts_on,
     isActive: row.is_active,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function toFinancialGoal(row: ExactFinancialGoalRow): FinancialGoal {
+  return financialGoalSchema.parse({
+    id: row.id,
+    name: row.name,
+    target: { amountMinor: row.target_amount, currency: row.currency },
+    saved: { amountMinor: row.saved_amount, currency: row.currency },
+    targetDate: row.target_date,
+    status: row.status,
+    imagePath: row.image_path,
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -267,7 +293,7 @@ const transactionUpdate = (
 
 async function missingOrConflict(
   client: MonaraServiceRoleClient,
-  table: "transactions" | "budgets" | "financial_accounts" | "categories",
+  table: "transactions" | "budgets" | "financial_accounts" | "financial_goals" | "categories",
   id: string,
   userId: string,
 ): Promise<never> {
@@ -306,6 +332,17 @@ export function createSupabaseFinanceRepository(
       .maybeSingle();
     if (result.error) fail(result.error);
     return result.data ? toBudget(result.data as unknown as ExactBudgetRow) : null;
+  };
+
+  const findFinancialGoal = async (userId: string, goalId: string) => {
+    const result = await client
+      .from("financial_goals")
+      .select(FINANCIAL_GOAL_COLUMNS)
+      .eq("id", goalId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (result.error) fail(result.error);
+    return result.data ? toFinancialGoal(result.data as unknown as ExactFinancialGoalRow) : null;
   };
 
   const listTransactionsForDateRange = async (userId: string, startsOn: string, endsOn: string) =>
@@ -565,6 +602,129 @@ export function createSupabaseFinanceRepository(
       return toAccount(result.data);
     },
 
+    async listFinancialGoals(userId, input) {
+      const offset = offsetFor(input.cursor);
+      const limit = input.limit ?? 50;
+      let query = client
+        .from("financial_goals")
+        .select(FINANCIAL_GOAL_COLUMNS)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("target_date", { ascending: true })
+        .order("id", { ascending: true })
+        .range(offset, offset + limit);
+      if (input.status) query = query.eq("status", input.status);
+      const result = await query;
+      if (result.error) fail(result.error);
+      return page(
+        (result.data as unknown as ExactFinancialGoalRow[]).map(toFinancialGoal),
+        offset,
+        limit,
+      );
+    },
+
+    async findFinancialGoal(userId, goalId) {
+      return findFinancialGoal(userId, goalId);
+    },
+
+    async createFinancialGoal(userId, input) {
+      const inserted = await client
+        .from("financial_goals")
+        .insert({
+          user_id: userId,
+          client_request_id: input.clientRequestId,
+          name: input.name,
+          target_amount: databaseNumeric(input.target.amountMinor),
+          saved_amount: databaseNumeric(input.saved.amountMinor),
+          currency: input.target.currency,
+          target_date: input.targetDate,
+        })
+        .select(FINANCIAL_GOAL_COLUMNS)
+        .single();
+      if (!inserted.error)
+        return toFinancialGoal(inserted.data as unknown as ExactFinancialGoalRow);
+      if (inserted.error.code !== "23505") fail(inserted.error);
+      const existing = await client
+        .from("financial_goals")
+        .select(FINANCIAL_GOAL_COLUMNS)
+        .eq("user_id", userId)
+        .eq("client_request_id", input.clientRequestId)
+        .maybeSingle();
+      if (existing.error) fail(existing.error);
+      if (!existing.data) fail(inserted.error);
+      const goal = toFinancialGoal(existing.data as unknown as ExactFinancialGoalRow);
+      if (
+        goal.name !== input.name ||
+        goal.target.amountMinor !== input.target.amountMinor ||
+        goal.saved.amountMinor !== input.saved.amountMinor ||
+        goal.targetDate !== input.targetDate
+      ) {
+        throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
+      }
+      return goal;
+    },
+
+    async updateFinancialGoal(userId, input) {
+      const result = await client
+        .from("financial_goals")
+        .update({
+          ...(input.changes.name === undefined ? {} : { name: input.changes.name }),
+          ...(input.changes.target === undefined
+            ? {}
+            : {
+                target_amount: databaseNumeric(input.changes.target.amountMinor),
+                currency: input.changes.target.currency,
+              }),
+          ...(input.changes.saved === undefined
+            ? {}
+            : { saved_amount: databaseNumeric(input.changes.saved.amountMinor) }),
+          ...(input.changes.targetDate === undefined
+            ? {}
+            : { target_date: input.changes.targetDate }),
+        })
+        .eq("id", input.goalId)
+        .eq("user_id", userId)
+        .eq("updated_at", input.expectedUpdatedAt)
+        .is("deleted_at", null)
+        .select(FINANCIAL_GOAL_COLUMNS)
+        .maybeSingle();
+      if (result.error) fail(result.error);
+      if (!result.data) return missingOrConflict(client, "financial_goals", input.goalId, userId);
+      return toFinancialGoal(result.data as unknown as ExactFinancialGoalRow);
+    },
+
+    async setFinancialGoalImage(input) {
+      const result = await client
+        .from("financial_goals")
+        .update({ image_path: input.imagePath })
+        .eq("id", input.goalId)
+        .eq("user_id", input.userId)
+        .eq("updated_at", input.expectedUpdatedAt)
+        .is("deleted_at", null)
+        .select(FINANCIAL_GOAL_COLUMNS)
+        .maybeSingle();
+      if (result.error) fail(result.error);
+      if (!result.data)
+        return missingOrConflict(client, "financial_goals", input.goalId, input.userId);
+      return toFinancialGoal(result.data as unknown as ExactFinancialGoalRow);
+    },
+
+    async softDeleteFinancialGoal(input) {
+      const result = await client
+        .from("financial_goals")
+        .update({ deleted_at: input.deletedAt })
+        .eq("id", input.goalId)
+        .eq("user_id", input.userId)
+        .eq("updated_at", input.expectedUpdatedAt)
+        .is("deleted_at", null)
+        .select(FINANCIAL_GOAL_COLUMNS)
+        .maybeSingle();
+      if (result.error) fail(result.error);
+      if (!result.data)
+        return missingOrConflict(client, "financial_goals", input.goalId, input.userId);
+      return toFinancialGoal(result.data as unknown as ExactFinancialGoalRow);
+    },
+
     async listCategories(userId, input) {
       const offset = offsetFor(input.cursor);
       const limit = input.limit ?? 50;
@@ -604,6 +764,7 @@ export function createSupabaseFinanceRepository(
           id,
           user_id: userId,
           name: input.name,
+          kind: input.kind,
           slug,
           icon: input.icon,
           color: input.color,
@@ -626,6 +787,7 @@ export function createSupabaseFinanceRepository(
       if (!existing.data) fail(inserted.error);
       const category = toCategory(existing.data);
       if (
+        category.kind !== input.kind ||
         category.name !== input.name ||
         category.icon !== input.icon ||
         category.color !== input.color ||

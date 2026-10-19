@@ -54,16 +54,18 @@
 .tabs {
   display: flex;
   flex-shrink: 0;
+  overflow-x: auto;
   gap: 4px;
   padding: 3px;
   border-radius: 999px;
   background: var(--surface-secondary);
+  scrollbar-width: none;
 }
 
 .tab {
   display: inline-flex;
   min-height: 36px;
-  flex: 1;
+  flex: 1 0 auto;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -76,9 +78,16 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background-color 140ms var(--ease-out),
     color 140ms var(--ease-out);
+}
+
+.tabIcon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .tab[aria-selected="true"] {
@@ -118,9 +127,10 @@
 }
 
 .row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   min-height: var(--row);
-  align-items: center;
+  align-items: start;
   gap: 10px;
   padding: 4px 2px;
   border-top: 1px solid var(--separator);
@@ -137,6 +147,39 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
+}
+
+.rowBadge {
+  align-self: center;
+}
+
+.rowCategory {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.25;
+}
+
+.categoryIcon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.categoryName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowValue {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
 }
 
 .rowName {
@@ -159,6 +202,7 @@
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   font-weight: 800;
+  line-height: 1.25;
 }
 
 .row[data-kind="income"] .rowAmount {

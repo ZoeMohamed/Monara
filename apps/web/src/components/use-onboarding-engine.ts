@@ -22,6 +22,9 @@ export type ImportedTransaction = {
   /** YYYY-MM-DD */
   date: string;
   kind: ImportedKind;
+  category?: string | null;
+  categoryIcon?: string | null;
+  needsReview?: boolean;
 };
 
 /**
@@ -31,7 +34,9 @@ export type ImportedTransaction = {
 export type ImportProgress = {
   state: "waiting" | "running" | "completed" | "failed";
   emailsRead: number | null;
+  /** Claimed emails so far, unless totalEmailsFinal confirms discovery has finished. */
   totalEmails: number | null;
+  totalEmailsFinal?: boolean;
   /** Transactions imported so far. */
   transactions: number | null;
   /** Transactions the scan has detected in all, which the count above works toward. */
@@ -41,6 +46,8 @@ export type ImportProgress = {
    * list transactions yet; the table then waits instead of inventing rows.
    */
   feed: ImportedTransaction[];
+  categorizing?: number;
+  needsReview?: number;
   message?: string;
 };
 

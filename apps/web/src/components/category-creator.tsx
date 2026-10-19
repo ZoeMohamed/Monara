@@ -6,12 +6,14 @@ import { type FormEvent, useRef, useState } from "react";
 import { type FinanceManagerProps, FinanceRecovery } from "@/components/budget-manager";
 import styles from "@/components/budget-manager.module.css";
 import { CategoryIconPicker } from "@/components/category-icon-picker";
+import { CategoryKindField } from "@/components/category-kind-field";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import { categoryIconChoice } from "@/data/category-icons";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
 
 type CategoryCreatorProps = FinanceManagerProps & {
+  initialKind?: Category["kind"];
   onClose: () => void;
   onCreated?: (category: Category) => void;
 };
@@ -19,6 +21,7 @@ type CategoryCreatorProps = FinanceManagerProps & {
 function useCategoryCreation(props: CategoryCreatorProps) {
   const [state, setState] = useState({
     name: "",
+    kind: props.initialKind ?? ("expense" as Category["kind"]),
     icon: null as string | null,
     pending: false,
     uncertain: false,
@@ -28,6 +31,7 @@ function useCategoryCreation(props: CategoryCreatorProps) {
   const request = useRef<{
     clientRequestId: string;
     name: string;
+    kind: Category["kind"];
     icon: string;
     color: string;
   } | null>(null);
@@ -36,6 +40,7 @@ function useCategoryCreation(props: CategoryCreatorProps) {
     (category) =>
       category.id === request.current?.clientRequestId &&
       category.name === request.current.name &&
+      category.kind === request.current.kind &&
       category.icon === request.current.icon,
   );
   const locked = state.pending || state.uncertain || Boolean(props.refreshRequired);
@@ -54,6 +59,7 @@ function useCategoryCreation(props: CategoryCreatorProps) {
       }
       request.current = {
         name,
+        kind: state.kind,
         icon: categoryIconChoice(name, state.icon),
         color: "#0b33fd",
         clientRequestId: crypto.randomUUID(),
@@ -68,6 +74,7 @@ function useCategoryCreation(props: CategoryCreatorProps) {
         if (
           response.category.id !== submitted.clientRequestId ||
           response.category.name !== submitted.name ||
+          response.category.kind !== submitted.kind ||
           response.category.icon !== submitted.icon
         )
           throw new FinanceClientError(
@@ -96,7 +103,7 @@ function useCategoryCreation(props: CategoryCreatorProps) {
       inFlight.current = false;
     }
   };
-  const change = (patch: Partial<Pick<typeof state, "name" | "icon">>) =>
+  const change = (patch: Partial<Pick<typeof state, "name" | "icon" | "kind">>) =>
     setState((previous) => ({ ...previous, ...patch, error: null, fieldError: null }));
   return { state, locked, close, submit, change, found };
 }
@@ -147,6 +154,7 @@ function CategoryCreationFields({
   editor,
   refreshRequired,
   onRefreshRecords,
+  initialKind,
 }: CategoryCreatorProps & { editor: ReturnType<typeof useCategoryCreation> }) {
   const { state } = editor;
   return (
@@ -167,6 +175,12 @@ function CategoryCreationFields({
         />
         <FieldError>{state.fieldError}</FieldError>
       </TextField>
+      <CategoryKindField
+        value={state.kind}
+        onChange={(kind) => editor.change({ kind })}
+        disabled={editor.locked || Boolean(initialKind)}
+      />
+      <p className={styles.meta}>The category type stays fixed after creation.</p>
       <CategoryIconPicker
         disabled={editor.locked}
         name={state.name}

@@ -7,6 +7,7 @@ export type {
   GmailConnector,
 } from "./gmail.ts";
 export { ComposioRequestError, createComposioGmailClient } from "./gmail.ts";
+export { createComposioUserCleanup } from "./gmail-cleanup.ts";
 export type {
   ComposioGmailReader,
   GmailMailbox,

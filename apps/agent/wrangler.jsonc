@@ -5,6 +5,11 @@
   "compatibility_date": "2026-10-09",
   "workers_dev": true,
   "preview_urls": false,
+  // Persist only the runtime's structured stage/error logs, without request logs.
+  "observability": {
+    "redact_query_string": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": false }
+  },
   // One object per User holds their WhatsApp conversation. See src/whatsapp/conversation.ts.
   "durable_objects": {
     "bindings": [{ "name": "CONVERSATIONS", "class_name": "WhatsAppConversation" }]
@@ -19,10 +24,9 @@
     "consumers": [
       {
         "queue": "monara-gmail-jobs",
-        // A parse job carries up to 10 emails, and a busy model can be asked again twice per
-        // email, so one job per invocation stays under the Workers Free limit of 50 outside
-        // requests: 10 Composio reads + 30 model calls + 2 backend calls + 1 queue send = 43.
-        // On Workers Paid this can go up.
+        // Parse jobs carry at most 5 emails to leave room for activity checks before
+        // each provider call. Busy models yield to the queue instead of retrying inline.
+        // Older, larger jobs are split by the consumer before doing provider work.
         "max_batch_size": 1,
         // Every hop used to wait up to 5 s for a batch to fill; onboarding makes two hops.
         "max_batch_timeout": 1,
@@ -33,21 +37,21 @@
         "max_retries": 3
       },
       {
-        // Web searches are rate limited, so merchant jobs run in small batches on one
-        // consumer at a time; extraction never waits on them. Every imported transaction
-        // without a history Category comes through here, and its auto-confirm waits for
-        // the result, so raise max_concurrency to what the Brave plan allows.
+        // One job per invocation keeps five cold business lookups below the
+        // subrequest budget. Five invocations preserve the previous upper bound
+        // of five parallel jobs without sharing one invocation's request limit.
         "queue": "monara-merchant-jobs",
-        "max_batch_size": 5,
-        "max_batch_timeout": 5,
-        "max_concurrency": 1,
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_concurrency": 5,
         "max_retries": 5
       }
     ]
   },
   "triggers": {
-    // Every 15 minutes: deliver budget alerts held by quiet hours.
+    // Every 15 minutes: deliver budget alerts held by quiet hours. Mondays 02:00 UTC (09:00
+    // Jakarta): refresh spending forecasts.
     // Daily at 01:00 UTC (08:00 WIB): new-bank discovery and a catch-up import per mailbox.
-    "crons": ["*/15 * * * *", "0 1 * * *"]
+    "crons": ["* * * * *", "*/15 * * * *", "0 1 * * *", "0 2 * * 1"]
   }
 }

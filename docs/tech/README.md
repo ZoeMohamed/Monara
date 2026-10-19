@@ -24,6 +24,7 @@ The rules list three separate deliverables here, so they are built as three PDFs
 | [agent.md](agent.md) | Argya | 16 Oct | Draft |
 | [ui.md](ui.md) | Erdafa | 16 Oct | Draft |
 | [reminders.md](reminders.md) | Abhip | 16 Oct | Draft |
+| [forecast.md](forecast.md) | Abhip | 18 Oct | Draft |
 | [evaluation.md](evaluation.md) | Abhip | 18 Oct | Draft |
 | [security-self-assessment.md](security-self-assessment.md) | Abhip | 17 Oct | Draft |
 

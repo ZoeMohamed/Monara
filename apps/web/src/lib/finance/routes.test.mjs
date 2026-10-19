@@ -10,6 +10,7 @@ const actionId = "00000000-0000-4000-8000-000000000501";
 const transactionId = "00000000-0000-4000-8000-000000000301";
 const version = "2026-10-17T10:00:00Z";
 const state = {
+  active: true,
   identity: { id: ownerId },
   action: null,
   lookups: [],
@@ -44,6 +45,12 @@ const mockNextServer = "export const after = () => {};";
 const mockGmailImport = "export async function importAfterAccountLinked() {}";
 const mockGmailTrigger = "export async function syncUserTriggers() {}";
 const mockBudgetAlerts = "export function scheduleBudgetAlert() {}";
+const mockUserDeletion = `
+  import { FinanceOperationError } from ${JSON.stringify(actualCore)};
+  export async function requireActiveUser() {
+    if (!globalThis.monaraFinanceRouteTest.active) throw new FinanceOperationError("UNAUTHENTICATED", "This account is no longer available.");
+  }
+`;
 const mockIdentity =
   "export async function getAuthenticatedIdentity() { return globalThis.monaraFinanceRouteTest.identity; }";
 const hooks = registerHooks({
@@ -55,6 +62,9 @@ const hooks = registerHooks({
       "@/lib/gmail/import": mockGmailImport,
       "@/lib/gmail/trigger": mockGmailTrigger,
       "@/lib/whatsapp/budget-alerts": mockBudgetAlerts,
+      "@/lib/auth/user-deletion": mockUserDeletion,
+      "@/lib/forecast/service":
+        'export function forecastService() { throw new Error("not used here"); }',
       "@/lib/supabase/config": mockConfig,
       "@/lib/supabase/server": mockIdentity,
     };
@@ -70,6 +80,9 @@ const hooks = registerHooks({
     if (specifier === "@/lib/http/origin") {
       return nextResolve(new URL("../http/origin.ts", import.meta.url).href, context);
     }
+    if (specifier === "@/lib/http/rate-limit") {
+      return nextResolve(new URL("../http/rate-limit.ts", import.meta.url).href, context);
+    }
     return nextResolve(specifier, context);
   },
 });
@@ -78,6 +91,7 @@ const { isFinanceOperation, isAgentOperation, runAgentOperation } = await import
 hooks.deregister();
 
 function reset() {
+  state.active = true;
   state.identity = { id: ownerId };
   state.action = {
     id: actionId,
@@ -104,6 +118,22 @@ function undo(input = { actionId }, site = "same-origin") {
 }
 
 describe("owned web Undo boundary", () => {
+  it("rejects a deleting identity before web or Agent operations can write", async () => {
+    reset();
+    state.active = false;
+    const response = await undo();
+    assert.equal(response.status, 401);
+    await assert.rejects(
+      () =>
+        runAgentOperation(
+          "undo_action",
+          { userId: ownerId, channel: "web", directSource: "in_app_chat" },
+          { actionId },
+        ),
+      (error) => error.code === "UNAUTHENTICATED",
+    );
+    assert.deepEqual(state.writes, []);
+  });
   it("exposes the existing owned reversal through web and Agent dispatch", async () => {
     reset();
     assert.equal(isFinanceOperation("undo_action"), true);
@@ -175,5 +205,23 @@ describe("owned web Undo boundary", () => {
     assert.equal(response.status, 409);
     assert.equal(state.action.consumedAt, null);
     assert.equal(state.writes.length, 0);
+  });
+
+  it("refuses with Retry-After once a User sends too many operations", async () => {
+    const { resetRateLimits, RATE_LIMITS } = await import("../http/rate-limit.ts");
+    resetRateLimits();
+    try {
+      reset();
+      for (let sent = 0; sent < RATE_LIMITS.finance.limit; sent++) {
+        assert.notEqual((await undo()).status, 429);
+      }
+      const refused = await undo();
+      assert.equal(refused.status, 429);
+      assert.equal((await refused.json()).code, "RATE_LIMITED");
+      assert.ok(Number(refused.headers.get("retry-after")) >= 1);
+      assert.equal(refused.headers.get("cache-control"), "private, no-store");
+    } finally {
+      resetRateLimits();
+    }
   });
 });

@@ -15,6 +15,7 @@ import {
   type CreateBudgetInput,
   type CreateCategoryInput,
   type CreateFinancialAccountInput,
+  type CreateFinancialGoalInput,
   type CreateTransactionInput,
   categoryMutationResultSchema,
   confirmDestructiveActionInputSchema,
@@ -24,20 +25,25 @@ import {
   createCategoryInputSchema,
   createCategoryResultSchema,
   createFinancialAccountInputSchema,
+  createFinancialGoalInputSchema,
   createTransactionInputSchema,
   type DashboardSummary,
   type DeleteBudgetInput,
+  type DeleteFinancialGoalInput,
   type DeleteTransactionInput,
   type DestructiveActionConfirmation,
   type DismissReminderInput,
   dashboardSummarySchema,
   deleteBudgetInputSchema,
+  deleteFinancialGoalInputSchema,
   deleteTransactionInputSchema,
   destructiveActionConfirmationSchema,
   dismissReminderInputSchema,
   excludeTransactionInputSchema,
   type FinancialAccount,
   type FinancialAccountPage,
+  type FinancialGoal,
+  type FinancialGoalPage,
   type FinancialInsights,
   financialAccountMutationResultSchema,
   financialInsightsSchema,
@@ -46,11 +52,13 @@ import {
   type ListBudgetsInput,
   type ListCategoriesInput,
   type ListFinancialAccountsInput,
+  type ListFinancialGoalsInput,
   type ListRemindersInput,
   type ListTransactionsInput,
   listBudgetsInputSchema,
   listCategoriesInputSchema,
   listFinancialAccountsInputSchema,
+  listFinancialGoalsInputSchema,
   listRemindersInputSchema,
   listTransactionsInputSchema,
   type MarkReminderReadInput,
@@ -71,12 +79,14 @@ import {
   type UpdateBudgetInput,
   type UpdateCategoryInput,
   type UpdateFinancialAccountInput,
+  type UpdateFinancialGoalInput,
   type UpdatePendingTransactionInput,
   type UpdateTransactionInput,
   undoActionInputSchema,
   updateBudgetInputSchema,
   updateCategoryInputSchema,
   updateFinancialAccountInputSchema,
+  updateFinancialGoalInputSchema,
   updatePendingTransactionInputSchema,
   updateTransactionInputSchema,
   userIdSchema,
@@ -171,6 +181,23 @@ export interface FinanceRepository {
     userId: string,
     input: UpdateFinancialAccountInput,
   ): Promise<FinancialAccount>;
+
+  listFinancialGoals(userId: string, input: ListFinancialGoalsInput): Promise<FinancialGoalPage>;
+  findFinancialGoal(userId: string, goalId: string): Promise<FinancialGoal | null>;
+  createFinancialGoal(userId: string, input: CreateFinancialGoalInput): Promise<FinancialGoal>;
+  updateFinancialGoal(userId: string, input: UpdateFinancialGoalInput): Promise<FinancialGoal>;
+  setFinancialGoalImage(input: {
+    userId: string;
+    goalId: string;
+    expectedUpdatedAt: string;
+    imagePath: string | null;
+  }): Promise<FinancialGoal>;
+  softDeleteFinancialGoal(input: {
+    userId: string;
+    goalId: string;
+    expectedUpdatedAt: string;
+    deletedAt: string;
+  }): Promise<FinancialGoal>;
 
   listCategories(userId: string, input: ListCategoriesInput): Promise<CategoryPage>;
   listAllCategories(userId: string): Promise<Category[]>;
@@ -731,6 +758,19 @@ export function createFinanceService(
     userId: userIdSchema.parse(input.userId),
   });
 
+  async function requireExpenseCategory(userId: string, categoryId: string, requireActive = true) {
+    const category = (await repository.listAllCategories(userId)).find(
+      (item) => item.id === categoryId,
+    );
+    if (!category) throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+    if (category.kind !== "expense" || (requireActive && category.isArchived)) {
+      throw new FinanceOperationError(
+        "VALIDATION_FAILED",
+        "Budgets require an active expense Category.",
+      );
+    }
+  }
+
   async function action(input: {
     caller: FinanceCaller;
     toolName: string;
@@ -994,6 +1034,7 @@ export function createFinanceService(
         values: confirmedTransactionValuesSchema.parse({
           ...transactionValues(previous),
           kind: "exclusion",
+          categoryId: null,
           flowDirection:
             previous.flowDirection ??
             (previous.kind === "expense" ? "out" : previous.kind === "income" ? "in" : null),
@@ -1278,6 +1319,51 @@ export function createFinanceService(
       return financialAccountMutationResultSchema.parse({ financialAccount, action: receipt });
     },
 
+    async listFinancialGoals(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      return repository.listFinancialGoals(
+        verified.userId,
+        listFinancialGoalsInputSchema.parse(input),
+      );
+    },
+
+    async createFinancialGoal(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      return repository.createFinancialGoal(
+        verified.userId,
+        createFinancialGoalInputSchema.parse(input),
+      );
+    },
+
+    async updateFinancialGoal(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const values: UpdateFinancialGoalInput = updateFinancialGoalInputSchema.parse(input);
+      const previous = await repository.findFinancialGoal(verified.userId, values.goalId);
+      if (!previous || previous.deletedAt) {
+        throw new FinanceOperationError("NOT_FOUND", "That Goal was not found.");
+      }
+      const target = values.changes.target ?? previous.target;
+      const saved = values.changes.saved ?? previous.saved;
+      if (BigInt(saved.amountMinor) > BigInt(target.amountMinor)) {
+        throw new FinanceOperationError(
+          "VALIDATION_FAILED",
+          "Saved amount cannot exceed the target.",
+        );
+      }
+      return repository.updateFinancialGoal(verified.userId, values);
+    },
+
+    async deleteFinancialGoal(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const values: DeleteFinancialGoalInput = deleteFinancialGoalInputSchema.parse(input);
+      return repository.softDeleteFinancialGoal({
+        userId: verified.userId,
+        goalId: values.goalId,
+        expectedUpdatedAt: values.expectedUpdatedAt,
+        deletedAt: now(),
+      });
+    },
+
     async listCategories(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
       return repository.listCategories(verified.userId, listCategoriesInputSchema.parse(input));
@@ -1334,8 +1420,13 @@ export function createFinanceService(
         repository.listAllCategories(verified.userId),
         repository.listTransactionsForDateRange(verified.userId, basedOnStartsOn, basedOnEndsOn),
       ]);
-      if (!categories.some((category) => category.id === values.categoryId)) {
-        throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+      const category = categories.find((item) => item.id === values.categoryId);
+      if (!category) throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+      if (category.kind !== "expense" || category.isArchived) {
+        throw new FinanceOperationError(
+          "VALIDATION_FAILED",
+          "Budgets require an active expense Category.",
+        );
       }
 
       let confirmedIncome = 0n;
@@ -1382,10 +1473,9 @@ export function createFinanceService(
 
     async createBudget(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
-      const budget = await repository.createBudget(
-        verified.userId,
-        createBudgetInputSchema.parse(input),
-      );
+      const values = createBudgetInputSchema.parse(input);
+      await requireExpenseCategory(verified.userId, values.categoryId);
+      const budget = await repository.createBudget(verified.userId, values);
       const receipt = await action({
         caller: verified,
         toolName: "create_budget",
@@ -1405,6 +1495,12 @@ export function createFinanceService(
       if (!previous || previous.deletedAt) {
         throw new FinanceOperationError("NOT_FOUND", "That Budget was not found.");
       }
+      await requireExpenseCategory(
+        verified.userId,
+        values.changes.categoryId ?? previous.categoryId,
+        values.changes.categoryId !== undefined &&
+          values.changes.categoryId !== previous.categoryId,
+      );
       const budget = await repository.updateBudget(verified.userId, values);
       const receipt = await action({
         caller: verified,

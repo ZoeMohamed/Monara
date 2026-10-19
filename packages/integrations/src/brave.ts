@@ -24,11 +24,13 @@ export interface BraveSearchResult {
 /** A failed search. rateLimited tells the caller to retry later rather than give up. */
 export class BraveSearchError extends Error {
   readonly status: number | null;
+  readonly retryAfterMs: number | null;
 
-  constructor(message: string, status: number | null = null) {
+  constructor(message: string, status: number | null = null, retryAfterMs: number | null = null) {
     super(message);
     this.name = "BraveSearchError";
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
 
   get rateLimited(): boolean {
@@ -69,7 +71,18 @@ export function createBraveSearchClient(config: BraveSearchConfig) {
       } catch {
         throw new BraveSearchError("Brave Search could not be reached.");
       }
-      if (!response.ok) throw new BraveSearchError("Brave Search failed.", response.status);
+      if (!response.ok) {
+        const retryAfter = response.headers.get("Retry-After");
+        const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
+        const date = retryAfter === null ? Number.NaN : Date.parse(retryAfter);
+        const retryAfterMs =
+          Number.isFinite(seconds) && seconds >= 0
+            ? seconds * 1000
+            : Number.isFinite(date)
+              ? Math.max(0, date - Date.now())
+              : null;
+        throw new BraveSearchError("Brave Search failed.", response.status, retryAfterMs);
+      }
       let payload: unknown;
       try {
         payload = await response.json();

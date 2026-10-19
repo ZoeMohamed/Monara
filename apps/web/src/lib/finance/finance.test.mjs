@@ -33,6 +33,7 @@ const categories = [
   {
     id: categoryId,
     name: "Food",
+    kind: "expense",
     slug: "food",
     icon: "food",
     color: "#0b33fd",
@@ -498,6 +499,7 @@ describe("financial HTTP boundary", () => {
   it("creates a category with its retry UUID and no unsupported Undo receipt", async () => {
     const input = {
       name: "  Hobbies  ",
+      kind: "expense",
       icon: "palette",
       color: "#4c2a86",
       clientRequestId: categoryId,
@@ -506,6 +508,7 @@ describe("financial HTTP boundary", () => {
       ...categories[0],
       id: categoryId,
       name: "Hobbies",
+      kind: "expense",
       icon: "palette",
       color: "#4c2a86",
       slug: `custom-${categoryId}`,
@@ -524,6 +527,7 @@ describe("financial HTTP boundary", () => {
   it("rejects invalid category creation before transport and preserves uncertain-write recovery", async () => {
     const input = {
       name: "Hobbies",
+      kind: "expense",
       icon: "palette",
       color: "#4c2a86",
       clientRequestId: categoryId,

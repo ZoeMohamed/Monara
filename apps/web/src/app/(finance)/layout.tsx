@@ -3,7 +3,9 @@ import { Suspense } from "react";
 
 import { FinanceUnavailable } from "@/components/finance-unavailable";
 import { MonaraApp } from "@/components/monara-app";
+import { UserSessionGuard } from "@/components/user-session-guard";
 import { profileFromIdentity } from "@/lib/auth/identity";
+import { setupKeyForUser } from "@/lib/auth/setup-key";
 import {
   FinancePresentationError,
   type FinanceSnapshot,
@@ -43,7 +45,11 @@ export default async function FinanceLayout({ children }: { children: React.Reac
         </main>
       }
     >
-      <MonaraApp initialFinance={initialFinance} profile={profileFromIdentity(identity)}>
+      <UserSessionGuard setupKey={setupKeyForUser(identity.id)} />
+      <MonaraApp
+        initialFinance={initialFinance}
+        profile={{ ...profileFromIdentity(identity), setupKey: setupKeyForUser(identity.id) }}
+      >
         {children}
       </MonaraApp>
     </Suspense>

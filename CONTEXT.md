@@ -12,12 +12,16 @@ _Avoid_: Account when referring to a person's identity
 A bank account, wallet, or cash balance whose transactions and balance a User tracks in Monara.
 _Avoid_: User account, login account
 
+**User Deletion**:
+The permanent removal of a User's Monara identity and all their personal Monara data, including Financial Accounts, transactions, settings, connections, and conversations. It has no recovery grace period or undo.
+_Avoid_: Financial Account deletion when referring to deleting the entire identity
+
 **Pending Transaction**:
 A transaction extracted from a source that awaits review and does not contribute to confirmed dashboard totals.
 _Avoid_: Confirmed transaction when review is outstanding
 
 **Confirmed Transaction**:
-A reviewed transaction included in the User's financial totals. A Gmail import is confirmed without review only when its sender is authenticated and the extraction is confident and complete.
+A transaction accepted as final, with its Transaction Type determining whether it contributes to expense, income, or neither. A Gmail import may be confirmed automatically when its sender is authenticated and its extraction and classification meet the confirmation requirements.
 _Avoid_: Pending transaction
 
 **Gmail Connection**:
@@ -28,14 +32,18 @@ _Avoid_: Google login when referring to mailbox authorization
 A verified association between a User and their WhatsApp number that permits conversations to access that User's records.
 _Avoid_: Phone number as proof of identity
 
-### Spending
+### Transactions
+
+**Transaction Type**:
+The financial treatment of a transaction: expense, income, or exclusion.
+_Avoid_: Category when referring to whether money counts as spending, income, or neither
 
 **Category**:
-A label a User assigns to transactions to group them by kind of spending.
-_Avoid_: Tag, type
+A label that groups transactions within exactly one Transaction Type: expense, income, or exclusion. A transaction's Category must match its Transaction Type when that type is known; a Pending Transaction may retain a category hint while its type is unknown.
+_Avoid_: Tag, Transaction Type
 
 **Budget**:
-A spending limit a User sets for a Category over a weekly or monthly period, measured against Confirmed Transactions.
+A spending limit a User sets for an expense Category over a weekly or monthly period, measured against Confirmed expenses.
 _Avoid_: Allowance, quota
 
 **Recurring Bill**:
@@ -57,6 +65,10 @@ _Avoid_: Credit, deposit
 **Excluded Transaction**:
 A confirmed transaction whose type is `exclusion`, intentionally kept out of financial totals, such as an internal transfer, reimbursement, duplicate, or non-personal transaction.
 _Avoid_: Deleting an imported record when it must remain for deduplication
+
+**Internal Transfer**:
+Money moving between bank accounts, wallets, or cash balances owned by the same User, whether or not both are tracked in Monara. Its Category is Internal and its Transaction Type is exclusion.
+_Avoid_: Income or expense when referring to movement of the User's own funds
 
 ### Agent
 

@@ -29,6 +29,6 @@ BRAVE_SEARCH_API_KEY=
 # Gmail parse throughput. At most (queue max_concurrency 3) x GMAIL_PARSE_CONCURRENCY
 # model calls run at once. A rate-limited or busy model puts emails back on the queue
 # instead of failing them, but raise this only as far as the model's tokens-per-minute
-# limit allows. Both accept 1-10.
-GMAIL_PARSE_BATCH_SIZE=10
+# limit allows. Batch size accepts 1-5; concurrency accepts 1-10.
+GMAIL_PARSE_BATCH_SIZE=5
 GMAIL_PARSE_CONCURRENCY=2

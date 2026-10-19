@@ -7,7 +7,7 @@ import { type TourMode, writeTourSeen } from "./use-product-tour";
 
 type TourStep = { target: string; title: string; body: string };
 
-// Four stops on the real Home screen: what counts, what waits, how to ask, how to add.
+// Four stops on the real Home screen: what counts, what is coming, how to ask, how to add.
 const steps: TourStep[] = [
   {
     target: "balance",
@@ -15,9 +15,9 @@ const steps: TourStep[] = [
     body: "Only payments you've confirmed count here. Tap the eye to hide amounts.",
   },
   {
-    target: "chips",
-    title: "A quick second look",
-    body: "Imports that need more detail appear in To review. Exclusions stay out of your spending totals.",
+    target: "forecast",
+    title: "What's coming",
+    body: "Monara looks at your repeating payments and shows what to expect before the month ends, with how sure it is.",
   },
   {
     target: "ask",

@@ -3,6 +3,7 @@ import { after } from "next/server";
 
 import { chatHistoryService } from "@/lib/chat/service";
 import { isSameOriginRequest } from "@/lib/http/origin";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/http/rate-limit";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -26,6 +27,17 @@ export async function POST(request: Request) {
   }
   const identity = await getAuthenticatedIdentity();
   if (!identity) return failure(401, "UNAUTHENTICATED", "Sign in to continue.");
+  const limited = checkRateLimit("chat", identity.id, RATE_LIMITS.chat);
+  if (!limited.ok) {
+    return Response.json(
+      {
+        code: "RATE_LIMITED",
+        message: "You're sending messages too fast. Try again in a moment.",
+        requestId: null,
+      },
+      { status: 429, headers: { ...headers, "Retry-After": String(limited.retryAfterSeconds) } },
+    );
+  }
 
   const agentUrl = process.env.MONARA_AGENT_URL?.trim();
   const secret = process.env.MONARA_AGENT_BACKEND_SECRET?.trim();

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   Detection,
-  ImportedTransaction,
   ImportProgress,
   OnboardingEngine,
 } from "@/components/use-onboarding-engine";
@@ -17,12 +16,16 @@ import {
   requestGmailDiscovery,
   startGmailConnection,
 } from "@/lib/gmail/client";
-import { loadImportFeed } from "@/lib/gmail/import-feed";
+import { loadImportSnapshot } from "@/lib/gmail/import-snapshot";
+import { mergeImportFeed } from "@/lib/gmail/merge-import-feed";
 import { accountInputFor, choiceFromSuggestion, choicesToCreate } from "@/lib/onboarding/banks";
 import type { OnboardingPhase } from "@/lib/onboarding/flow";
 import { saveFullName } from "@/lib/profile/client";
 
 const POLL_MS = 3_000;
+const FIRST_RESULT_POLL_MS = 1_000;
+/** Faster initial feedback is bounded so a slow provider cannot cause endless rapid polling. */
+const FIRST_RESULT_FAST_WINDOW_MS = 15_000;
 /** Detection reads a few hundred headers; past this Gmail is probably not answering. */
 const DETECTION_TIMEOUT_MS = 90_000;
 
@@ -122,13 +125,6 @@ function useDetection(mailboxId: string | null | undefined, enabled: boolean) {
   return { detection, retry };
 }
 
-/** Keeps rows already shown in place and puts new ones on top, so only new rows animate in. */
-function mergeFeed(current: ImportedTransaction[], latest: ImportedTransaction[]) {
-  const shown = new Set(current.map((item) => item.id));
-  const added = latest.filter((item) => !shown.has(item.id));
-  return added.length === 0 ? current : [...added, ...current];
-}
-
 /**
  * Reads how the mailbox's latest sync is going and the transactions it has imported so
  * far. It only reads: starting the import belongs to the backend, which runs it as soon
@@ -142,58 +138,75 @@ function useImportProgress(mailboxId: string | null | undefined, enabled: boolea
     if (!enabled || !mailboxId || finished) return;
     const controller = new AbortController();
     const { signal } = controller;
+    const fastUntil = Date.now() + FIRST_RESULT_FAST_WINDOW_MS;
+    let hasRows = false;
+    let keepPolling = true;
+    let timer: number | undefined;
     const poll = () =>
-      Promise.all([loadGmailConnections({ signal }), loadImportFeed(mailboxId, signal)]).then(
-        ([mailboxes, feed]) => {
-          const sync = mailboxes.find((mailbox) => mailbox.id === mailboxId)?.sync;
-          if (signal.aborted || !sync) return;
-          setProgress((current) => {
-            const merged = mergeFeed(current.feed, feed);
-            if (sync.state === "completed") {
-              return {
-                state: "completed",
-                emailsRead: null,
-                totalEmails: null,
-                transactions: sync.transactions,
-                totalTransactions: sync.transactions,
-                feed: merged,
-              };
-            }
-            if (sync.state === "failed") {
-              return {
-                state: "failed",
-                emailsRead: null,
-                totalEmails: null,
-                transactions: null,
-                totalTransactions: null,
-                feed: merged,
-                message: sync.message,
-              };
-            }
+      loadImportSnapshot(mailboxId, signal).then((snapshot) => {
+        if (signal.aborted || !snapshot) return;
+        const { sync, feed } = snapshot;
+        hasRows ||= feed.length > 0;
+        keepPolling = sync.state !== "completed" && sync.state !== "failed";
+        setProgress((current) => {
+          const merged = mergeImportFeed(current.feed, feed);
+          if (sync.state === "completed") {
             return {
-              ...waitingProgress,
-              state: sync.state === "running" ? "running" : "waiting",
+              state: "completed",
+              emailsRead: sync.emailsRead,
+              totalEmails: sync.totalEmails,
+              totalEmailsFinal: true,
+              transactions: sync.transactions,
+              totalTransactions: sync.transactions,
+              needsReview: sync.needsReview,
+              categorizing: 0,
               feed: merged,
             };
-          });
-        },
-      );
-    // A failed check keeps the last known state; the next one tries again.
-    let polling = false;
+          }
+          if (sync.state === "failed") {
+            return {
+              state: "failed",
+              emailsRead: null,
+              totalEmails: null,
+              transactions: null,
+              totalTransactions: null,
+              feed: merged,
+              message: sync.message,
+            };
+          }
+          return {
+            ...waitingProgress,
+            state: sync.state === "running" ? "running" : "waiting",
+            ...(sync.state === "running"
+              ? {
+                  emailsRead: sync.emailsRead,
+                  totalEmails: sync.totalEmails,
+                  totalEmailsFinal: false,
+                  transactions: sync.transactions,
+                  categorizing: sync.categorizing,
+                  needsReview: sync.needsReview,
+                }
+              : {}),
+            feed: merged,
+          };
+        });
+      });
+    // Schedule after each response, so slow reads never overlap. A failed check
+    // keeps the last known state and follows the same bounded refresh schedule.
     const check = () => {
-      if (polling) return;
-      polling = true;
+      if (signal.aborted) return;
       void poll()
         .catch(() => undefined)
         .finally(() => {
-          polling = false;
+          if (signal.aborted || !keepPolling) return;
+          const delay = !hasRows && Date.now() < fastUntil ? FIRST_RESULT_POLL_MS : POLL_MS;
+          timer = window.setTimeout(check, delay);
         });
     };
     check();
-    const timer = window.setInterval(check, POLL_MS);
     return () => {
       controller.abort();
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
   }, [enabled, mailboxId, finished]);
 

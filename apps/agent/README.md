@@ -10,6 +10,7 @@ Run `pnpm dev:agent` from the root. `pnpm --filter @monara/agent build` creates 
 | --- | --- |
 | `GET /health` | Returns a minimal live-service response. |
 | `POST /chat` | In-app chat. The web backend sends `{ userId, text, history }` (see `agentChatRequestSchema`) with `Authorization: Bearer <MONARA_AGENT_BACKEND_SECRET>` and gets `{ reply, actions, confirmation }`. |
+| `POST /forecast/refine` | Spending forecast (F17). Only the web backend may call it, with the shared secret. It receives rule-found candidates and returns a confidence and reason for each; it cannot add an item or an amount. |
 | `POST /webhooks/kapso` | Kapso `whatsapp.message.received` webhook. Verifies the signature, asks the backend who each sender is, and queues a linked User's text for the Agent. Everyone else gets a fixed reply and no data. |
 | `POST /gmail/sync` | Manual Gmail sync. The web backend sends `{ connectionId, since }` with the same Bearer secret, only after checking that the signed-in User owns the connection. Queues a sync job and returns 202. |
 | `POST /gmail/discover` | Account discovery after a Gmail connection. The web backend sends `{ connectionId }` with the same Bearer secret after checking ownership. Queues a discovery job and returns 202. |
@@ -68,7 +69,7 @@ Gmail sync reads only mail from the banks, cards, and wallets the User has as Fi
 
 After a User connects Gmail, the web backend calls `POST /gmail/discover`. A discovery job lists 90 days of metadata (sender, subject, date) from every registry sender, without reading bodies or calling the model, and records which entries emailed the mailbox and which card endings their subjects show. The Gmail page suggests adding or linking accounts from these findings.
 
-A reminder cron runs every 15 minutes and calls `/api/agent/reminders/dispatch` so the backend sends WhatsApp budget alerts held back by quiet hours. A separate Gmail cron runs daily at 01:00 UTC. For each active Gmail Connection it queues a `gmail.discover` job, which asks the web backend to look for new banks and wallets, and, when accounts read from that mailbox, a catch-up sync job on the `monara-gmail-jobs` queue. A sync job lists one page of mail from the exact senders of the mailbox's accounts (`from:(…)`) and queues parse jobs of up to 10 messages. If there are more pages, it queues a follow-up sync job. A first import covers the last 30 days; a catch-up starts a day before the last finished import, so an import that failed or never finished runs again. Mail recorded as failed is not retried. A mailbox with no accounts has nothing to sync.
+A forecast cron runs Mondays at 02:00 UTC (09:00 Jakarta) and calls `/api/agent/forecast/refresh` so the backend refreshes spending forecasts that are due. A reminder cron runs every 15 minutes and calls `/api/agent/reminders/dispatch` so the backend sends WhatsApp budget alerts held back by quiet hours. A separate Gmail cron runs daily at 01:00 UTC. For each active Gmail Connection it queues a `gmail.discover` job, which asks the web backend to look for new banks and wallets, and, when accounts read from that mailbox, a catch-up sync job on the `monara-gmail-jobs` queue. A sync job lists one page of mail from the exact senders of the mailbox's accounts (`from:(…)`) and queues parse jobs of up to five messages. Smaller batches leave room for live-User checks before provider calls; larger jobs from an older release are split before processing. Busy models yield to durable queue retries. If there are more pages, it queues a follow-up sync job. A first import covers the last 30 days; a catch-up starts a day before the last finished import, so an import that failed or never finished runs again. Mail recorded as failed is not retried. A mailbox with no accounts has nothing to sync.
 
 An extraction job (`src/gmail/pipeline.ts`):
 
@@ -80,7 +81,11 @@ An extraction job (`src/gmail/pipeline.ts`):
 6. Records them through the backend with the sender's institution and verification. The backend maps the account from the institution (by card ending when the User has several), takes the Category from the User's history for that merchant, and auto-confirms only verified, confident, complete items.
 7. Queues a categorization job for each transaction still without a Category.
 
-Categorization (`src/merchant/pipeline.ts`) runs on its own `monara-merchant-jobs` queue, throttled for web search. It checks the shared `merchant_profiles` cache, searches Brave (`BRAVE_SEARCH_API_KEY`) with the merchant name only when the cache has nothing, and lets the model choose one of the User's Categories from the result. The backend writes it only while the transaction has no Category and the User has not edited it, and checks budgets for confirmed transactions.
+Categorization (`src/merchant/pipeline.ts`) runs on its own `monara-merchant-jobs` queue. Each invocation processes one job of at most five transactions, with at most five invocations running concurrently. This retains the previous parallel-job ceiling while giving each job its own request budget. Larger or multi-message legacy deliveries are requeued before provider calls. Temporary model failures stop further model calls in that job and use durable retry backoff. It checks the shared `merchant_profiles` cache, searches Brave (`BRAVE_SEARCH_API_KEY`) with the merchant name only when the cache has nothing, and lets the model choose one of the User's Categories from the result. The backend writes it only while the transaction has no Category and the User has not edited it, and checks budgets for confirmed transactions.
+
+Internal matching runs before search or the second model. It accepts exact normalized confirmed names, or complete subsets containing at least two distinct substantive words, with one character edit allowed in each of at most two words. A matching counterparty name is sufficient regardless of the description, transfer flag, model-assigned counterparty type or cash direction. The backend independently applies the same rule. Shared single words, initials and conflicting names cannot establish a match. Known cash direction is preserved; missing direction is never invented. Other extraction and confirmation checks remain in force.
+
+Structured stage/error logs are persisted through Workers Logs with invocation request logs disabled. They contain durations, cache flags, status codes and outcomes, never transaction content or credentials.
 
 The extractor treats email content, and categorization treats search results, as untrusted. Amounts must appear in the email exactly as written, non-Rupiah amounts are never converted, and anything the email does not state stays empty.
 
@@ -94,7 +99,11 @@ A 404 with the JSON `NOT_FOUND` error means the connection is no longer active a
 
 Add the missing Agent operations (recurring bills, Reminder preferences) and client-turn status/idempotency. Accept owned reads/writes and destructive confirmation against a disposable local Supabase stack before configured-provider testing.
 
-The Gmail and merchant queues and the cron are declared in `wrangler.jsonc` and simulated by `wrangler dev`. Creating the queue in Cloudflare requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
+The Gmail and merchant queues and cron schedules are declared in `wrangler.jsonc`. `wrangler dev` simulates the queues; scheduled events need a manual trigger during local development. Creating queues or applying cloud schedules requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
+
+## User deletion
+
+Every minute, the Worker calls the authenticated backend `/api/agent/account-deletions/process` endpoint to recover durable cleanup jobs. The backend owns deletion acceptance, financial erasure, Gmail cleanup and Auth hard deletion. Worker `POST /users/purge` requires the backend credential and a verified inactive User before deleting that User's WhatsApp Durable Object storage and alarms. Purge waits for in-flight conversation work, and provider/model boundaries reject deleting or deleted Users. See the [deletion design](../../docs/user-deletion-design.md) for the operational drain window, queue retention limits and rollout order.
 
 The `CONVERSATIONS` Durable Object binding in `wrangler.jsonc` is created on the first deployment. It has only run locally.
 

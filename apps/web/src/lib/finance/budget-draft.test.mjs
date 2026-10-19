@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { budgetCategoryError, budgetDraftOf, rebaseBudgetDraft } from "./budget-draft.ts";
 
-const category = { id: "expense", name: "Groceries", isArchived: false };
+const category = { id: "expense", name: "Groceries", kind: "expense", isArchived: false };
 const saved = {
   name: "Groceries budget",
   categoryId: category.id,
@@ -49,9 +49,17 @@ describe("budget draft recovery", () => {
     assert.match(budgetCategoryError([category], "removed"), /available expense category/);
     assert.match(budgetCategoryError([{ ...category, isArchived: true }], category.id), /archived/);
     assert.match(
-      budgetCategoryError([{ ...category, name: "  internal " }], category.id),
-      /Exclusions/,
+      budgetCategoryError(
+        [{ ...category, name: "User renamed reason", kind: "exclusion" }],
+        category.id,
+      ),
+      /Income and exclusions/,
     );
+    assert.match(
+      budgetCategoryError([{ ...category, name: "Salary", kind: "income" }], category.id),
+      /expense category/,
+    );
+    assert.equal(budgetCategoryError([{ ...category, name: "Internal" }], category.id), null);
     assert.equal(budgetCategoryError([category], category.id), null);
   });
 });
