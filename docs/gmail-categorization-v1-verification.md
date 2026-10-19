@@ -44,6 +44,13 @@ At 390 by 844 CSS pixels, a synthetic local authenticated identity opened the si
 
 The last SQL-only confirmation guard additionally keeps nonbusiness transfers pending unless Internal is independently established from the stored extraction evidence and confirmed full name. It retains a compatible category suggestion for review; high model confidence alone does not bypass this rule. Clean database replay results cover that guard separately from the unchanged application build.
 
+## PR review regression checks
+
+- Rejected merchant lookups caused by an edited or deleted transaction are evicted without repeating shared provider failures. Agent tests cover two subsequent imports from the same business receiving independent classifications with one successful search.
+- Unknown-type pending category hints survive editor validation, picker rendering, and the live `edit_pending` boundary. Unchanged archived owned hints remain editable; changed or unowned hints and known-type mismatches are rejected.
+- Imported-transaction resolution reuses connection-path holder-name normalization. Regression tests cover a whitespace-padded 150-character confirmed name, repeated whitespace, and missing identity evidence.
+- A signed-in synthetic local browser at 390 by 844 saved an unknown-type pending row with an unchanged archived category hint through the real backend (`edit_pending` returned 200). Reload and a local database assertion confirmed the null type, same category, and pending review status were preserved.
+
 ## Limits
 
 - Counterparty identity, sender/recipient roles, and explicit transfer meaning still depend on the extractor's semantic reading. Text-presence checks and deterministic full-name rules constrain model output; they do not independently prove bank-account ownership.

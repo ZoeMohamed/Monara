@@ -93,7 +93,19 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
           lookup = merchantSummary(businessName, checkActive);
           summaries.set(key, lookup);
         }
-        summary = await lookup;
+        try {
+          summary = await lookup;
+        } catch (error) {
+          // Transaction inactivity must not poison other imports, while provider
+          // failures stay shared so this job does not repeat a rate-limited search.
+          if (
+            error instanceof BackendOperationError &&
+            error.isNotFound &&
+            summaries.get(key) === lookup
+          )
+            summaries.delete(key);
+          throw error;
+        }
       }
       await checkActive();
       const classificationStarted = performance.now();

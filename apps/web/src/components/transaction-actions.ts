@@ -74,6 +74,7 @@ export function useTransactionActions(context: ActionContext) {
   const backendValues = (
     values: TransactionValues,
     existing?: Transaction,
+    allowUnchangedArchivedCategory = false,
   ): BackendTransactionValues => {
     const previous = existing?.backend;
     const categoryId =
@@ -82,10 +83,17 @@ export function useTransactionActions(context: ActionContext) {
       values.financialAccountId === undefined
         ? (previous?.financialAccountId ?? null)
         : values.financialAccountId;
+    const unchangedPendingCategory =
+      allowUnchangedArchivedCategory &&
+      existing?.status === "pending" &&
+      previous?.categoryId === categoryId;
     if (
       categoryId &&
       !resources?.categories.some(
-        (category) => category.id === categoryId && category.kind === values.kind,
+        (category) =>
+          category.id === categoryId &&
+          (!category.isArchived || unchangedPendingCategory) &&
+          (values.kind === null || category.kind === values.kind),
       )
     )
       throw new FinanceClientError(
@@ -208,7 +216,7 @@ export function useTransactionActions(context: ActionContext) {
     if (action !== "edit" && Object.keys(transactionErrors(values)).length > 0)
       throw new Error("Check the transaction details.");
     if (live && editing.backend) {
-      const valuesToSave = backendValues(values, editing);
+      const valuesToSave = backendValues(values, editing, action === "edit");
       const operation =
         action === "correct"
           ? "edit_transaction"

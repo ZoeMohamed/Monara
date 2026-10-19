@@ -475,7 +475,7 @@ export function createSupabaseGmailIngestionRepository(
         counterpartyType: item.data.counterparty_type,
         isTransfer: item.data.is_transfer,
         internalTransfer: item.data.internal_transfer,
-        holderName: item.data.holder_name,
+        holderName: usableName(item.data.holder_name),
         categories: categories.data.map((category) => ({
           id: category.id,
           name: category.name,

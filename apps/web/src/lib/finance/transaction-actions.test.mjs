@@ -99,7 +99,7 @@ function backendTransaction() {
   };
 }
 
-function mountActions(respond, categoryKind = "expense") {
+function mountActions(respond, categoryKind = "expense", categoryArchived = false) {
   const references = [];
   let cursor = 0;
   const requests = [];
@@ -146,7 +146,7 @@ function mountActions(respond, categoryKind = "expense") {
       live: true,
       resources: {
         financialAccounts: [{ id: accountId }],
-        categories: [{ id: categoryId, kind: categoryKind }],
+        categories: [{ id: categoryId, kind: categoryKind, isArchived: categoryArchived }],
       },
       transactions: state.transactions,
       editing: state.editing,
@@ -181,6 +181,76 @@ function mountActions(respond, categoryKind = "expense") {
 }
 
 describe("transaction action recovery", () => {
+  it("preserves an owned category hint when editing a live unknown-type pending row", async () => {
+    const original = { ...backendTransaction(), kind: null, reviewStatus: "pending" };
+    const actions = mountActions(async (_path, input) =>
+      Response.json({ transaction: { ...original, ...input.changes }, action: receipt }),
+    );
+    actions.state.editing = {
+      ...values,
+      kind: null,
+      id: transactionId,
+      status: "pending",
+      backend: original,
+    };
+    await actions
+      .render()
+      .save({ ...values, kind: null, merchant: "Corrected evidence" }, "edit", reviewedVersion);
+    assert.equal(actions.requests[0].path, "/api/finance/operations/edit_pending");
+    assert.equal(actions.requests[0].input.changes.kind, null);
+    assert.equal(actions.requests[0].input.changes.categoryId, categoryId);
+    assert.equal(actions.requests[0].input.changes.flowDirection, null);
+    assert.equal(actions.requests[0].input.expectedUpdatedAt, reviewedVersion);
+  });
+
+  it("keeps unchanged archived hints during pending edit but rejects changed archived hints", async () => {
+    const original = { ...backendTransaction(), kind: null, reviewStatus: "pending" };
+    const actions = mountActions(
+      async (_path, input) =>
+        Response.json({ transaction: { ...original, ...input.changes }, action: receipt }),
+      "expense",
+      true,
+    );
+    actions.state.editing = {
+      ...values,
+      kind: null,
+      id: transactionId,
+      status: "pending",
+      backend: original,
+    };
+    await actions.render().save({ ...values, kind: null }, "edit", reviewedVersion);
+    assert.equal(actions.requests[0].input.changes.categoryId, categoryId);
+    actions.state.editing.backend = { ...original, categoryId: null };
+    await assert.rejects(
+      actions.render().save({ ...values, kind: null }, "edit", reviewedVersion),
+      (error) => error.code === "VALIDATION_FAILED",
+    );
+    assert.equal(actions.requests.length, 1);
+  });
+
+  it("rejects unowned unknown-type hints and known-type conflicts before pending-edit transport", async () => {
+    const actions = mountActions(async () => {
+      throw new Error("Must not be called");
+    });
+    actions.state.editing = {
+      ...values,
+      kind: null,
+      id: transactionId,
+      status: "pending",
+      backend: { ...backendTransaction(), kind: null, reviewStatus: "pending" },
+    };
+    for (const changes of [
+      { kind: null, categoryId: "00000000-0000-4000-8000-000000000999" },
+      { kind: "income" },
+    ]) {
+      await assert.rejects(
+        actions.render().save({ ...values, ...changes }, "edit", reviewedVersion),
+        (error) => error.code === "VALIDATION_FAILED",
+      );
+    }
+    assert.equal(actions.requests.length, 0);
+  });
+
   it("edits a live exclusion and preserves the imported cash direction", async () => {
     const original = { ...backendTransaction(), kind: "exclusion", flowDirection: "out" };
     const actions = mountActions(

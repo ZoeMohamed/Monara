@@ -349,12 +349,18 @@ function validateDraft(
     !resources.financialAccounts.some((account) => account.id === draft.method && account.isActive)
   )
     validation.method = "This account is no longer active. Choose an active account.";
+  const unchangedPendingCategory =
+    action === "edit" &&
+    transaction?.status === "pending" &&
+    draft.category === draftOf(transaction, resources).category;
   if (
     resources &&
     draft.category &&
     !resources.categories.some(
       (category) =>
-        category.id === draft.category && !category.isArchived && category.kind === draft.kind,
+        category.id === draft.category &&
+        (!category.isArchived || unchangedPendingCategory) &&
+        (draft.kind === null || category.kind === draft.kind),
     )
   )
     validation.category = "Choose an available category matching this transaction type.";
@@ -400,14 +406,16 @@ function kindChange(
           ? "exclusion"
           : null;
   const category = resources?.categories.find((category) => category.id === draft.category);
-  const compatibleCategory = resources
-    ? category?.kind === kind
-    : (kind === "exclusion"
-        ? demoExclusionNames
-        : kind === "income"
-          ? demoIncomeNames
-          : demoCategoryNames
-      ).some((name) => name === draft.category);
+  const compatibleCategory =
+    kind === null ||
+    (resources
+      ? category?.kind === kind
+      : (kind === "exclusion"
+          ? demoExclusionNames
+          : kind === "income"
+            ? demoIncomeNames
+            : demoCategoryNames
+        ).some((name) => name === draft.category));
   return { kind, category: compatibleCategory ? draft.category : null };
 }
 
@@ -471,7 +479,9 @@ function TransactionCategoryChoice({
   // Each category belongs to exactly one transaction type.
   const options = resources
     ? resources.categories
-        .filter((category) => category.kind === draft.kind)
+        .filter((category) =>
+          draft.kind === null ? category.id === draft.category : category.kind === draft.kind,
+        )
         .map((category) => ({
           id: category.id,
           label: category.name,

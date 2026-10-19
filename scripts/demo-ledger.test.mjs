@@ -178,6 +178,25 @@ test("exclusion categories are optional and display names do not determine their
   }
 });
 
+test("unknown pending types retain category hints without guessing financial treatment", () => {
+  const pending = syntheticTransaction({ kind: null, category: "Salary", categoryKind: "income" });
+  assert.equal(transactionErrors(pending).category, undefined);
+  assert.equal(transactionErrors(pending).kind, "Choose the transaction type.");
+  const edited = updatePendingTransaction(
+    [pending],
+    pending.id,
+    { ...pending, merchant: "Corrected evidence" },
+    "edit",
+  );
+  assert.equal(edited[0].kind, null);
+  assert.equal(edited[0].category, "Salary");
+  assert.equal(edited[0].categoryKind, "income");
+  assert.equal(edited[0].status, "pending");
+  assert.equal(demoSummary(edited).income, 0n);
+  assert.equal(demoSummary(edited).spending, 0n);
+  assert.ok(transactionErrors({ ...edited[0], kind: "expense" }).category);
+});
+
 test("expense and income cannot use a category typed as exclusion", () => {
   for (const kind of ["expense", "income"]) {
     assert.ok(

@@ -33,6 +33,7 @@ interface Overrides {
   modelForRequest?: (request: JsonCompletionRequest) => unknown;
   applied?: boolean;
   editedAfterRead?: boolean;
+  inactiveAfterClaim?: { id: string; deleted: boolean };
 }
 function setup(overrides: Overrides = {}) {
   const calls = {
@@ -42,16 +43,18 @@ function setup(overrides: Overrides = {}) {
     set: [] as SetImportedCategoryInput[],
     prompts: [] as JsonCompletionRequest[],
     resolves: 0,
+    claims: 0,
   };
   const backend = {
     async resolveImportedTransaction(id: string) {
       calls.resolves += 1;
-      if (overrides.missing)
+      const inactive = overrides.inactiveAfterClaim?.id === id && calls.claims > 0;
+      if (overrides.missing || (inactive && overrides.inactiveAfterClaim?.deleted))
         throw new BackendOperationError("gmail.resolve-imported-transaction", 404, "NOT_FOUND");
       return resolvedImportedTransactionSchema.parse({
         merchantName: "Kopi Kenangan",
         location: "Jakarta",
-        needsCategory: !(overrides.editedAfterRead && calls.resolves > 1),
+        needsCategory: !inactive && !(overrides.editedAfterRead && calls.resolves > 1),
         categoryNames: ["Food & Drinks"],
         kind: "expense",
         flowDirection: "out",
@@ -65,6 +68,7 @@ function setup(overrides: Overrides = {}) {
       });
     },
     async claimMerchantProfile() {
+      calls.claims += 1;
       return overrides.claim ?? { status: "claimed" };
     },
     async saveMerchantProfile(input: SaveMerchantProfileInput) {
@@ -225,6 +229,30 @@ describe("transaction categorization", () => {
       calls.set.map((value) => ("categoryId" in value ? value.categoryId : null)),
       [categoryId, incomeId],
     );
+  });
+  it("retries rejected business lookups after the originating transaction is edited or deleted", async () => {
+    const other = "00000000-0000-4000-8000-000000000031";
+    const third = "00000000-0000-4000-8000-000000000032";
+    for (const deleted of [false, true]) {
+      const { pipeline, calls } = setup({
+        inactiveAfterClaim: { id: transactionId, deleted },
+      });
+      assert.deepEqual(
+        await pipeline.runJob({
+          kind: "merchant.categorize",
+          transactionIds: [transactionId, other, third],
+        }),
+        ["not_needed", "categorized", "categorized"],
+      );
+      assert.equal(calls.claims, 2);
+      assert.deepEqual(calls.released, ["Kopi Kenangan"]);
+      assert.deepEqual(calls.searches, ["Kopi Kenangan"]);
+      assert.equal(calls.prompts.length, 2);
+      assert.deepEqual(
+        calls.set.map((input) => input.transactionId),
+        [other, third],
+      );
+    }
   });
   it("finishes exhausted provider failures as needs-review without another provider attempt", async () => {
     const { pipeline, calls } = setup({ searchFails: true });

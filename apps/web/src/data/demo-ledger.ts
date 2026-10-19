@@ -80,7 +80,7 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
   if ((!isExclusion || values.date) && !isCalendarDate(values.date)) {
     errors.date = "Enter a valid transaction date.";
   }
-  if (values.category && values.categoryKind && values.categoryKind !== values.kind)
+  if (values.kind && values.category && values.categoryKind && values.categoryKind !== values.kind)
     errors.category = "Choose a category for this transaction type.";
   return errors;
 }
