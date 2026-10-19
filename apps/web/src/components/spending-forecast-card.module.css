@@ -150,21 +150,12 @@
   margin-top: 14px;
 }
 
-/* On a phone the card has no box: a thick dashed rule below separates it from the next section. */
+/* On a phone the card's box comes from Home's shared card style; only the layout inside differs. */
 @media (max-width: 1023.98px) {
-  .card {
-    margin: 0;
-    padding: 28px 0;
-    border: 0;
-    border-bottom: 3px dashed var(--line-strong);
-    border-radius: 0;
-    background: none;
-  }
-
   .totals {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0;
-    margin-top: 18px;
+    margin-top: 16px;
     border-top: 1px solid var(--separator);
     border-bottom: 1px solid var(--separator);
   }
@@ -189,5 +180,31 @@
   .totals > div:last-child dd {
     font-size: clamp(13px, 4.4vw, 16px);
     white-space: nowrap;
+  }
+}
+
+/* Three amounts fit side by side from about 380px; narrower, they stack as label and amount rows. */
+@media (max-width: 379.98px) {
+  .totals {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .totals > div,
+  .totals > div:last-child,
+  .totals > div:first-child {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .totals > div + div {
+    border-top: 1px solid var(--separator);
+    border-left: 0;
+  }
+
+  .totals dd {
+    margin-top: 0;
   }
 }

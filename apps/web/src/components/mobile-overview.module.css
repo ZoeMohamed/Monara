@@ -1265,26 +1265,25 @@
 }
 
 /* Home on a phone ----------------------------------------------------------
-   No card boxes: sections sit on the page and a thick dashed rule separates them, so each
-   one gets the full width. Desktop keeps its tinted cards. */
+   Sections are white cards on a soft blue ground. A crisp border and a layered shadow give
+   each card an edge that a tint alone could not, and the daily guide is the one solid blue
+   card, because it answers the first question Home is asked. Desktop keeps its own cards. */
 @media (max-width: 1023.98px) {
+  .sheet {
+    padding-top: 16px;
+    padding-bottom: 8px;
+    background: var(--surface-tertiary);
+  }
+
   .sheet [data-home-card] {
-    margin: 0;
-    padding: 28px 0;
-    border: 0;
-    border-bottom: 3px dashed var(--line-strong);
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-  }
-
-  .sheet .slotWhere [data-home-card] {
-    border-bottom: 0;
-  }
-
-  /* The sheet already has its own top padding, so the first section starts closer to it. */
-  .sheet .slotForecast [data-home-card] {
-    padding-top: 6px;
+    margin: 0 0 16px;
+    padding: 20px;
+    border: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
+    border-radius: 28px;
+    background: var(--surface);
+    box-shadow:
+      0 1px 2px rgb(23 37 84 / 6%),
+      0 14px 30px rgb(23 37 84 / 9%);
   }
 
   .sheet .cardLabel {
@@ -1292,7 +1291,7 @@
   }
 
   .sheet .alerts {
-    margin: 4px -10px 0;
+    margin: 4px -10px -6px;
     padding: 0;
   }
 
@@ -1304,7 +1303,35 @@
     font-size: 38px;
   }
 
+  /* Rows are told apart by a rule between them, so they keep square corners. */
   .sheet .activityItem {
     border-radius: 0;
+  }
+
+  /* The daily guide: one solid blue card. Its colors are reset here so every pair on it is
+     light on dark, measured against the darkest and lightest parts of the gradient. */
+  .sheet [data-home-card="safe"] {
+    border-color: transparent;
+    background-color: #2865e5;
+    background-image: linear-gradient(155deg, #2e6bef 0%, #1d49b8 100%);
+    box-shadow:
+      0 2px 4px rgb(29 73 184 / 25%),
+      0 16px 34px rgb(29 73 184 / 32%);
+    color: #fff;
+    --button-bg: transparent;
+    --button-bg-hover: transparent;
+    --button-bg-pressed: transparent;
+    --foreground: #fff;
+    --muted: #fff;
+    --ink: #fff;
+    --accent: #fff;
+    --success: #8ff0bf;
+    --warning: #ffd76a;
+    --warning-soft-foreground: #fff;
+    --danger: #ffc4c9;
+  }
+
+  .sheet [data-home-card="safe"] .pace {
+    background: rgb(255 255 255 / 28%);
   }
 }
