@@ -1,16 +1,18 @@
 import { type MerchantCategorizeJob, merchantKey } from "@monara/contracts";
 import type { BraveSearchClient } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "../gmail/backend.ts";
-import { isTemporaryLlmError, type LlmClient, type LlmError } from "../gmail/llm.ts";
+import { isTemporaryLlmError, type LlmClient, LlmError } from "../gmail/llm.ts";
 import {
   businessSearchName,
   chooseCategory,
+  fallbackCategory,
   internalCategory,
+  personCategory,
   summarizeSearchResults,
 } from "./categorize.ts";
 
-/** Five cold business lookups leave room below the Worker's 50-subrequest budget. */
-export const MERCHANT_PROCESSING_BATCH_SIZE = 5;
+/** Three sequential 120-second classifications leave ample room within the 15-minute wall limit. */
+export const MERCHANT_PROCESSING_BATCH_SIZE = 3;
 
 export type MerchantJobOutcome = "categorized" | "uncategorized" | "not_needed";
 export class MerchantBusyError extends Error {
@@ -20,7 +22,7 @@ export class MerchantBusyError extends Error {
   }
 }
 interface MerchantStageMetric {
-  stage: "search" | "classification" | "internal";
+  stage: "search" | "classification" | "internal" | "person" | "fallback";
   durationMs: number;
   cacheHit?: boolean;
 }
@@ -84,11 +86,17 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
       return current;
     };
     const started = performance.now();
-    let choice = internalCategory(transaction);
-    if (choice)
-      dependencies.observe?.({ stage: "internal", durationMs: performance.now() - started });
+    const internal = internalCategory(transaction);
+    const person = internal ? null : personCategory(transaction);
+    const unknownType = transaction.kind === null ? fallbackCategory(transaction, null) : null;
+    let choice = internal ?? person ?? unknownType;
+    if (choice || transaction.kind === null)
+      dependencies.observe?.({
+        stage: internal ? "internal" : person ? "person" : "fallback",
+        durationMs: performance.now() - started,
+      });
     else {
-      // Deterministic Internal decisions remain available during an outage.
+      // Deterministic name decisions remain available during an outage.
       // Only rows that need provider work must wait for the same model to recover.
       if (modelUnavailable) throw modelUnavailable;
       const businessName = businessSearchName(transaction);
@@ -158,7 +166,10 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
           if (isTemporaryLlmError(error)) modelUnavailable = error;
           if (error instanceof BackendOperationError && error.isNotFound)
             outcomes.push("not_needed");
-          else if (options.isFinalAttempt) {
+          else if (
+            options.isFinalAttempt ||
+            (error instanceof LlmError && error.failure === "failed")
+          ) {
             const applied = await backend.setImportedCategory({
               transactionId,
               categoryId: null,

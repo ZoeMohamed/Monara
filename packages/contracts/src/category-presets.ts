@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Category slugs follow Aiccountant's shipped default allocation catalog (17 October 2026).
+// Preserve shipped category identities when extending the default catalog.
 export const expenseCategoryPresets = [
   { slug: "housing", name: "Housing", group: "Home", icon: "home" },
   { slug: "bills", name: "Bills", group: "Home", icon: "bills" },
@@ -20,6 +20,7 @@ export const expenseCategoryPresets = [
   { slug: "fit-wellness", name: "Fit & Wellness", group: "Health", icon: "pulse" },
   { slug: "family", name: "Family", group: "Family", icon: "family" },
   { slug: "giving", name: "Giving", group: "Others", icon: "giving" },
+  { slug: "person", name: "Person", group: "Others", icon: "family" },
   { slug: "misc", name: "Misc", group: "Others", icon: "dot" },
 ] as const;
 
@@ -30,6 +31,8 @@ export const incomeCategoryPresets = [
   { slug: "interest", name: "Interest", icon: "income" },
   { slug: "gifts", name: "Gifts", icon: "giving" },
   { slug: "other-income", name: "Other Income", icon: "income" },
+  { slug: "person-income", name: "Person", icon: "family" },
+  { slug: "misc-income", name: "Misc", icon: "dot" },
 ] as const;
 
 export const exclusionCategoryPresets = [
@@ -39,6 +42,7 @@ export const exclusionCategoryPresets = [
   { slug: "investment", name: "Investment", icon: "investment", automated: false },
   { slug: "one-off", name: "One-off", icon: "one-off", automated: false },
   { slug: "cancelled", name: "Cancelled", icon: "cancelled", automated: false },
+  { slug: "misc-exclusion", name: "Misc", icon: "dot", automated: true },
 ] as const;
 
 export const exclusionCategorySchema = z.enum([
@@ -48,10 +52,16 @@ export const exclusionCategorySchema = z.enum([
   "investment",
   "one-off",
   "cancelled",
+  "misc-exclusion",
 ]);
 export type ExclusionCategory = z.infer<typeof exclusionCategorySchema>;
 
+/** Legacy label lookup. Shared labels cannot establish an exclusion type. */
 export function isExclusionCategoryName(name: string | null | undefined): boolean {
   const normalized = name?.trim().toLowerCase();
-  return exclusionCategoryPresets.some((category) => category.name.toLowerCase() === normalized);
+  return (
+    ![...expenseCategoryPresets, ...incomeCategoryPresets].some(
+      (category) => category.name.toLowerCase() === normalized,
+    ) && exclusionCategoryPresets.some((category) => category.name.toLowerCase() === normalized)
+  );
 }

@@ -10,8 +10,17 @@ import {
 } from "@monara/contracts";
 import { type BraveSearchClient, BraveSearchError } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "../src/gmail/backend.ts";
-import { type JsonCompletionRequest, type LlmClient, LlmError } from "../src/gmail/llm.ts";
-import { summarizeSearchResults } from "../src/merchant/categorize.ts";
+import {
+  createLlmClient,
+  type JsonCompletionRequest,
+  type LlmClient,
+  LlmError,
+} from "../src/gmail/llm.ts";
+import {
+  chooseCategory,
+  fallbackCategory,
+  summarizeSearchResults,
+} from "../src/merchant/categorize.ts";
 import { createMerchantPipeline, MerchantBusyError } from "../src/merchant/pipeline.ts";
 
 const transactionId = "00000000-0000-4000-8000-000000000030";
@@ -19,7 +28,7 @@ const categoryId = "00000000-0000-4000-8000-000000000040";
 const internalId = "00000000-0000-4000-8000-000000000041";
 const incomeId = "00000000-0000-4000-8000-000000000042";
 const job = { kind: "merchant.categorize", transactionId } as const;
-const categories = [
+const categories: ResolvedImportedTransaction["categories"] = [
   { id: categoryId, name: "Food & Drinks", slug: "food-drinks", kind: "expense", isDefault: true },
   { id: internalId, name: "Internal", slug: "internal", kind: "exclusion", isDefault: true },
   { id: incomeId, name: "Salary", slug: "salary", kind: "income", isDefault: true },
@@ -101,10 +110,332 @@ function setup(overrides: Overrides = {}) {
       );
     },
   };
-  return { pipeline: createMerchantPipeline({ backend, llm, search }), calls };
+  return { pipeline: createMerchantPipeline({ backend, llm, search }), backend, calls };
 }
 
 describe("transaction categorization", () => {
+  const miscId = "00000000-0000-4000-8000-000000000043";
+  const miscIncomeId = "00000000-0000-4000-8000-000000000044";
+  const miscExclusionId = "00000000-0000-4000-8000-000000000045";
+  const personId = "00000000-0000-4000-8000-000000000046";
+  const personIncomeId = "00000000-0000-4000-8000-000000000047";
+  const defaults: ResolvedImportedTransaction["categories"] = [
+    ...categories,
+    { id: miscId, name: "Misc", slug: "misc", kind: "expense", isDefault: true },
+    { id: miscIncomeId, name: "Misc", slug: "misc-income", kind: "income", isDefault: true },
+    {
+      id: miscExclusionId,
+      name: "Misc",
+      slug: "misc-exclusion",
+      kind: "exclusion",
+      isDefault: true,
+    },
+    { id: personId, name: "Person", slug: "person", kind: "expense", isDefault: true },
+    { id: personIncomeId, name: "Person", slug: "person-income", kind: "income", isDefault: true },
+  ];
+
+  it("preserves low and unavailable category scores for the confidence-only backend rule", async () => {
+    for (const confidence of [0, 0.49, 0.5, null]) {
+      const { pipeline, calls } = setup({ model: { categoryId, kind: "expense", confidence } });
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+      assert.deepEqual(calls.set, [{ transactionId, categoryId, kind: "expense", confidence }]);
+    }
+  });
+
+  it("uses Income Misc only for clear incoming cash and otherwise Expense Misc, preserving real scores", async () => {
+    for (const kind of ["expense", "income", "exclusion"] as const) {
+      for (const flowDirection of ["in", "out", null] as const) {
+        for (const confidence of [0.2, null]) {
+          const { pipeline, calls } = setup({
+            transaction: { categories: defaults, kind, flowDirection },
+            model: { categoryId: null, kind: null, confidence },
+          });
+          assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+          assert.deepEqual(calls.set, [
+            {
+              transactionId,
+              categoryId: flowDirection === "in" ? miscIncomeId : miscId,
+              kind: flowDirection === "in" ? "income" : "expense",
+              confidence,
+            },
+          ]);
+        }
+      }
+    }
+  });
+
+  it("finalizes unknown extraction kinds through cash-flow Misc without another provider call", async () => {
+    for (const flowDirection of ["in", "out", null] as const) {
+      const expectedId = flowDirection === "in" ? miscIncomeId : miscId;
+      const expectedKind = flowDirection === "in" ? "income" : "expense";
+      const wrongKindId = flowDirection === "in" ? miscId : miscIncomeId;
+      for (const availableCategories of [
+        defaults,
+        defaults.filter((entry) => entry.id === wrongKindId),
+        [],
+      ]) {
+        const { pipeline, calls } = setup({
+          transaction: {
+            categories: availableCategories,
+            kind: null,
+            flowDirection,
+            counterpartyType: "business",
+            counterpartyName: "Kopi Kenangan",
+          },
+          model: { categoryId, kind: "expense", confidence: 0.99 },
+        });
+        await pipeline.runJob(job);
+        const hasCorrectDefault = availableCategories.some((entry) => entry.id === expectedId);
+        assert.deepEqual(calls.set, [
+          {
+            transactionId,
+            categoryId: hasCorrectDefault ? expectedId : null,
+            kind: hasCorrectDefault ? expectedKind : null,
+            confidence: null,
+          },
+        ]);
+        assert.deepEqual(calls.prompts, []);
+        assert.deepEqual(calls.searches, []);
+        assert.equal(calls.claims, 0);
+      }
+    }
+  });
+
+  it("never borrows another type's Misc when the correct owned default is absent", async () => {
+    for (const flowDirection of ["in", "out", null] as const) {
+      const wrongKindId = flowDirection === "in" ? miscId : miscIncomeId;
+      for (const availableCategories of [
+        defaults.filter((entry) => entry.id === wrongKindId),
+        [],
+      ]) {
+        const { backend } = setup({
+          transaction: { categories: availableCategories, kind: null, flowDirection },
+        });
+        const transaction = await backend.resolveImportedTransaction(transactionId);
+        assert.equal(fallbackCategory(transaction, 0.2), null);
+      }
+    }
+  });
+
+  it("preserves low category confidence when the backend must create the correct Misc default", async () => {
+    for (const flowDirection of ["in", "out", null] as const) {
+      const wrongKindId = flowDirection === "in" ? miscId : miscIncomeId;
+      const { pipeline, calls } = setup({
+        transaction: {
+          categories: defaults.filter((entry) => entry.id === wrongKindId),
+          kind: flowDirection === "in" ? "income" : "expense",
+          flowDirection,
+        },
+        model: { categoryId: null, kind: null, confidence: 0.2 },
+      });
+      await pipeline.runJob(job);
+      assert.deepEqual(calls.set, [
+        { transactionId, categoryId: null, kind: null, confidence: 0.2 },
+      ]);
+    }
+  });
+
+  it("keeps Person ahead of Misc for unknown extraction kinds, without asserting cash direction", async () => {
+    for (const flowDirection of ["in", "out", null] as const) {
+      const { pipeline, calls } = setup({
+        transaction: {
+          categories: defaults,
+          kind: null,
+          flowDirection,
+          counterpartyType: "person",
+          counterpartyName: "Rina Putri",
+        },
+      });
+      await pipeline.runJob(job);
+      assert.deepEqual(calls.set, [
+        {
+          transactionId,
+          categoryId: flowDirection === "in" ? personIncomeId : personId,
+          kind: flowDirection === "in" ? "income" : "expense",
+          confidence: null,
+        },
+      ]);
+      assert.deepEqual(calls.prompts, []);
+      assert.deepEqual(calls.searches, []);
+    }
+  });
+
+  it("keeps own-name Internal ahead of Person and Misc for unknown kinds in every direction", async () => {
+    for (const flowDirection of ["in", "out", null] as const) {
+      const { pipeline, calls } = setup({
+        transaction: {
+          categories: defaults,
+          kind: null,
+          flowDirection,
+          counterpartyType: "person",
+          counterpartyName: "Adlyn Fakhreyz Pratama",
+        },
+      });
+      await pipeline.runJob(job);
+      assert.deepEqual(calls.set, [
+        { transactionId, categoryId: internalId, kind: "exclusion", confidence: 1 },
+      ]);
+      assert.deepEqual(calls.prompts, []);
+      assert.deepEqual(calls.searches, []);
+    }
+  });
+
+  it("routes an Exclusion Misc model fallback to the correct cash-flow Misc", async () => {
+    const { pipeline, calls } = setup({
+      transaction: { categories: defaults },
+      model: { categoryId: miscExclusionId, kind: "exclusion", confidence: 0.2 },
+    });
+    await pipeline.runJob(job);
+    assert.deepEqual(calls.set, [
+      { transactionId, categoryId: miscId, kind: "expense", confidence: 0.2 },
+    ]);
+  });
+
+  it("settles permanent LLM failures immediately through the backend fallback for every cash direction", async () => {
+    for (const flowDirection of ["in", "out", null] as const) {
+      const { pipeline, calls } = setup({
+        transaction: {
+          categories: defaults,
+          flowDirection,
+          kind: flowDirection === "in" ? "income" : "expense",
+          counterpartyName: "Unlisted Synthetic Business",
+          counterpartyType: "business",
+        },
+        modelForRequest() {
+          throw new LlmError("The model output was not JSON.", 200, "failed");
+        },
+      });
+      assert.deepEqual(await pipeline.runJob(job), ["uncategorized"]);
+      assert.equal(calls.prompts.length, 1);
+      assert.deepEqual(calls.set, [
+        { transactionId, categoryId: null, kind: null, confidence: null },
+      ]);
+      assert.deepEqual(calls.searches, []);
+    }
+  });
+
+  it("uses Person before salary or rent without a second LLM and keeps Internal first", async () => {
+    for (const [kind, flowDirection, expectedId] of [
+      ["expense", "out", personId],
+      ["income", "in", personIncomeId],
+    ] as const) {
+      const { pipeline, calls } = setup({
+        transaction: {
+          categories: defaults,
+          kind,
+          flowDirection,
+          description: kind === "expense" ? "Rent" : "Salary",
+          counterpartyType: "person",
+          counterpartyName: "Rina Putri",
+        },
+      });
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+      assert.deepEqual(calls.set, [
+        { transactionId, categoryId: expectedId, kind, confidence: null },
+      ]);
+      assert.deepEqual(calls.prompts, []);
+      assert.deepEqual(calls.searches, []);
+    }
+    const internal = setup({
+      transaction: {
+        categories: defaults,
+        counterpartyType: "person",
+        counterpartyName: "Adlyn Fakhreyz Pratama",
+      },
+    });
+    await internal.pipeline.runJob(job);
+    assert.deepEqual(internal.calls.set, [
+      { transactionId, categoryId: internalId, kind: "exclusion", confidence: 1 },
+    ]);
+  });
+
+  it("keeps a recognized business out of Person even when the extractor mislabels it", async () => {
+    const { pipeline, calls } = setup({
+      transaction: {
+        categories: defaults,
+        counterpartyType: "person",
+        counterpartyName: "Kopi Kenangan",
+      },
+    });
+    await pipeline.runJob(job);
+    assert.deepEqual(calls.set, [{ transactionId, categoryId, kind: "expense", confidence: 0.9 }]);
+    assert.equal(calls.prompts.length, 1);
+    assert.deepEqual(calls.searches, []);
+  });
+
+  it("allows the category model to identify a person when extraction left counterparty type unknown", async () => {
+    const { pipeline, calls } = setup({
+      transaction: {
+        categories: defaults,
+        counterpartyType: "unknown",
+        counterpartyName: "Rina Putri",
+      },
+      model: { categoryId: personId, kind: "expense", confidence: 0.7 },
+    });
+    await pipeline.runJob(job);
+    assert.deepEqual(calls.set, [
+      { transactionId, categoryId: personId, kind: "expense", confidence: 0.7 },
+    ]);
+    assert.deepEqual(calls.searches, []);
+    assert.equal(calls.prompts.length, 1);
+  });
+
+  it("rejects a model's Person category for a known business", async () => {
+    const { pipeline, calls } = setup({
+      transaction: {
+        categories: defaults,
+        counterpartyType: "person",
+        counterpartyName: "Kopi Kenangan",
+      },
+      model: { categoryId: personId, kind: "expense", confidence: 0.9 },
+    });
+    await pipeline.runJob(job);
+    assert.deepEqual(calls.set, [
+      { transactionId, categoryId: miscId, kind: "expense", confidence: 0.9 },
+    ]);
+  });
+
+  it("falls back safely from an unmatched Internal suggestion and retains its known score", async () => {
+    const { pipeline, calls } = setup({
+      transaction: { categories: defaults },
+      model: { categoryId: internalId, kind: "exclusion", confidence: 0.4 },
+    });
+    await pipeline.runJob(job);
+    assert.deepEqual(calls.set, [
+      { transactionId, categoryId: miscId, kind: "expense", confidence: 0.4 },
+    ]);
+  });
+
+  it("leaves room for observed reasoning before the category JSON answer", async () => {
+    // A synthetic Azure probe used 363 reasoning tokens plus 45 answer tokens.
+    // Replay that provider boundary without relying on a live, variable response.
+    const observedCompletionTokens = 408;
+    const modelChoice = { categoryId, kind: "expense", confidence: 0.97 };
+    let attempts = 0;
+    const llm = createLlmClient({
+      baseUrl: "https://synthetic.openai.azure.com/openai/v1",
+      apiKey: "synthetic",
+      model: "synthetic-deployment",
+      maxInlineRetries: 0,
+      async fetcher(_input, init) {
+        attempts += 1;
+        const request = JSON.parse(String(init.body));
+        const hasRoom = request.max_completion_tokens >= observedCompletionTokens;
+        return Response.json({
+          choices: [
+            {
+              finish_reason: hasRoom ? "stop" : "length",
+              message: { content: hasRoom ? JSON.stringify(modelChoice) : "" },
+            },
+          ],
+        });
+      },
+    });
+    const { backend } = setup();
+    const transaction = await backend.resolveImportedTransaction(transactionId);
+    assert.deepEqual(await chooseCategory(llm, { transaction, summary: null }), modelChoice);
+    assert.equal(attempts, 1);
+  });
   it("stops sending more classifications from the same job after a model rate limit", async () => {
     const busy = new LlmError("The model request failed.", 429, "rate_limited", 60_000);
     const { pipeline, calls } = setup({
@@ -154,6 +485,31 @@ describe("transaction categorization", () => {
         confidence: null,
       })),
     );
+  });
+  it("settles permanent model output failures for review and continues deterministic decisions", async () => {
+    const other = "00000000-0000-4000-8000-000000000031";
+    const permanent = new LlmError("The model output was not JSON.", 200, "failed");
+    const { pipeline, calls } = setup({
+      transaction: { counterpartyName: "Synthetic Recipient", counterpartyType: "person" },
+      transactions: {
+        [other]: { counterpartyName: "Adlyn Fakhreyz Pratama", isTransfer: true },
+      },
+      modelForRequest() {
+        throw permanent;
+      },
+    });
+    assert.deepEqual(
+      await pipeline.runJob({
+        kind: "merchant.categorize",
+        transactionIds: [transactionId, other],
+      }),
+      ["uncategorized", "categorized"],
+    );
+    assert.equal(calls.prompts.length, 1);
+    assert.deepEqual(calls.set, [
+      { transactionId, categoryId: null, kind: null, confidence: null },
+      { transactionId: other, categoryId: internalId, kind: "exclusion", confidence: 1 },
+    ]);
   });
   it("still categorizes a later deterministic Internal transfer after a model outage", async () => {
     const other = "00000000-0000-4000-8000-000000000031";
@@ -236,9 +592,8 @@ describe("transaction categorization", () => {
     assert.deepEqual(failed.calls.released, ["Kopi Kenangan"]);
     assert.deepEqual(failed.calls.set, []);
   });
-  it("marks uncertain, foreign ID, incompatible type and direction results terminal for review", async () => {
+  it("sends invalid category choices to backend fallback while preserving available model confidence", async () => {
     for (const model of [
-      { categoryId, kind: "expense", confidence: 0.4 },
       { categoryId: "foreign", kind: "expense", confidence: 0.99 },
       { categoryId, kind: "income", confidence: 0.99 },
       { categoryId: incomeId, kind: "income", confidence: 0.99 },
@@ -246,9 +601,14 @@ describe("transaction categorization", () => {
       { categoryId, kind: "expense", confidence: 2 },
     ]) {
       const { pipeline, calls } = setup({ model });
-      assert.deepEqual(await pipeline.runJob(job), ["uncategorized"]);
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
       assert.deepEqual(calls.set, [
-        { transactionId, categoryId: null, kind: null, confidence: null },
+        {
+          transactionId,
+          categoryId: null,
+          kind: null,
+          confidence: model.confidence <= 1 ? model.confidence : null,
+        },
       ]);
     }
   });
@@ -364,8 +724,11 @@ describe("transaction categorization", () => {
         transaction: { counterpartyType: "person", ...transaction },
         model: { categoryId: internalId, kind: "exclusion", confidence: 0.99 },
       });
-      assert.deepEqual(await pipeline.runJob(job), ["uncategorized"]);
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
       assert.deepEqual(calls.searches, []);
+      assert.deepEqual(calls.set, [
+        { transactionId, categoryId: null, kind: null, confidence: 0.99 },
+      ]);
     }
   });
   it("keeps personal, unknown and account-like counterparties out of Brave", async () => {

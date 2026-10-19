@@ -77,3 +77,43 @@ describe("imported transaction holder names", () => {
     }
   });
 });
+
+describe("imported category persistence", () => {
+  it("preserves unknown financial type and absent confidence when applying a category hint", async () => {
+    const categoryId = "00000000-0000-4000-8000-000000000040";
+    const calls = [];
+    const repository = createSupabaseGmailIngestionRepository({
+      rpc(operation, input) {
+        calls.push({ operation, input });
+        return {
+          async single() {
+            return {
+              data: { applied: true, user_id: userId, review_status: "pending" },
+              error: null,
+            };
+          },
+        };
+      },
+    });
+    assert.deepEqual(
+      await repository.setImportedCategory({
+        transactionId,
+        categoryId,
+        kind: null,
+        confidence: null,
+      }),
+      { applied: true, userId, confirmed: false },
+    );
+    assert.deepEqual(calls, [
+      {
+        operation: "set_imported_category",
+        input: {
+          p_transaction_id: transactionId,
+          p_category_id: categoryId,
+          p_kind: undefined,
+          p_confidence: undefined,
+        },
+      },
+    ]);
+  });
+});

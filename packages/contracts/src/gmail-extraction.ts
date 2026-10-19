@@ -31,6 +31,8 @@ export const extractedTransactionSchema = z
     kind: transactionKindSchema.nullable(),
     flowDirection: transactionFlowDirectionSchema.nullable().default(null),
     merchantName: z.string().trim().min(1).max(200).nullable(),
+    /** Display-only normalization. Original names remain evidence for identity matching. */
+    normalizedDisplayName: z.string().trim().min(1).max(80).nullable().default(null),
     counterpartyName: z.string().trim().min(1).max(200).nullable().default(null),
     counterpartyType: counterpartyTypeSchema.default("unknown"),
     isTransfer: z.boolean().default(false),
@@ -323,7 +325,7 @@ export const recordGmailExtractionInputSchema = z
     items: z.array(extractedTransactionSchema).max(50),
     /** The registry entry of the email's sender; null when the sender is not listed. */
     institutionKey: institutionKeySchema.nullable(),
-    /** Gmail authenticated the sender's domain with DKIM or SPF. Required for auto-confirm. */
+    /** Whether Gmail authenticated the sender's domain with DKIM or SPF; retained as evidence. */
     senderVerified: z.boolean(),
   })
   .strict()
@@ -530,11 +532,13 @@ export const setImportedCategoryInputSchema = z.union([
     })
     .strict()
     .superRefine((value, context) => {
-      if ((value.categoryId === null) !== (value.kind === null)) {
+      // Legacy hints may omit the type. The backend resolves a typed Misc
+      // fallback from stated cash direction and verifies category ownership.
+      if (value.categoryId === null && value.kind !== null) {
         context.addIssue({
           code: "custom",
           path: ["categoryId"],
-          message: "A category and compatible type must be selected together.",
+          message: "A financial type requires a compatible category.",
         });
       }
     }),

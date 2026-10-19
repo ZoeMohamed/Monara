@@ -677,7 +677,7 @@ describe("processBatch", () => {
       })),
     );
   });
-  it("queues large extracted transaction sets in five-row merchant jobs", async () => {
+  it("queues large extracted transaction sets in three-row merchant jobs", async () => {
     const ids = Array.from(
       { length: 8 },
       (_, index) => `00000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
@@ -686,7 +686,7 @@ describe("processBatch", () => {
     await pipeline.runJob(parseJob(["m1"]), notFinal);
     assert.deepEqual(
       calls.merchantJobs.map((job) => ("transactionIds" in job ? job.transactionIds.length : 1)),
-      [5, 3],
+      [3, 3, 2],
     );
     assert.deepEqual(
       calls.merchantJobs.flatMap((job) =>
