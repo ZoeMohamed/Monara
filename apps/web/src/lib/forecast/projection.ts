@@ -7,7 +7,7 @@ export interface SpendingDay {
   future: boolean;
 }
 
-export interface ProjectionPoint {
+interface ProjectionPoint {
   day: number;
   value: number;
 }
