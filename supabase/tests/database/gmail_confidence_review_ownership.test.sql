@@ -39,7 +39,18 @@ insert into cases values
  ('fallback-exclusion',pg_temp.import('confidence-fallback-exclusion',0.99,true,'{"kind":"exclusion","flowDirection":"out"}')),
  ('fallback-low',pg_temp.import('confidence-fallback-low')),
  ('unknown',pg_temp.import('confidence-unknown',0.99,true,'{"kind":null,"flowDirection":"in"}')),
+ ('unknown-out-fallback',pg_temp.import('confidence-unknown-out-fallback',0.99,true,'{"kind":null,"flowDirection":"out"}')),
+ ('unknown-no-direction',pg_temp.import('confidence-unknown-no-direction',0.99,true,'{"kind":null,"flowDirection":null}')),
+ ('unknown-in-no-amount',pg_temp.import('confidence-unknown-in-no-amount',0.99,true,'{"kind":null,"flowDirection":"in","money":null}')),
+ ('wrong-misc-in',pg_temp.import('confidence-wrong-misc-in',0.99,true,'{"kind":null,"flowDirection":"in"}')),
+ ('wrong-misc-out',pg_temp.import('confidence-wrong-misc-out',0.99,true,'{"kind":null,"flowDirection":"out"}')),
+ ('no-direction-specific',pg_temp.import('confidence-no-direction-specific',0.99,true,'{"kind":null,"flowDirection":null}')),
+ ('archived-misc-in',pg_temp.import('confidence-archived-misc-in',0.99,true,'{"kind":null,"flowDirection":"in"}')),
+ ('archived-misc-out',pg_temp.import('confidence-archived-misc-out',0.99,true,'{"kind":null,"flowDirection":"out"}')),
+ ('archived-misc-no-direction',pg_temp.import('confidence-archived-misc-no-direction',0.99,true,'{"kind":null,"flowDirection":null}')),
  ('unknown-model-type',pg_temp.import('confidence-unknown-model-type',0.99,true,'{"kind":null,"flowDirection":"out"}')),
+ ('missing-direction-person-income',pg_temp.import('confidence-missing-direction-person-income',0.99,true,'{"kind":null,"flowDirection":null}')),
+ ('missing-income-fallback',pg_temp.import('confidence-missing-income-fallback',0.99,true,'{"kind":null,"flowDirection":"in"}')),
  ('missing-direction-model-type',pg_temp.import('confidence-missing-direction-model-type',0.99,true,'{"kind":"exclusion","flowDirection":null}')),
  ('unknown-hint',pg_temp.import('confidence-unknown-hint',0.99,true,'{"kind":null,"flowDirection":"out"}')),
  ('unknown-invalid-hint',pg_temp.import('confidence-unknown-invalid-hint',0.99,true,'{"kind":null,"flowDirection":null}')),
@@ -101,23 +112,44 @@ select is((select row(category_id,review_status,gmail_classification_confidence)
 select is((select category_id from public.transactions where id=(select id from cases where name='fallback-income')),
   pg_temp.category('misc-income'),'income receives its own typed Misc');
 select is((select category_id from public.transactions where id=(select id from cases where name='fallback-exclusion')),
-  pg_temp.category('misc-exclusion'),'exclusion receives its own typed Misc');
+  pg_temp.category('misc'),'unclassified exclusion outflow receives expense Misc');
 select public.set_imported_category((select id from cases where name='fallback-low'),null::uuid,null::text,0.2);
 select is((select row(category_id,review_status,gmail_classification_confidence)::text from public.transactions where id=(select id from cases where name='fallback-low')),
   row(pg_temp.category('misc'),'pending',0.2::numeric)::text,'Misc preserves a known low classification score');
 select is((select row(transaction_type,flow_direction,review_status,category_id)::text from public.transactions where id=(select id from cases where name='unknown')),
-  row(null::text,'in','pending',pg_temp.category('misc'))::text,'unknown type gets Misc hint and preserves stated inflow without inventing a type');
+  row('income','in','confirmed',pg_temp.category('misc-income'))::text,'clear inflow resolves unknown type to Income Misc and qualifies');
 select public.set_imported_category((select id from cases where name='unknown-model-type'),pg_temp.category('person'),'expense',0.99);
 select is((select row(transaction_type,category_id,review_status)::text from public.transactions where id=(select id from cases where name='unknown-model-type')),
-  row(null::text,pg_temp.category('misc'),'pending')::text,'a later model type cannot promote an unknown original treatment');
+  row('expense',pg_temp.category('person'),'confirmed')::text,'a compatible Person decision resolves unknown type before generic Misc');
 select public.set_imported_category((select id from cases where name='missing-direction-model-type'),pg_temp.category('person'),'expense',0.99);
 select is((select row(transaction_type,flow_direction,category_id,review_status,gmail_classification_status)::text from public.transactions where id=(select id from cases where name='missing-direction-model-type')),
-  row('exclusion',null::text,pg_temp.category('misc-exclusion'),'pending','needs_review')::text,'missing direction keeps original treatment and settles review rather than retrying');
+  row('expense',null::text,pg_temp.category('person'),'pending','needs_review')::text,'Person retains priority with missing direction and settles review without invented outflow');
+select public.set_imported_category((select id from cases where name='missing-direction-person-income'),pg_temp.category('person-income'),'income',0.99);
+select is((select row(transaction_type,flow_direction,category_id,review_status)::text from public.transactions where id=(select id from cases where name='missing-direction-person-income')),
+  row('income',null::text,pg_temp.category('person-income'),'pending')::text,'income Person also retains priority without inventing missing direction');
 select public.set_imported_category((select id from cases where name='unknown-hint'),pg_temp.category('misc'),null::text,0.99);
 select is((select row(transaction_type,review_status,category_id)::text from public.transactions where id=(select id from cases where name='unknown-hint')),
-  row(null::text,'pending',pg_temp.category('misc'))::text,'explicit Misc hint also leaves unknown type in review');
-select throws_ok($$select * from public.set_imported_category((select id from cases where name='unknown-invalid-hint'),pg_temp.category('salary'),null::text,1)$$,
-  '22023',null,'unknown-type Gmail hint must be owned default expense Misc');
+  row('expense','confirmed',pg_temp.category('misc'))::text,'owned expense Misc hint resolves clear outflow and qualifies');
+select public.set_imported_category((select id from cases where name='unknown-invalid-hint'),pg_temp.category('salary'),null::text,1);
+select is((select row(transaction_type,category_id,flow_direction,review_status)::text from public.transactions where id=(select id from cases where name='unknown-invalid-hint')),
+  row('expense',pg_temp.category('misc'),null::text,'pending')::text,'a missing-direction specific hint becomes Expense Misc in review');
+select public.set_imported_category(id,null::uuid,null::text,null::numeric) from cases
+  where name in ('unknown-out-fallback','unknown-no-direction','unknown-in-no-amount');
+select is((select row(transaction_type,category_id,flow_direction,review_status)::text from public.transactions where id=(select id from cases where name='unknown-out-fallback')),
+  row('expense',pg_temp.category('misc'),'out','confirmed')::text,'clear outflow without a model decision finalizes as Expense Misc');
+select is((select row(transaction_type,category_id,flow_direction,review_status,gmail_classification_status)::text from public.transactions where id=(select id from cases where name='unknown-no-direction')),
+  row('expense',pg_temp.category('misc'),null::text,'pending','needs_review')::text,'no cash direction finalizes as Expense Misc without inventing outflow');
+select is((select row(transaction_type,category_id,amount,review_status)::text from public.transactions where id=(select id from cases where name='unknown-in-no-amount')),
+  row('income',pg_temp.category('misc-income'),null::numeric,'pending')::text,'clear inflow with missing amount finalizes as Income Misc in review');
+select public.set_imported_category((select id from cases where name='wrong-misc-in'),pg_temp.category('misc'),'expense',0.2);
+select is((select row(transaction_type,category_id,gmail_classification_confidence,review_status)::text from public.transactions where id=(select id from cases where name='wrong-misc-in')),
+  row('income',pg_temp.category('misc-income'),0.2::numeric,'pending')::text,'old wrong-typed Misc normalizes to inflow and preserves known low score');
+select public.set_imported_category((select id from cases where name='wrong-misc-out'),pg_temp.category('misc-exclusion'),'exclusion',1);
+select is((select row(transaction_type,category_id,review_status)::text from public.transactions where id=(select id from cases where name='wrong-misc-out')),
+  row('expense',pg_temp.category('misc'),'confirmed')::text,'old exclusion Misc hint cannot exclude a generic outflow');
+select public.set_imported_category((select id from cases where name='no-direction-specific'),pg_temp.category('resto-cafe'),'expense',1);
+select is((select row(transaction_type,category_id,flow_direction,review_status)::text from public.transactions where id=(select id from cases where name='no-direction-specific')),
+  row('expense',pg_temp.category('misc'),null::text,'pending')::text,'non-Person specific decision without direction becomes Expense Misc in review');
 select public.set_imported_category(id,null::uuid,null::text,1) from cases
   where name in ('missing-amount','missing-date','missing-direction','missing-account');
 select is((select count(*) from public.transactions where id in(select id from cases where name in ('missing-amount','missing-date','missing-direction','missing-account'))
@@ -166,6 +198,17 @@ select is((select row(item.category_id,category.is_archived)::text from public.t
   row(pg_temp.category('misc'),false)::text,'future classification reactivates only its canonical typed Misc');
 select is((select is_archived from public.categories where id=pg_temp.category('housing')),true,
   'reactivating Misc never reactivates other archived categories');
+update public.categories set is_archived=true where id=pg_temp.category('misc');
+select public.set_imported_category((select id from cases where name='archived-misc-in'),pg_temp.category('misc'),null::text,1);
+select is((select row(transaction_type,category_id,review_status,gmail_classification_status)::text from public.transactions where id=(select id from cases where name='archived-misc-in')),
+  row('income',pg_temp.category('misc-income'),'confirmed','completed')::text,'archived expense Misc hint with clear inflow immediately settles as Income Misc');
+select public.set_imported_category((select id from cases where name='archived-misc-out'),pg_temp.category('misc'),null::text,1);
+select is((select row(transaction_type,category_id,review_status,gmail_classification_status)::text from public.transactions where id=(select id from cases where name='archived-misc-out')),
+  row('expense',pg_temp.category('misc'),'confirmed','completed')::text,'archived expense Misc with clear outflow is repaired and immediately settles');
+update public.categories set is_archived=true where id=pg_temp.category('misc');
+select public.set_imported_category((select id from cases where name='archived-misc-no-direction'),pg_temp.category('misc'),null::text,1);
+select is((select row(transaction_type,category_id,flow_direction,review_status,gmail_classification_status)::text from public.transactions where id=(select id from cases where name='archived-misc-no-direction')),
+  row('expense',pg_temp.category('misc'),null::text,'pending','needs_review')::text,'archived expense Misc with no direction repairs and settles review immediately');
 update public.categories set is_default=false,name='Custom category',color='#123456' where id=pg_temp.category('misc');
 select public.set_imported_category((select id from cases where name='custom-collision'),null::uuid,null::text,null::numeric);
 select is((select row(name,color,is_default)::text from public.categories where id=pg_temp.category('misc')),
@@ -174,6 +217,23 @@ select ok((select category.name='Misc' and category.is_default and category.kind
   and category.id<>pg_temp.category('misc') from public.transactions item join public.categories category on category.id=item.category_id
   where item.id=(select id from cases where name='custom-collision')),
   'custom slug collision receives a separate active typed fallback');
+-- Simulate a removed canonical income fallback without deleting its history.
+update public.categories set slug='historical-misc-income',is_default=false
+  where id=pg_temp.category('misc-income');
+select public.set_imported_category((select id from cases where name='missing-income-fallback'),null::uuid,null::text,0.2);
+select is((select row(item.transaction_type,category.slug,category.is_default,item.gmail_classification_confidence,item.review_status,item.gmail_classification_status)::text
+  from public.transactions item join public.categories category on category.id=item.category_id
+  where item.id=(select id from cases where name='missing-income-fallback')),
+  row('income','misc-income',true,0.2::numeric,'pending','needs_review')::text,'missing Income Misc is created immediately while preserving a known low score');
+select ok((select bool_and(transaction_type is not null and category_id is not null)
+  from public.transactions where id in(select id from cases where name<>'edited')
+    and gmail_classification_status in ('completed','needs_review')),
+  'every finalized imported record has a type and a category');
+-- Explicit User confirmation keeps the established type-derived direction behavior.
+update public.transactions set transaction_type='expense',review_status='confirmed'
+  where id=(select id from cases where name='unknown-no-direction');
+select is((select row(transaction_type,flow_direction,review_status)::text from public.transactions where id=(select id from cases where name='unknown-no-direction')),
+  row('expense','out','confirmed')::text,'manual confirmation can derive outflow from an explicitly confirmed expense');
 select ok(not has_function_privilege('authenticated','private.gmail_misc_category(uuid,text)','EXECUTE'),
   'clients cannot create fallbacks through the private backend helper');
 select * from finish();

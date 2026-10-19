@@ -161,10 +161,10 @@ select throws_ok($$select * from public.set_imported_category((select id from ex
  '22023',null,'unknown-type inflow rejects an incompatible expense category');
 select public.set_imported_category((select id from examples where name='unknown-kind-out'),pg_temp.category('resto-cafe'),'expense',0.99);
 select is((select row(transaction_type,flow_direction,review_status)::text from public.transactions where id=(select id from examples where name='unknown-kind-out')),
- row(null::text,'out','pending')::text,'an expense suggestion preserves unknown original type and stated outflow in review');
+ row('expense','out','confirmed')::text,'a compatible expense decision resolves type and preserves stated outflow');
 select public.set_imported_category((select id from examples where name='unknown-kind-in'),pg_temp.category('salary'),'income',0.99);
 select is((select row(transaction_type,flow_direction,review_status)::text from public.transactions where id=(select id from examples where name='unknown-kind-in')),
- row(null::text,'in','pending')::text,'an income suggestion preserves unknown original type and stated inflow in review');
+ row('income','in','confirmed')::text,'a compatible income decision resolves type and preserves stated inflow');
 select is((select applied from public.set_imported_category((select id from examples where name='unknown-kind-no-direction'),pg_temp.category('resto-cafe'),'expense',0.99)),
  true,'missing cash direction settles in review rather than stranding classification');
 select public.set_imported_category((select id from examples where name='unknown-kind-no-direction'),null::uuid,null::text,null::numeric);

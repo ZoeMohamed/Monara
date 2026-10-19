@@ -87,11 +87,12 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
     };
     const started = performance.now();
     const internal = internalCategory(transaction);
+    const person = internal ? null : personCategory(transaction);
     const unknownType = transaction.kind === null ? fallbackCategory(transaction, null) : null;
-    let choice = internal ?? unknownType ?? personCategory(transaction);
+    let choice = internal ?? person ?? unknownType;
     if (choice || transaction.kind === null)
       dependencies.observe?.({
-        stage: internal ? "internal" : transaction.kind === null ? "fallback" : "person",
+        stage: internal ? "internal" : person ? "person" : "fallback",
         durationMs: performance.now() - started,
       });
     else {

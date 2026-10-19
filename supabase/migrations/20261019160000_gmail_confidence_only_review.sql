@@ -76,6 +76,25 @@ do $$ declare v_user record; begin
 end; $$;
 
 
+-- A fallback can assign Expense while its original cash direction is unknown.
+-- Preserve Gmail's stated direction instead of manufacturing one from that type.
+create or replace function private.normalize_transaction_foundation()
+returns trigger language plpgsql security invoker set search_path='' as $$
+begin
+  if new.occurred_on is null and new.source_type<>'gmail_email' then
+    new.occurred_on:=coalesce(case when tg_op='UPDATE' then old.occurred_on end,
+      (statement_timestamp() at time zone 'Asia/Jakarta')::date);
+  end if;
+  if new.source_type='gmail_email' and new.review_status='pending' and new.flow_direction is null then
+    new.flow_direction:=null;
+  else
+    new.flow_direction:=case new.transaction_type when 'expense' then 'out'
+      when 'income' then 'in' when 'exclusion' then new.flow_direction
+      else case when new.flow_direction in ('in','out') then new.flow_direction end end;
+  end if;
+  return new;
+end; $$;
+
 -- Preserve original structured name evidence while displaying the normalized name.
 create or replace function public.record_gmail_extraction(
   p_processed_message_id uuid,
@@ -296,6 +315,7 @@ declare
   v_misc_id uuid;
   v_kind text;
   v_internal boolean:=false;
+  v_use_fallback boolean:=false;
   v_active_owned_account boolean:=false;
   v_financial_facts_valid boolean:=false;
   v_confidence_qualified boolean:=false;
@@ -323,56 +343,60 @@ begin
   if p_kind is not null and p_kind not in ('expense','income','exclusion') then
     raise exception using errcode='22023',message='Classification type is invalid.';
   end if;
-  v_kind:=coalesce(p_kind,v_item.transaction_type);
-  if p_category_id is null then
-    -- A missing decision (including a terminal provider failure) still has Misc.
-    -- Unknown type is only an expense Misc hint; do not guess financial treatment.
-    v_misc_id:=private.gmail_misc_category(v_item.user_id,v_kind);
+  v_use_fallback:=p_category_id is null;
+  if p_category_id is not null then
+    -- Check ownership before recognizing old Misc hints. An owned default Misc
+    -- may be archived or typed incorrectly; normalize it to the current rule.
     select category.* into v_category from public.categories as category
-      where category.id=v_misc_id for share;
-  else
-    select category.* into v_category from public.categories as category
-      where category.id=p_category_id and category.user_id=v_item.user_id
-        and not category.is_archived for share;
-    if v_category.id is null
-      or (v_kind is not null and v_category.kind<>v_kind)
-      or (v_kind is null and not(v_category.kind='expense' and v_category.is_default
-        and (v_category.slug='misc' or v_category.slug like 'gmail-fallback-expense-%'))) then
+      where category.id=p_category_id and category.user_id=v_item.user_id;
+    if v_category.id is null then
       raise exception using errcode='22023',message='An active compatible owned Category is required.';
     end if;
-  end if;
-  if (v_kind='expense' and v_item.flow_direction='in')
-    or (v_kind='income' and v_item.flow_direction='out') then
-    raise exception using errcode='22023',message='An active compatible owned Category is required.';
-  end if;
-  if v_category.kind='exclusion' and v_category.is_default and v_category.slug='internal' then
-    select profile.full_name into v_holder from public.profiles as profile
-      where profile.id=v_item.user_id for share;
-    v_internal:=private.holder_name_matches(
-      v_item.gmail_extraction_evidence ->> 'counterpartyName',v_holder);
-    -- The special Internal meaning requires original name evidence, never a
-    -- normalized display name or a model's transfer/person label.
-    if not coalesce(v_internal,false) then
-      -- A refused Internal suggestion becomes typed Misc, preserving the score.
-      v_misc_id:=private.gmail_misc_category(v_item.user_id,v_item.transaction_type);
+    v_use_fallback:=v_category.is_default and (
+      (v_category.kind='expense' and (v_category.slug='misc'
+        or v_category.slug like 'gmail-fallback-expense-%'))
+      or (v_category.kind='income' and (v_category.slug='misc-income'
+        or v_category.slug like 'gmail-fallback-income-%'))
+      or (v_category.kind='exclusion' and (v_category.slug='misc-exclusion'
+        or v_category.slug like 'gmail-fallback-exclusion-%')));
+    if not v_use_fallback then
+      -- Specific decisions need a stable active category. Do not hold a shared
+      -- Misc lock before its resolver's advisory/update locks, which can deadlock
+      -- parallel workers normalizing the same archived fallback.
       select category.* into v_category from public.categories as category
-        where category.id=v_misc_id for share;
-      v_kind:=v_item.transaction_type;
+        where category.id=p_category_id and category.user_id=v_item.user_id for share;
+      if v_category.id is null then
+        raise exception using errcode='22023',message='An active compatible owned Category is required.';
+      end if;
+      v_kind:=coalesce(p_kind,v_item.transaction_type,v_category.kind);
+      if v_category.is_archived or v_category.kind<>v_kind
+        or (v_kind='expense' and v_item.flow_direction='in')
+        or (v_kind='income' and v_item.flow_direction='out') then
+        raise exception using errcode='22023',message='An active compatible owned Category is required.';
+      end if;
+      if v_category.kind='exclusion' and v_category.is_default and v_category.slug='internal' then
+        select profile.full_name into v_holder from public.profiles as profile
+          where profile.id=v_item.user_id for share;
+        v_internal:=private.holder_name_matches(
+          v_item.gmail_extraction_evidence ->> 'counterpartyName',v_holder);
+        -- Internal uses original names, never the normalized display or labels.
+        v_use_fallback:=not coalesce(v_internal,false);
+      end if;
+      -- A specific category cannot create missing cash direction. Verified
+      -- Internal and default Person retain priority while incomplete and pending.
+      if v_item.flow_direction is null and not coalesce(v_internal,false)
+        and not(v_category.is_default and (
+          (v_category.kind='expense' and v_category.slug='person')
+          or (v_category.kind='income' and v_category.slug='person-income'))) then
+        v_use_fallback:=true;
+      end if;
     end if;
   end if;
-  if v_kind in ('expense','income') and v_item.flow_direction is null then
-    -- A missing cash direction is incomplete evidence, not a retryable error.
-    -- Retain original treatment and settle with its typed fallback.
-    v_kind:=v_item.transaction_type;
+  if v_use_fallback then
+    -- Generic fallback is always Income Misc for clear money in, else Expense
+    -- Misc. Original extracted type and old Misc hints never force exclusion.
+    v_kind:=case when v_item.flow_direction='in' then 'income' else 'expense' end;
     v_misc_id:=private.gmail_misc_category(v_item.user_id,v_kind);
-    select category.* into v_category from public.categories as category
-      where category.id=v_misc_id for share;
-  end if;
-  -- A classification cannot supply missing financial treatment. Only a
-  -- deterministic own-name match can establish Internal from an unknown type.
-  if v_item.transaction_type is null and not coalesce(v_internal,false) then
-    v_kind:=null;
-    v_misc_id:=private.gmail_misc_category(v_item.user_id,null::text);
     select category.* into v_category from public.categories as category
       where category.id=v_misc_id for share;
   end if;
@@ -397,7 +421,8 @@ begin
       and v_confidence_qualified then 'confirmed'
     else 'pending' end;
   update public.transactions set category_id=v_category.id,
-    transaction_type=v_kind,review_status=v_review_status,gmail_auto_confirm_pending=false,
+    transaction_type=v_kind,flow_direction=v_item.flow_direction,
+    review_status=v_review_status,gmail_auto_confirm_pending=false,
     gmail_classification_confidence=p_confidence,
     gmail_classification_status=case when v_review_status='confirmed' then 'completed' else 'needs_review' end
     where id=v_item.id;

@@ -532,8 +532,8 @@ export const setImportedCategoryInputSchema = z.union([
     })
     .strict()
     .superRefine((value, context) => {
-      // An unknown-type import can carry an owned Misc hint without inventing a
-      // financial type. The database verifies the hinted category's identity.
+      // Legacy hints may omit the type. The backend resolves a typed Misc
+      // fallback from stated cash direction and verifies category ownership.
       if (value.categoryId === null && value.kind !== null) {
         context.addIssue({
           code: "custom",

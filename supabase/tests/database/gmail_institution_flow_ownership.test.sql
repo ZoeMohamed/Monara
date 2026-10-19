@@ -269,8 +269,8 @@ select is(
     join public.processed_gmail_messages source on source.id=item.processed_gmail_message_id
     join public.categories category on category.id=item.category_id
     where source.gmail_message_id='inst-004' and item.source_item_index=2),
-  row('exclusion','misc-exclusion')::text,
-  'an incompatible legacy category never changes exclusion financial treatment'
+  row('income','misc-income')::text,
+  'an unknown legacy category uses Income Misc for clear money in'
 );
 
 select public.record_gmail_extraction(
