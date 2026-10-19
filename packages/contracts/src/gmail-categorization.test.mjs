@@ -4,6 +4,7 @@ import {
   createCategoryInputSchema,
   extractedTransactionSchema,
   gmailSyncCountsSchema,
+  merchantCategorizeJobSchema,
   reportGmailProcessingRetryInputSchema,
   setImportedCategoryInputSchema,
   updateCategoryInputSchema,
@@ -11,6 +12,24 @@ import {
 
 const transactionId = "00000000-0000-4000-8000-000000000001";
 const categoryId = "00000000-0000-4000-8000-000000000002";
+it("keeps legacy merchant jobs compatible and bounds preserved processing attempts", () => {
+  for (const target of [{ transactionId }, { transactionIds: [transactionId] }]) {
+    const legacy = { kind: "merchant.categorize", ...target };
+    assert.deepEqual(merchantCategorizeJobSchema.parse(legacy), legacy);
+    for (const priorAttempts of [0, 5]) {
+      assert.equal(
+        merchantCategorizeJobSchema.parse({ ...legacy, priorAttempts }).priorAttempts,
+        priorAttempts,
+      );
+    }
+    for (const priorAttempts of [-1, 0.5, 6, "5", null]) {
+      assert.equal(
+        merchantCategorizeJobSchema.safeParse({ ...legacy, priorAttempts }).success,
+        false,
+      );
+    }
+  }
+});
 it("requires a category type and never permits changing it", () => {
   const input = { name: "Salary", icon: "income", color: "#10B981", clientRequestId: categoryId };
   assert.equal(createCategoryInputSchema.safeParse(input).success, false);

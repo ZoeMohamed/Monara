@@ -10,6 +10,7 @@ export * from "./forecast.ts";
 export * from "./gmail.ts";
 export * from "./gmail-extraction.ts";
 export * from "./goals.ts";
+export * from "./holder-name.ts";
 export * from "./insights.ts";
 export * from "./institutions.ts";
 export * from "./ledger.ts";

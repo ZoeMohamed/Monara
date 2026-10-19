@@ -8,7 +8,6 @@ import {
   type GmailJobInput,
   type GmailParseJob,
   type GmailSyncJob,
-  MERCHANT_JOB_MAX_TRANSACTIONS,
   type MerchantCategorizeJob,
   type RecordGmailExtractionInput,
   type ResolvedGmailConnection,
@@ -19,6 +18,7 @@ import {
   type GmailMessageContent,
   GmailReadError,
 } from "@monara/integrations";
+import { MERCHANT_PROCESSING_BATCH_SIZE } from "../merchant/pipeline.ts";
 import { BackendOperationError, type GmailBackend } from "./backend.ts";
 import { toEmailForExtraction } from "./email-text.ts";
 import { isTemporaryLlmError, type LlmClient, type LlmError } from "./llm.ts";
@@ -197,7 +197,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
   async function queueCategorization(transactionIds: readonly string[]): Promise<void> {
     if (transactionIds.length === 0) return;
     await enqueueMerchant(
-      chunk(transactionIds, MERCHANT_JOB_MAX_TRANSACTIONS).map((ids) => ({
+      chunk(transactionIds, MERCHANT_PROCESSING_BATCH_SIZE).map((ids) => ({
         kind: "merchant.categorize",
         transactionIds: ids,
       })),
@@ -421,7 +421,8 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
   }
 
   /**
-   * Parses one job's claimed emails a few at a time and records them in one call.
+   * Parses one job's claimed emails a few at a time and publishes each finished
+   * email immediately, so a slow provider response cannot hide faster results.
    * Failed emails make the job retry; a retry first drops emails an earlier delivery
    * finished. On the final attempt they are recorded as failed instead. Emails the
    * model was too busy for are never failures: once it reports a rate limit or an
@@ -452,14 +453,46 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
 
     let busy: LlmError | null = null;
     const deferrable = job.deferrals < MAX_DEFERRALS;
+    const recordingFailures: unknown[] = [];
     const settled = await settleWithLimit(emails, parseConcurrency, async (email) => {
-      if (busy) throw busy;
+      let result: RecordGmailExtractionInput;
       try {
-        return await extractOne(connection, email.processedMessageId, email.gmailMessageId);
+        if (busy) throw busy;
+        result = await extractOne(connection, email.processedMessageId, email.gmailMessageId);
       } catch (error) {
-        if (deferrable && isTemporaryLlmError(error)) busy ??= error;
-        throw error;
+        if (deferrable && isTemporaryLlmError(error)) {
+          busy ??= error;
+          throw error;
+        }
+        // A lost connection or an inactive one stays unfinished until reconnect.
+        if (!options.isFinalAttempt || isNotFound(error) || error instanceof ConnectionLostError)
+          throw error;
+        result = {
+          processedMessageId: email.processedMessageId,
+          outcome: "failed",
+          items: [],
+          institutionKey: null,
+          senderVerified: false,
+        };
       }
+      try {
+        const recordStarted = performance.now();
+        const recorded = await backend.recordExtractions({ results: [result] });
+        dependencies.observe?.({
+          stage: "record",
+          durationMs: performance.now() - recordStarted,
+          count: 1,
+        });
+        await queueCategorization(
+          recorded.results.flatMap((entry) => entry.uncategorizedTransactionIds),
+        );
+      } catch (error) {
+        // Persistence and enqueue failures must retry the job, even on its final
+        // attempt. A retry recovers committed categories before skipping finished
+        // emails; never relabel a successful extraction as a parse failure.
+        recordingFailures.push(error);
+      }
+      return result;
     });
     const results: RecordGmailExtractionInput[] = [];
     const failures: unknown[] = [];
@@ -475,32 +508,9 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
         return;
       }
       failures.push(outcome.reason);
-      // A lost connection or an inactive one leaves the message claimed but unfinished.
-      const recoverable =
-        !isNotFound(outcome.reason) && !(outcome.reason instanceof ConnectionLostError);
-      if (options.isFinalAttempt && recoverable && email) {
-        results.push({
-          processedMessageId: email.processedMessageId,
-          outcome: "failed",
-          items: [],
-          institutionKey: null,
-          senderVerified: false,
-        });
-      }
     });
 
-    if (results.length > 0) {
-      const recordStarted = performance.now();
-      const recorded = await backend.recordExtractions({ results });
-      dependencies.observe?.({
-        stage: "record",
-        durationMs: performance.now() - recordStarted,
-        count: results.length,
-      });
-      await queueCategorization(
-        recorded.results.flatMap((entry) => entry.uncategorizedTransactionIds),
-      );
-    }
+    if (recordingFailures.length > 0) throw recordingFailures[0];
 
     const lost = failures.find(
       (reason) => reason instanceof ConnectionLostError || isNotFound(reason),
