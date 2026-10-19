@@ -17,6 +17,11 @@
   background: #4c2a86;
 }
 
+/* Preserve CIMB's white header artwork on its official site background colour. */
+.mark[data-brand="cimb"] {
+  background: #860913;
+}
+
 .mark img {
   width: 82%;
   height: 82%;
