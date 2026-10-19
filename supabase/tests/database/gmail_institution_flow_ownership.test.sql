@@ -334,7 +334,7 @@ select is(
     row('inst-008', 'pending', true)::text,
     row('inst-009', 'pending', false)::text
   ],
-  'below 50 percent and missing original dates never qualify'
+  'below 50 percent and incomplete facts never qualify'
 );
 
 select is(
@@ -342,8 +342,8 @@ select is(
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     where source.gmail_message_id = 'inst-009'),
-  row(null::date, 'out')::text,
-  'missing email dates remain unknown and expenses retain outflow direction'
+  row(date '2026-10-13', 'out')::text,
+  'a missing email date takes the day the email arrived and expenses retain outflow direction'
 );
 
 -- Categorization write-back.

@@ -6,7 +6,8 @@ Status: the User confirmed the complete workflow and authorized implementation o
 
 - Review Confidence is derived from Extraction Confidence and Categorization Confidence, not a third model score. Use the lower known score; if only one is available, use that one.
 - The requested review cutoff is 50%, replacing 95%. A valid transaction at or above the cutoff qualifies for confirmation. Lower scores require review.
-- Incomplete records remain in review. Missing amounts, dates, financial-account mappings, or financial direction must not be invented to confirm them.
+- Incomplete records remain in review. Missing amounts, financial-account mappings, or financial direction must not be invented to confirm them.
+- Dates are the exception (User decision, 2026-10-19): a transaction whose email states no usable date, or only one outside the plausible window, takes the day the email was received, counted in Asia/Jakarta. A receipt arrives on or after the day it describes. A rejected stated date still caps confidence; an absent one does not. The agent applies this and a database trigger backs it, with a backfill for earlier rows.
 - Every finalized Gmail classification has a Category and Transaction Type. When no more specific category is chosen, clearly incoming money uses Income Misc; every other fallback uses Expense Misc.
 - Separate expense, income and exclusion Misc Categories remain available. The User clarified the generic fallback after PR creation: derive Income Misc from stated incoming direction, otherwise Expense Misc. An unresolved extracted type no longer remains unresolved after classification. Genuinely missing direction still requires review, as do two absent confidence scores.
 - Assigning Misc does not manufacture or raise a Categorization Confidence. Preserve a known low score; when the score is unavailable, use the other known score under the agreed review rule.

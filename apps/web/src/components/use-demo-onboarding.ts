@@ -11,6 +11,7 @@ import { waitingProgress } from "@/components/use-onboarding-engine";
 import { demoImportFeed } from "@/data/demo-import-feed";
 import { choiceFromSuggestion } from "@/lib/onboarding/banks";
 import type { OnboardingPhase } from "@/lib/onboarding/flow";
+import { withReachedStep } from "@/lib/onboarding/import-steps";
 
 const sampleBanks = [
   {
@@ -57,20 +58,35 @@ export function useDemoOnboarding(
 
   useEffect(() => {
     if (!importing || finished) return;
+    // Finding, reading, then categorizing, the way the live import reports them.
+    let found = 0;
     let emails = 0;
+    let categorized = 0;
     const timer = window.setInterval(() => {
-      emails = Math.min(sampleEmails, emails + 3 + Math.floor(Math.random() * 3));
-      const found = Math.round((emails / sampleEmails) * demoImportFeed.length);
-      setProgress({
-        state: emails >= sampleEmails ? "completed" : "running",
-        emailsRead: emails,
-        totalEmails: sampleEmails,
-        totalEmailsFinal: true,
-        transactions: found,
-        totalTransactions: demoImportFeed.length,
-        feed: demoImportFeed.slice(0, found),
-      });
-      if (emails >= sampleEmails) window.clearInterval(timer);
+      if (found < sampleEmails) found = Math.min(sampleEmails, found + 20);
+      else emails = Math.min(sampleEmails, emails + 3 + Math.floor(Math.random() * 3));
+      const transactions = Math.round((emails / sampleEmails) * demoImportFeed.length);
+      categorized =
+        emails >= sampleEmails
+          ? Math.min(transactions, categorized + 3)
+          : Math.floor(transactions / 2);
+      const completed = emails >= sampleEmails && categorized >= transactions;
+      setProgress((current) =>
+        withReachedStep(
+          {
+            state: completed ? "completed" : "running",
+            emailsRead: emails,
+            totalEmails: found,
+            totalEmailsFinal: true,
+            transactions,
+            totalTransactions: demoImportFeed.length,
+            categorizing: transactions - categorized,
+            feed: demoImportFeed.slice(0, transactions),
+          },
+          current,
+        ),
+      );
+      if (completed) window.clearInterval(timer);
     }, 650);
     return () => window.clearInterval(timer);
   }, [importing, finished]);

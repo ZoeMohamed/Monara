@@ -9,6 +9,7 @@ import { Icon, type IconName } from "@/components/icon";
 import { OnboardingAvatar } from "@/components/onboarding-avatar";
 import { BankBadge } from "@/components/onboarding-bank-badge";
 import styles from "@/components/onboarding-import.module.css";
+import { ImportSteps } from "@/components/onboarding-import-steps";
 import { ButtonIcon, onboardingTitleId, StepFrame } from "@/components/onboarding-sheet";
 import type {
   ImportedKind,
@@ -16,6 +17,7 @@ import type {
   ImportProgress,
 } from "@/components/use-onboarding-engine";
 import { formatDay } from "@/data/demo-ledger";
+import { importPercent } from "@/lib/onboarding/import-steps";
 
 const badgeSize = 28;
 
@@ -32,15 +34,10 @@ function matchesTab(item: ImportedTransaction, tab: ImportTab) {
   return tab === "review" ? item.needsReview === true : !item.needsReview && item.kind === tab;
 }
 
-const copy: Record<ImportProgress["state"], { title: string; text: string }> = {
-  waiting: {
-    title: "Getting ready",
-    text: "Lining up your bank emails.",
-  },
-  running: {
-    title: "Importing your transactions",
-    text: "Reading the last 30 days of email.",
-  },
+/** Waiting and running have no text: the steps below the title say what is happening. */
+const copy: Record<ImportProgress["state"], { title: string; text?: string }> = {
+  waiting: { title: "Getting ready" },
+  running: { title: "Importing your transactions" },
   completed: {
     title: "All caught up",
     text: "From the last 30 days of email.",
@@ -58,50 +55,20 @@ const avatarScene = {
   failed: "empty",
 } as const;
 
-function percent(progress: ImportProgress): number | null {
-  if (progress.state === "completed") return 100;
-  if (!progress.totalEmailsFinal || (progress.categorizing ?? 0) > 0) return null;
-  if (progress.emailsRead === null || !progress.totalEmails) return null;
-  return Math.min(100, Math.round((progress.emailsRead / progress.totalEmails) * 100));
-}
-
-function hasCounts(progress: ImportProgress) {
-  return progress.emailsRead !== null && progress.transactions !== null;
-}
-
-function countsLine(progress: ImportProgress) {
-  const categorizing = progress.categorizing ?? 0;
-  if (progress.state === "running" && progress.transactions !== null && categorizing > 0) {
-    const processed = Math.max(0, progress.transactions - categorizing);
-    return `${processed} / ${progress.transactions} transactions processed`;
-  }
-
-  const total = progress.totalEmails === null ? "" : ` / ${progress.totalEmails}`;
-  const provisional =
-    progress.totalEmails !== null && !progress.totalEmailsFinal && progress.state !== "completed"
-      ? " (found so far)"
-      : "";
-  return `${progress.emailsRead}${total} emails processed${provisional}`;
-}
-
-function summaryText(progress: ImportProgress): string {
+function summaryText(progress: ImportProgress): string | undefined {
   if (progress.state === "failed" && progress.message) return progress.message;
-  if ((progress.categorizing ?? 0) > 0)
-    return "Categorizing your transactions. You can leave this running.";
   return copy[progress.state].text;
 }
 
 function summaryCounts(progress: ImportProgress): string | null {
-  if (progress.state === "failed") return null;
   if (progress.state === "completed" && progress.transactions !== null)
     return `${progress.transactions} transactions imported`;
-  if (hasCounts(progress)) return countsLine(progress);
   return null;
 }
 
 function Stats({ progress }: { progress: ImportProgress }) {
   if (progress.state === "failed") return null;
-  const value = percent(progress);
+  const value = importPercent(progress);
   return (
     <div className={styles.meter}>
       <ProgressBar
@@ -247,15 +214,18 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
 function ImportSummary({ progress }: { progress: ImportProgress }) {
   const { title } = copy[progress.state];
   const counts = summaryCounts(progress);
+  const text = summaryText(progress);
   return (
     <div className={styles.top}>
       <div>
         <h2 className={styles.title} id={onboardingTitleId}>
           {title}
         </h2>
-        <p aria-live="polite" className={styles.sub}>
-          {summaryText(progress)}
-        </p>
+        {text ? (
+          <p aria-live="polite" className={styles.sub}>
+            {text}
+          </p>
+        ) : null}
         {counts ? <p className={styles.counts}>{counts}</p> : null}
       </div>
       <div aria-hidden className={styles.avatar}>
@@ -283,6 +253,9 @@ export function ImportStep({ progress, onNext }: { progress: ImportProgress; onN
     >
       <div className={styles.import}>
         <ImportSummary progress={progress} />
+        {progress.state === "waiting" || progress.state === "running" ? (
+          <ImportSteps progress={progress} />
+        ) : null}
         <Stats progress={progress} />
         <ImportTable progress={progress} />
       </div>

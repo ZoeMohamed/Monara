@@ -254,6 +254,19 @@ function guardDate(value: string | null, receivedAt: string): string | null {
   return value;
 }
 
+const WIB_OFFSET_MS = 7 * 3_600_000;
+
+/**
+ * The calendar day an email arrived, in Jakarta where the app's days are counted. A receipt
+ * arrives on or after the day it describes, so this is the fallback when it names no date.
+ */
+function receivedOn(receivedAt: string): string | null {
+  const received = Date.parse(receivedAt);
+  return Number.isFinite(received)
+    ? new Date(received + WIB_OFFSET_MS).toISOString().slice(0, 10)
+    : null;
+}
+
 /** The card or account ending in a hint such as "BCA ****1234", when it shows one. */
 export function lastFourFromHint(hint: string | null): string | null {
   return hint?.match(/(?:^|\D)(\d{4})\D*$/)?.[1] ?? null;
@@ -274,7 +287,9 @@ function toExtractedTransaction(item: ModelItem, email: EmailForExtraction): Ext
 
   const statedDate = guardDate(item.occurredOn, email.receivedAt);
   const rejectedDate = item.occurredOn !== null && statedDate === null;
-  const occurredOn = statedDate;
+  // Every transaction has a day: one the email does not state, or states beyond belief,
+  // is the day the email arrived. A rejected date still lowers confidence.
+  const occurredOn = statedDate ?? receivedOn(email.receivedAt);
   if (rejectedDate) guarded = true;
 
   // Like amounts, a location must be copied from the email, never inferred from a merchant.
