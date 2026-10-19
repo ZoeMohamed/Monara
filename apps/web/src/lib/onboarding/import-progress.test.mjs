@@ -22,7 +22,10 @@ const hooks = registerHooks({
       return { url: `data:text/javascript,${encodeURIComponent(jsx)}`, shortCircuit: true };
     }
     if (specifier.endsWith(".module.css")) {
-      return { url: "data:text/javascript,export default {};", shortCircuit: true };
+      return {
+        url: `data:text/javascript,export default new Proxy({}, { get: (_, key) => String(key) });`,
+        shortCircuit: true,
+      };
     }
     if (specifier === "@monara/ui" || specifier.startsWith("@/")) {
       return {
@@ -64,24 +67,18 @@ function text(node) {
   return text(node.props?.children);
 }
 
-it("shows processed emails over the known email total, rather than ambiguous emails and found", () => {
-  const summary = text(
-    summaryForTest({
-      progress: {
-        state: "running",
-        emailsRead: 37,
-        totalEmails: 67,
-        transactions: 36,
-        categorizing: 26,
-        needsReview: 10,
-        feed: [],
-        totalTransactions: null,
-      },
-    }),
-  );
-  assert.match(summary, /37 \/ 67 emails processed/);
-  assert.match(summary, /36 transactions found/);
-});
+function paragraphs(node, className) {
+  if (node === null || node === undefined || typeof node !== "object") return [];
+  if (Array.isArray(node)) return node.flatMap((child) => paragraphs(child, className));
+  const matches = node.type === "p" && node.props?.className === className ? [node] : [];
+  return matches.concat(paragraphs(node.props?.children, className));
+}
+
+function countRow(progress) {
+  const rows = paragraphs(summaryForTest({ progress }), "counts");
+  assert.equal(rows.length, 1, "summary should render exactly one count row");
+  return text(rows[0]);
+}
 
 const running = {
   state: "running",
@@ -94,15 +91,10 @@ const running = {
   totalTransactions: null,
 };
 
-it("shows classification work advancing while email processing is unchanged", () => {
-  const before = text(summaryForTest({ progress: running }));
-  const after = text(
-    summaryForTest({ progress: { ...running, categorizing: 13, needsReview: 51 } }),
-  );
-  assert.match(before, /67 emails processed · 64 transactions found/);
-  assert.match(before, /10 \/ 64 transactions processed/);
-  assert.match(after, /51 \/ 64 transactions processed/);
-  assert.doesNotMatch(before, /67 \/ 64 emails/);
+it("shows one concise transaction count row while categorizing", () => {
+  assert.equal(countRow(running), "10 / 64 transactions processed");
+  const advanced = { ...running, categorizing: 13, needsReview: 51 };
+  assert.equal(countRow(advanced), "51 / 64 transactions processed");
 });
 
 it("uses only currently imported transactions when extraction overlaps categorization", () => {
@@ -113,11 +105,19 @@ it("uses only currently imported transactions when extraction overlaps categoriz
     categorizing: 14,
     needsReview: 54,
   };
-  const summary = text(summaryForTest({ progress: growing }));
-  assert.match(summary, /70 emails processed · 68 transactions found/);
-  assert.match(summary, /54 \/ 68 transactions processed/);
+  assert.equal(countRow(growing), "54 / 68 transactions processed");
   assert.equal(percentForTest(growing), null);
   assert.equal(percentForTest({ ...growing, totalEmails: 70 }), null);
+});
+
+it("shows a provisional email count when discovery is incomplete", () => {
+  const progress = { ...running, categorizing: 0, totalEmails: 67, totalEmailsFinal: false };
+  assert.equal(countRow(progress), "67 / 67 emails processed (found so far)");
+});
+
+it("shows only the email counter after discovery reaches its final total", () => {
+  const progress = { ...running, categorizing: 0, totalEmails: 65, totalEmailsFinal: true };
+  assert.equal(countRow(progress), "67 / 65 emails processed");
 });
 
 it("lets terminal review results complete with a full bar and an exit action", () => {
@@ -125,6 +125,7 @@ it("lets terminal review results complete with a full bar and an exit action", (
   const summary = text(summaryForTest({ progress: completed }));
   assert.match(summary, /All caught up/);
   assert.doesNotMatch(summary, /Categorizing your transactions/);
+  assert.equal(countRow(completed), "64 transactions imported");
   assert.equal(percentForTest(completed), 100);
   const step = ImportStep({ progress: completed, onNext() {} });
   assert.match(text(step.props.actions), /Explore Monara/);

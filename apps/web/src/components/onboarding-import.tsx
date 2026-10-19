@@ -70,19 +70,18 @@ function hasCounts(progress: ImportProgress) {
 }
 
 function countsLine(progress: ImportProgress) {
+  const categorizing = progress.categorizing ?? 0;
+  if (progress.state === "running" && progress.transactions !== null && categorizing > 0) {
+    const processed = Math.max(0, progress.transactions - categorizing);
+    return `${processed} / ${progress.transactions} transactions processed`;
+  }
+
   const total = progress.totalEmails === null ? "" : ` / ${progress.totalEmails}`;
   const provisional =
     progress.totalEmails !== null && !progress.totalEmailsFinal && progress.state !== "completed"
       ? " (found so far)"
       : "";
-  return `${progress.emailsRead}${total} emails processed${provisional} · ${progress.transactions} transactions found`;
-}
-
-function classificationLine(progress: ImportProgress): string | null {
-  if (progress.state !== "running" || progress.transactions === null || !progress.categorizing)
-    return null;
-  const processed = Math.max(0, progress.transactions - progress.categorizing);
-  return `${processed} / ${progress.transactions} transactions processed`;
+  return `${progress.emailsRead}${total} emails processed${provisional}`;
 }
 
 function summaryText(progress: ImportProgress): string {
@@ -94,9 +93,9 @@ function summaryText(progress: ImportProgress): string {
 
 function summaryCounts(progress: ImportProgress): string | null {
   if (progress.state === "failed") return null;
-  if (hasCounts(progress)) return countsLine(progress);
   if (progress.state === "completed" && progress.transactions !== null)
     return `${progress.transactions} transactions imported`;
+  if (hasCounts(progress)) return countsLine(progress);
   return null;
 }
 
@@ -125,7 +124,7 @@ const staggeredRows = 8;
 function ImportRow({ item, index }: { item: ImportedTransaction; index: number }) {
   const { formatRupiah } = useAmountDisplay();
   const sign = item.kind === "income" ? "+" : item.kind === "expense" ? "−" : "";
-  const category = item.category ?? "Uncategorized";
+  const category = item.category ?? "Misc";
   const style = { "--row-index": Math.min(index, staggeredRows) } as CSSProperties;
   return (
     <li className={styles.row} data-kind={item.kind} style={style}>
@@ -248,7 +247,6 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
 function ImportSummary({ progress }: { progress: ImportProgress }) {
   const { title } = copy[progress.state];
   const counts = summaryCounts(progress);
-  const classification = classificationLine(progress);
   return (
     <div className={styles.top}>
       <div>
@@ -259,11 +257,6 @@ function ImportSummary({ progress }: { progress: ImportProgress }) {
           {summaryText(progress)}
         </p>
         {counts ? <p className={styles.counts}>{counts}</p> : null}
-        {classification ? (
-          <p className={styles.counts} role="status">
-            {classification}
-          </p>
-        ) : null}
       </div>
       <div aria-hidden className={styles.avatar}>
         <OnboardingAvatar scene={avatarScene[progress.state]} tight />

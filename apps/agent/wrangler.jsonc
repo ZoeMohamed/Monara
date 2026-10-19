@@ -24,7 +24,7 @@
     "consumers": [
       {
         "queue": "monara-gmail-jobs",
-        // Parse jobs carry at most 5 emails to leave room for activity checks before
+        // Parse jobs carry at most 3 emails to leave room for activity checks before
         // each provider call. Busy models yield to the queue instead of retrying inline.
         // Older, larger jobs are split by the consumer before doing provider work.
         "max_batch_size": 1,
@@ -37,7 +37,7 @@
         "max_retries": 3
       },
       {
-        // One job per invocation keeps five cold business lookups below the
+        // One job per invocation keeps three cold business lookups below the
         // subrequest budget. Five invocations preserve the previous upper bound
         // of five parallel jobs without sharing one invocation's request limit.
         "queue": "monara-merchant-jobs",

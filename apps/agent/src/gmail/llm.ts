@@ -1,10 +1,11 @@
 const REQUEST_TIMEOUT_MS = 60_000;
 /**
- * Caps every answer. The results are small JSON objects, and Azure counts a request
- * against its tokens-per-minute limit as prompt plus this cap, so leaving it unset
- * spends the model's whole output limit on every call.
+ * Explicit import budgets can reserve more room for reasoning and complete JSON.
+ * Azure accounts for the requested cap in its rate limit, so other callers keep
+ * their existing default unless they request the larger budget.
  */
-const MAX_OUTPUT_TOKENS = 2_000;
+const DEFAULT_OUTPUT_TOKENS = 2_000;
+const MAX_OUTPUT_TOKENS = 32_000;
 /** A wait the provider asks for that is this short is waited out in the same call. */
 const MAX_INLINE_WAIT_MS = 10_000;
 const MAX_INLINE_RETRIES = 2;
@@ -12,8 +13,8 @@ const MAX_INLINE_RETRIES = 2;
 const DEFAULT_BUSY_WAIT_MS = 2_000;
 /** Reasoning tokens count against the cap too, so a reasoning model gets this much more. */
 const REASONING_TOKEN_ALLOWANCE = 2_000;
-/** gpt-5 and o-series models reason before answering; their names start like this. */
-const REASONING_MODEL = /^(openai\/)?(gpt-5|o[1-9])/i;
+/** GPT reasoning generations and o-series names support explicit reasoning effort. */
+const REASONING_MODEL = /^(openai\/)?(gpt-[56]|o[1-9])/i;
 const REASONING_EFFORTS = new Set(["none", "minimal", "low", "medium", "high"]);
 
 type Fetcher = (input: string, init: RequestInit) => Promise<Response>;
@@ -23,7 +24,7 @@ export interface LlmConfig {
   apiKey: string;
   model: string;
   /**
-   * How hard a reasoning model thinks. Unset means "low" for a gpt-5 or o-series model
+   * How hard a reasoning model thinks. Unset means "low" for a gpt-5, gpt-6 or o-series model
    * name and nothing for others; set it for an Azure deployment named differently.
    */
   reasoningEffort?: string;
@@ -31,6 +32,8 @@ export interface LlmConfig {
   sleep?: (ms: number) => Promise<void>;
   /** Queue consumers retry durably instead of spending extra subrequests inline. */
   maxInlineRetries?: 0;
+  /** Per-attempt timeout; Gmail imports explicitly reserve 120 seconds. */
+  requestTimeoutMs?: number;
 }
 
 /**
@@ -72,7 +75,7 @@ export interface JsonCompletionRequest {
   imageUrl?: string;
   schemaName: string;
   schema: Record<string, unknown>;
-  /** A lower cap for answers known to be short; Azure counts it against its rate limit. */
+  /** Completion budget including reasoning, capped at 32,000 tokens. */
   maxOutputTokens?: number;
 }
 
@@ -147,10 +150,12 @@ export function createLlmClient(config: LlmConfig) {
 
   /** The output cap, under the name this provider takes, and the reasoning effort. */
   function limits(request: JsonCompletionRequest): Record<string, unknown> {
-    const answer = Math.min(request.maxOutputTokens ?? MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS);
-    const cap =
+    const answer = Math.min(request.maxOutputTokens ?? DEFAULT_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS);
+    const cap = Math.min(
       answer +
-      (reasoningEffort === null || reasoningEffort === "none" ? 0 : REASONING_TOKEN_ALLOWANCE);
+        (reasoningEffort === null || reasoningEffort === "none" ? 0 : REASONING_TOKEN_ALLOWANCE),
+      MAX_OUTPUT_TOKENS,
+    );
     if (isOpenRouter) {
       return reasoningEffort === null
         ? { max_tokens: cap }
@@ -193,7 +198,7 @@ export function createLlmClient(config: LlmConfig) {
             json_schema: { name: request.schemaName, strict: true, schema: request.schema },
           },
         }),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(config.requestTimeoutMs ?? REQUEST_TIMEOUT_MS),
       });
     } catch {
       throw new LlmError("The model could not be reached.", null, "unavailable");

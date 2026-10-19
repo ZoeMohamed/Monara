@@ -31,8 +31,8 @@ const MERCHANT_QUEUE_MAX_RETRIES = 5;
 const MERCHANT_BUSY_RETRY_SECONDS = 15;
 const QUEUE_SEND_BATCH_LIMIT = 100;
 const MANUAL_FALLBACK_MESSAGE_LIMIT = 5;
-// Five emails leave room for activity checks before each read and model call.
-const SAFE_PARSE_BATCH_SIZE = 5;
+// Three emails fit the 15-minute wall limit even with one lane and 120-second model calls.
+const SAFE_PARSE_BATCH_SIZE = 3;
 
 /** Logs ids and outcomes only; never email content, financial values, or credentials. */
 function logEvent(level: "info" | "error", fields: Record<string, unknown>): void {
@@ -93,7 +93,9 @@ function createLlm(env: Env) {
     baseUrl: env.LLM_BASE_URL ?? "",
     apiKey: env.LLM_API_KEY ?? "",
     model: env.LLM_MODEL ?? "",
-    reasoningEffort: env.LLM_REASONING_EFFORT,
+    // Import-specific settings do not change WhatsApp or conversation defaults.
+    reasoningEffort: "medium",
+    requestTimeoutMs: 120_000,
   });
 }
 

@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(34);
+select plan(35);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001, the
 -- accounts "Daily bank" (4242) and "Daily wallet" (1234), and default Categories.
@@ -43,8 +43,8 @@ set local role service_role;
 
 select is(
   public.gmail_auto_confirm_confidence(),
-  0.95::numeric,
-  'Gmail auto-confirm uses the conservative 95 percent confidence boundary'
+  0.5::numeric,
+  'Gmail auto-confirm uses the agreed 50 percent confidence boundary'
 );
 
 -- Discovery.
@@ -257,16 +257,20 @@ select is(
 select is(
   (select applied
     from public.set_imported_category(
-      (select item.id
-        from public.transactions as item
-        join public.processed_gmail_messages as source
-          on source.id = item.processed_gmail_message_id
-        where source.gmail_message_id = 'inst-004'
-          and item.transaction_type = 'exclusion'),
-      'Food & Drinks'
-    )),
-  false,
-  'a categorization result cannot mutate an exclusion'
+      (select item.id from public.transactions item
+        join public.processed_gmail_messages source on source.id=item.processed_gmail_message_id
+        where source.gmail_message_id='inst-004' and item.transaction_type='exclusion'),
+      'Food & Drinks')),
+  true,
+  'a legacy unknown category still applies the automatic typed fallback'
+);
+select is(
+  (select row(item.transaction_type,category.slug)::text from public.transactions item
+    join public.processed_gmail_messages source on source.id=item.processed_gmail_message_id
+    join public.categories category on category.id=item.category_id
+    where source.gmail_message_id='inst-004' and item.source_item_index=2),
+  row('exclusion','misc-exclusion')::text,
+  'an incompatible legacy category never changes exclusion financial treatment'
 );
 
 select public.record_gmail_extraction(
@@ -294,7 +298,7 @@ select public.record_gmail_extraction(
   $$[{"kind": "expense", "merchantName": "Boundary Low",
       "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
-      "accountHint": "****4242", "accountLastFour": "4242", "confidence": 0.9495}]$$::jsonb,
+      "accountHint": "****4242", "accountLastFour": "4242", "confidence": 0.4995}]$$::jsonb,
   p_sender_verified => true,
   p_institution_key => 'BCA_CC'
 );
@@ -304,7 +308,7 @@ select public.record_gmail_extraction(
   $$[{"kind": "income", "merchantName": "Boundary Exact",
       "money": {"amountMinor": "10000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
-      "accountHint": "****4242", "accountLastFour": "4242", "confidence": 0.95}]$$::jsonb,
+      "accountHint": "****4242", "accountLastFour": "4242", "confidence": 0.5}]$$::jsonb,
   p_sender_verified => true,
   p_institution_key => 'BCA_CC'
 );
@@ -330,7 +334,7 @@ select is(
     row('inst-008', 'pending', true)::text,
     row('inst-009', 'pending', false)::text
   ],
-  'below 95 percent and missing original dates never qualify'
+  'below 50 percent and missing original dates never qualify'
 );
 
 select is(
@@ -381,8 +385,8 @@ select is(
       join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
       where source.gmail_message_id = 'inst-003'),
     'Not a category')),
-  false,
-  'a name that is not one of the owner''s Categories changes nothing'
+  true,
+  'legacy fallback reports the actual applied result'
 );
 
 create temporary table qualified on commit drop as
@@ -393,16 +397,16 @@ create temporary table qualified on commit drop as
 select is(
   (select row(applied, review_status)::text
     from public.set_imported_category((select id from qualified), 'Not a category')),
-  row(false, 'pending')::text,
-  'a qualifying transaction without a confident Category stays pending review'
+  row(true, 'confirmed')::text,
+  'a qualifying transaction without a specific Category uses automatic Misc'
 );
 update public.transactions set description = 'Edited by the User'
   where id = (select id from qualified);
 select is(
   (select row(applied, review_status)::text
     from public.set_imported_category((select id from qualified), 'Food & Drinks')),
-  row(false, 'pending')::text,
-  'a qualifying transaction the User edited is never confirmed by categorization'
+  row(false, 'confirmed')::text,
+  'a confirmed transaction the User edited is not overwritten by categorization'
 );
 
 -- New imports do not learn from previously confirmed history.

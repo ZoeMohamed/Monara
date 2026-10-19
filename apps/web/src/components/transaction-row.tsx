@@ -21,8 +21,7 @@ function transactionRowModel(
   ]
     .filter(Boolean)
     .join(" · ");
-  const category =
-    transaction.category ?? (transaction.kind === "income" ? "Income" : "Uncategorized");
+  const category = transaction.category ?? "Misc";
   const sign = transaction.kind === "income" ? "+" : transaction.kind === "expense" ? "−" : "";
 
   return {

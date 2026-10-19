@@ -33,21 +33,27 @@ export function demoEditorCategories(budgets: Budget[]): Category[] {
     ...incomeCategoryPresets.map((preset) => ({ ...preset, kind: "income" as const })),
     ...exclusionCategoryPresets.map((preset) => ({ ...preset, kind: "exclusion" as const })),
   ];
-  const names = [
-    ...new Set([
-      ...presets.map((preset) => preset.name),
-      ...budgets.map((budget) => budget.category),
-    ]),
+  const extraNames = [...new Set(budgets.map((budget) => budget.category))].filter(
+    (name) => !presets.some((preset) => preset.kind === "expense" && preset.name === name),
+  );
+  const choices = [
+    ...presets,
+    ...extraNames.map((name, index) => ({
+      name,
+      kind: "expense" as const,
+      slug: `demo-category-${presets.length + index + 1}`,
+      icon: "auto",
+    })),
   ];
-  return names.map((name, index) => ({
+  return choices.map((preset, index) => ({
     id: `c0000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-    name,
-    kind: presets.find((preset) => preset.name === name)?.kind ?? "expense",
-    slug: presets.find((preset) => preset.name === name)?.slug ?? `demo-category-${index + 1}`,
+    name: preset.name,
+    kind: preset.kind,
+    slug: preset.slug,
     icon:
-      budgets.find((budget) => budget.category === name)?.icon ??
-      presets.find((preset) => preset.name === name)?.icon ??
-      "auto",
+      (preset.kind === "expense"
+        ? budgets.find((budget) => budget.category === preset.name)?.icon
+        : undefined) ?? preset.icon,
     color: "#2865e5",
     isDefault: index < presets.length,
     isArchived: false,

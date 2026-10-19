@@ -32,8 +32,8 @@ function setup() {
 
 describe("manual Gmail sync worker boundary", () => {
   for (const attempts of [1, 2]) {
-    it(`publishes five maximal extraction emails within the invocation budget on attempt ${attempts}`, async (t) => {
-      const emails = Array.from({ length: 5 }, (_, index) => ({
+    it(`publishes three maximal extraction emails within the invocation budget on attempt ${attempts}`, async (t) => {
+      const emails = Array.from({ length: 3 }, (_, index) => ({
         processedMessageId: `00000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
         gmailMessageId: `synthetic-${index}`,
         receivedAt: "2026-10-19T00:00:00Z",
@@ -79,7 +79,10 @@ describe("manual Gmail sync worker boundary", () => {
                 messageText: "Total Rp 25.000 dibayar dengan BCA ****4242",
               },
             });
-          if (url.endsWith("/chat/completions"))
+          if (url.endsWith("/chat/completions")) {
+            const request = JSON.parse(String(init?.body));
+            assert.equal(request.reasoning_effort, "medium");
+            assert.equal(request.max_tokens, 32_000);
             return Response.json({
               choices: [
                 {
@@ -103,6 +106,7 @@ describe("manual Gmail sync worker boundary", () => {
                 },
               ],
             });
+          }
           if (url.endsWith("/record-extractions")) {
             recordCalls += 1;
             const body = JSON.parse(String(init?.body));
@@ -156,10 +160,10 @@ describe("manual Gmail sync worker boundary", () => {
         },
       );
       assert.equal(acked, true);
-      assert.equal(recordCalls, 5);
-      assert.equal(queueCalls, 5);
-      assert.equal(jobs.length, 20, "five 20-item receipts each enqueue four five-row jobs");
-      assert.equal(networkRequests, attempts === 1 ? 26 : 27);
+      assert.equal(recordCalls, 3);
+      assert.equal(queueCalls, 3);
+      assert.equal(jobs.length, 21, "three 20-item receipts each enqueue seven bounded jobs");
+      assert.equal(networkRequests, attempts === 1 ? 16 : 17);
       assert.ok(
         networkRequests + jobs.length <= 50,
         "budget also covers counting each queued message separately",
@@ -206,7 +210,7 @@ describe("manual Gmail sync worker boundary", () => {
     assert.equal(acked, true);
     assert.deepEqual(
       jobs.map((job) => (job.kind === "gmail.parse" ? job.emails.length : 0)),
-      [5, 3],
+      [3, 3, 2],
     );
     assert.deepEqual(
       jobs.flatMap((job) => (job.kind === "gmail.parse" ? job.emails : [])),
@@ -356,6 +360,163 @@ describe("manual Gmail sync worker boundary", () => {
 });
 
 describe("merchant queue provider backoff", () => {
+  it("settles a truncated model response for review on the first delivery", async (t) => {
+    const transactionId = "00000000-0000-4000-8000-000000000030";
+    let acked = false;
+    let retries = 0;
+    let categoryWrites = 0;
+    let retryReports = 0;
+    t.mock.method(
+      globalThis,
+      "fetch",
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/resolve-imported-transaction"))
+          return Response.json({
+            merchantName: null,
+            location: null,
+            needsCategory: true,
+            categoryNames: [],
+            kind: "expense",
+            flowDirection: "out",
+            counterpartyName: "Synthetic Recipient",
+            counterpartyType: "person",
+            categories: [
+              {
+                id: "00000000-0000-4000-8000-000000000040",
+                name: "Food",
+                kind: "expense",
+                slug: "food",
+                isDefault: true,
+              },
+            ],
+          });
+        if (url.endsWith("/chat/completions"))
+          return Response.json({
+            choices: [{ finish_reason: "length", message: { content: '{"categoryId":' } }],
+          });
+        if (url.endsWith("/set-imported-category")) {
+          const body = JSON.parse(String(init?.body));
+          assert.deepEqual(body, { transactionId, categoryId: null, kind: null, confidence: null });
+          categoryWrites += 1;
+          return Response.json({ applied: true });
+        }
+        if (url.endsWith("/report-processing-retry")) {
+          retryReports += 1;
+          return Response.json({});
+        }
+        throw new Error("Unexpected synthetic request");
+      },
+    );
+    await consumeMerchantJobs(
+      {
+        messages: [
+          {
+            body: { kind: "merchant.categorize", transactionId },
+            attempts: 1,
+            ack() {
+              acked = true;
+            },
+            retry() {
+              retries += 1;
+            },
+          },
+        ],
+      } as unknown as MessageBatch<unknown>,
+      {
+        MONARA_BACKEND_URL: "https://backend.test",
+        MONARA_AGENT_BACKEND_SECRET: "synthetic",
+        LLM_BASE_URL: "https://llm.test",
+        LLM_API_KEY: "synthetic",
+        LLM_MODEL: "synthetic",
+        BRAVE_SEARCH_API_KEY: "synthetic",
+      },
+    );
+    assert.equal(acked, true);
+    assert.equal(retries, 0);
+    assert.equal(categoryWrites, 1);
+    assert.equal(retryReports, 0);
+  });
+
+  it("retries when the final-attempt review write fails", async (t) => {
+    const transactionId = "00000000-0000-4000-8000-000000000030";
+    let acked = false;
+    let retries = 0;
+    let categoryWrites = 0;
+    let retryReports = 0;
+    t.mock.method(
+      globalThis,
+      "fetch",
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/resolve-imported-transaction"))
+          return Response.json({
+            merchantName: null,
+            location: null,
+            needsCategory: true,
+            categoryNames: [],
+            kind: "expense",
+            flowDirection: "out",
+            counterpartyName: "Synthetic Recipient",
+            counterpartyType: "person",
+            categories: [
+              {
+                id: "00000000-0000-4000-8000-000000000040",
+                name: "Food",
+                kind: "expense",
+                slug: "food",
+                isDefault: true,
+              },
+            ],
+          });
+        if (url.endsWith("/chat/completions"))
+          return Response.json({
+            choices: [{ finish_reason: "length", message: { content: '{"categoryId":' } }],
+          });
+        if (url.endsWith("/set-imported-category")) {
+          categoryWrites += 1;
+          return new Response(null, { status: 503 });
+        }
+        if (url.endsWith("/report-processing-retry")) {
+          retryReports += 1;
+          const body = JSON.parse(String(init?.body));
+          assert.deepEqual(body, { transactionId, delaySeconds: 600 });
+          return Response.json({});
+        }
+        throw new Error("Unexpected synthetic request");
+      },
+    );
+    await consumeMerchantJobs(
+      {
+        messages: [
+          {
+            body: { kind: "merchant.categorize", transactionId },
+            attempts: 6,
+            ack() {
+              acked = true;
+            },
+            retry(options: { delaySeconds: number }) {
+              retries += 1;
+              assert.equal(options.delaySeconds, 600);
+            },
+          },
+        ],
+      } as unknown as MessageBatch<unknown>,
+      {
+        MONARA_BACKEND_URL: "https://backend.test",
+        MONARA_AGENT_BACKEND_SECRET: "synthetic",
+        LLM_BASE_URL: "https://llm.test",
+        LLM_API_KEY: "synthetic",
+        LLM_MODEL: "synthetic",
+        BRAVE_SEARCH_API_KEY: "synthetic",
+      },
+    );
+    assert.equal(acked, false);
+    assert.equal(retries, 1);
+    assert.equal(categoryWrites, 1);
+    assert.equal(retryReports, 1);
+  });
+
   it("continues provider backoff from attempts preserved by a split", async (t) => {
     let retrySeconds = 0;
     const reports: unknown[] = [];
@@ -514,7 +675,7 @@ describe("merchant queue provider backoff", () => {
     assert.deepEqual(terminalIds, [legacyId, ...transactionIds]);
     assert.equal(
       modelCalls,
-      3,
+      4,
       "one model rejection per final processing job, with no new retry budget",
     );
   });
@@ -563,9 +724,9 @@ describe("merchant queue provider backoff", () => {
     assert.equal(consumer.max_concurrency * consumer.max_batch_size, 5);
   });
   for (const failCategoryWrite of [false, true]) {
-    it(`fits five unique cold business lookups inside 50 subrequests${failCategoryWrite ? " with final write fallback" : ""}`, async (t) => {
+    it(`fits three unique cold business lookups inside 50 subrequests${failCategoryWrite ? " with final write fallback" : ""}`, async (t) => {
       const transactionIds = Array.from(
-        { length: 5 },
+        { length: 3 },
         (_, index) => `00000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
       );
       const publicNames = Object.values(brands)
@@ -661,8 +822,8 @@ describe("merchant queue provider backoff", () => {
         },
       );
       assert.equal(acked, true);
-      assert.equal(subrequests, failCategoryWrite ? 45 : 40);
-      assert.equal(setCalls, failCategoryWrite ? 10 : 5);
+      assert.equal(subrequests, failCategoryWrite ? 27 : 24);
+      assert.equal(setCalls, failCategoryWrite ? 6 : 3);
     });
   }
   it("splits older large merchant jobs before provider work to bound invocation subrequests", async (t) => {
@@ -712,7 +873,7 @@ describe("merchant queue provider backoff", () => {
     assert.equal(retried, false);
     assert.deepEqual(
       jobs.map((job) => ("transactionIds" in job ? job.transactionIds.length : 1)),
-      [5, 3],
+      [3, 3, 2],
     );
     assert.deepEqual(
       jobs.flatMap((job) => ("transactionIds" in job ? job.transactionIds : [job.transactionId])),
