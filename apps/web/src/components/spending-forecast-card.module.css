@@ -9,14 +9,9 @@
 
 .header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.header h2 {
-  font-size: 15px;
-  font-weight: 750;
 }
 
 .header > span {
@@ -159,4 +154,46 @@
 .footer {
   display: flex;
   margin-top: 14px;
+}
+
+/* On a phone the card has no box: a thick dashed rule below separates it from the next section. */
+@media (max-width: 1023.98px) {
+  .card {
+    margin: 0;
+    padding: 28px 0;
+    border: 0;
+    border-bottom: 3px dashed var(--line-strong);
+    border-radius: 0;
+    background: none;
+  }
+
+  .totals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin-top: 18px;
+    border-top: 1px solid var(--separator);
+    border-bottom: 1px solid var(--separator);
+  }
+
+  .totals > div,
+  .totals > div:last-child {
+    grid-column: auto;
+    padding: 14px 8px;
+    border-radius: 0;
+    background: none;
+  }
+
+  .totals > div:first-child {
+    padding-left: 0;
+  }
+
+  .totals > div + div {
+    border-left: 1px solid var(--separator);
+  }
+
+  .totals > div dd,
+  .totals > div:last-child dd {
+    font-size: clamp(13px, 4.4vw, 16px);
+    white-space: nowrap;
+  }
 }

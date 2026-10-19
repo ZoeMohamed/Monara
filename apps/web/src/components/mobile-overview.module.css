@@ -275,6 +275,42 @@
 
 /* Sheet ------------------------------------------------------------- */
 
+/* One column on a phone, in the order a person reads Home. The two columns of the wide layout
+   dissolve here so every card can take its place in a single list. */
+.columns {
+  display: flex;
+  flex-direction: column;
+}
+
+.lead,
+.aside {
+  display: contents;
+}
+
+.slotForecast {
+  order: 1;
+}
+
+.slotAttention {
+  order: 2;
+}
+
+.slotSafe {
+  order: 3;
+}
+
+.slotFlags {
+  order: 4;
+}
+
+.slotActivity {
+  order: 5;
+}
+
+.slotWhere {
+  order: 6;
+}
+
 .sheet {
   position: relative;
   z-index: 2;
@@ -339,12 +375,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.quiet {
-  color: var(--muted);
-  font-size: 15px;
-  font-weight: 650;
 }
 
 .monthPicker {
@@ -564,12 +594,6 @@
   background: var(--surface-secondary);
 }
 
-.todayCard h2 {
-  font-size: 18px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-}
-
 .todayCard p {
   margin-top: 2px;
   color: var(--muted);
@@ -646,45 +670,8 @@
 }
 
 .featureName {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: flex;
   margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.featureIcon {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--accent);
-}
-
-.featureIcon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.featureIcon[data-tone="green"] {
-  color: var(--success);
-}
-
-.featureIcon[data-tone="violet"] {
-  color: #7356c7;
-}
-
-.featureIcon[data-tone="amber"] {
-  color: #a86b12;
-}
-
-.featureIcon[data-tone="red"] {
-  color: var(--danger);
 }
 
 .featureGrid strong {
@@ -714,9 +701,6 @@
 
 .cardLabel {
   margin: 18px 18px 0;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 650;
 }
 
 .alerts {
@@ -1277,5 +1261,45 @@
 
   60% {
     background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+}
+
+/* Home on a phone ----------------------------------------------------------
+   No card boxes: sections sit on the page and a thick dashed rule separates them, so each
+   one gets the full width. Desktop keeps its tinted cards. */
+@media (max-width: 1023.98px) {
+  .sheet [data-home-card] {
+    margin: 0;
+    padding: 28px 0;
+    border: 0;
+    border-bottom: 3px dashed var(--line-strong);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .sheet .slotWhere [data-home-card] {
+    border-bottom: 0;
+  }
+
+  .sheet .cardLabel {
+    margin: 0 0 6px;
+  }
+
+  .sheet .alerts {
+    margin: 4px -10px 0;
+    padding: 0;
+  }
+
+  .sheet .pace {
+    background: var(--surface-tertiary);
+  }
+
+  .sheet .safeAmount strong {
+    font-size: 38px;
+  }
+
+  .sheet .activityItem {
+    border-radius: 0;
   }
 }

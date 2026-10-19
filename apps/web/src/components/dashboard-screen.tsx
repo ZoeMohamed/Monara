@@ -24,12 +24,10 @@ export function DashboardScreen({
   openTransaction,
   openTransactions,
   openReview,
-  openReports,
   openBudgets,
   openChat,
   openAdd,
   openConnectGmail,
-  openAccounts,
 }: {
   setup?: ReactNode;
   month: string;
@@ -45,12 +43,10 @@ export function DashboardScreen({
   openTransaction: (transaction: Transaction) => void;
   openTransactions?: () => void;
   openReview: () => void;
-  openReports: () => void;
   openBudgets: () => void;
   openChat: (prompt?: string) => void;
   openAdd?: () => void;
   openConnectGmail?: () => void;
-  openAccounts?: () => void;
 }) {
   const presentationModel = overviewModel(
     transactions,
@@ -93,8 +89,6 @@ export function DashboardScreen({
       openBudgets={openBudgets}
       openChat={openChat}
       openConnectGmail={openConnectGmail}
-      openAccounts={openAccounts}
-      openReports={openReports}
       openReview={openReview}
       openTransaction={openTransaction}
       openTransactions={openTransactions}
