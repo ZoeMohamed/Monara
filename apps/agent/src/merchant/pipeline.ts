@@ -66,9 +66,20 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
     const key = `${merchantKey(merchantName)}\u0000${categoryNames.join("\u0000")}`;
     let lookup = lookups.get(key);
     if (!lookup) {
-      lookup = merchantSummary(merchantName).then((summary) =>
-        chooseCategory(llm, { merchantName, summary, categoryNames }),
-      );
+      lookup = merchantSummary(merchantName).then(async (summary) => {
+        await backend.resolveImportedTransaction(transactionId);
+        return chooseCategory(
+          {
+            completeJson: async (request) => {
+              await backend.resolveImportedTransaction(transactionId);
+              return llm.completeJson(request, () =>
+                backend.resolveImportedTransaction(transactionId),
+              );
+            },
+          },
+          { merchantName, summary, categoryNames },
+        );
+      });
       lookups.set(key, lookup);
     }
     const categoryName = await lookup;

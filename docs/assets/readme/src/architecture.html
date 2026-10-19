@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Monara runtime architecture</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    #w { width: 1500px; height: 1110px; background: #f5fbff; border-radius: 32px; }
+    header { position: absolute; left: 56px; top: 38px; }
+    h1 { margin: 9px 0 0; font-size: 36px; font-weight: 850; }
+    .node { position: absolute; padding: 24px; background: #fff; border: 2px solid var(--line); border-radius: 22px; }
+    .main { border-color: #3171fd; box-shadow: 0 8px 24px #1b427908; }
+    .node h2 { margin: 7px 0 9px; font-size: 29px; font-weight: 850; line-height: 1.1; }
+    .node p { margin: 0; font-size: 21px; line-height: 1.45; color: var(--muted); }
+    .node .tag { font-size: 16px; font-weight: 800; letter-spacing: 1.4px; color: #2865e5; text-transform: uppercase; }
+    .worker p + p { margin-top: 12px; }
+    .rule { position: absolute; left: 56px; top: 886px; width: 1388px; padding: 23px 28px; border-radius: 18px; background: #e2eeff; font-size: 22px; line-height: 1.4; }
+    .foot { position: absolute; left: 58px; bottom: 25px; font-size: 18px; color: var(--muted); }
+    svg { position: absolute; inset: 0; pointer-events: none; }
+    .edge { stroke: #3171fd; stroke-width: 3; fill: none; marker-end: url(#arrow); stroke-linecap: round; stroke-linejoin: round; }
+    .label { font-size: 18px; font-weight: 750; fill: #405b83; }
+  </style>
+</head>
+<body><main id="w">
+  <header><span class="eyebrow">Runtime architecture</span><h1>One backend owns the financial ledger.</h1></header>
+  <section class="node" style="left:56px;top:177px;width:350px;height:166px"><span class="tag">Browser</span><h2>Monara PWA</h2><p>Overview, review, budgets,<br>reports and in-app chat</p></section>
+  <section class="node main" style="left:575px;top:177px;width:350px;height:166px"><span class="tag">Vercel · apps/web</span><h2>Next.js backend</h2><p>Identity, ownership checks,<br>services and repositories</p></section>
+  <section class="node" style="left:1094px;top:177px;width:350px;height:166px"><span class="tag">Supabase</span><h2>Auth + Postgres</h2><p>Google sign-in, financial<br>records and row-level security</p></section>
+
+  <section class="node" style="left:56px;top:510px;width:350px;height:150px"><span class="tag">Messaging</span><h2>WhatsApp / Kapso</h2><p>Verified number linking</p></section>
+  <section class="node" style="left:56px;top:701px;width:350px;height:150px"><span class="tag">Email</span><h2>Gmail / Composio</h2><p>Separately authorized mailbox</p></section>
+  <section class="node main worker" style="left:575px;top:482px;width:350px;height:370px"><span class="tag">Cloudflare · apps/agent</span><h2>Shared agent runtime</h2><p>Conversation + backend tools<br>WhatsApp Durable Objects</p><p>Gmail + merchant queues<br>Extraction + categorization</p><p>Scheduled Gmail catch-up<br>Deferred budget alerts</p></section>
+  <section class="node" style="left:1094px;top:510px;width:350px;height:150px"><span class="tag">Model provider</span><h2>LLM</h2><p>Conversation and extraction</p></section>
+  <section class="node" style="left:1094px;top:701px;width:350px;height:150px"><span class="tag">Merchant enrichment</span><h2>Brave Search</h2><p>Merchant-name lookup</p></section>
+
+  <svg width="1500" height="1110" viewBox="0 0 1500 1110" aria-hidden="true">
+    <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto-start-reverse"><path d="M0 0L9 4.5L0 9Z" fill="#3171fd"/></marker></defs>
+    <path class="edge" d="M408 260H571"/><text class="label" x="490" y="244" text-anchor="middle">HTTPS</text>
+    <path class="edge" d="M927 260H1090"/><text class="label" x="1010" y="244" text-anchor="middle">Owned data</text>
+    <path class="edge" d="M659 345V478"/><text class="label" x="642" y="399" text-anchor="end">Chat + Gmail jobs</text>
+    <path class="edge" d="M842 480V347"/><text class="label" x="858" y="426">Backend operations</text>
+    <path class="edge" d="M408 585H571" marker-start="url(#arrow)"/><text class="label" x="491" y="566" text-anchor="middle">Messages</text>
+    <path class="edge" d="M573 776H410" marker-start="url(#arrow)"/><text class="label" x="491" y="758" text-anchor="middle">Mail reads</text>
+    <path class="edge" d="M927 585H1090" marker-start="url(#arrow)"/>
+    <path class="edge" d="M927 776H1090" marker-start="url(#arrow)"/>
+  </svg>
+  <div class="rule"><strong>Every financial write goes through Next.js.</strong> Agent operations use a shared bearer secret.<br>Supabase Auth verifies web sessions; agent calls carry the runtime's User context.<br>Backend services enforce ownership. Service-role database calls bypass RLS.</div>
+  <div class="foot">Implemented source boundaries. External integrations require configured services and live acceptance.</div>
+</main></body>
+</html>

@@ -5,6 +5,7 @@ The Next.js backend lives here. Financial writes belong to these routes, includi
 | Route | Implemented boundary |
 | --- | --- |
 | `POST /api/finance/operations/[operation]` | Verifies the Google session, validates the operation input, and calls owned financial account, category, transaction/review, budget, dashboard and notification list/read/dismiss services. |
+| `GET, POST, DELETE /api/goals/[goalId]/image` | Verifies goal ownership, issues a short-lived private read URL, and uploads or removes a validated goal image. |
 | `POST /api/agent/operations/[operation]` | Requires the server-only Agent/backend credential, validates the trusted runtime caller and input, and rechecks resource ownership in the financial service. Transaction/budget deletion requires a bound destructive confirmation. |
 | `/api/gmail/connections`, `/api/gmail/connections/[connectionId]`, `/api/gmail/connections/callback` | Owned Gmail list, separate consent, callback verification, and disconnect lifecycle. |
 | `GET/POST /api/gmail/connections/[connectionId]/discovery` | Reads or reruns owned mailbox discovery; the institution child route accepts or dismisses a discovered account. |
@@ -12,6 +13,10 @@ The Next.js backend lives here. Financial writes belong to these routes, includi
 | `GET /api/chat/conversations`, `GET /api/chat/conversations/[conversationId]` | Lists the signed-in User's saved chats, newest first, and reads the newest 200 messages of one. Another User's chat reads as empty. |
 | `GET /api/brands?q=` | Public, session-free search over the bundled Simple Icons (CC0) logo catalog for the logo picker. `/brand-icons/[slug].svg` serves the matching mark from the same bundle, so no third-party logo service is called. |
 | `GET /api/health/supabase` | Reports configuration/connectivity availability without returning credentials. |
+| `POST /api/profile/deletion` | Requires the existing verified Google session, same origin, exact `DELETE MY ACCOUNT` phrase and acknowledgement. Atomically fences the User and erases product data, clears Auth cookies, and returns a status receipt for durable cleanup. |
+| `GET /api/profile/deletion` | Reads only pending/completed status through the signed HttpOnly receipt; it never grants account access or drives retries. |
+| `GET /api/profile/status` | Returns an opaque live-identity key or null so connected browsers discard stale rendered records and setup state. |
+| `POST /api/agent/account-deletions/process`, `POST /api/agent/users/active` | Agent-credential-only cleanup wake-up and live-User check. The matching Worker `/users/purge` endpoint deletes per-User WhatsApp storage and alarms. |
 
 Google Auth start, callback, and sign-out handlers live under `src/app/auth`. Gmail background ingestion has queue and scheduled handlers in `apps/agent`; configured provider acceptance remains unverified. WhatsApp linking uses `whatsapp/link` (signed-in User) and `agent/whatsapp/resolve-sender` (Agent credential). `agent/reminders/dispatch` (Agent credential) sends WhatsApp budget alerts held back by quiet hours. Durable Undo executes stored, owned receipts. Personal Reminder scheduling, delivery preferences and recurring-bill operations remain incomplete. The Agent may list Reminders; mark-read and dismiss are web-only. The backend allowlist is authoritative.
 

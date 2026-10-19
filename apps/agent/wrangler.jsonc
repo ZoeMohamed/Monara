@@ -19,10 +19,9 @@
     "consumers": [
       {
         "queue": "monara-gmail-jobs",
-        // A parse job carries up to 10 emails, and a busy model can be asked again twice per
-        // email, so one job per invocation stays under the Workers Free limit of 50 outside
-        // requests: 10 Composio reads + 30 model calls + 2 backend calls + 1 queue send = 43.
-        // On Workers Paid this can go up.
+        // Parse jobs carry at most 5 emails to leave room for activity checks before
+        // each provider call. Busy models yield to the queue instead of retrying inline.
+        // Older, larger jobs are split by the consumer before doing provider work.
         "max_batch_size": 1,
         // Every hop used to wait up to 5 s for a batch to fill; onboarding makes two hops.
         "max_batch_timeout": 1,
@@ -49,6 +48,6 @@
     // Every 15 minutes: deliver budget alerts held by quiet hours. Mondays 02:00 UTC (09:00
     // Jakarta): refresh spending forecasts.
     // Daily at 01:00 UTC (08:00 WIB): new-bank discovery and a catch-up import per mailbox.
-    "crons": ["*/15 * * * *", "0 1 * * *", "0 2 * * 1"]
+    "crons": ["* * * * *", "*/15 * * * *", "0 1 * * *", "0 2 * * 1"]
   }
 }

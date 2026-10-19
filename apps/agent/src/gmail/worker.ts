@@ -25,6 +25,8 @@ const GMAIL_QUEUE_MAX_RETRIES = 3;
 const MERCHANT_BUSY_RETRY_SECONDS = 15;
 const QUEUE_SEND_BATCH_LIMIT = 100;
 const MANUAL_FALLBACK_MESSAGE_LIMIT = 5;
+// Five emails leave room for activity checks before each read and model call.
+const SAFE_PARSE_BATCH_SIZE = 5;
 
 /** Logs ids and outcomes only; never email content, financial values, or credentials. */
 function logEvent(level: "info" | "error", fields: Record<string, unknown>): void {
@@ -69,6 +71,7 @@ function createBackend(env: Env) {
 
 function createLlm(env: Env) {
   return createLlmClient({
+    maxInlineRetries: 0,
     baseUrl: env.LLM_BASE_URL ?? "",
     apiKey: env.LLM_API_KEY ?? "",
     model: env.LLM_MODEL ?? "",
@@ -113,7 +116,10 @@ function createPipeline(env: Env) {
     enqueue: (jobs) => sendInBatches(queue, jobs),
     enqueueLater: (jobs, delaySeconds) => sendInBatches(queue, jobs, delaySeconds),
     enqueueMerchant: (jobs) => sendInBatches(merchantQueue, jobs),
-    parseBatchSize: smallCount(env.GMAIL_PARSE_BATCH_SIZE),
+    parseBatchSize: Math.min(
+      smallCount(env.GMAIL_PARSE_BATCH_SIZE) ?? SAFE_PARSE_BATCH_SIZE,
+      SAFE_PARSE_BATCH_SIZE,
+    ),
     parseConcurrency: smallCount(env.GMAIL_PARSE_CONCURRENCY),
   });
 }
@@ -251,6 +257,20 @@ export async function consumeGmailJobs(batch: MessageBatch<unknown>, env: Env): 
       const job = gmailJobSchema.safeParse(message.body);
       if (!job.success) {
         logEvent("error", { event: "gmail.job_invalid" });
+        message.ack();
+        return;
+      }
+      // Old queued batches can predate the activity checks. Split before any
+      // provider work so they remain within the runtime's subrequest budget.
+      if (job.data.kind === "gmail.parse" && job.data.emails.length > SAFE_PARSE_BATCH_SIZE) {
+        const smaller: GmailJob[] = [];
+        for (let index = 0; index < job.data.emails.length; index += SAFE_PARSE_BATCH_SIZE) {
+          smaller.push({
+            ...job.data,
+            emails: job.data.emails.slice(index, index + SAFE_PARSE_BATCH_SIZE),
+          });
+        }
+        await sendInBatches(requireQueue(env), smaller);
         message.ack();
         return;
       }

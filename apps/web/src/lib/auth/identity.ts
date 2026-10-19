@@ -1,4 +1,6 @@
 export interface AuthenticatedProfile {
+  /** Opaque identity-specific key for browser setup, never a resource authorization key. */
+  setupKey?: string;
   displayName: string;
   email: string | null;
   initials: string;

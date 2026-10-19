@@ -122,6 +122,7 @@ export async function runGmailDiscovery(
     connectedAccountId: connection.composioConnectedAccountId,
   };
   const list = async (senders: readonly string[], pageToken: string | null) => {
+    await repository.resolveConnection(connectionId);
     try {
       return await reader.listMessages(mailbox, {
         query: `${DISCOVERY_WINDOW} ${fromClause(senders)}`,
@@ -129,12 +130,12 @@ export async function runGmailDiscovery(
         maxResults: PAGE_SIZE,
       });
     } catch (error) {
-      if (
-        mayBeAuthorizationLoss(error) &&
-        !(await reader.isConnectionUsable(mailbox.connectedAccountId))
-      ) {
-        await repository.markError(connectionId);
-        throw connectionNotActive();
+      if (mayBeAuthorizationLoss(error)) {
+        await repository.resolveConnection(connectionId);
+        if (!(await reader.isConnectionUsable(mailbox.connectedAccountId))) {
+          await repository.markError(connectionId);
+          throw connectionNotActive();
+        }
       }
       throw error;
     }

@@ -1,0 +1,33 @@
+@font-face {
+  font-family: "Nunito Sans";
+  src: url("../../../../apps/web/public/fonts/nunito-sans-latin-variable.woff2") format("woff2");
+  font-weight: 200 900;
+}
+
+:root {
+  --brand: #3171fd;
+  --ink: #192d52;
+  --muted: #566b83;
+  --line: #dae8f3;
+  --pale: #edf7ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Nunito Sans", sans-serif;
+}
+#w {
+  position: relative;
+  overflow: hidden;
+}
+.eyebrow {
+  color: #2865e5;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
