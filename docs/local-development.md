@@ -105,3 +105,21 @@ Direct pushes to `main`, when permitted, also trigger the connected production d
 | Production URL | <https://monara-finance.vercel.app> |
 
 If a deployment fails, open its GitHub Vercel status to inspect the build log. Worker deployment is separate from the web deployment. Never commit tokens, deployment hooks, or other secrets. These instructions describe the workflow; they do not authorize deployment or external provisioning.
+
+### Worker deployment
+
+The CI workflow deploys `monara-agent` after every successful `main` push, once lint, types, dependency checks, tests, database checks, both platform builds/checks, React Doctor, and workflow lint all pass. Pull requests never deploy. Main runs are not interrupted midway through a release; a revision superseded on `main` is skipped before upload.
+
+Configure these entries in the GitHub `production` environment:
+
+| Kind | Name | Purpose |
+| --- | --- | --- |
+| Secret | `CLOUDFLARE_API_TOKEN` | Access to deploy the existing Worker, configure its existing queues and schedules, and read deployment metadata. |
+| Variable | `CLOUDFLARE_ACCOUNT_ID` | The account containing the production Worker and its resources. |
+| Variable | `MONARA_AGENT_URL` | The production Worker's HTTPS origin. |
+
+The release uses the pinned local Wrangler with `--keep-vars`. Existing dashboard variables and Worker secrets survive; local `.dev.vars` and `.env.cloudflare.local` are never uploaded as production secrets. Bindings, queue settings, and all three cron schedules come from `apps/agent/wrangler.jsonc`.
+
+Post-deployment verification checks that the intended commit serves 100 percent of traffic, all cron schedules are registered, health succeeds, and the deletion endpoint rejects an unauthenticated request. It sends no User ID and cannot purge data. These checks establish deployed wiring, not completed provider cleanup or a successful Google sign-in. If verification fails, the CI deployment job fails; investigate before rerunning because an upload may already have succeeded. Cloudflare schedule changes may take up to 15 minutes to propagate.
+
+For an authorized manual release, load the project-local Cloudflare credentials into that command's environment, run `pnpm --filter @monara/agent exec wrangler deploy --keep-vars --message "main <full-commit-sha>"`, then run `node scripts/verify-agent-deployment.mjs` with `MONARA_DEPLOYMENT_MESSAGE` set to the same message and the variables above. Do not use development provider credentials as production Worker secrets.

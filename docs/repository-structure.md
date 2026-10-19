@@ -114,7 +114,7 @@ Database validation runs separately through `pnpm db:check --reset` and the loca
 
 GitHub reads `.git-blame-ignore-revs` automatically; locally run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to skip the Biome formatting commit in `git blame`.
 
-Direct pushes to `main` stay allowed, so the strictness lives in the PR checks and the local hooks; branch protection and required checks are GitHub repository settings and are not configured by the repository. CI runner images are pinned (`ubuntu-24.04`, `windows-2025`) so a GitHub `-latest` migration cannot break the gates; bump them deliberately. Deployment stays outside CI. See [the development harness decision](adr/0002-development-harness.md).
+Direct pushes to `main` stay allowed, so the strictness lives in the PR checks and the local hooks; branch protection and required checks are GitHub repository settings and are not configured by the repository. CI runner images are pinned (`ubuntu-24.04`, `windows-2025`) so a GitHub `-latest` migration cannot break the gates; bump them deliberately. After all main CI gates pass, CI deploys the Cloudflare Worker and verifies its version, schedules, and endpoints. Vercel web deployment and Supabase migration deployment use their separate workflows. See the [team deployment workflow](local-development.md#worker-deployment) and [development harness decision](adr/0002-development-harness.md).
 
 ## Environment configuration
 
