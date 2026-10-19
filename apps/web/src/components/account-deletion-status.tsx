@@ -78,14 +78,12 @@ export function AccountDeletionStatus({
         Original emails and messages already delivered through WhatsApp stay unchanged.
         Provider-held copies and backups follow their own retention rules.
       </p>
-      {state.status === "complete" && (
-        <Link
-          className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-accent-foreground"
-          href="/sign-in"
-        >
-          Back to sign in
-        </Link>
-      )}
+      <Link
+        className="mt-6 inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-5 text-sm font-semibold text-accent-foreground"
+        href="/"
+      >
+        Back to home
+      </Link>
       <Link
         className="mt-4 inline-flex min-h-11 items-center text-sm font-medium text-accent"
         href="/privacy"
