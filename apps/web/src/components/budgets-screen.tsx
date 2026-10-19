@@ -2,12 +2,11 @@
 
 import type { Category, FinancialInsights } from "@monara/contracts";
 import { Button, Card, Chip, ProgressBar } from "@monara/ui";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
 
 import { BillCalendar } from "@/components/bill-calendar";
 import { BrandMark } from "@/components/brand-mark";
-import { BudgetDetails } from "@/components/budget-details";
 import budgetStyles from "@/components/budgets-screen.module.css";
 import { CategorySpendingGuide } from "@/components/category-spending-guide";
 import { CategoryAvatar } from "@/components/category-symbol";
@@ -93,12 +92,140 @@ function BudgetProgress({
   );
 }
 
+function BudgetRowAction({
+  budget,
+  onEdit,
+  onDelete,
+  description,
+  children,
+}: {
+  budget: Budget;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  description: string;
+  children: ReactNode;
+}) {
+  const descriptionId = `budget-${budget.id}-summary`;
+  return (
+    <li>
+      <div className="flex items-center gap-1">
+        <Button
+          aria-describedby={descriptionId}
+          aria-label={`Edit ${budget.category} budget`}
+          className={`${budgetStyles.budgetRow} flex-1`}
+          onPress={onEdit}
+          variant="ghost"
+        >
+          <span className="sr-only" id={descriptionId}>
+            {description}
+          </span>
+          {children}
+        </Button>
+        {onDelete && (
+          <Button
+            aria-label={`Delete ${budget.category} budget`}
+            className="h-10 w-10 shrink-0 rounded-full text-muted"
+            isIconOnly
+            onPress={onDelete}
+            variant="ghost"
+          >
+            <Icon className="h-4 w-4" name="delete" />
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function UpcomingBudgetContent({ budget }: { budget: Budget }) {
+  const { formatRupiah } = useAmountDisplay();
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">
+          {budget.category}
+        </h3>
+        <strong className="text-sm tabular-nums">{formatRupiah(budget.limit)}</strong>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted">
+          Starts {budget.startsOn ? formatDay(budget.startsOn) : "later"}
+        </p>
+        <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+      </div>
+    </>
+  );
+}
+
+function ActiveBudgetContent({
+  budget,
+  usage,
+  color,
+  today,
+}: {
+  budget: Budget;
+  usage: ReturnType<typeof budgetUsage>;
+  color: string;
+  today: string;
+}) {
+  const { formatRupiah } = useAmountDisplay();
+  const over = usage.state === "over";
+  const remaining = over ? -usage.remaining : usage.remaining;
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold [overflow-wrap:anywhere]">
+          <CategoryAvatar
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-secondary"
+            icon={budget.icon}
+            iconClassName="h-4 w-4"
+            name={budget.category}
+            size={36}
+            style={{ color }}
+          />
+          {budget.category}
+        </h3>
+        <span className={`text-xs font-medium ${textByState[usage.state]}`}>
+          {labelByState[usage.state]}
+        </span>
+      </div>
+      <div className="mt-3">
+        <BudgetProgress
+          color={color}
+          label={`${budget.category} budget used`}
+          percent={usage.percent}
+          state={usage.state}
+        />
+      </div>
+      <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-2 text-xs tabular-nums">
+        <p className="min-w-0 text-muted [overflow-wrap:anywhere]">
+          <span className="font-medium text-foreground">{formatRupiah(usage.used)}</span> of{" "}
+          {formatRupiah(usage.limit)} spent · {usage.percent}%
+        </p>
+        <p
+          className={`min-w-0 text-sm font-bold [overflow-wrap:anywhere] ${over ? "text-danger" : "text-foreground"}`}
+        >
+          {formatRupiah(remaining)} {over ? "over" : "left"}
+        </p>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted">
+          {formatDay(usage.periodStartsOn ?? budget.startsOn ?? today)} –{" "}
+          {formatDay(usage.periodEndsOn ?? usage.periodStartsOn ?? budget.startsOn ?? today)}
+        </p>
+        <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+      </div>
+    </div>
+  );
+}
+
 function BudgetRow({
   budget,
   transactions,
   month,
   index,
   onEdit,
+  onDelete,
   today,
 }: {
   budget: Budget;
@@ -106,104 +233,30 @@ function BudgetRow({
   month: string;
   index: number;
   onEdit?: () => void;
+  onDelete?: () => void;
   today: string;
 }) {
   const { formatRupiah } = useAmountDisplay();
   const usage = budgetUsage(transactions, budget, month, today);
   const color = categoryColor(budget.category, index);
-  const descriptionId = `budget-${budget.id}-summary`;
   const description = usage.periodStartsOn
     ? `${formatRupiah(usage.used)} of ${formatRupiah(usage.limit)} spent. ${formatRupiah(usage.remaining < 0n ? -usage.remaining : usage.remaining)} ${usage.remaining < 0n ? "over" : "left"}. ${formatDay(usage.periodStartsOn)} to ${formatDay(usage.periodEndsOn ?? usage.periodStartsOn)}.`
     : `${formatRupiah(budget.limit)} limit. ${budget.startsOn ? `Starts ${formatDay(budget.startsOn)}.` : "Not started yet."}`;
   if (usage.periodStartsOn === null)
     return (
-      <li>
-        <Button
-          aria-describedby={descriptionId}
-          aria-label={`View ${budget.category} budget details`}
-          className={budgetStyles.budgetRow}
-          onPress={onEdit}
-          variant="ghost"
-        >
-          <span className="sr-only" id={descriptionId}>
-            {description}
-          </span>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">
-              {budget.category}
-            </h3>
-            <strong className="text-sm tabular-nums">{formatRupiah(budget.limit)}</strong>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted">
-              Starts {budget.startsOn ? formatDay(budget.startsOn) : "later"}
-            </p>
-            <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
-          </div>
-        </Button>
-      </li>
+      <BudgetRowAction
+        budget={budget}
+        description={description}
+        onDelete={onDelete}
+        onEdit={onEdit}
+      >
+        <UpcomingBudgetContent budget={budget} />
+      </BudgetRowAction>
     );
   return (
-    <li>
-      <Button
-        aria-describedby={descriptionId}
-        aria-label={`View ${budget.category} budget details`}
-        className={budgetStyles.budgetRow}
-        onPress={onEdit}
-        variant="ghost"
-      >
-        <span className="sr-only" id={descriptionId}>
-          {description}
-        </span>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold [overflow-wrap:anywhere]">
-              <CategoryAvatar
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-secondary"
-                icon={budget.icon}
-                iconClassName="h-4 w-4"
-                name={budget.category}
-                size={36}
-                style={{ color }}
-              />
-              {budget.category}
-            </h3>
-            <span className={`text-xs font-medium ${textByState[usage.state]}`}>
-              {labelByState[usage.state]}
-            </span>
-          </div>
-          <div className="mt-3">
-            <BudgetProgress
-              color={color}
-              label={`${budget.category} budget used`}
-              percent={usage.percent}
-              state={usage.state}
-            />
-          </div>
-          <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-2 text-xs tabular-nums">
-            <p className="min-w-0 text-muted [overflow-wrap:anywhere]">
-              <span className="font-medium text-foreground">{formatRupiah(usage.used)}</span> of{" "}
-              {formatRupiah(usage.limit)} spent · {usage.percent}%
-            </p>
-            <p
-              className={`min-w-0 text-sm font-bold [overflow-wrap:anywhere] ${usage.state === "over" ? "text-danger" : "text-foreground"}`}
-            >
-              {usage.state === "over"
-                ? `${formatRupiah(-usage.remaining)} over`
-                : `${formatRupiah(usage.remaining)} left`}
-            </p>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted">
-              {usage.periodStartsOn && usage.periodEndsOn
-                ? `${formatDay(usage.periodStartsOn)} – ${formatDay(usage.periodEndsOn)}`
-                : "Not started yet"}
-            </p>
-            <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
-          </div>
-        </div>
-      </Button>
-    </li>
+    <BudgetRowAction budget={budget} description={description} onDelete={onDelete} onEdit={onEdit}>
+      <ActiveBudgetContent budget={budget} color={color} today={today} usage={usage} />
+    </BudgetRowAction>
   );
 }
 
@@ -339,65 +392,28 @@ function BudgetGauge({
   );
 }
 
-function BudgetSummaryProgress({
-  summary,
-  elapsedPercent,
-  cadence,
-}: {
-  summary: BudgetSummary;
-  elapsedPercent?: number;
-  cadence: Budget["cadence"];
-}) {
-  const state =
-    summary.totalUsed > summary.totalLimit
-      ? "over"
-      : summary.totalLimit > 0n && summary.totalUsed === summary.totalLimit
-        ? "at-limit"
-        : "on-track";
-  return (
-    <div className="mt-4">
-      <BudgetProgress
-        elapsedPercent={elapsedPercent}
-        label={`${cadence === "weekly" ? "Weekly" : "Monthly"} category budgets used`}
-        periodLabel={cadence === "weekly" ? "budget week" : "budget month"}
-        percent={summary.usedPercent}
-        state={state}
-      />
-      <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted tabular-nums">
-        <span>{summary.usedPercent}% of budgets used</span>
-        {elapsedPercent !== undefined && <span>Time elapsed · {elapsedPercent}%</span>}
-      </div>
-    </div>
-  );
-}
-
 function BudgetSummaryCard({
   budgets,
   summary,
   cadence,
-  onCreate,
 }: {
   budgets: Budget[];
   summary: BudgetSummary;
   cadence: Budget["cadence"];
-  onCreate: () => void;
 }) {
   const { formatRupiah } = useAmountDisplay();
   const elapsedPercent = summary.elapsedPercent;
   if (budgets.length === 0)
     return (
-      <Card className="block min-w-0 gap-0 rounded-2xl border border-border bg-surface-secondary p-5">
+      <div className="px-5 py-4">
         <h2 className="text-base font-semibold">
           {cadence === "weekly" ? "Weekly" : "Monthly"} budgets
         </h2>
-        <Button className="mt-4 min-h-11 rounded-full" onPress={onCreate} variant="secondary">
-          <Icon className="h-4 w-4" name="plus" />
-          Add {cadence} budget
-        </Button>
-      </Card>
+        <p className="mt-1 text-sm text-muted">Set a limit to start tracking this period.</p>
+      </div>
     );
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border p-5 sm:p-6">
+    <div className="px-5 pb-2 pt-5 sm:px-6">
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-medium text-muted">
@@ -435,20 +451,6 @@ function BudgetSummaryCard({
           </dd>
         </div>
       </dl>
-      <details className="group mt-3 text-sm text-muted">
-        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-lg font-medium focus-visible:outline-2 focus-visible:outline-focus">
-          Details
-          <Icon
-            className="h-4 w-4 transition-transform group-open:rotate-180 motion-reduce:transition-none"
-            name="chevron-down"
-          />
-        </summary>
-        <BudgetSummaryProgress
-          cadence={cadence}
-          elapsedPercent={elapsedPercent}
-          summary={summary}
-        />
-      </details>
       {summary.overBudget > BigInt(0) ? (
         <div className="mt-4 rounded-xl bg-warning-soft p-3 text-sm leading-6 text-warning-soft-foreground">
           <p>
@@ -460,7 +462,7 @@ function BudgetSummaryCard({
           <p className="mt-1">Review spending or adjust a category limit.</p>
         </div>
       ) : null}
-    </Card>
+    </div>
   );
 }
 
@@ -469,6 +471,7 @@ function CategoryBudgets({
   budgets,
   month,
   onOpenBudget,
+  onDeleteBudget,
   today,
   onCreate,
   cadence,
@@ -478,27 +481,23 @@ function CategoryBudgets({
   month: string;
   cadence: Budget["cadence"];
   onOpenBudget: (budget: Budget) => void;
+  onDeleteBudget?: (budget: Budget) => void;
   today: string;
   onCreate: () => void;
 }) {
   return (
-    <section aria-labelledby={`${cadence}-category-budgets`} className="mt-4">
-      <div className="flex items-center justify-between gap-3">
+    <section
+      aria-labelledby={`${cadence}-category-budgets`}
+      className={budgetStyles.categorySection}
+    >
+      <div className="flex items-baseline justify-between gap-3 px-5 pb-2 pt-4">
         <h3 className="text-sm font-semibold" id={`${cadence}-category-budgets`}>
-          Categories <span className="ml-1 text-xs font-normal text-muted">{budgets.length}</span>
+          Categories
         </h3>
-        <Button
-          aria-label={`Add ${cadence} budget`}
-          className="min-h-11 rounded-full px-4 text-sm"
-          onPress={onCreate}
-          variant="secondary"
-        >
-          <Icon className="h-4 w-4" name="plus" />
-          Add
-        </Button>
+        <span className="text-xs text-muted">{budgets.length}</span>
       </div>
-      <Card className={`${budgetStyles.categoryCard} mt-2`}>
-        <ul className={budgetStyles.budgetList}>
+      {budgets.length > 0 && (
+        <ul className={`${budgetStyles.budgetList} px-2`}>
           {budgets.map((budget, index) => (
             <BudgetRow
               budget={budget}
@@ -508,57 +507,23 @@ function CategoryBudgets({
               transactions={transactions}
               today={today}
               onEdit={() => onOpenBudget(budget)}
+              onDelete={onDeleteBudget ? () => onDeleteBudget(budget) : undefined}
             />
           ))}
         </ul>
-      </Card>
+      )}
+      <div className="border-t border-separator p-3">
+        <Button
+          aria-label={`Add ${cadence} budget`}
+          className="min-h-11 w-full rounded-full text-sm"
+          onPress={onCreate}
+          variant="secondary"
+        >
+          <Icon className="h-4 w-4" name="plus" />
+          Add {cadence} budget
+        </Button>
+      </div>
     </section>
-  );
-}
-
-function BudgetDetailsPanel({
-  budget,
-  transactions,
-  month,
-  today,
-  onClose,
-  onEdit,
-  onDelete,
-}: {
-  budget?: Budget;
-  transactions: Transaction[];
-  month: string;
-  today: string;
-  onClose: () => void;
-  onEdit: () => void;
-  onDelete?: (id: string) => void;
-}) {
-  if (!budget) return null;
-  const usage = budgetUsage(transactions, budget, month, today);
-  return (
-    <BudgetDetails
-      record={{
-        name: budget.backend?.name ?? budget.category,
-        category: budget.category,
-        icon: budget.icon,
-        cadence: budget.cadence,
-        limit: BigInt(budget.limit),
-        warningPercent: budget.warningPercent,
-        startsOn: budget.startsOn,
-        status: usage.periodStartsOn ? labelByState[usage.state] : "Not started",
-        usage: usage.periodStartsOn ? usage : undefined,
-      }}
-      onClose={onClose}
-      onEdit={onEdit}
-      onDelete={
-        onDelete
-          ? () => {
-              onClose();
-              onDelete(budget.id);
-            }
-          : undefined
-      }
-    />
   );
 }
 
@@ -650,19 +615,12 @@ export function BudgetsScreen({
   const monthly = periods[1].summary;
   const [editing, setEditing] = useState<Budget | null>(null);
   const [creating, setCreating] = useState<Budget["cadence"] | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     message: string;
     category?: string;
     undo?: { budgetId: string; before: DemoBudgetChanges; after: DemoBudgetChanges };
     error?: string;
   } | null>(null);
-  const feedbackRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!feedback) return;
-    feedbackRef.current?.scrollIntoView({ block: "center" });
-    feedbackRef.current?.focus({ preventScroll: true });
-  }, [feedback]);
   const saveDemoBudget = (budgetId: string, changes: DemoBudgetChanges) => {
     const current = budgets.find((budget) => budget.id === budgetId);
     if (!current || !onEditBudget)
@@ -699,7 +657,7 @@ export function BudgetsScreen({
       current.icon !== after.icon
     ) {
       setFeedback({
-        message: "This budget changed again. Open its latest details before making another change.",
+        message: "This budget changed again. Open it to review the latest settings.",
         category: feedback.category,
       });
       return;
@@ -714,16 +672,13 @@ export function BudgetsScreen({
       setFeedback({
         ...feedback,
         error:
-          "We couldn’t undo that change. Your current budget is still in place. Try again or open its details.",
+          "We couldn’t undo that change. Your current budget is still in place. Try again or edit it.",
       });
     }
   };
-  const detail = budgets.find((budget) => budget.id === detailId);
-  const editDetail = () => {
-    if (!detail) return;
-    setDetailId(null);
-    if (onRequestEditBudget) onRequestEditBudget(detail.id);
-    else setEditing(detail);
+  const openBudget = (budget: Budget) => {
+    if (onRequestEditBudget) onRequestEditBudget(budget.id);
+    else setEditing(budget);
   };
   const suggested = bills.filter((bill) => bill.status === "suggested");
   const active = bills
@@ -745,12 +700,7 @@ export function BudgetsScreen({
       </div>
 
       {feedback && (
-        <div
-          className="mt-4 rounded-2xl border border-border bg-surface p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          ref={feedbackRef}
-          role="status"
-          tabIndex={-1}
-        >
+        <div className={budgetStyles.budgetToast} role="status">
           <p className="text-sm leading-6">{feedback.message}</p>
           {feedback.error && (
             <p className="mt-2 text-sm text-danger" role="alert">
@@ -765,18 +715,6 @@ export function BudgetsScreen({
                 variant="secondary"
               >
                 Undo change
-              </Button>
-            )}
-            {feedback.category && (
-              <Button
-                className="min-h-11 rounded-full"
-                onPress={() => {
-                  const budget = budgets.find((item) => item.category === feedback.category);
-                  if (budget) setDetailId(budget.id);
-                }}
-                variant="ghost"
-              >
-                View budget
               </Button>
             )}
             <Button
@@ -797,33 +735,27 @@ export function BudgetsScreen({
         <div className="min-w-0">
           <div className={budgetStyles.periodGrid}>
             {periods.map(({ cadence, summary }) => (
-              <section
-                className="min-w-0"
+              <Card
+                className={budgetStyles.periodGroup}
                 aria-label={`${cadence === "weekly" ? "Weekly" : "Monthly"} budgets`}
                 key={cadence}
               >
-                <BudgetSummaryCard
-                  budgets={summary.budgets}
+                <BudgetSummaryCard budgets={summary.budgets} cadence={cadence} summary={summary} />
+                <CategoryBudgets
                   cadence={cadence}
-                  summary={summary}
+                  budgets={summary.budgets}
+                  month={month}
+                  transactions={transactions}
+                  today={today}
+                  onOpenBudget={openBudget}
+                  onDeleteBudget={
+                    onRequestDeleteBudget ? (budget) => onRequestDeleteBudget(budget.id) : undefined
+                  }
                   onCreate={() =>
                     onRequestCreateBudget ? onRequestCreateBudget(cadence) : setCreating(cadence)
                   }
                 />
-                {summary.budgets.length > 0 && (
-                  <CategoryBudgets
-                    cadence={cadence}
-                    budgets={summary.budgets}
-                    month={month}
-                    transactions={transactions}
-                    today={today}
-                    onOpenBudget={(budget) => setDetailId(budget.id)}
-                    onCreate={() =>
-                      onRequestCreateBudget ? onRequestCreateBudget(cadence) : setCreating(cadence)
-                    }
-                  />
-                )}
-              </section>
+              </Card>
             ))}
           </div>
           <CategorySpendingGuide
@@ -847,15 +779,6 @@ export function BudgetsScreen({
           </div>
         )}
       </div>
-      <BudgetDetailsPanel
-        budget={detail}
-        transactions={transactions}
-        month={month}
-        today={today}
-        onClose={() => setDetailId(null)}
-        onEdit={editDetail}
-        onDelete={onRequestDeleteBudget}
-      />
       {editing && onEditBudget && (
         <DemoBudgetEditor
           budget={editing}

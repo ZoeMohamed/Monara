@@ -1325,12 +1325,10 @@ function BudgetSavedNotice({
   result,
   finance,
   onDismiss,
-  onView,
 }: {
   result: BudgetMutationResult;
   finance: FinanceManagerProps;
   onDismiss: () => void;
-  onView?: () => void;
 }) {
   const [state, setState] = useState({
     pending: false,
@@ -1338,11 +1336,6 @@ function BudgetSavedNotice({
     unavailable: false,
     error: null as string | null,
   });
-  const noticeRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    noticeRef.current?.scrollIntoView({ block: "center" });
-    noticeRef.current?.focus({ preventScroll: true });
-  }, []);
   const inFlight = useRef(false);
   const undo = async () => {
     if (inFlight.current || finance.refreshRequired || state.undone || state.unavailable) return;
@@ -1379,12 +1372,7 @@ function BudgetSavedNotice({
     }
   };
   return (
-    <div
-      className={`${styles.recovery} mb-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`}
-      ref={noticeRef}
-      role="status"
-      tabIndex={-1}
-    >
+    <div className={styles.savedToast} role="status">
       <p className="text-sm leading-6">
         {state.undone
           ? "Budget change undone. Your transactions haven’t changed."
@@ -1415,11 +1403,6 @@ function BudgetSavedNotice({
             variant="secondary"
           >
             {state.pending ? "Undoing…" : "Undo change"}
-          </Button>
-        )}
-        {onView && (
-          <Button className="min-h-11" isDisabled={state.pending} onPress={onView} variant="ghost">
-            View budget
           </Button>
         )}
         <Button className="min-h-11" isDisabled={state.pending} onPress={onDismiss} variant="ghost">
@@ -1604,11 +1587,6 @@ export function BudgetManager(props: BudgetManagerProps) {
           result={saved}
           finance={props}
           onDismiss={() => setSaved(null)}
-          onView={
-            budgets.some((budget) => budget.id === saved.budget.id)
-              ? () => setDetailId(saved.budget.id)
-              : undefined
-          }
         />
       )}
       <ManagedBudgetList

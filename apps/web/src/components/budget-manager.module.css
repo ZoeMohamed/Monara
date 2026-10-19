@@ -194,6 +194,21 @@
   background: var(--surface-secondary);
 }
 
+.savedToast {
+  position: fixed;
+  z-index: 60;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: calc(6.5rem + env(safe-area-inset-bottom));
+  left: max(1rem, env(safe-area-inset-left));
+  max-width: 34rem;
+  margin-inline: auto;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--surface);
+  padding: 1rem;
+  box-shadow: 0 12px 36px rgb(16 35 65 / 18%);
+}
+
 @media (min-width: 640px) {
   .form {
     padding: 1.5rem;

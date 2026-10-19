@@ -3,17 +3,22 @@
   min-width: 0;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 21.25rem), 1fr));
   align-items: start;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 
-.categoryCard {
+.periodGroup {
   display: block;
   min-width: 0;
   gap: 0;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 1.5rem;
-  padding: 0.5rem;
+  padding: 0;
+  background: var(--surface);
+}
+
+.categorySection {
+  border-top: 1px solid var(--separator);
 }
 
 .budgetList > li + li {
@@ -42,6 +47,33 @@
   transition: background-color 180ms ease;
 }
 
+.budgetToast {
+  position: fixed;
+  z-index: 60;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: calc(6.5rem + env(safe-area-inset-bottom));
+  left: max(1rem, env(safe-area-inset-left));
+  max-width: 34rem;
+  margin-inline: auto;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--surface);
+  padding: 1rem;
+  box-shadow: 0 12px 36px rgb(16 35 65 / 18%);
+  animation: toast-enter 180ms ease-out;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .budgetRow:hover,
 .budgetRow:focus-visible,
 .budgetRow[data-hovered="true"],
@@ -68,7 +100,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .budgetRow {
+  .budgetRow,
+  .budgetToast {
     transition: none;
+    animation: none;
   }
 }
