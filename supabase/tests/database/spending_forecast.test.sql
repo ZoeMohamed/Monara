@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(15);
+select plan(16);
 
 insert into auth.users (id, email)
 values
@@ -33,6 +33,12 @@ select lives_ok(
     ]'
   )$$,
   'the backend saves a forecast with its items'
+);
+
+select lives_ok(
+  $$update public.forecast_runs set source = 'daily'
+    where user_id = 'f0000000-0000-4000-8000-000000000001'$$,
+  'the backend accepts the nightly source'
 );
 
 select is(

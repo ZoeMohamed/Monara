@@ -1,4 +1,35 @@
-/** A User the weekly run might refresh, and the forecast they have (null when none). */
+/** A missing forecast or one generated before Jakarta midnight needs a catch-up run. */
+export function forecastNeedsRefresh(
+  forecast: { generatedAt: string; month: string } | null,
+  today: string,
+): boolean {
+  return (
+    !forecast ||
+    forecast.month < today.slice(0, 7) ||
+    Date.parse(forecast.generatedAt) < Date.parse(`${today}T00:00:00+07:00`)
+  );
+}
+
+/** A stale Home forecast gets one automatic attempt per day, unless its last attempt failed. */
+export function shouldAutomaticallyRefreshForecast(
+  forecast: { generatedAt: string; month: string } | null,
+  today: string,
+  attemptedDate: string | null,
+): boolean {
+  return attemptedDate !== today && forecastNeedsRefresh(forecast, today);
+}
+
+/** Keep successful automatic refreshes rate-limited for the day, but allow retries after errors. */
+export function settleAutomaticForecastAttempt(
+  attemptedDate: string | null,
+  today: string,
+  succeeded: boolean,
+): string | null {
+  if (succeeded) return today;
+  return attemptedDate === today ? null : attemptedDate;
+}
+
+/** A User the nightly run might refresh, and the forecast they have (null when none). */
 export interface ForecastDueCandidate {
   userId: string;
   generatedAt: string | null;
@@ -10,7 +41,7 @@ export interface ForecastDueCandidate {
  * The Users whose forecast is missing, older than `staleBefore`, or for a month that is over,
  * with no forecast first and then the oldest, cut to `limit`. A forecast for a past month is due
  * however new it is, because every date in it has already gone by. Ordering matters: a fixed
- * order would refresh the same first Users every week and starve the rest.
+ * order would refresh the same first Users every night and starve the rest.
  */
 export function dueForecastUsers(
   candidates: ForecastDueCandidate[],

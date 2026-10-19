@@ -4,7 +4,7 @@ Owner: Abhip. Features: F17. Status: Draft.
 
 ## Purpose
 
-The forecast tells a User what they are likely to spend for the rest of the month, before they spend it. It lists the payments they are expected to make, such as Spotify on the 25th or chicken rice every Monday, Wednesday and Friday, each with a confidence, and it totals what is expected this week and this month. It runs weekly and on demand, so a demo can trigger it by hand. A forecast is a prediction. It is always labelled as expected, and it never counts toward confirmed spending, income or Budget usage.
+The forecast tells a User what they are likely to spend for the rest of the month, before they spend it. It lists the payments they are expected to make, such as Spotify on the 25th or chicken rice every Monday, Wednesday and Friday, each with a confidence, and it totals what is expected this week and this month. It runs nightly at 00:00 Jakarta time and on demand, so a demo can trigger it by hand. A forecast is a prediction. It is always labelled as expected, and it never counts toward confirmed spending, income or Budget usage.
 
 ## How it works
 
@@ -34,7 +34,9 @@ flowchart LR
 
 **Totals.** Expected this week (to Sunday), expected this month (to the last day of the month), confirmed spending so far, and the projected month end, which is the confirmed total plus what is still expected this month.
 
-**A forecast for a past month.** Every date in it has gone by, so the Home card replaces it once, automatically, when it opens and sees a forecast from an earlier month, and the weekly run treats it as due however new it is.
+**Home projection.** Home shows a graph immediately, before a specific-payment forecast exists. It adds a daily pace from the previous 30 complete days of confirmed IDR expenses to confirmed month-to-date spending. Short histories use the available calendar span, including zero-spend days; a first-day-only history uses today's spending provisionally. Limited history is labelled and an empty ledger still shows the chart. Specific predictions replace matching historical pattern contributions in the daily pace before being added, preventing double counting while retaining incidental same-merchant purchases. The chart and Home totals share this combined calculation; backend forecast totals and History remain totals of specific payments.
+
+**A missing or stale forecast.** Home creates a missing forecast and refreshes one generated before the current Jakarta midnight or for a past month. It also re-reads when ledger data changes or the app regains focus. Failed automatic attempts retain the manual button.
 
 **Did it come true?** When a prediction's date has passed, it is matched to a confirmed expense from the same merchant, made on or after the day the forecast was made, within 3 days and within 35% of the amount. A payment from before the forecast cannot fulfil it. A matched prediction shows as Paid and leaves the remaining total. The forecast reports how many earlier predictions came true. Nothing is stored for this, so it is worked out when the forecast is read.
 
@@ -44,8 +46,8 @@ flowchart LR
 | --- | --- |
 | Tables `forecast_runs` and `forecast_items`, and `replace_forecast` | `supabase/migrations/20261019150000_spending_forecast.sql` |
 | Service and repository | `packages/core/src/forecast-service.ts`, `supabase-forecast-repository.ts` |
-| Routes | `apps/web/src/app/api/forecast/route.ts` (read and refresh), `api/agent/forecast/refresh/route.ts` (weekly run) |
-| Weekly trigger | Worker cron, Mondays 02:00 UTC (09:00 Jakarta) |
+| Routes | `apps/web/src/app/api/forecast/route.ts` (read and refresh), `api/agent/forecast/refresh/route.ts` (nightly run) |
+| Nightly trigger | Worker cron, daily 17:00 UTC (00:00 Jakarta) |
 | Agent tools | `get_spending_forecast` and `refresh_spending_forecast` (read tier) |
 | Interface | A Home card with this week, this month, month end, the list of payments still ahead with confidence chips and a Refresh button (`spending-forecast-card.tsx`), and a Forecast filter in History that lists every expected payment of the rest of the month by day, drawn faint because none has happened (`forecast-ledger.tsx`). The public demo shows a sample |
 
@@ -57,21 +59,21 @@ flowchart LR
 - **One forecast per User, replaced atomically.** Keeping history would add storage and a screen nobody asked for. A single database function replaces the old forecast in one transaction, so a refresh never leaves half a forecast.
 - **Realization is derived, not stored.** The match is cheap to compute on read, and storing it would mean writing on every new transaction.
 - **The model runs in the Agent worker.** The backend could have called the model itself. The worker already holds the model credentials, so no new secret is needed on the web host.
-- **Weekly run through the Worker cron.** The cron already exists for Reminders and Gmail. A separate scheduler would be new infrastructure.
+- **Nightly run through the Worker cron.** The Worker already schedules Reminders and Gmail. A separate scheduler would be new infrastructure.
 
 ## Security and risks
 
 - The forecast tables are backend-only: row-level security is forced and the browser has no grant, like the chat history tables. Every query includes the User's id, and an item cannot point at another User's run (composite key).
-- Forecast routes need a signed-in session and a same-origin request. The weekly route and the model route need the shared agent secret. A refresh made twice within 20 seconds returns the forecast just made, so a double tap does not call the model twice, and a User is limited to 10 refreshes a minute.
+- Forecast routes need a signed-in session and a same-origin request. The nightly route and the model route need the shared agent secret. A refresh made twice within 20 seconds returns the forecast just made, so a double tap does not call the model twice, and a User is limited to 10 refreshes a minute.
 - The model receives merchant names, dates and amounts but not the User's identity. Merchant names are treated as untrusted text in the prompt, and the answer is validated and limited to the candidates that were sent.
 - The Agent presents a forecast as expected, never as spent. Forecast tools only read and recompute. They do not change the User's records.
 
 Open risks:
 
 - Merchant names reach the model provider, as they do in extraction. The provider's retention terms are not assessed here.
-- The rules need history. A new User with under two months of confirmed expenses gets an empty forecast, and the card says so.
+- The rules need history. A new User may have no specific payment predictions. Home still shows the available baseline projection and labels limited history.
 - Matching is by merchant name, so a merchant paid under two different names is treated as two merchants.
-- The weekly run refreshes up to 25 Users per call, Users without a forecast first and then the oldest, so no one is starved. With more than 25 stale Users it takes several weeks to catch up.
+- The nightly run examines active Users in UUID cursor batches of 25, with five operations concurrent. The Worker continues batches within a 12-minute deadline and logs failures or unfinished work. Home catches up stale forecasts; very large populations or failures can delay nightly completion.
 - The forecast was not measured on real spending, only on synthetic history (see below).
 
 ## How to verify

@@ -11,6 +11,7 @@ import { type ForecastState, useForecast } from "@/components/use-forecast";
 import { demoForecastFor } from "@/data/demo-forecast";
 import { formatDay, type Transaction } from "@/data/demo-ledger";
 import { financialMonth } from "@/data/finance-analytics";
+import { projectSpending } from "@/lib/forecast/projection";
 import { upcomingForecastItems } from "@/lib/forecast/upcoming";
 import styles from "./spending-forecast-card.module.css";
 
@@ -143,6 +144,7 @@ function RefreshButton({
         <Icon aria-hidden name="sparkle" />
         {refreshing ? "Working it out…" : hasForecast ? "Refresh forecast" : "Make a forecast"}
       </Button>
+      <p className={styles.note}>Forecast will update every night at 00.00</p>
     </div>
   );
 }
@@ -153,13 +155,31 @@ interface Context {
   today: string;
 }
 
-function Body({ forecast, context }: { forecast: ForecastSummary; context: Context }) {
+function Body({ forecast, context }: { forecast: ForecastSummary | null; context: Context }) {
   const days = financialMonth(context.transactions, context.month, context.today).days;
+  const items = forecast?.month === context.month ? forecast.items : [];
+  const projection = projectSpending(days, items, context.today, context.transactions);
+  if (!projection) return null;
+  const money = (amount: bigint) => ({ amountMinor: String(amount), currency: "IDR" as const });
   return (
     <>
-      <ForecastProjectionChart days={days} items={forecast.items} today={context.today} />
-      <Totals totals={forecast.totals} />
-      <Items all={forecast.items} today={context.today} />
+      <ForecastProjectionChart projection={projection} />
+      <p className={styles.note}>
+        {projection.historyDays === 0
+          ? "Add expenses to build your projection"
+          : projection.historyDays < 30
+            ? `Limited history: based on ${projection.historyDays} ${projection.historyDays === 1 ? "day" : "days"} of recorded expenses.`
+            : "Based on the previous 30 days of recorded expenses."}
+      </p>
+      <Totals
+        totals={{
+          weekRemaining: money(projection.weekRemaining),
+          monthRemaining: money(projection.monthRemaining),
+          monthSpentSoFar: money(projection.spentSoFar),
+          projectedMonthEnd: money(projection.projected),
+        }}
+      />
+      {forecast ? <Items all={items} today={context.today} /> : null}
     </>
   );
 }
@@ -179,7 +199,6 @@ function DemoCard({ context }: { context: Context }) {
         <SectionTitle icon="pulse" id={titleId}>
           Spending forecast
         </SectionTitle>
-        <span>Sample data</span>
       </div>
       <Body context={context} forecast={demoForecastFor(spent)} />
     </section>
@@ -188,7 +207,7 @@ function DemoCard({ context }: { context: Context }) {
 
 function LiveCard({ context }: { context: Context }) {
   const titleId = useId();
-  const { state, refreshing, refresh } = useForecast(context.today);
+  const { state, refreshing, refresh } = useForecast(context.today, context.transactions);
   const forecast = state.status === "loading" ? null : state.forecast;
   return (
     <section
@@ -201,10 +220,9 @@ function LiveCard({ context }: { context: Context }) {
         <SectionTitle icon="pulse" id={titleId}>
           Spending forecast
         </SectionTitle>
-        <span>Expected, not confirmed</span>
       </div>
       <Notice hasForecast={forecast !== null} state={state} />
-      {forecast ? <Body context={context} forecast={forecast} /> : null}
+      <Body context={context} forecast={forecast} />
       {state.status === "loading" ? null : (
         <RefreshButton hasForecast={forecast !== null} refresh={refresh} refreshing={refreshing} />
       )}

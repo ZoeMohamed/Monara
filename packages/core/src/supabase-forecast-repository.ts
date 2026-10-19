@@ -97,7 +97,8 @@ export function createSupabaseForecastRepository(
         run: {
           id: run.data.id,
           generatedAt: run.data.generated_at,
-          source: source === "weekly" || source === "agent" ? source : "manual",
+          source:
+            source === "weekly" || source === "daily" || source === "agent" ? source : "manual",
           month: run.data.month,
           threshold: Number(run.data.threshold),
           usedModel: run.data.used_model,

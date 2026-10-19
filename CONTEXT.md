@@ -94,6 +94,16 @@ _Avoid_: Deleting an imported record when it must remain for deduplication
 Money moving between bank accounts, wallets, or cash balances owned by the same User, whether or not both are tracked in Monara. Its Category is Internal and its Transaction Type is exclusion.
 _Avoid_: Income or expense when referring to movement of the User's own funds
 
+### Forecasting
+
+**Spending Projection**:
+An estimate of spending through the end of the month, based on recent Confirmed expenses and refined by specific Expected Payments when available. It is separate from confirmed spending and Budget usage.
+_Avoid_: Confirmed spending when referring to a future estimate
+
+**Expected Payment**:
+A specific future expense predicted from a User's recorded spending patterns. It is a prediction, not a Pending Transaction or a Confirmed Transaction.
+_Avoid_: Pending Transaction when referring to a predicted payment
+
 ### Agent
 
 **Agent**:

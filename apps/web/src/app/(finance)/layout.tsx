@@ -1,3 +1,4 @@
+import { jakartaDate } from "@monara/core";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
@@ -17,7 +18,7 @@ import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 export default async function FinanceLayout({ children }: { children: React.ReactNode }) {
   const identity = await getAuthenticatedIdentity();
   if (!identity) redirect("/sign-in?next=/");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = jakartaDate(new Date());
   let initialFinance: FinanceSnapshot;
   try {
     initialFinance = await loadFinanceSnapshot(
