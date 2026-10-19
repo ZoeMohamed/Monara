@@ -46,7 +46,7 @@ select is((select occurred_on from public.transactions where id=(select id from 
 select is(private.normalized_holder_name('BPK. Ｄａｆｆａ   Praya'),'daffa praya','title spacing and Unicode normalization match');
 select isnt(private.normalized_holder_name('Ann A'),private.normalized_holder_name('Anna'),'word boundaries cannot collide');
 select is((select internal_transfer from public.imported_transaction_for_category((select id from examples where name='internal'))),true,'server verifies full holder match');
-select is((select internal_transfer from public.imported_transaction_for_category((select id from examples where name='business-name'))),false,'business identity is not holder evidence');
+select is((select internal_transfer from public.imported_transaction_for_category((select id from examples where name='business-name'))),true,'matching name takes precedence over a business label');
 select throws_ok($$select * from public.set_imported_category((select id from examples where name='expense'),pg_temp.category('salary'),'expense',0.99)$$,'22023',null,'cannot attach income category to expense');
 select throws_ok($$select * from public.set_imported_category((select id from examples where name='expense'),pg_temp.category('resto-cafe','10000000-0000-4000-8000-000000000002'),'expense',0.99)$$,'22023',null,'cannot attach another owner category');
 select throws_ok($$select * from public.set_imported_category((select id from examples where name='expense'),pg_temp.category('salary'),'income',0.99)$$,'22023',null,'classifier cannot reverse cash direction');
@@ -80,11 +80,11 @@ select ok((select financial_account_id is not null from public.transactions wher
 select public.set_imported_category((select id from examples where name='partial-name'),pg_temp.category('internal'),'exclusion',1);
 select is((select row(transaction_type,category_id,gmail_classification_status)::text from public.transactions where id=(select id from examples where name='partial-name')),row('expense',null::uuid,'needs_review')::text,'partial name cannot silently exclude');
 select public.set_imported_category((select id from examples where name='business-name'),pg_temp.category('internal'),'exclusion',1);
-select is((select category_id from public.transactions where id=(select id from examples where name='business-name')),null::uuid,'business name cannot become Internal');
+select is((select category_id from public.transactions where id=(select id from examples where name='business-name')),pg_temp.category('internal'),'matching name becomes Internal despite the business label');
 select public.set_imported_category((select id from examples where name='no-transfer'),pg_temp.category('internal'),'exclusion',1);
-select is((select category_id from public.transactions where id=(select id from examples where name='no-transfer')),null::uuid,'boolean internalTransfer alone is insufficient');
+select is((select category_id from public.transactions where id=(select id from examples where name='no-transfer')),pg_temp.category('internal'),'matching name becomes Internal without a transfer flag');
 select public.set_imported_category((select id from examples where name='no-direction'),pg_temp.category('internal'),'exclusion',1);
-select is((select review_status from public.transactions where id=(select id from examples where name='no-direction')),'pending','missing cash direction prevents automatic Internal');
+select is((select review_status from public.transactions where id=(select id from examples where name='no-direction')),'confirmed','matching name can qualify for Internal confirmation without cash direction');
 select public.set_imported_category((select id from examples where name='other-exclusion'),pg_temp.category('repayment'),'exclusion',1);
 select is((select review_status from public.transactions where id=(select id from examples where name='other-exclusion')),'pending','other exclusions always need review');
 select public.set_imported_category((select id from examples where name='unknown-date'),pg_temp.category('resto-cafe'),'expense',1);

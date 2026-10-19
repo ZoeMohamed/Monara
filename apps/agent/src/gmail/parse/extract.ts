@@ -40,7 +40,7 @@ Rules:
 - One item per transaction the email confirms. Most emails have one.
 - kind: "expense" for money leaving the holder, "income" for money the holder received, and "exclusion" for reimbursements, internal transfers, duplicates, or non-personal activity. Never invent a kind when it is unclear.
 - flowDirection: "out" when money left the holder and "in" when money reached the holder. Keep this direction for exclusions. Null only when the direction is not stated.
-- Internal transfer: when money moves between two accounts that both belong to the holder, kind is "exclusion". It is internal when the sender and the recipient are both the holder, or when the other party's name is the holder's name in <holder>. Require an explicit transfer and an exact full-name match. A partial, shortened, or shared family name does not make it internal.
+- Internal: a counterparty name matching the confirmed holder name makes kind "exclusion", regardless of the description or whether the email states a transfer. Copy counterpartyName exactly as written even when shortened or misspelled; the application checks it against <holder> deterministically. Do not invent a counterparty name, transfer or cash direction. A shared single word or initials do not establish a match.
 - isTransfer: true only when the email explicitly states a transfer or top-up between accounts. Purchases, bill payments, and refunds are false.
 - counterpartyType: "business" only for an identifiable business name; "person" for a personal name; "unknown" when unclear. Never treat bank routing text, account numbers, or a payment reference as a business name.
 - counterpartyName: the other person or business in the transaction, as payer or recipient, copied exactly as written. Null if not stated.
@@ -276,7 +276,7 @@ function formatEmail(email: EmailForExtraction, context: ExtractionContext): str
 }
 
 /**
- * Extracts transactions with one model call, marks transfers to or from the holder as
+ * Extracts transactions with one model call, marks matching holder counterparties as
  * exclusions, then removes anything the email does not support.
  */
 export async function extractTransactions(

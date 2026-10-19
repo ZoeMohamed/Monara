@@ -5,6 +5,11 @@
   "compatibility_date": "2026-10-09",
   "workers_dev": true,
   "preview_urls": false,
+  // Persist only the runtime's structured stage/error logs, without request logs.
+  "observability": {
+    "redact_query_string": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": false }
+  },
   // One object per User holds their WhatsApp conversation. See src/whatsapp/conversation.ts.
   "durable_objects": {
     "bindings": [{ "name": "CONVERSATIONS", "class_name": "WhatsAppConversation" }]
@@ -32,14 +37,13 @@
         "max_retries": 3
       },
       {
-        // Web searches are rate limited, so merchant jobs run in small batches on one
-        // consumer at a time; extraction never waits on them. Every imported transaction
-        // needing classification comes through here, and its auto-confirm waits for
-        // the result, so raise max_concurrency to what the Brave plan allows.
+        // One job per invocation keeps five cold business lookups below the
+        // subrequest budget. Five invocations preserve the previous upper bound
+        // of five parallel jobs without sharing one invocation's request limit.
         "queue": "monara-merchant-jobs",
-        "max_batch_size": 5,
+        "max_batch_size": 1,
         "max_batch_timeout": 1,
-        "max_concurrency": 1,
+        "max_concurrency": 5,
         "max_retries": 5
       }
     ]

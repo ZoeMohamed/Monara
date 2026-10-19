@@ -36,7 +36,12 @@ export function OnboardingBanner({
 }) {
   const finished = progress.state === "completed" || progress.state === "failed";
   const { transactions, totalTransactions } = progress;
-  const counted = transactions !== null && totalTransactions !== null && totalTransactions > 0;
+  const categorizing = progress.categorizing ?? 0;
+  const counted =
+    categorizing === 0 &&
+    transactions !== null &&
+    totalTransactions !== null &&
+    totalTransactions > 0;
   const value = counted ? Math.round((transactions / totalTransactions) * 100) : null;
   return (
     <div className={styles.banner} data-inset={inset} role="status">
@@ -58,9 +63,13 @@ export function OnboardingBanner({
                 <ProgressBar.Fill />
               </ProgressBar.Track>
             </ProgressBar>
-            {counted ? (
+            {categorizing > 0 && transactions !== null ? (
               <p className={styles.bannerCount}>
-                {transactions} / {totalTransactions} processed
+                {Math.max(0, transactions - categorizing)} / {transactions} transactions processed
+              </p>
+            ) : counted ? (
+              <p className={styles.bannerCount}>
+                {transactions} / {totalTransactions} transactions found
               </p>
             ) : null}
           </>

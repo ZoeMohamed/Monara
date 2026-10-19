@@ -65,6 +65,7 @@ export function useDemoOnboarding(
         state: emails >= sampleEmails ? "completed" : "running",
         emailsRead: emails,
         totalEmails: sampleEmails,
+        totalEmailsFinal: true,
         transactions: found,
         totalTransactions: demoImportFeed.length,
         feed: demoImportFeed.slice(0, found),

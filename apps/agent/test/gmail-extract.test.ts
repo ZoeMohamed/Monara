@@ -148,7 +148,7 @@ describe("extractTransactions", () => {
     ]);
   });
 
-  it("preserves missing dates and only derives Internal from explicit raw-email evidence", async () => {
+  it("preserves missing dates and derives Internal from a counterparty name present in the email", async () => {
     for (const fixture of [
       {
         body: "Transfer Rp 25.000 ke ADLYN FAKHREYZ PRATAMA",
@@ -160,11 +160,17 @@ describe("extractTransactions", () => {
         body: "Pembelian Rp 25.000 ADLYN FAKHREYZ PRATAMA",
         name: "ADLYN FAKHREYZ PRATAMA",
         type: "person",
-        expected: false,
+        expected: true,
       },
       {
         body: "Transfer Rp 25.000 ke ADLYN FAKHREYZ",
         name: "ADLYN FAKHREYZ",
+        type: "person",
+        expected: true,
+      },
+      {
+        body: "Transfer Rp 25.000 ke ADLYN",
+        name: "ADLYN",
         type: "person",
         expected: false,
       },
@@ -178,7 +184,7 @@ describe("extractTransactions", () => {
         body: "Transfer Rp 25.000 ke ADLYN FAKHREYZ PRATAMA",
         name: "ADLYN FAKHREYZ PRATAMA",
         type: "business",
-        expected: false,
+        expected: true,
       },
     ]) {
       const llm = fakeLlm({
@@ -198,6 +204,7 @@ describe("extractTransactions", () => {
       });
       assert.equal(result.items[0]?.occurredOn, null);
       assert.equal(result.items[0]?.internalTransfer, fixture.expected);
+      assert.equal(result.items[0]?.isTransfer, /\btransfer\b/i.test(fixture.body));
     }
   });
 
