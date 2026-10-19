@@ -82,7 +82,20 @@ export function TransactionRow({
       data-kind={transaction.kind ?? "unknown"}
       data-status={status}
       onPress={onClick}
-      aria-label={transaction.status === "pending" ? `${model.merchant}, to review` : undefined}
+      aria-label={
+        transaction.status === "pending"
+          ? [
+              model.merchant,
+              model.amount,
+              model.category,
+              model.account,
+              model.metadata,
+              "To review",
+            ]
+              .filter(Boolean)
+              .join(", ")
+          : undefined
+      }
       type="button"
       variant="ghost"
     >

@@ -17,6 +17,7 @@ function storageFixture(names) {
     settlement: false,
   };
   const pending = new Map();
+  const expired = new Set();
   const client = {
     async rpc(name, input) {
       if (name === "list_pending_goal_image_uploads")
@@ -24,6 +25,13 @@ function storageFixture(names) {
           data: [...pending].map(([upload_id, object_path]) => ({ upload_id, object_path })),
           error: null,
         };
+      if (name === "settle_expired_goal_image_upload") {
+        assert.equal(input.p_user_id, userId);
+        if (faults.settlement) return { data: null, error: { code: "XX000" } };
+        if (!expired.has(input.p_upload_id)) return { data: false, error: null };
+        pending.delete(input.p_upload_id);
+        return { data: true, error: null };
+      }
       assert.equal(name, "settle_goal_image_upload");
       assert.equal(input.p_user_id, userId);
       if (faults.settlement) return { data: null, error: { code: "XX000" } };
@@ -73,7 +81,7 @@ function storageFixture(names) {
       },
     },
   };
-  return { client, remaining, calls, faults, pending };
+  return { client, remaining, calls, faults, pending, expired };
 }
 
 it("drains every page and goal folder while preserving another owner's images", async () => {
@@ -152,6 +160,16 @@ it("retains an absent uncertain upload until its actual object appears, then set
   assert.equal(h.pending.size, 0);
   assert.equal(h.remaining.size, 0);
   assert.equal(await cleanUserGoalImages(h.client, userId), true);
+});
+
+it("settles an absent upload only after the bounded request window has elapsed", async () => {
+  const h = storageFixture([]);
+  h.pending.set("expired-upload", `${userId}/goal/late.png`);
+  assert.equal(await cleanUserGoalImages(h.client, userId), false);
+  assert.equal(h.pending.size, 1, "a recent absent object remains unresolved");
+  h.expired.add("expired-upload");
+  assert.equal(await cleanUserGoalImages(h.client, userId), true);
+  assert.equal(h.pending.size, 0);
 });
 
 it("reconciles bounded upload batches and keeps completion evidence until all requests settle", async () => {

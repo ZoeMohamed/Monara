@@ -21,7 +21,9 @@ it("keeps upload registration, unstarted cancellation and completion owner-scope
     return Response.json(
       path.endsWith("list_pending_goal_image_uploads")
         ? [{ upload_id: identity.uploadId, object_path: identity.objectPath }]
-        : null,
+        : path.endsWith("settle_expired_goal_image_upload")
+          ? true
+          : null,
     );
   };
   try {
@@ -33,6 +35,7 @@ it("keeps upload registration, unstarted cancellation and completion owner-scope
     await repository.begin(identity);
     await repository.cancelUnstarted(identity);
     await repository.settle(identity);
+    assert.equal(await repository.settleExpiredAbsent(identity), true);
     assert.deepEqual(await repository.listPending(identity.userId), [
       { uploadId: identity.uploadId, objectPath: identity.objectPath },
     ]);
@@ -42,6 +45,7 @@ it("keeps upload registration, unstarted cancellation and completion owner-scope
         "begin_goal_image_upload",
         "cancel_unstarted_goal_image_upload",
         "settle_goal_image_upload",
+        "settle_expired_goal_image_upload",
         "list_pending_goal_image_uploads",
       ].map((name) => `/rest/v1/rpc/${name}`),
     );
@@ -54,7 +58,8 @@ it("keeps upload registration, unstarted cancellation and completion owner-scope
     });
     assert.deepEqual(calls[1].body, calls[0].body);
     assert.deepEqual(calls[2].body, { p_upload_id: identity.uploadId, p_user_id: identity.userId });
-    assert.deepEqual(calls[3].body, { p_user_id: identity.userId });
+    assert.deepEqual(calls[3].body, { p_upload_id: identity.uploadId, p_user_id: identity.userId });
+    assert.deepEqual(calls[4].body, { p_user_id: identity.userId });
   } finally {
     globalThis.fetch = originalFetch;
   }

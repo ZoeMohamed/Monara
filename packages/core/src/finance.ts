@@ -1248,7 +1248,7 @@ export function createFinanceService(
           await evaluateBudgetThresholdsFor(
             verified.userId,
             previous.categoryId,
-            undoneAt.slice(0, 10),
+            financialCalendarDate(undoneAt),
           );
           break;
         }

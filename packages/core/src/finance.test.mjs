@@ -1471,17 +1471,18 @@ describe("undo_action", () => {
 
   it("restores a Budget's previous limit and removes a Budget it created", async () => {
     const memory = createMemoryFinanceRepository();
+    let currentTime = new Date("2026-10-14T16:00:30.000Z");
     const service = createFinanceService(memory.repository, {
-      now: () => new Date("2026-10-15T01:00:30.000Z"),
+      now: () => currentTime,
     });
     const created = await service.createBudget(callerA, {
       clientRequestId: "undo-budget",
       categoryId: category.id,
       name: "Food",
-      cadence: "monthly",
+      cadence: "weekly",
       limit: { amountMinor: "1500000", currency: "IDR" },
       warningPercent: 80,
-      startsOn: "2026-10-01",
+      startsOn: "2026-10-15",
     });
     const raised = await service.updateBudget(callerA, {
       budgetId: created.budget.id,
@@ -1494,10 +1495,13 @@ describe("undo_action", () => {
       money: { amountMinor: "1300000", currency: "IDR" },
     });
     const remindersBeforeUndo = memory.state.reminderKeys.size;
+    // 01:00 Jakarta on Oct 15 is still Oct 14 in UTC.
+    currentTime = new Date("2026-10-14T18:00:30.000Z");
     await service.undoAction(callerA, { actionId: raised.action.actionId });
     const [budgetAfterUndo] = (await service.listBudgets(callerA, {})).items;
     assert.equal(budgetAfterUndo.limit.amountMinor, "1500000");
     assert.equal(memory.state.reminderKeys.size, remindersBeforeUndo + 1);
+    assert.equal(memory.state.reminders.at(-1).value.periodStartsOn, "2026-10-15");
 
     const other = await service.createBudget(callerA, {
       clientRequestId: "undo-budget-2",

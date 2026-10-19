@@ -80,6 +80,23 @@ export function ChatHistory({
             </Button>
           </div>
         ) : null}
+        {history.copyRequired && history.notice ? (
+          <div
+            className="mt-3 flex items-center gap-3 rounded-2xl bg-warning/10 p-4 text-sm"
+            role="status"
+          >
+            <p className="flex-1">{history.notice}</p>
+            <Button
+              aria-label="Dismiss unsaved reply warning"
+              className="min-h-11 shrink-0"
+              isIconOnly
+              onPress={history.dismissNotice}
+              variant="ghost"
+            >
+              <Icon name="close" />
+            </Button>
+          </div>
+        ) : null}
         {onNewChat ? (
           <Button
             className="mt-4 min-h-11 w-full rounded-full"

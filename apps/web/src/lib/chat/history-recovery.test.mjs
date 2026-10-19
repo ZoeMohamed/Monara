@@ -82,6 +82,15 @@ describe("private chat history recovery", () => {
     assert.equal(storageCalls, 1, "history retry never repeats the Agent request");
   });
 
+  it("preserves a verified answer when a safe history-retry receipt cannot be issued", async () => {
+    const result = await persistChatExchange(owner, exchange, exchange.response, "", async () => {
+      throw new Error("Storage should not run when recovery cannot be issued");
+    });
+    assert.equal(result.reply, exchange.response.reply);
+    assert.equal(result.historySave.status, "unavailable");
+    assert.match(result.historySave.exchangeId, /^[0-9a-f-]{36}$/);
+  });
+
   it("keeps interrupted saves and later replies until each exact exchange is acknowledged", async () => {
     const queue = new ChatHistorySaveQueue();
     const first = pending();

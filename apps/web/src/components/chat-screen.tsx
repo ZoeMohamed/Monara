@@ -494,10 +494,10 @@ function ChatComposer({
 
 function ChatHistorySaveNotice() {
   const { history } = useChatSession();
-  if (!history.error && !history.notice) return null;
+  if (!history.error && !history.notice && !history.copyRequired) return null;
   return (
     <div
-      className={`mx-4 mt-2 flex items-center gap-3 rounded-2xl p-3 text-xs ${history.error ? "bg-warning/10" : "bg-success/10"}`}
+      className={`mx-4 mt-2 flex items-center gap-3 rounded-2xl p-3 text-xs ${history.error || history.copyRequired ? "bg-warning/10" : "bg-success/10"}`}
       role="status"
     >
       <p className="flex-1">{history.error ?? history.notice}</p>

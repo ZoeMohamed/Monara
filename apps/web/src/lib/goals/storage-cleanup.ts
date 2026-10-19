@@ -31,9 +31,10 @@ export async function cleanUserGoalImages(
       // A visible object proves this opaque, backend-only upload reached Storage.
       // Absence proves nothing about an interrupted request; never expire its intent.
       const visible = await bucket.info(upload.objectPath);
-      if (visible.error || !visible.data) {
+      if (visible.error) {
         return false;
       }
+      if (!visible.data) return uploads.settleExpiredAbsent({ userId, uploadId: upload.uploadId });
       await uploads.settle({ userId, uploadId: upload.uploadId });
       return true;
     }),

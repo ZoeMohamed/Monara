@@ -109,6 +109,14 @@ select lives_ok(
 select is((select count(*) from public.list_pending_goal_image_uploads(
   'f1930000-0000-4000-8000-000000000001')), 1::bigint,
   'registration retry creates only one pending completion record');
+select lives_ok(
+  $$select public.begin_goal_image_upload(
+    'f1950000-0000-4000-8000-000000000002', 'f1930000-0000-4000-8000-000000000001',
+    'f1940000-0000-4000-8000-000000000001',
+    'f1930000-0000-4000-8000-000000000001/f1940000-0000-4000-8000-000000000001/f1950000-0000-4000-8000-000000000002.png',
+    (select updated_at from public.financial_goals where id = 'f1940000-0000-4000-8000-000000000001'))$$,
+  'a separate request receives its own bounded upload window'
+);
 select throws_ok(
   $$select public.begin_goal_image_upload(
     'f1950000-0000-4000-8000-000000000001', 'f1930000-0000-4000-8000-000000000001',
@@ -125,6 +133,17 @@ select lives_ok(
     'f1930000-0000-4000-8000-000000000001/f1940000-0000-4000-8000-000000000001/f1950000-0000-4000-8000-000000000001.png')$$,
   'the registered exact path passes authenticated Storage authorization'
 );
+reset role;
+set local role service_role;
+update private.goal_image_uploads set created_at = now() - interval '90 days'
+where upload_id = 'f1950000-0000-4000-8000-000000000002';
+reset role;
+set local role authenticated;
+select throws_ok(
+  $$insert into storage.objects (bucket_id, name) values ('goal-images',
+    'f1930000-0000-4000-8000-000000000001/f1940000-0000-4000-8000-000000000001/f1950000-0000-4000-8000-000000000002.png')$$,
+  '42501', null, 'Storage rejects an intent after its maximum request window'
+);
 select lives_ok($$select public.begin_user_deletion('DELETE MY ACCOUNT', true)$$,
   'deletion accepts while an already-started upload is unresolved');
 reset role;
@@ -132,7 +151,7 @@ select is((select count(*) from public.financial_goals
   where user_id = 'f1930000-0000-4000-8000-000000000001'), 0::bigint,
   'deletion erases the public goal');
 select is((select count(*) from private.goal_image_uploads
-  where user_id = 'f1930000-0000-4000-8000-000000000001' and settled_at is null), 1::bigint,
+  where user_id = 'f1930000-0000-4000-8000-000000000001' and settled_at is null), 2::bigint,
   'deletion retains the private unresolved completion identity');
 select throws_ok(
   $$delete from auth.users where id = 'f1930000-0000-4000-8000-000000000001'$$,
@@ -141,13 +160,19 @@ select throws_ok(
 update public.user_deletions set whatsapp_purged = true,
   lease_token = 'f1960000-0000-4000-8000-000000000001', lease_until = now() + interval '1 hour'
 where user_id = 'f1930000-0000-4000-8000-000000000001';
--- An elapsed timeout is not proof that an accepted Storage request cannot finish.
-update private.goal_image_uploads set created_at = now() - interval '90 days'
-where upload_id = 'f1950000-0000-4000-8000-000000000001';
 set local role service_role;
 select is((select count(*) from public.list_pending_goal_image_uploads(
+  'f1930000-0000-4000-8000-000000000001')), 2::bigint,
+  'expired requests remain pending until Storage absence is checked');
+select is(public.settle_expired_goal_image_upload(
+  'f1950000-0000-4000-8000-000000000001', 'f1930000-0000-4000-8000-000000000001'), false,
+  'a recent upload cannot be settled by the expiry operation');
+select is(public.settle_expired_goal_image_upload(
+  'f1950000-0000-4000-8000-000000000002', 'f1930000-0000-4000-8000-000000000001'), true,
+  'the trusted cleanup may settle an absent request after its upload window');
+select is((select count(*) from public.list_pending_goal_image_uploads(
   'f1930000-0000-4000-8000-000000000001')), 1::bigint,
-  'old unresolved requests never disappear through expiry or a lease timeout');
+  'only the verified absent expired request leaves pending inventory');
 select throws_ok(
   $$select public.prepare_goal_image_identity_deletion(
     'f1930000-0000-4000-8000-000000000001', 'f1960000-0000-4000-8000-000000000001')$$,

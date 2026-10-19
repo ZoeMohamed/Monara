@@ -13,7 +13,7 @@ export class ChatHistorySaveQueue {
 
   remember(status: ChatHistorySaveStatus): void {
     if (status.status === "saved") this.pending.delete(status.exchangeId);
-    else this.pending.set(status.exchangeId, status);
+    else if (status.status === "pending") this.pending.set(status.exchangeId, status);
   }
 
   async flush(save = retryChatHistorySave): Promise<void> {

@@ -16,12 +16,17 @@ export function useChatHistory(persistent: boolean) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [copyRequired, setCopyRequired] = useState(false);
 
   const remember = useCallback(
     (status: ChatHistorySaveStatus) => {
       if (!persistent) return;
       queue.current?.remember(status);
       if (status.status === "pending") setNotice(null);
+      else if (status.status === "unavailable") {
+        setCopyRequired(true);
+        setNotice("This reply couldn’t be saved. Copy it before leaving this page.");
+      }
       setCount(queue.current?.count ?? 0);
       setError(queue.current?.count ? unsavedMessage : null);
     },
@@ -64,9 +69,13 @@ export function useChatHistory(persistent: boolean) {
     saving,
     error,
     notice,
-    dismissNotice: () => setNotice(null),
+    dismissNotice: () => {
+      setNotice(null);
+      setCopyRequired(false);
+    },
     retry: () => void retry(),
     remember,
-    unsaved: count > 0,
+    unsaved: count > 0 || copyRequired,
+    copyRequired,
   };
 }

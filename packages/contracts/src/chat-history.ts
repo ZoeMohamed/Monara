@@ -76,6 +76,7 @@ export const chatHistorySaveStatusSchema = z.discriminatedUnion("status", [
       expiresAt: isoDateTimeSchema,
     })
     .strict(),
+  z.object({ status: z.literal("unavailable"), exchangeId: z.uuid() }).strict(),
 ]);
 
 /** Persistence status is mandatory on the web bridge, never supplied by the Agent. */

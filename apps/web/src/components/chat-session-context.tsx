@@ -33,6 +33,7 @@ type ChatSession = {
     saving: boolean;
     error: string | null;
     notice: string | null;
+    copyRequired: boolean;
     dismissNotice: () => void;
     retry: () => void;
   };
@@ -55,7 +56,7 @@ export function ChatSessionProvider({
     (action: ChatSessionAction) => setState((current) => reduceChatSession(current, action)),
     [],
   );
-  const { loading, saving, error, notice, dismissNotice, retry, remember, unsaved } =
+  const { loading, saving, error, notice, copyRequired, dismissNotice, retry, remember, unsaved } =
     useChatHistory(persistent);
   const hasUnsentWork =
     pending ||
@@ -78,8 +79,8 @@ export function ChatSessionProvider({
     setPending(false);
   }, []);
   const historyStatus = useMemo(
-    () => ({ persistent, loading, saving, error, notice, dismissNotice, retry }),
-    [persistent, loading, saving, error, notice, dismissNotice, retry],
+    () => ({ persistent, loading, saving, error, notice, copyRequired, dismissNotice, retry }),
+    [persistent, loading, saving, error, notice, copyRequired, dismissNotice, retry],
   );
   const value = useMemo(
     () => ({

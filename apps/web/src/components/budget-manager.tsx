@@ -739,6 +739,13 @@ function useBudgetEditorState({ budget, onClose, onSaved, ...props }: BudgetEdit
     canReview: version.canReview,
     reviewLatest,
     useDraftForNewBudget: () => {
+      if (sessions.sessions[budgetSessionKey()]) {
+        setState((previous) => ({
+          ...previous,
+          error: "Finish or discard your other new budget draft first.",
+        }));
+        return;
+      }
       sessions.forget(sessionKey);
       setOriginal(undefined);
       setInitial(draftOf(undefined, props.snapshot.today));

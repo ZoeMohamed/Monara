@@ -14,6 +14,8 @@ export interface GoalImageUploadRepository {
   /** Only before a Storage request was attempted; closes a late registration. */
   cancelUnstarted(input: GoalImageUploadIdentity): Promise<void>;
   settle(input: { uploadId: string; userId: string }): Promise<void>;
+  /** Only after Storage reports absence for an intent past the bounded request window. */
+  settleExpiredAbsent(input: { uploadId: string; userId: string }): Promise<boolean>;
   listPending(userId: string): Promise<{ uploadId: string; objectPath: string }[]>;
 }
 
@@ -61,6 +63,14 @@ export function createSupabaseGoalImageUploadRepository(
         p_user_id: input.userId,
       });
       if (result.error) fail(result.error);
+    },
+    async settleExpiredAbsent(input) {
+      const result = await client.rpc("settle_expired_goal_image_upload", {
+        p_upload_id: input.uploadId,
+        p_user_id: input.userId,
+      });
+      if (result.error) fail(result.error);
+      return result.data;
     },
     async listPending(userId) {
       const result = await client.rpc("list_pending_goal_image_uploads", { p_user_id: userId });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { chatExchangeSchema } from "./chat-history.ts";
+import { chatExchangeSchema, webChatBridgeResponseSchema } from "./chat-history.ts";
 import { chatHistoryMaxBytes, chatStorageByteLength } from "./chat-limits.ts";
 import {
   chatReceiptRequestSchema,
@@ -91,6 +91,21 @@ describe("chat media contracts", () => {
       webChatResponseSchema.safeParse({ ...reply, actions: [...reply.actions, action] }).success,
       false,
     );
+  });
+
+  it("does not count a pending recovery receipt against the verified reply size limit", () => {
+    const response = {
+      reply: "A concise verified answer.",
+      actions: [],
+      confirmation: null,
+      historySave: {
+        status: "pending",
+        exchangeId: id,
+        recoveryToken: "x".repeat(190_000),
+        expiresAt: "2026-10-19T12:00:00Z",
+      },
+    };
+    assert.equal(webChatBridgeResponseSchema.safeParse(response).success, true);
   });
 
   it("rejects replies whose encoded history exceeds the byte limit without truncating content", () => {

@@ -563,6 +563,9 @@ isOneToOne: false
               "applied": boolean,"review_status": string,"user_id": string
             }[]
                            },
+"settle_expired_goal_image_upload":
+{ Args: { "p_upload_id": string,"p_user_id": string }; Returns: boolean
+                           },
 "settle_goal_image_upload":
 { Args: { "p_upload_id": string,"p_user_id": string }; Returns: undefined
                            },

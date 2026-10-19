@@ -61,7 +61,12 @@ export const webChatResponseSchema = agentChatResponseSchema
     (response) =>
       chatStorageByteLength({
         text: response.reply,
-        result: { ...response, confirmation: null },
+        result: {
+          reply: response.reply,
+          actions: response.actions,
+          confirmation: null,
+          visuals: response.visuals,
+        },
       }) <=
       chatHistoryMaxBytes - 4_096,
     "This reply is too large to retain safely in chat history.",
