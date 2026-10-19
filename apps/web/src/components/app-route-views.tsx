@@ -61,12 +61,10 @@ export function OverviewRoute() {
       openTransaction={(transaction) => navigation.openTransaction(transaction.id)}
       openTransactions={() => navigation.navigate({ screen: "transactions", reviewOpen: false })}
       openReview={session.openReview}
-      openReports={() => navigation.navigate({ screen: "reports" })}
       openBudgets={() => navigation.navigate({ screen: "budgets" })}
       openChat={session.openChat}
       openAdd={navigation.openAdd}
       openConnectGmail={navigation.openGmail}
-      openAccounts={() => navigation.navigate({ screen: "account" })}
     />
   );
 }

@@ -275,6 +275,42 @@
 
 /* Sheet ------------------------------------------------------------- */
 
+/* One column on a phone, in the order a person reads Home. The two columns of the wide layout
+   dissolve here so every card can take its place in a single list. */
+.columns {
+  display: flex;
+  flex-direction: column;
+}
+
+.lead,
+.aside {
+  display: contents;
+}
+
+.slotForecast {
+  order: 1;
+}
+
+.slotAttention {
+  order: 2;
+}
+
+.slotSafe {
+  order: 3;
+}
+
+.slotFlags {
+  order: 4;
+}
+
+.slotActivity {
+  order: 5;
+}
+
+.slotWhere {
+  order: 6;
+}
+
 .sheet {
   position: relative;
   z-index: 2;
