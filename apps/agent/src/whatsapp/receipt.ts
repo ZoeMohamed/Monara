@@ -202,7 +202,7 @@ function toReceiptValues(
   };
 }
 
-function rupiah(amountMinor: string): string {
+export function rupiah(amountMinor: string): string {
   return `Rp ${amountMinor.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 }
 

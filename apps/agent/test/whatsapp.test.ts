@@ -441,6 +441,27 @@ test("a receipt photo is read once and its reply joins the history for a follow-
   );
 });
 
+test("a voice note joins the history as a voice note, not a photo", async () => {
+  const { session, asked } = harness(echo, async () => "Got your voice note: Rp 20.000 at warteg.");
+  await session().receive({
+    ...message("wamid.1", ""),
+    type: "audio",
+    media: {
+      url: "https://api.kapso.ai/media/voice",
+      contentType: "audio/ogg",
+      byteSize: 1000,
+      caption: null,
+    },
+  });
+  await session().receive(message("wamid.2", "confirm"));
+  await session().drain();
+
+  assert.deepEqual(
+    asked[0]?.history.map((turn) => turn.text),
+    ["[Sent a voice note]", "Got your voice note: Rp 20.000 at warteg."],
+  );
+});
+
 test("a receipt that fails to read says nothing can be confirmed", async () => {
   const { session, sent } = harness(echo, async () => {
     throw new Error("model down");
