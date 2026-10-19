@@ -6,6 +6,7 @@ export * from "./chat-history.ts";
 export * from "./chat-media.ts";
 export * from "./common.ts";
 export * from "./dashboard.ts";
+export * from "./forecast.ts";
 export * from "./gmail.ts";
 export * from "./gmail-extraction.ts";
 export * from "./goals.ts";

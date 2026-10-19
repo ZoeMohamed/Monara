@@ -24,6 +24,7 @@ The rules require technical documentation covering system architecture, core alg
 | [agent.md](agent.md) | Argya | 16 Oct | Draft |
 | [ui.md](ui.md) | Erdafa | 16 Oct | Draft |
 | [reminders.md](reminders.md) | Abhip | 16 Oct | Not started |
+| [forecast.md](forecast.md) | Abhip | 18 Oct | Draft |
 | [evaluation.md](evaluation.md) | Abhip | 18 Oct | Not started |
 | [security-self-assessment.md](security-self-assessment.md) | Abhip | 17 Oct | Not started |
 

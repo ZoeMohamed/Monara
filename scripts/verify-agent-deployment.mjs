@@ -40,7 +40,7 @@ export async function verifyAgentDeployment(config, fetcher = fetch) {
     throw new Error("Production Worker does not match the intended revision.");
   }
   const { schedules } = await read("/schedules");
-  for (const cron of ["* * * * *", "*/15 * * * *", "0 1 * * *"]) {
+  for (const cron of ["* * * * *", "*/15 * * * *", "0 1 * * *", "0 2 * * 1"]) {
     if (!schedules.some((schedule) => schedule.cron === cron)) {
       throw new Error(`Production Worker is missing schedule: ${cron}`);
     }

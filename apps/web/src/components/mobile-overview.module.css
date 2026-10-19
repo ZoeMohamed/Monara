@@ -275,6 +275,42 @@
 
 /* Sheet ------------------------------------------------------------- */
 
+/* One column on a phone, in the order a person reads Home. The two columns of the wide layout
+   dissolve here so every card can take its place in a single list. */
+.columns {
+  display: flex;
+  flex-direction: column;
+}
+
+.lead,
+.aside {
+  display: contents;
+}
+
+.slotForecast {
+  order: 1;
+}
+
+.slotAttention {
+  order: 2;
+}
+
+.slotSafe {
+  order: 3;
+}
+
+.slotFlags {
+  order: 4;
+}
+
+.slotActivity {
+  order: 5;
+}
+
+.slotWhere {
+  order: 6;
+}
+
 .sheet {
   position: relative;
   z-index: 2;
@@ -339,12 +375,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.quiet {
-  color: var(--muted);
-  font-size: 15px;
-  font-weight: 650;
 }
 
 .monthPicker {
@@ -564,12 +594,6 @@
   background: var(--surface-secondary);
 }
 
-.todayCard h2 {
-  font-size: 18px;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-}
-
 .todayCard p {
   margin-top: 2px;
   color: var(--muted);
@@ -646,45 +670,8 @@
 }
 
 .featureName {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: flex;
   margin-bottom: 8px;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.featureIcon {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  place-items: center;
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--accent);
-}
-
-.featureIcon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.featureIcon[data-tone="green"] {
-  color: var(--success);
-}
-
-.featureIcon[data-tone="violet"] {
-  color: #7356c7;
-}
-
-.featureIcon[data-tone="amber"] {
-  color: #a86b12;
-}
-
-.featureIcon[data-tone="red"] {
-  color: var(--danger);
 }
 
 .featureGrid strong {
@@ -714,9 +701,6 @@
 
 .cardLabel {
   margin: 18px 18px 0;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 650;
 }
 
 .alerts {
@@ -1277,5 +1261,77 @@
 
   60% {
     background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+}
+
+/* Home on a phone ----------------------------------------------------------
+   Sections are white cards on a soft blue ground. A crisp border and a layered shadow give
+   each card an edge that a tint alone could not, and the daily guide is the one solid blue
+   card, because it answers the first question Home is asked. Desktop keeps its own cards. */
+@media (max-width: 1023.98px) {
+  .sheet {
+    padding-top: 16px;
+    padding-bottom: 8px;
+    background: var(--surface-tertiary);
+  }
+
+  .sheet [data-home-card] {
+    margin: 0 0 16px;
+    padding: 20px;
+    border: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
+    border-radius: 28px;
+    background: var(--surface);
+    box-shadow:
+      0 1px 2px rgb(23 37 84 / 6%),
+      0 14px 30px rgb(23 37 84 / 9%);
+  }
+
+  .sheet .cardLabel {
+    margin: 0 0 6px;
+  }
+
+  .sheet .alerts {
+    margin: 4px -10px -6px;
+    padding: 0;
+  }
+
+  .sheet .pace {
+    background: var(--surface-tertiary);
+  }
+
+  .sheet .safeAmount strong {
+    font-size: 38px;
+  }
+
+  /* Rows are told apart by a rule between them, so they keep square corners. */
+  .sheet .activityItem {
+    border-radius: 0;
+  }
+
+  /* The daily guide: one solid blue card. Its colors are reset here so every pair on it is
+     light on dark, measured against the darkest and lightest parts of the gradient. */
+  .sheet [data-home-card="safe"] {
+    border-color: transparent;
+    background-color: #2865e5;
+    background-image: linear-gradient(155deg, #2e6bef 0%, #1d49b8 100%);
+    box-shadow:
+      0 2px 4px rgb(29 73 184 / 25%),
+      0 16px 34px rgb(29 73 184 / 32%);
+    color: #fff;
+    --button-bg: transparent;
+    --button-bg-hover: transparent;
+    --button-bg-pressed: transparent;
+    --foreground: #fff;
+    --muted: #fff;
+    --ink: #fff;
+    --accent: #fff;
+    --success: #8ff0bf;
+    --warning: #ffd76a;
+    --warning-soft-foreground: #fff;
+    --danger: #ffc4c9;
+  }
+
+  .sheet [data-home-card="safe"] .pace {
+    background: rgb(255 255 255 / 28%);
   }
 }

@@ -1,5 +1,6 @@
 import { handleChatRequest } from "./conversation/index.ts";
 import type { Env } from "./env.ts";
+import { dispatchWeeklyForecast, FORECAST_CRON, handleForecastRefine } from "./forecast.ts";
 import {
   consumeGmailJobs,
   consumeMerchantJobs,
@@ -29,6 +30,9 @@ export default {
     if (request.method === "POST" && path === "/chat") {
       return handleChatRequest(request, env);
     }
+    if (request.method === "POST" && path === "/forecast/refine") {
+      return handleForecastRefine(request, env);
+    }
     if (request.method === "POST" && path === "/webhooks/kapso") {
       return handleKapsoWebhook(request, env);
     }
@@ -45,6 +49,7 @@ export default {
     if (controller.cron === "* * * * *") return processUserDeletions(env);
     if (controller.cron === "0 1 * * *") return scheduleGmailDaily(env);
     if (controller.cron === "*/15 * * * *") return dispatchReminders(env);
+    if (controller.cron === FORECAST_CRON) return dispatchWeeklyForecast(env);
   },
 
   queue(batch, env) {
