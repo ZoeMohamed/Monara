@@ -5,7 +5,7 @@ import {
   FinanceOperationError,
 } from "@monara/core";
 import { createMonaraServiceRoleClient } from "@monara/db";
-
+import { requireActiveUser } from "@/lib/auth/user-deletion";
 import { publicSupabaseConfig } from "@/lib/supabase/config";
 import { scheduleBudgetAlert } from "@/lib/whatsapp/budget-alerts";
 
@@ -95,6 +95,7 @@ export async function runFinanceOperation(
   caller: FinanceCaller,
   input: unknown,
 ): Promise<unknown> {
+  await requireActiveUser(caller.userId);
   const service = financeService();
   switch (operation) {
     case "list_transactions":
@@ -153,6 +154,7 @@ export async function runAgentOperation(
   caller: FinanceCaller,
   input: unknown,
 ): Promise<unknown> {
+  await requireActiveUser(caller.userId);
   if (operation === "request_destructive_action") {
     return financeService().requestDestructiveAction(caller, input);
   }

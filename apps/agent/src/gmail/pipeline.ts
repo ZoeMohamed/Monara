@@ -220,7 +220,18 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
     // One-time codes and the institution's known non-transaction subjects skip the model.
     const extraction =
       owned && email && shouldParse(email, owned)
-        ? await parseEmail(llm, email, { holderName: connection.holderName, institution: owned })
+        ? await parseEmail(
+            {
+              completeJson: async (request) => {
+                await backend.resolveConnection(connection.connectionId);
+                return llm.completeJson(request, () =>
+                  backend.resolveConnection(connection.connectionId),
+                );
+              },
+            },
+            email,
+            { holderName: connection.holderName, institution: owned },
+          )
         : null;
     const outcome = extraction && extraction.items.length > 0 ? "transactions" : "skipped";
     return {
@@ -238,10 +249,12 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
    * confirms it is unusable. A bad API key fails that check too, so it never marks Users.
    */
   async function read<T>(connection: ResolvedGmailConnection, run: () => Promise<T>): Promise<T> {
+    await backend.resolveConnection(connection.connectionId);
     try {
       return await run();
     } catch (error) {
       if (!mayBeAuthorizationLoss(error)) throw error;
+      await backend.resolveConnection(connection.connectionId);
       if (await reader.isConnectionUsable(connection.composioConnectedAccountId)) throw error;
       await backend.reportConnectionError({
         connectionId: connection.connectionId,

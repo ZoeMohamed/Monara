@@ -12,6 +12,7 @@ import { useTourPending } from "@/components/use-product-tour";
 export function useFirstRun({
   live,
   email,
+  setupKey,
   displayName,
   homeOpen,
   homeScreen,
@@ -19,6 +20,7 @@ export function useFirstRun({
 }: {
   live: boolean;
   email: string | null;
+  setupKey?: string;
   displayName: string;
   homeOpen: boolean;
   homeScreen: boolean;
@@ -26,7 +28,7 @@ export function useFirstRun({
 }) {
   const onboarding = useOnboarding({
     live,
-    scope: live ? `live.${email ?? "account"}` : "demo",
+    scope: live ? `live.${setupKey ?? email ?? "account"}` : "demo",
     onHome: homeOpen,
     onHomeScreen: homeScreen,
     // The demo guest has no real name to suggest.

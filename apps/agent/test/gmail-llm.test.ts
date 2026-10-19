@@ -31,6 +31,47 @@ describe("busy or failing model providers", () => {
   const request = { system: "s", user: "u", schemaName: "t", schema: { type: "object" } };
   const answer = () => Response.json({ choices: [{ message: { content: '{"ok":true}' } }] });
 
+  it("does not issue a retry after the User loses permission to keep processing", async () => {
+    let calls = 0;
+    const llm = createLlmClient({
+      baseUrl: "https://llm.example/v1",
+      apiKey: "test-key",
+      model: "test-model",
+      fetcher: async () => {
+        calls++;
+        return Response.json({}, { status: 503 });
+      },
+      sleep: async () => {},
+    });
+    await assert.rejects(
+      () =>
+        llm.completeJson(request, async () => {
+          throw new Error("User deleted");
+        }),
+      /User deleted/,
+    );
+    assert.equal(calls, 1);
+  });
+
+  it("lets a queue own retries without spending more requests inline", async () => {
+    let calls = 0;
+    const llm = createLlmClient({
+      baseUrl: "https://llm.example/v1",
+      apiKey: "test-key",
+      model: "test-model",
+      maxInlineRetries: 0,
+      fetcher: async () => {
+        calls++;
+        return Response.json({}, { status: 503 });
+      },
+      sleep: async () => {
+        throw new Error("Queue mode must not sleep inline");
+      },
+    });
+    await assert.rejects(() => llm.completeJson(request), LlmError);
+    assert.equal(calls, 1);
+  });
+
   function client(responses: (() => Response)[], waits: number[] = []) {
     let calls = 0;
     const llm = createLlmClient({

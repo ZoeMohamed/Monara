@@ -2,7 +2,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 
 export const privacy: LegalDocument = {
   title: "Privacy Policy",
-  updated: "17 October 2026",
+  updated: "19 October 2026",
   intro:
     "Monara handles sensitive information: your spending and, if you choose, your bank emails. This page says what we keep, what we do not keep, and who helps us run the app.",
   sections: [
@@ -71,10 +71,13 @@ export const privacy: LegalDocument = {
           list: [
             "Disconnect Gmail whenever you like, and Monara stops reading it. Records already created stay until you delete them.",
             "Edit or delete any transaction, account, budget or reminder in the app.",
-            "Ask us to delete your account and everything stored with it, or to give you a copy of your data.",
+            "Delete your account in Profile Settings, or contact us for help or a copy of your data. Confirm by typing DELETE MY ACCOUNT, checking the acknowledgement, and selecting Delete permanently.",
           ],
         },
         "We keep your records for as long as you have an account, and delete them when you ask.",
+        "Account deletion is permanent with no recovery period. Once accepted, we block account access and remove your Monara records, then finish connection and chat cleanup with automatic retries. Deletion in progress means cleanup is still running. We retain only the identity and restricted provider identifiers needed to complete cleanup, and remove them when it finishes.",
+        "Deleting Monara does not delete your Google account, original Gmail emails, or messages already delivered through WhatsApp. Shared public merchant information remains. Copies already held by providers, operational logs and backups follow their respective retention rules; this flow does not promise their immediate erasure. Signing in after deletion completes creates a new account with first-time setup and no restored records or connections.",
+        "Processing identifiers already in a background queue may remain until the job is discarded or its queue retention expires. Those identifiers cannot restore your deleted account, read its Gmail connection, or recreate your Monara records.",
       ],
     },
     {

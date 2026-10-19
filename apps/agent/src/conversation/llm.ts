@@ -46,12 +46,14 @@ export function createComplete(config: {
   baseUrl: string;
   apiKey: string;
   model: string;
+  beforeRequest?: () => Promise<void>;
 }): Complete {
   const url = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
   return async (messages, tools) => {
     let status = 0;
     let codes: string[] = [];
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      await config.beforeRequest?.();
       const response = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },

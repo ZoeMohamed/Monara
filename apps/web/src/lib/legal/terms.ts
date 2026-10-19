@@ -2,7 +2,7 @@ import type { LegalDocument } from "@/lib/legal/types";
 
 export const terms: LegalDocument = {
   title: "Terms",
-  updated: "17 October 2026",
+  updated: "19 October 2026",
   intro:
     "These terms are the agreement between you and Monara when you use the app. They are written to be read. If something here is unclear, please ask us before you use Monara.",
   sections: [
@@ -72,7 +72,8 @@ export const terms: LegalDocument = {
     {
       heading: "Stopping",
       blocks: [
-        "You can stop using Monara at any time, and you can disconnect Gmail and WhatsApp yourself. To have your data deleted, contact us as described below.",
+        "You can stop using Monara at any time, disconnect Gmail and WhatsApp, or permanently delete your account in Profile Settings. Deletion requires typing DELETE MY ACCOUNT, checking the acknowledgement and selecting Delete permanently. There is no undo or recovery period. Access stops when deletion is accepted; connection and chat cleanup may take longer and retries automatically. Contact us if you need help.",
+        "Deletion removes your personal Monara data and connections. Your Google account, original emails and already-delivered WhatsApp messages remain. Provider-held copies, operational logs and backups follow their own retention rules, as explained in the Privacy Policy. After cleanup completes, signing in again creates a fresh Monara account and starts setup from the beginning.",
         "We may suspend an account that breaks these terms or puts the service or other people at risk. We will explain why where we can.",
       ],
     },

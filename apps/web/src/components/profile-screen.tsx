@@ -4,7 +4,7 @@ import { Button, Card, Chip } from "@monara/ui";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
-
+import { DeleteAccountControl } from "@/components/delete-account-control";
 import { Icon } from "@/components/icon";
 import { InstallAppButton } from "@/components/install-app-button";
 import { MonaraMascot } from "@/components/monara-mascot";
@@ -181,7 +181,7 @@ function ProfileConnections({ demo }: { demo: boolean }) {
   );
 }
 
-function ProfileAccount() {
+function ProfileAccount({ online, setupKey }: { online: boolean; setupKey?: string }) {
   return (
     <Group id="account" title="Account">
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2.5">
@@ -195,6 +195,7 @@ function ProfileAccount() {
           </Button>
         </form>
       </div>
+      <DeleteAccountControl online={online} setupKey={setupKey} />
     </Group>
   );
 }
@@ -303,7 +304,7 @@ export function ProfileScreen({
       {financialAccounts}
       {financialCategories}
       <ProfileConnections demo={demo} />
-      {demo ? null : <ProfileAccount />}
+      {demo ? null : <ProfileAccount online={online} setupKey={profile.setupKey} />}
       <ProfileReminderSettings onOpenReminders={onOpenReminders} />
       <ProfileAppSettings online={online} onReplayTour={onReplayTour} />
       <ProfileLegal />

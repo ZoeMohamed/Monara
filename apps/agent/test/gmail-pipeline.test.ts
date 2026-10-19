@@ -582,10 +582,10 @@ describe("processBatch", () => {
     };
   }
 
-  it("resolves once, parses every email, and records them in one call", async () => {
+  it("rechecks connection activity at provider boundaries and records the batch in one call", async () => {
     const { pipeline, calls } = setup({ uncategorized: [transactionId] });
     assert.equal(await pipeline.runJob(parseJob(["m1", "m2", "m3"]), notFinal), "transactions");
-    assert.equal(calls.resolved, 1);
+    assert.ok(calls.resolved > calls.modelCalls, "activity is not cached across provider calls");
     assert.deepEqual(calls.claim, [], "the first delivery needs no claim call");
     assert.equal(calls.modelCalls, 3);
     assert.equal(calls.recordCalls.length, 1);
