@@ -860,6 +860,35 @@ export function createFinanceService(
     return transactionMutationResultSchema.parse({ transaction: next, action: receipt });
   }
 
+  async function addMediaTransaction(
+    operationCaller: FinanceCaller,
+    input: unknown,
+    source: "whatsapp_receipt" | "whatsapp_voice",
+  ) {
+    const verified = caller(operationCaller);
+    if (verified.channel !== "whatsapp") {
+      throw new FinanceOperationError("FORBIDDEN", "Media imports arrive on WhatsApp only.");
+    }
+    const parsed = addReceiptTransactionInputSchema.parse(input);
+    const transaction = await repository.createPendingTransaction({
+      userId: verified.userId,
+      source,
+      clientRequestId: parsed.clientRequestId,
+      values: parsed.values,
+      confidence: parsed.confidence,
+    });
+    const saved = transactionValuesSchema.parse(transactionValues(transaction));
+    if (
+      transaction.deletedAt !== null ||
+      transaction.source !== source ||
+      transaction.reviewStatus !== "pending" ||
+      JSON.stringify(saved) !== JSON.stringify(transactionValuesSchema.parse(parsed.values))
+    ) {
+      throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
+    }
+    return { transaction };
+  }
+
   return {
     /**
      * Budget checks for Transactions that Gmail ingestion confirmed without review.
@@ -907,32 +936,13 @@ export function createFinanceService(
      * Extracted values never count until the User confirms them (PRD F14).
      */
     async addReceiptTransaction(operationCaller: FinanceCaller, input: unknown) {
-      const verified = caller(operationCaller);
-      if (verified.channel !== "whatsapp") {
-        throw new FinanceOperationError("FORBIDDEN", "Receipt photos arrive on WhatsApp only.");
-      }
-      const parsed = addReceiptTransactionInputSchema.parse(input);
-      const transaction = await repository.createPendingTransaction({
-        userId: verified.userId,
-        source: "whatsapp_receipt",
-        clientRequestId: parsed.clientRequestId,
-        values: parsed.values,
-        confidence: parsed.confidence,
-      });
-      // A repeat of the same message must describe what was saved, so a
-      // different reading or another kind of record under this id is refused.
-      const saved = transactionValuesSchema.parse(transactionValues(transaction));
-      if (
-        transaction.deletedAt !== null ||
-        transaction.source !== "whatsapp_receipt" ||
-        transaction.reviewStatus !== "pending" ||
-        JSON.stringify(saved) !== JSON.stringify(transactionValuesSchema.parse(parsed.values))
-      ) {
-        throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
-      }
-      return { transaction };
+      return addMediaTransaction(operationCaller, input, "whatsapp_receipt");
     },
 
+    /** Saves a WhatsApp voice extraction as pending; voice never counts before review. */
+    async addVoiceTransaction(operationCaller: FinanceCaller, input: unknown) {
+      return addMediaTransaction(operationCaller, input, "whatsapp_voice");
+    },
     async editTransaction(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
       const values: UpdateTransactionInput = updateTransactionInputSchema.parse(input);

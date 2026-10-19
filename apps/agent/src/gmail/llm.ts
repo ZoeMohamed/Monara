@@ -70,6 +70,10 @@ export interface JsonCompletionRequest {
   user: string;
   /** A data: URL of a photo for a model that can see, such as a receipt. */
   imageUrl?: string;
+  /** A data: URL of audio for a model that can transcribe, such as a voice note. */
+  audioUrl?: string;
+  /** Audio container passed to an input_audio content part. */
+  audioFormat?: "ogg" | "mp3" | "mp4" | "wav" | "webm";
   schemaName: string;
   schema: Record<string, unknown>;
   /** A lower cap for answers known to be short; Azure counts it against its rate limit. */
@@ -185,7 +189,18 @@ export function createLlmClient(config: LlmConfig) {
                     { type: "text", text: request.user },
                     { type: "image_url", image_url: { url: request.imageUrl } },
                   ]
-                : request.user,
+                : request.audioUrl
+                  ? [
+                      { type: "text", text: request.user },
+                      {
+                        type: "input_audio",
+                        input_audio: {
+                          data: request.audioUrl.split(",")[1] ?? "",
+                          format: request.audioFormat ?? "ogg",
+                        },
+                      },
+                    ]
+                  : request.user,
             },
           ],
           response_format: {

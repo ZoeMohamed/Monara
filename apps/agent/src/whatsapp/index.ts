@@ -24,9 +24,9 @@ const CODE_REPLIES: Record<WhatsAppCodeRejection, string> = {
   expired: "That code has expired. Open Monara, go to Settings, and get a new one.",
   too_many_attempts: "Too many wrong codes. Open Monara, go to Settings, and start linking again.",
 };
-// Receipt photos go to the User's conversation (receipt.ts); voice notes are not read yet.
+// Receipt photos and voice notes go to the User's per-account conversation.
 const MEDIA_REPLY =
-  "I can't listen to voice notes yet. Send a photo of the receipt or type it, for example: lunch 20k from GoPay.";
+  "I can only read receipt photos and voice notes, or you can type it, for example: lunch 20k from GoPay.";
 const TEXT_ONLY_REPLY = "I can only read text messages for now.";
 
 /** What the handler needs from outside, so it can be tested without Kapso or a backend. */
@@ -46,7 +46,8 @@ function fixedReply(
   if (resolution.status === "unlinked") return LINK_PROMPT;
   if (resolution.status === "code_rejected") return CODE_REPLIES[resolution.reason];
   if (resolution.status === "verified") return LINKED_REPLY;
-  if (message.media) return message.type === "image" ? null : MEDIA_REPLY;
+  if (message.media)
+    return message.type === "image" || message.type === "audio" ? null : MEDIA_REPLY;
   return message.text?.trim() ? null : TEXT_ONLY_REPLY;
 }
 
@@ -96,8 +97,11 @@ export async function handleInbound(
         await dependencies.enqueue({
           userId: resolution.userId,
           messageId: message.messageId,
+          type: message.type,
           text: text.slice(0, 4000),
-          ...(message.media && message.type === "image" ? { media: message.media } : {}),
+          ...(message.media && (message.type === "image" || message.type === "audio")
+            ? { media: message.media }
+            : {}),
           to: message.from,
           phoneNumberId: message.phoneNumberId,
         });

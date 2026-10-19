@@ -4,6 +4,8 @@ import type { Respond } from "../conversation/respond.ts";
 
 /** One inbound message from a verified WhatsApp Link, plus where the reply goes. */
 export interface QueuedMessage extends Omit<WhatsAppMessage, "text"> {
+  /** Kapso message kind, used to select photo or audio extraction. */
+  type: string;
   /** Empty for a photo sent without a caption. */
   text: string;
   /** A receipt photo stored by Kapso. Only its link is kept, never the bytes. */
@@ -13,8 +15,8 @@ export interface QueuedMessage extends Omit<WhatsAppMessage, "text"> {
   phoneNumberId: string;
 }
 
-/** Reads a receipt photo, saves it as pending, and returns the reply. */
-export type ReadReceipt = (message: QueuedMessage) => Promise<string>;
+/** Reads a receipt photo or voice note, saves it as pending, and returns the reply. */
+export type ReadMedia = (message: QueuedMessage) => Promise<string>;
 
 /** What a photo turn looks like in the history the Agent sees next. */
 const PHOTO_TURN = "[Sent a receipt photo]";
@@ -88,7 +90,7 @@ let sequence = 0;
 export class ConversationSession {
   private readonly storage: SessionStorage;
   private readonly respond: Respond;
-  private readonly readReceipt: ReadReceipt | null;
+  private readonly readMedia: ReadMedia | null;
   private readonly send: (message: Outbound) => Promise<void>;
   private readonly now: () => number;
   private readonly isActive: (userId: string) => Promise<boolean>;
@@ -96,14 +98,14 @@ export class ConversationSession {
   constructor(dependencies: {
     storage: SessionStorage;
     respond: Respond;
-    readReceipt?: ReadReceipt;
+    readMedia?: ReadMedia;
     send: (message: Outbound) => Promise<void>;
     now: () => number;
     isActive: (userId: string) => Promise<boolean>;
   }) {
     this.storage = dependencies.storage;
     this.respond = dependencies.respond;
-    this.readReceipt = dependencies.readReceipt ?? null;
+    this.readMedia = dependencies.readMedia ?? null;
     this.send = dependencies.send;
     this.now = dependencies.now;
     this.isActive = dependencies.isActive;
@@ -169,10 +171,13 @@ export class ConversationSession {
       let text = FAILURE_REPLY;
       if (message.media) {
         try {
-          if (!this.readReceipt) throw new Error("Receipt reading is not configured.");
-          text = await this.readReceipt(message);
+          if (!this.readMedia) throw new Error("Media reading is not configured.");
+          text = await this.readMedia(message);
         } catch {
-          text = RECEIPT_FAILURE_REPLY;
+          text =
+            message.type === "audio"
+              ? "Sorry, I couldn't read that voice note and can't confirm anything was saved. Check your Review Queue or type it instead."
+              : RECEIPT_FAILURE_REPLY;
         }
         if (!(await this.isActive(message.userId))) {
           await this.storage.deleteAll();

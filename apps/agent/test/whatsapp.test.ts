@@ -115,11 +115,18 @@ test("a linked User's text is queued for the Agent as that User", async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(sent, []);
   assert.deepEqual(queued, [
-    { userId, messageId: "wamid.9", text: "lunch 20k", to: "6281200000001", phoneNumberId: "111" },
+    {
+      userId,
+      messageId: "wamid.9",
+      type: "text",
+      text: "lunch 20k",
+      to: "6281200000001",
+      phoneNumberId: "111",
+    },
   ]);
 });
 
-test("a linked User's photo is queued as a receipt; a voice note or sticker gets a fixed reply", async () => {
+test("a linked User's photo and voice note are queued; a sticker gets a fixed reply", async () => {
   const media = { url: "https://api.kapso.ai/media/abc", content_type: "image/jpeg" };
   const photo = event("wamid.1", "6281200000001", {
     type: "image",
@@ -138,11 +145,13 @@ test("a linked User's photo is queued as a receipt; a voice note or sticker gets
     userId,
   }));
 
-  assert.equal(queued.length, 1);
+  assert.equal(queued.length, 2);
   assert.equal(queued[0]?.messageId, "wamid.1");
   assert.equal(queued[0]?.media?.url, media.url);
-  assert.match(sent[0]?.text ?? "", /can't listen to voice notes/);
-  assert.match(sent[1]?.text ?? "", /only read text messages/);
+  assert.equal(queued[1]?.messageId, "wamid.2");
+  assert.equal(queued[1]?.media?.contentType, "audio/ogg");
+  assert.equal(sent.length, 1);
+  assert.match(sent[0]?.text ?? "", /only read text messages/);
 });
 
 test("an unlinked sender's photo is never queued", async () => {
@@ -183,7 +192,7 @@ test("a failed reply answers Kapso with an error so the delivery is retried", as
 
 function harness(
   reply: (text: string, history: AgentChatTurn[]) => Promise<AgentChatResponse>,
-  readReceipt?: (message: QueuedMessage) => Promise<string>,
+  readMedia?: (message: QueuedMessage) => Promise<string>,
 ) {
   const stored = new Map<string, unknown>();
   const sent: string[] = [];
@@ -212,7 +221,7 @@ function harness(
       storage,
       isActive: async () => clock.active,
       now: () => clock.now,
-      ...(readReceipt ? { readReceipt } : {}),
+      ...(readMedia ? { readMedia } : {}),
       respond: async ({ caller, history, text }) => {
         asked.push({ text, history: [...history], channel: caller.channel });
         return reply(text, history);
@@ -231,6 +240,7 @@ function harness(
 const message = (messageId: string, text: string): QueuedMessage => ({
   userId,
   messageId,
+  type: "text",
   text,
   to: "6281200000001",
   phoneNumberId: "111",
