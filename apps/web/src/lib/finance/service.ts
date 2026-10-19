@@ -71,6 +71,7 @@ const AGENT_CONFIRMATION_OPERATIONS = [
   "confirm_destructive_action",
   "undo_action",
   "add_receipt_transaction",
+  "add_voice_transaction",
 ] as const;
 type AgentConfirmationOperation = (typeof AGENT_CONFIRMATION_OPERATIONS)[number];
 export type AgentOperation = AgentFinanceOperation | AgentConfirmationOperation;
@@ -211,6 +212,9 @@ export async function runAgentOperation(
   }
   if (operation === "add_receipt_transaction") {
     return financeService().addReceiptTransaction(caller, input);
+  }
+  if (operation === "add_voice_transaction") {
+    return financeService().addVoiceTransaction(caller, input);
   }
   return runFinanceOperation(operation, caller, input);
 }

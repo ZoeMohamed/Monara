@@ -7,6 +7,7 @@ import { createLlmClient } from "../gmail/llm.ts";
 import { createUserIsActive } from "../user-deletion.ts";
 import { readReceipt } from "./receipt.ts";
 import { ConversationSession, type QueuedMessage } from "./session.ts";
+import { readVoice } from "./voice.ts";
 
 /**
  * One Durable Object per User holds their WhatsApp conversation. It gives the
@@ -40,7 +41,7 @@ export class WhatsAppConversation extends DurableObject<Env> {
         !this.purging && (await createUserIsActive(this.env)(userId)) && !this.purging,
       respond,
       // createRespond already checked the backend and model settings.
-      async readReceipt(message) {
+      async readMedia(message) {
         if (!message.media) throw new Error("No photo to read.");
         const requireActive = async () => {
           if (!(await createUserIsActive(env)(message.userId)))
@@ -52,7 +53,8 @@ export class WhatsAppConversation extends DurableObject<Env> {
           model: env.LLM_MODEL ?? "",
           reasoningEffort: env.LLM_REASONING_EFFORT,
         });
-        return readReceipt({
+        const read = message.type === "audio" ? readVoice : readReceipt;
+        return read({
           userId: message.userId,
           messageId: message.messageId,
           media: message.media,
