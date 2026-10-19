@@ -22,20 +22,29 @@ function summary(progress: ImportProgress) {
   }
 }
 
+function progressValue(progress: ImportProgress): number | null {
+  const { transactions, totalTransactions } = progress;
+  if ((progress.categorizing ?? 0) > 0 || transactions === null || !totalTransactions) return null;
+  return Math.round((transactions / totalTransactions) * 100);
+}
+
+function progressCount(progress: ImportProgress): string | null {
+  if (progress.transactions === null) return null;
+  const categorizing = progress.categorizing ?? 0;
+  if (categorizing > 0)
+    return `${Math.max(0, progress.transactions - categorizing)} / ${progress.transactions} transactions processed`;
+  if (!progress.totalTransactions) return null;
+  return `${progress.transactions} / ${progress.totalTransactions} transactions found`;
+}
+
 /** Background import status, rendered only inside Home's landscape. */
 export function OnboardingBanner() {
   const { gmailImport } = useAppSession();
   if (!gmailImport) return null;
   const { progress, onOpen, onFinish } = gmailImport;
   const finished = progress.state === "completed" || progress.state === "failed";
-  const { transactions, totalTransactions } = progress;
-  const categorizing = progress.categorizing ?? 0;
-  const counted =
-    categorizing === 0 &&
-    transactions !== null &&
-    totalTransactions !== null &&
-    totalTransactions > 0;
-  const value = counted ? Math.round((transactions / totalTransactions) * 100) : null;
+  const value = progressValue(progress);
+  const count = progressCount(progress);
   return (
     <div className={styles.banner} role="status">
       <div aria-hidden className={styles.bannerAvatar}>
@@ -56,15 +65,7 @@ export function OnboardingBanner() {
                 <ProgressBar.Fill />
               </ProgressBar.Track>
             </ProgressBar>
-            {categorizing > 0 && transactions !== null ? (
-              <p className={styles.bannerCount}>
-                {Math.max(0, transactions - categorizing)} / {transactions} transactions processed
-              </p>
-            ) : counted ? (
-              <p className={styles.bannerCount}>
-                {transactions} / {totalTransactions} transactions found
-              </p>
-            ) : null}
+            {count ? <p className={styles.bannerCount}>{count}</p> : null}
           </>
         ) : null}
       </div>

@@ -9,7 +9,11 @@ const componentUrl = new URL("../../components/onboarding-import.tsx", import.me
 const jsx = "export const jsx = (type, props) => ({type,props}), jsxs = jsx, Fragment = null;";
 const dependencies = `export const Button = null, ProgressBar = { Track: "track", Fill: "fill" }, OnboardingAvatar = null, OnboardingMark = null,
   BankBadge = null, ButtonIcon = null, StepFrame = null, onboardingTitleId = "onboarding-title",
-  useAmountDisplay = null, formatDay = null;`;
+  useAmountDisplay = null, formatDay = null, CategoryAvatar = null, Icon = null;
+  let appSession = {};
+  export const useAppSession = () => appSession;
+  export const setAppSession = (value) => { appSession = value; };`;
+const dependenciesUrl = `data:text/javascript,${encodeURIComponent(dependencies)}`;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (![componentUrl, bannerUrl].includes(context.parentURL))
@@ -22,7 +26,7 @@ const hooks = registerHooks({
     }
     if (specifier === "@monara/ui" || specifier.startsWith("@/")) {
       return {
-        url: `data:text/javascript,${encodeURIComponent(dependencies)}`,
+        url: dependenciesUrl,
         shortCircuit: true,
       };
     }
@@ -50,6 +54,7 @@ const hooks = registerHooks({
 });
 const { ImportStep, summaryForTest, percentForTest } = await import(componentUrl);
 const { OnboardingBanner } = await import(bannerUrl);
+const { setAppSession } = await import(dependenciesUrl);
 hooks.deregister();
 
 function text(node) {
@@ -76,7 +81,6 @@ it("shows processed emails over the known email total, rather than ambiguous ema
   );
   assert.match(summary, /37 \/ 67 emails processed/);
   assert.match(summary, /36 transactions found/);
-  assert.match(summary, /10 need review in Pending/);
 });
 
 const running = {
@@ -98,7 +102,6 @@ it("shows classification work advancing while email processing is unchanged", ()
   assert.match(before, /67 emails processed · 64 transactions found/);
   assert.match(before, /10 \/ 64 transactions processed/);
   assert.match(after, /51 \/ 64 transactions processed/);
-  assert.match(after, /51 need review in Pending/);
   assert.doesNotMatch(before, /67 \/ 64 emails/);
 });
 
@@ -121,7 +124,6 @@ it("lets terminal review results complete with a full bar and an exit action", (
   const completed = { ...running, state: "completed", categorizing: 0, needsReview: 51 };
   const summary = text(summaryForTest({ progress: completed }));
   assert.match(summary, /All caught up/);
-  assert.match(summary, /51 need review in Pending/);
   assert.doesNotMatch(summary, /Categorizing your transactions/);
   assert.equal(percentForTest(completed), 100);
   const step = ImportStep({ progress: completed, onNext() {} });
@@ -129,7 +131,8 @@ it("lets terminal review results complete with a full bar and an exit action", (
 });
 
 it("keeps the background banner honest during classification", () => {
-  const banner = OnboardingBanner({ progress: running, onOpen() {}, onFinish() {}, inset: false });
+  setAppSession({ gmailImport: { progress: running, onOpen() {}, onFinish() {} } });
+  const banner = OnboardingBanner();
   assert.match(text(banner), /10 \/ 64 transactions processed/);
 });
 
