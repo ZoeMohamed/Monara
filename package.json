@@ -35,7 +35,8 @@
     "worktree:teardown": "node scripts/worktree.mjs teardown",
     "worktree:prune": "node scripts/worktree.mjs prune",
     "worktree:status": "node scripts/worktree.mjs status",
-    "docs:check": "node scripts/docs-check.mjs"
+    "docs:check": "node scripts/docs-check.mjs",
+    "docs:pdf": "node scripts/build-submission-pdfs.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

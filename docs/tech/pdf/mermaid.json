@@ -1,0 +1,22 @@
+{
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Nunito Sans, Helvetica Neue, Arial, sans-serif",
+    "primaryColor": "#e2f4ff",
+    "primaryBorderColor": "#3171FD",
+    "primaryTextColor": "#192d52",
+    "secondaryColor": "#f5fbff",
+    "tertiaryColor": "#ffffff",
+    "lineColor": "#566b83",
+    "textColor": "#192d52",
+    "actorBkg": "#e2f4ff",
+    "actorBorder": "#3171FD",
+    "actorTextColor": "#192d52",
+    "signalColor": "#566b83",
+    "signalTextColor": "#192d52",
+    "noteBkgColor": "#f5fbff",
+    "noteBorderColor": "#dae8f3",
+    "attributeBackgroundColorOdd": "#ffffff",
+    "attributeBackgroundColorEven": "#f5fbff"
+  }
+}

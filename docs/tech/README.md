@@ -4,15 +4,15 @@ This is the technical documentation for the FinTechathon 2026 submission. It liv
 
 ## What the competition asks for
 
-The rules require technical documentation covering system architecture, core algorithm description, and security design. Together with the security self-assessment and execution evidence, the files below cover all of it.
+The rules list three separate deliverables here, so they are built as three PDFs from the files below.
 
-| Required part | Files |
-| --- | --- |
-| System architecture | [architecture.md](architecture.md), [ui.md](ui.md) |
-| Core algorithm description | [extraction.md](extraction.md), [agent.md](agent.md), [reminders.md](reminders.md) |
-| Security design | [data-and-security.md](data-and-security.md), [agent.md](agent.md) |
-| Security self-assessment | [security-self-assessment.md](security-self-assessment.md) |
-| Execution evidence | [evaluation.md](evaluation.md) |
+| PDF | Required part | Files |
+| --- | --- | --- |
+| Technical Documentation | System architecture | [architecture.md](architecture.md), [ui.md](ui.md) |
+| | Core algorithm description | [extraction.md](extraction.md), [agent.md](agent.md), [reminders.md](reminders.md) |
+| | Security design | [data-and-security.md](data-and-security.md) |
+| Security Self-Assessment | Permission tiers and known-risk list | [security-self-assessment.md](security-self-assessment.md) |
+| Execution Evidence | Sandbox logs and measured results | [evaluation.md](evaluation.md) |
 
 ## Sections, owners, and status
 
@@ -23,16 +23,16 @@ The rules require technical documentation covering system architecture, core alg
 | [extraction.md](extraction.md) | Adlyn | 16 Oct | Draft |
 | [agent.md](agent.md) | Argya | 16 Oct | Draft |
 | [ui.md](ui.md) | Erdafa | 16 Oct | Draft |
-| [reminders.md](reminders.md) | Abhip | 16 Oct | Not started |
+| [reminders.md](reminders.md) | Abhip | 16 Oct | Draft |
 | [forecast.md](forecast.md) | Abhip | 18 Oct | Draft |
-| [evaluation.md](evaluation.md) | Abhip | 18 Oct | Not started |
-| [security-self-assessment.md](security-self-assessment.md) | Abhip | 17 Oct | Not started |
+| [evaluation.md](evaluation.md) | Abhip | 18 Oct | Draft |
+| [security-self-assessment.md](security-self-assessment.md) | Abhip | 17 Oct | Draft |
 
 Status values: Not started, Draft, Reviewed, Final.
 
 The UI section was reconciled with current source and the PRD, Action Tracker and Brainstorm on **16 October 2026**. The [UI action checklist](../ui-actions-2026-10-16.md) maps ER1–ER12 to delivered source, remaining acceptance and teammate dependencies; the [backend handoff](../ui-backend-handoff.md) records integration boundaries and current verification. The shared tracker now lists ER4, ER7 and ER12 In review, with dated owner dependencies and evidence references. Other owners' rows and technical sections retain their existing statuses. The UI section remains Draft pending owner review. Normal documentation checks do not establish review or final submission acceptance.
 
-Architecture, Agent, and Gmail extraction drafts were reconciled against current source without changing their owners or review status. Receipt and voice extraction remain planned. Data/security, Reminders, evaluation and the security self-assessment remain Not started with owner TODOs. The normal structure check can pass while these submission sections are unfinished; final acceptance requires completed content, measured evidence and owner review.
+Architecture, Agent, and Gmail extraction drafts were reconciled against current source without changing their owners or review status. Receipt and voice extraction remain planned. Reminders and evaluation remain Not started with owner TODOs. The normal structure check can pass while these submission sections are unfinished; final acceptance requires completed content, measured evidence and owner review.
 
 ## How to write a section
 
@@ -40,7 +40,32 @@ Architecture, Agent, and Gmail extraction drafts were reconciled against current
 2. Describe what the code does today. Mark anything not built as "Planned". Never claim a number you did not measure.
 3. Name real file paths and link tests, ADRs, and Sandbox scenarios.
 4. Run `pnpm docs:check`. Run `pnpm docs:check --final` before the submission freeze: it also fails on any leftover TODO.
-5. Open a pull request. Abhip assembles the final document from these files.
+5. Open a pull request. Abhip builds the PDFs from these files.
+
+## Build the submission PDFs
+
+```sh
+pnpm docs:pdf            # all three PDFs into docs/tech/build (ignored by git)
+pnpm docs:pdf security   # one of: technical, security, evidence
+pnpm docs:pdf --final    # also fails on any TODO or a Status below Reviewed
+```
+
+The build needs `pandoc`, `typst` and `mmdc` (Mermaid CLI) on the PATH. It renders the Mermaid blocks to images, turns links to other sections into anchors (or a pointer to the PDF that holds them) and links to code into GitHub URLs, and applies the Monara cover, header and footer from `pdf/`. The PDFs use the app's Nunito Sans, brand blue and canvas colors.
+
+## Submission package
+
+The rules ask for six items, sent by email to `fintechathon@ican-x.com` with clear labels on each attachment (the organizers confirmed this on 14 October).
+
+| Item | Where it is |
+| --- | --- |
+| Technical documentation | `Team808-Technical-Documentation.pdf`, built by `pnpm docs:pdf` |
+| Presentation deck | Canva deck exported to PDF |
+| Demo video (optional, up to 5 minutes) | Link, to be added |
+| Source code | This repository, which will be public: https://github.com/ZoeMohamed/Monara |
+| Security self-assessment | `Team808-Security-Self-Assessment.pdf` |
+| Execution evidence | `Team808-Execution-Evidence.pdf`, with raw logs in [evidence/](evidence/) |
+
+Hosted app for the judges: https://monara-finance.vercel.app. Test accounts are to be added.
 
 If you use an AI agent to draft a section, ask it to follow `.agents/skills/tech-doc/SKILL.md`.
 
