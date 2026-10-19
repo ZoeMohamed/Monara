@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { detectGoalImage } from "../goals/image.ts";
+import { detectGoalImage, validGoalImageContentLength } from "../goals/image.ts";
 import { buildGoalPlan } from "../goals/plan.ts";
 
 const timestamp = "2026-10-18T00:00:00Z";
@@ -67,5 +67,15 @@ describe("goal image detection", () => {
       "png",
     );
     assert.equal(detectGoalImage(new TextEncoder().encode("not really an image")), null);
+  });
+
+  it("rejects missing, malformed, unsafe, and oversized request lengths before parsing", () => {
+    assert.equal(validGoalImageContentLength(null), false);
+    assert.equal(validGoalImageContentLength("not-a-number"), false);
+    assert.equal(validGoalImageContentLength("-1"), false);
+    assert.equal(validGoalImageContentLength("0"), false);
+    assert.equal(validGoalImageContentLength(String(Number.MAX_SAFE_INTEGER + 1)), false);
+    assert.equal(validGoalImageContentLength(String(3 * 1024 * 1024 + 100_001)), false);
+    assert.equal(validGoalImageContentLength(String(3 * 1024 * 1024 + 100_000)), true);
   });
 });

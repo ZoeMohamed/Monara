@@ -248,6 +248,7 @@ export function GoalPlanner({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
+  const createRequestId = useRef<string | null>(null);
   const current = demo ? demoState : goals;
   const plan = useMemo(
     () => buildGoalPlan(current, transactions, today),
@@ -260,6 +261,19 @@ export function GoalPlanner({
     "needs-adjustment": "The monthly pace is above your recent surplus.",
     complete: "All current goals are complete.",
   }[plan.state];
+
+  const openNewEditor = () => {
+    createRequestId.current = null;
+    setEditing(null);
+  };
+  const openExistingEditor = (goal: FinancialGoal) => {
+    createRequestId.current = null;
+    setEditing(goal);
+  };
+  const closeEditor = () => {
+    createRequestId.current = null;
+    setEditing(undefined);
+  };
 
   const save = async (draft: GoalDraft) => {
     if (inFlight.current) return;
@@ -301,9 +315,23 @@ export function GoalPlanner({
         }
       } else {
         if (!runMutation) throw new Error("Goals are unavailable.");
-        await runMutation(async () => {
-          const result = editing
-            ? await callFinanceOperation(
+        const createGoal = () => {
+          const clientRequestId = createRequestId.current ?? crypto.randomUUID();
+          createRequestId.current = clientRequestId;
+          return callFinanceOperation(
+            "create_financial_goal",
+            createFinancialGoalInputSchema.parse({
+              clientRequestId,
+              name: draft.name,
+              target: { amountMinor: String(target), currency: "IDR" },
+              saved: { amountMinor: String(saved), currency: "IDR" },
+              targetDate: draft.targetDate,
+            }),
+          );
+        };
+        const result = await runMutation(() =>
+          editing
+            ? callFinanceOperation(
                 "edit_financial_goal",
                 updateFinancialGoalInputSchema.parse({
                   goalId: editing.id,
@@ -316,19 +344,16 @@ export function GoalPlanner({
                   },
                 }),
               )
-            : await callFinanceOperation(
-                "create_financial_goal",
-                createFinancialGoalInputSchema.parse({
-                  clientRequestId: crypto.randomUUID(),
-                  name: draft.name,
-                  target: { amountMinor: String(target), currency: "IDR" },
-                  saved: { amountMinor: String(saved), currency: "IDR" },
-                  targetDate: draft.targetDate,
-                }),
-              );
-          return draft.image ? uploadGoalImage(result, draft.image) : result;
-        });
+            : createGoal(),
+        );
+        setEditing(result);
+        const image = draft.image;
+        if (image) {
+          const uploaded = await runMutation(() => uploadGoalImage(result, image));
+          setEditing(uploaded);
+        }
       }
+      createRequestId.current = null;
       setEditing(undefined);
       setError(null);
     } finally {
@@ -378,7 +403,7 @@ export function GoalPlanner({
             </h2>
             <p className="mt-1 text-xs leading-5 text-muted">{status}</p>
           </div>
-          <Button className="min-h-10 shrink-0 rounded-full" onPress={() => setEditing(null)}>
+          <Button className="min-h-10 shrink-0 rounded-full" onPress={openNewEditor}>
             <Icon className="h-4 w-4" name="plus" /> Add
           </Button>
         </div>
@@ -412,7 +437,7 @@ export function GoalPlanner({
                   <Button
                     aria-label={`Edit ${item.goal.name}`}
                     isIconOnly
-                    onPress={() => setEditing(item.goal)}
+                    onPress={() => openExistingEditor(item.goal)}
                     size="sm"
                     variant="ghost"
                   >
@@ -466,7 +491,7 @@ export function GoalPlanner({
       {editing !== undefined && (
         <GoalEditor
           goal={editing}
-          onClose={() => setEditing(undefined)}
+          onClose={closeEditor}
           onSave={save}
           pending={pending}
           today={today}

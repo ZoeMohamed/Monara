@@ -30,6 +30,7 @@ export async function uploadGoalImage(
       "DEPENDENCY_UNAVAILABLE",
       "The goal was saved, but its image could not be uploaded. Try editing it again.",
       null,
+      true,
     );
   }
   const body: unknown = await response.json().catch(() => null);
@@ -45,6 +46,7 @@ export async function uploadGoalImage(
       "DEPENDENCY_UNAVAILABLE",
       "The image response could not be verified. Refresh your goals.",
       response.status,
+      true,
     );
   return parsed.data;
 }

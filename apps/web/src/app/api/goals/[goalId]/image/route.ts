@@ -2,7 +2,12 @@ import { financialGoalIdSchema, isoDateTimeSchema } from "@monara/contracts";
 import { FinanceOperationError } from "@monara/core";
 
 import { financeErrorResponse, financeSuccessResponse } from "@/lib/finance/service";
-import { detectGoalImage, GOAL_IMAGE_BUCKET, MAX_GOAL_IMAGE_BYTES } from "@/lib/goals/image";
+import {
+  detectGoalImage,
+  GOAL_IMAGE_BUCKET,
+  MAX_GOAL_IMAGE_BYTES,
+  validGoalImageContentLength,
+} from "@/lib/goals/image";
 import { goalImageBackend } from "@/lib/goals/service";
 import { isSameOriginRequest } from "@/lib/http/origin";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
@@ -41,8 +46,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ goa
       new FinanceOperationError("FORBIDDEN", "This request must come from Monara."),
     );
   try {
-    const declaredLength = Number(request.headers.get("content-length") ?? 0);
-    if (declaredLength > MAX_GOAL_IMAGE_BYTES + 100_000)
+    if (!validGoalImageContentLength(request.headers.get("content-length")))
       throw new FinanceOperationError("VALIDATION_FAILED", "Choose an image smaller than 3 MB.");
     const { goalId } = await params;
     const { client, goal, repository, userId } = await authenticatedGoal(goalId);
@@ -76,10 +80,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ goa
         expectedUpdatedAt,
         imagePath: path,
       });
-      if (goal.imagePath) await client.storage.from(GOAL_IMAGE_BUCKET).remove([goal.imagePath]);
+      if (goal.imagePath) {
+        const cleanup = await client.storage.from(GOAL_IMAGE_BUCKET).remove([goal.imagePath]);
+        if (cleanup.error)
+          process.emitWarning("A replaced goal image could not be cleaned up.", {
+            code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
+          });
+      }
       return financeSuccessResponse(updated);
     } catch (error) {
-      await client.storage.from(GOAL_IMAGE_BUCKET).remove([path]);
+      const cleanup = await client.storage.from(GOAL_IMAGE_BUCKET).remove([path]);
+      if (cleanup.error)
+        process.emitWarning("A failed goal image upload could not be cleaned up.", {
+          code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
+        });
       throw error;
     }
   } catch (error) {
@@ -110,7 +124,13 @@ export async function DELETE(
       expectedUpdatedAt,
       imagePath: null,
     });
-    if (goal.imagePath) await client.storage.from(GOAL_IMAGE_BUCKET).remove([goal.imagePath]);
+    if (goal.imagePath) {
+      const cleanup = await client.storage.from(GOAL_IMAGE_BUCKET).remove([goal.imagePath]);
+      if (cleanup.error)
+        process.emitWarning("A removed goal image could not be cleaned up.", {
+          code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
+        });
+    }
     return financeSuccessResponse(updated);
   } catch (error) {
     return financeErrorResponse(error);

@@ -146,7 +146,13 @@ export async function runFinanceOperation(
       return service.updateFinancialGoal(caller, input);
     case "delete_financial_goal": {
       const goal = await service.deleteFinancialGoal(caller, input);
-      if (goal.imagePath) await client.storage.from(GOAL_IMAGE_BUCKET).remove([goal.imagePath]);
+      if (goal.imagePath) {
+        const cleanup = await client.storage.from(GOAL_IMAGE_BUCKET).remove([goal.imagePath]);
+        if (cleanup.error)
+          process.emitWarning("A deleted goal image could not be cleaned up.", {
+            code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
+          });
+      }
       return goal;
     }
     case "list_categories":

@@ -1,7 +1,14 @@
 export const GOAL_IMAGE_BUCKET = "goal-images";
 export const MAX_GOAL_IMAGE_BYTES = 3 * 1024 * 1024;
+const MAX_GOAL_IMAGE_REQUEST_BYTES = MAX_GOAL_IMAGE_BYTES + 100_000;
 
 type GoalImageKind = { extension: "jpg" | "png" | "webp"; contentType: string };
+
+export function validGoalImageContentLength(value: string | null): boolean {
+  if (value === null) return false;
+  const length = Number(value);
+  return Number.isSafeInteger(length) && length > 0 && length <= MAX_GOAL_IMAGE_REQUEST_BYTES;
+}
 
 export function detectGoalImage(bytes: Uint8Array): GoalImageKind | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
