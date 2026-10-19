@@ -12,42 +12,9 @@ Each Gmail message is claimed once and each extracted item has a stable source i
 
 For WhatsApp, a verified sender is queued in the User's Durable Object conversation. Receipt photos are read by `apps/agent/src/whatsapp/receipt.ts`; voice notes are read by `apps/agent/src/whatsapp/voice.ts` through the audio-capable JSON model client. Media bytes are fetched from Kapso, held in memory for the model call, and not stored. Both paths list the User's active accounts and categories, validate Rupiah amounts and bounded dates, resolve an account only on an exact single match, and call the Next.js backend's media-specific pending-write operation. A message id becomes the client request id, so redelivery is idempotent.
 
-```mermaid
-flowchart TB
-  classDef source fill:#e8f0ff,stroke:#4263eb,color:#172554,stroke-width:1.5px
-  classDef trust fill:#e8faf2,stroke:#2f9e66,color:#123b29,stroke-width:1.5px
-  classDef guard fill:#fff4e6,stroke:#f08c46,color:#5f2d0c,stroke-width:1.5px
-  classDef result fill:#f3f0ff,stroke:#7950f2,color:#2b1b5a,stroke-width:1.5px
-  classDef review fill:#fff0f0,stroke:#e03131,color:#5c1717,stroke-width:1.5px
+![Extraction pipeline: Gmail messages, WhatsApp receipt photos and voice notes pass identity checks, structured extraction and deterministic guards in the agent, then reach the Next.js backend through idempotent writes. Only a Gmail item that passes every gate is confirmed; everything else waits in the Review Queue.](../assets/tech/extraction-pipeline.svg)
 
-  subgraph Inputs["Evidence from connected channels"]
-    direction LR
-    Gmail["Gmail message"]:::source
-    Photo["WhatsApp receipt photo"]:::source
-    Voice["WhatsApp voice note"]:::source
-  end
-
-  subgraph Trust["Identity and bounded extraction"]
-    Verify["Verify sender or WhatsApp link"]:::trust
-    Read["Read structured fields\namount · date · merchant · account hint"]:::trust
-    Guard["Deterministic guards\nIDR · date bounds · schema · prompt safety"]:::guard
-    Map["Resolve owned account and category\nonly on an exact single match"]:::guard
-  end
-
-  subgraph Outcomes["Backend-owned financial lifecycle"]
-    Confirmed["Gmail auto-confirmed\ncomplete + trusted + ≥ 0.95"]:::result
-    Review["Pending Review Queue\nuser confirms or corrects"]:::review
-    Excluded["Pending exclusion\nnever affects totals"]:::review
-  end
-
-  Gmail --> Verify
-  Photo --> Verify
-  Voice --> Verify
-  Verify --> Read --> Guard --> Map
-  Map -->|trusted Gmail gates pass| Confirmed
-  Map -->|media import or any uncertainty| Review
-  Map -->|duplicate, reimbursement, own transfer| Excluded
-```
+*All three sources share one extractor and one set of guards in the agent. The backend decides the outcome: only a Gmail expense or income that passes every auto-confirm gate is confirmed on import, while photos, voice notes, exclusions and anything uncertain wait in the Review Queue until the User confirms them. Exclusions never count in totals, even once confirmed.*
 
 ## Key decisions
 The auto-confirm boundary is `0.95`. A score at or above that value is necessary but not sufficient. The sender must also pass Gmail authentication, the transaction must be an expense or income, amount and date must be present, currency must be IDR, merchant or description must be present, and the institution must resolve to exactly one active Financial Account owned by the User. A sole account for that institution may resolve without a last-four hint; when several accounts match the institution, the last four digits must identify exactly one. Missing or ambiguous fields, unverified senders, exclusions, and scores below `0.95` stay pending.
