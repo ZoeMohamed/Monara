@@ -8,6 +8,7 @@ import { createMonaraServiceRoleClient } from "@monara/db";
 import { requireActiveUser } from "@/lib/auth/user-deletion";
 import { publicSupabaseConfig } from "@/lib/supabase/config";
 import { scheduleBudgetAlert } from "@/lib/whatsapp/budget-alerts";
+import { GOAL_IMAGE_BUCKET } from "../goals/image.ts";
 
 const FINANCE_OPERATIONS = [
   "list_transactions",
@@ -21,6 +22,10 @@ const FINANCE_OPERATIONS = [
   "list_financial_accounts",
   "create_financial_account",
   "update_financial_account",
+  "list_financial_goals",
+  "create_financial_goal",
+  "edit_financial_goal",
+  "delete_financial_goal",
   "list_categories",
   "create_category",
   "update_category",
@@ -36,10 +41,26 @@ const FINANCE_OPERATIONS = [
   "get_dashboard",
 ] as const;
 
+async function cleanUpDeletedGoalImage(remove: () => Promise<{ error: unknown }>): Promise<void> {
+  try {
+    const cleanup = await remove();
+    if (!cleanup.error) return;
+  } catch {
+    // The goal is already soft-deleted, so storage cleanup cannot roll it back.
+  }
+  process.emitWarning("A deleted goal image could not be cleaned up.", {
+    code: "MONARA_GOAL_IMAGE_CLEANUP_FAILED",
+  });
+}
+
 export type FinanceOperation = (typeof FINANCE_OPERATIONS)[number];
 type AgentFinanceOperation = Exclude<
   FinanceOperation,
   | "create_category"
+  | "list_financial_goals"
+  | "create_financial_goal"
+  | "edit_financial_goal"
+  | "delete_financial_goal"
   | "delete_transaction"
   | "delete_budget"
   | "mark_reminder_read"
@@ -54,14 +75,19 @@ const AGENT_CONFIRMATION_OPERATIONS = [
 type AgentConfirmationOperation = (typeof AGENT_CONFIRMATION_OPERATIONS)[number];
 export type AgentOperation = AgentFinanceOperation | AgentConfirmationOperation;
 
-function financeService(): FinanceService {
+function financeBackend() {
   const client = createMonaraServiceRoleClient(
     publicSupabaseConfig(),
     process.env.SUPABASE_SERVICE_ROLE_KEY,
   );
-  return createFinanceService(createRepository(client), {
+  const service = createFinanceService(createRepository(client), {
     onBudgetReminder: scheduleBudgetAlert,
   });
+  return { client, service };
+}
+
+function financeService(): FinanceService {
+  return financeBackend().service;
 }
 
 /** Budget follow-up for Gmail imports confirmed without review. See evaluateConfirmedImports. */
@@ -76,6 +102,10 @@ export function isFinanceOperation(value: string): value is FinanceOperation {
 function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinanceOperation {
   return (
     value !== "create_category" &&
+    value !== "list_financial_goals" &&
+    value !== "create_financial_goal" &&
+    value !== "edit_financial_goal" &&
+    value !== "delete_financial_goal" &&
     value !== "delete_transaction" &&
     value !== "delete_budget" &&
     value !== "mark_reminder_read" &&
@@ -96,7 +126,7 @@ export async function runFinanceOperation(
   input: unknown,
 ): Promise<unknown> {
   await requireActiveUser(caller.userId);
-  const service = financeService();
+  const { client, service } = financeBackend();
   switch (operation) {
     case "list_transactions":
       return service.listTransactions(caller, input);
@@ -120,6 +150,21 @@ export async function runFinanceOperation(
       return service.createFinancialAccount(caller, input);
     case "update_financial_account":
       return service.updateFinancialAccount(caller, input);
+    case "list_financial_goals":
+      return service.listFinancialGoals(caller, input);
+    case "create_financial_goal":
+      return service.createFinancialGoal(caller, input);
+    case "edit_financial_goal":
+      return service.updateFinancialGoal(caller, input);
+    case "delete_financial_goal": {
+      const goal = await service.deleteFinancialGoal(caller, input);
+      const deletedImagePath = goal.imagePath;
+      if (deletedImagePath)
+        await cleanUpDeletedGoalImage(() =>
+          client.storage.from(GOAL_IMAGE_BUCKET).remove([deletedImagePath]),
+        );
+      return goal;
+    }
     case "list_categories":
       return service.listCategories(caller, input);
     case "create_category":

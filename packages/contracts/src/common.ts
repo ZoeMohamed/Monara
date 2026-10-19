@@ -4,6 +4,7 @@ const MAX_MINOR_UNIT_DIGITS = 20;
 
 export const userIdSchema = z.uuid();
 export const financialAccountIdSchema = z.uuid();
+export const financialGoalIdSchema = z.uuid();
 export const categoryIdSchema = z.uuid();
 export const transactionIdSchema = z.uuid();
 export const budgetIdSchema = z.uuid();
@@ -164,6 +165,7 @@ export const confirmDestructiveActionInputSchema = z
 
 export type UserId = z.infer<typeof userIdSchema>;
 export type FinancialAccountId = z.infer<typeof financialAccountIdSchema>;
+export type FinancialGoalId = z.infer<typeof financialGoalIdSchema>;
 export type CategoryId = z.infer<typeof categoryIdSchema>;
 export type TransactionId = z.infer<typeof transactionIdSchema>;
 export type BudgetId = z.infer<typeof budgetIdSchema>;
