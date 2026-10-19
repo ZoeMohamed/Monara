@@ -1,82 +1,116 @@
-// Pandoc template for the Monara submission PDFs. Built by scripts/build-submission-pdfs.mjs.
-// Colors and typeface follow docs/ui-design-system.md. Paths starting with "/" are relative to the repository root.
-
+// Monara A4 submission PDFs. Approved design and build notes: docs/tech/pdf/README.md.
+// Body content is supplied unchanged by Pandoc. All text stays selectable.
 #let brand = rgb("#3171FD")
-#let accent = rgb("#2865E5")
-#let ink = rgb("#192d52")
-#let muted = rgb("#566b83")
-#let hairline = rgb("#dae8f3")
-#let soft = rgb("#e2f4ff")
-#let canvas = rgb("#f5fbff")
-
+#let accent = rgb("#2459d6")
+#let ink = rgb("#18274b")
+#let muted = rgb("#61708a")
+#let hairline = rgb("#d5dff0")
+#let soft = rgb("#eaf0ff")
+#let canvas = white
+#let navy = rgb("#193b91")
 #let lockup-blue = "/apps/web/public/logos/monara-lockup-light.svg"
 #let lockup-white = "/apps/web/public/logos/monara-lockup-dark.svg"
+#let doc-index = if "$kind$" == "Technical Documentation" { 1 } else if "$kind$" == "Security Self-Assessment" { 2 } else { 3 }
+#let doc-code = "0" + str(doc-index)
+#let cover-title = if doc-index == 1 { [Technical\ Documentation] } else if doc-index == 2 { [Security\ Self-Assessment] } else { [Execution\ Evidence] }
+#let motifs = if doc-index == 1 { ("Architecture", "Algorithms", "Security") } else if doc-index == 2 { ("Identity", "Permissions", "Known risks") } else { ("Tasks", "Attacks", "Extraction") }
 
 #set document(title: "$title$ $kind$", author: "Monara, Team 808")
 #set text(font: ("Nunito Sans", "Helvetica Neue", "Arial"), size: 10pt, fill: ink, lang: "en")
 #set smartquote(enabled: false)
 #set terms(hanging-indent: 1.5em)
 
-// Cover page: no header, footer or page number.
-#page(margin: 0pt, fill: canvas, header: none, footer: none)[
-  #place(top + left, rect(width: 100%, height: 13cm, fill: brand))
-  #place(top + left, dx: 2.2cm, dy: 2.4cm, image(lockup-white, width: 6.4cm))
-  #place(top + left, dx: 2.2cm, dy: 6.4cm, block(width: 15.6cm)[
-    #text(size: 11pt, weight: "bold", fill: soft, tracking: 0.12em)[#upper[$title$, an AI personal finance Agent]]
-    #v(0.5cm)
-    #text(size: 34pt, weight: "bold", fill: white)[$kind$]
+// A full-bleed vector cover with its own coordinated header and footer.
+#page(paper: "a4", margin: 0pt, header: none, footer: none)[
+  #place(top + left, image("/docs/tech/pdf/cover-background.svg", width: 100%, height: 100%))
+  #place(top + left, dx: 1.4cm, dy: 1.3cm, image(lockup-white, width: 5.5cm))
+  #place(top + right, dx: -1.4cm, dy: 0.9cm, text(font: "Montserrat", size: 62pt, weight: 800, fill: white.transparentize(85%))[#doc-code])
+  #place(top + left, dx: 1.4cm, dy: 5.0cm, block(width: 18.2cm)[
+    #set text(fill: white)
+    #text(font: "Montserrat", size: 8pt, weight: "bold", tracking: 0.08em)[SUBMISSION PACKAGE / #doc-code OF 03]
+    #v(0.6cm)
+    #text(font: "Montserrat", size: if doc-index == 2 { 43pt } else { 47pt }, weight: 800, tracking: -0.045em)[#cover-title]
 $if(subtitle)$
-    #v(0.35cm)
-    #text(size: 14pt, fill: soft)[$subtitle$]
+    #v(0.55cm)
+    #block(width: 15.9cm)[#text(size: 15pt, fill: rgb("#dbe7ff"))[$subtitle$]]
 $endif$
+    #v(0.85cm)
+    #for (i, item) in motifs.enumerate() {
+      if i > 0 { h(0.25cm); text(fill: rgb("#bcd3ff"))[→]; h(0.25cm) }
+      box(inset: (x: 10pt, y: 8pt), radius: 8pt, stroke: 0.5pt + white.transparentize(65%), fill: white.transparentize(96%))[
+        #text(font: "Montserrat", weight: "bold", size: 8pt)[#item]
+      ]
+    }
   ])
-  #place(top + left, dx: 2.2cm, dy: 15cm, block(width: 15.6cm)[
-    #set text(size: 10.5pt)
-    #grid(
-      columns: (4.2cm, 1fr),
-      row-gutter: 0.55cm,
-      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Competition]],
-      [2026 Shenzhen International FinTech Competition (FinTechathon)],
-      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Track and topic]],
-      [International Track, Topic A: Personal Finance Assistant],
-      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Team]],
-      [Team 808],
-$if(owner)$
-      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Owner]],
-      [$owner$],
-      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Features]],
-      [$features$],
-$endif$
-      text(fill: muted, weight: "bold", size: 8.5pt, tracking: 0.08em)[#upper[Version]],
-      [$version$, $date$],
+  #place(top + left, dx: 1.4cm, dy: 22.2cm, block(width: 18.2cm)[
+    #set text(fill: white, size: 9pt)
+    #line(length: 100%, stroke: 0.5pt + white.transparentize(65%))
+    #v(0.2cm)
+    #grid(columns: (1fr, 1fr), column-gutter: 0.7cm,
+      [#text(size: 6.5pt, weight: "bold", tracking: 0.09em, fill: rgb("#bad0ff"))[COMPETITION]
+      #v(0.1cm)
+      2026 Shenzhen International FinTech Competition (FinTechathon)],
+      [#text(size: 6.5pt, weight: "bold", tracking: 0.09em, fill: rgb("#bad0ff"))[TRACK AND TOPIC]
+      #v(0.1cm)
+      International Track, Topic A: Personal Finance Assistant],
     )
+    #v(0.3cm)
+    #grid(columns: (1fr, 1fr), column-gutter: 0.7cm,
+      [#text(size: 6.5pt, weight: "bold", tracking: 0.09em, fill: rgb("#bad0ff"))[TEAM]
+      #v(0.1cm)
+      Team 808],
+$if(owner)$
+      [#text(size: 6.5pt, weight: "bold", tracking: 0.09em, fill: rgb("#bad0ff"))[OWNER / FEATURES]
+      #v(0.1cm)
+      $owner$ / $features$],
+$else$
+      [],
+$endif$
+    )
+    #v(0.45cm)
+    #box(inset: (x: 9pt, y: 5pt), radius: 20pt, stroke: 0.5pt + white.transparentize(60%))[
+      #text(font: "Montserrat", size: 7pt, weight: "bold")[$version$, $date$]
+    ]
   ])
+  #place(bottom + left, dx: 1.4cm, dy: -0.65cm, text(size: 6.5pt, tracking: 0.09em, fill: rgb("#c4d8ff"))[#upper[$title$, an AI personal finance Agent]])
+  #place(bottom + right, dx: -1.4cm, dy: -0.65cm, text(size: 6.5pt, fill: rgb("#c4d8ff"))[#doc-code / 03])
 ]
 
 #set page(
+  background: image("/docs/tech/pdf/page-frame.svg", width: 100%, height: 100%),
   paper: "a4",
-  margin: (top: 2.6cm, bottom: 2.4cm, x: 2.2cm),
+  fill: canvas,
+  margin: (top: 3cm, bottom: 2.3cm, x: 1.8cm),
   header: [
-    #grid(
-      columns: (1fr, auto),
-      align: (left + horizon, right + horizon),
+    #grid(columns: (1fr, auto), align: (left + horizon, right + horizon),
       image(lockup-blue, height: 0.52cm),
-      text(size: 8pt, fill: muted)[$kind$],
+      box(fill: soft, radius: 20pt, inset: (x: 10pt, y: 6pt))[
+        #text(font: "Montserrat", size: 6.8pt, weight: "bold", fill: accent)[#doc-code / #upper[$kind$]]
+      ],
     )
-    #v(-0.15cm)
-    #line(length: 100%, stroke: 0.8pt + brand)
-  ],
-  header-ascent: 38%,
-  footer: [
+    #v(0.12cm)
+    #grid(columns: (1fr, auto),
+      text(size: 6.4pt, fill: muted, tracking: 0.06em)[FINTECHATHON 2026 / INTERNATIONAL TRACK],
+      text(size: 6.4pt, fill: muted, tracking: 0.06em)[TEAM 808],
+    )
+    #v(-0.05cm)
     #line(length: 100%, stroke: 0.6pt + hairline)
-    #v(-0.1cm)
-    #grid(
-      columns: (1fr, auto),
-      text(size: 8pt, fill: muted)[Monara #h(0.4em) · #h(0.4em) FinTechathon 2026, International Track, Team 808],
-      context text(size: 8pt, fill: muted)[Page #counter(page).display() of #counter(page).final().first()],
+  ],
+  header-ascent: 20%,
+  footer: context [
+    #let current = counter(page).get().first()
+    #let total = counter(page).final().first()
+    #grid(columns: (current * 1fr, calc.max(0.001, total - current) * 1fr), column-gutter: 0pt,
+      rect(width: 100%, height: 2pt, fill: brand, radius: 1pt),
+      rect(width: 100%, height: 2pt, fill: hairline, radius: 1pt),
+    )
+    #v(0.16cm)
+    #grid(columns: (1fr, auto), align: (left + horizon, right + horizon),
+      text(font: "Montserrat", size: 6.5pt, weight: "bold", fill: navy)[MONARA / TEAM 808],
+      text(size: 7pt, fill: muted)[$version$ #h(0.4em) · #h(0.4em) #current / #total],
     )
   ],
-  footer-descent: 35%,
+  footer-descent: 38%,
 )
 
 #set par(leading: 0.68em, spacing: 0.95em)
@@ -90,22 +124,24 @@ $if(flow)$
 $else$
   pagebreak(weak: true)
 $endif$
-  block(width: 100%, below: 1.1em)[
-    #text(size: 22pt, weight: "bold", fill: accent)[
-      #if it.numbering != none { counter(heading).display(it.numbering); h(0.5em) }
-      #it.body
+  block(width: 100%, below: 1.3em, breakable: false, sticky: true)[
+    #box(fill: brand, radius: (top-right: 7pt, bottom-right: 7pt), inset: (x: 11pt, y: 6pt))[
+      #text(font: "Montserrat", size: 8pt, weight: "bold", fill: white, tracking: 0.05em)[
+        #if it.numbering != none { counter(heading).display(it.numbering); h(0.6em) }
+        #upper[$kind$]
+      ]
     ]
-    #v(0.1cm)
-    #line(length: 100%, stroke: 1.4pt + brand)
+    #v(0.22cm)
+    #text(font: "Montserrat", size: 25pt, weight: 800, fill: ink)[#it.body]
   ]
 }
 #show heading.where(level: 2): it => block(above: 1.6em, below: 0.8em, width: 100%, breakable: false, sticky: true)[
-  #text(size: 15pt, weight: "bold", fill: ink)[
-    #if it.numbering != none { counter(heading).display(it.numbering); h(0.5em) }
+  #text(font: "Montserrat", size: 14pt, weight: "bold", fill: ink)[
+    #if it.numbering != none { text(fill: brand)[#counter(heading).display(it.numbering)]; h(0.5em) }
     #it.body
   ]
-  #v(-0.15cm)
-  #line(length: 100%, stroke: 0.6pt + hairline)
+  #v(-0.1cm)
+  #line(length: 100%, stroke: 0.7pt + hairline)
 ]
 #show heading.where(level: 3): it => block(above: 1.3em, below: 0.6em, breakable: false, sticky: true)[
   #text(size: 11.5pt, weight: "bold", fill: accent)[#it.body]
@@ -120,15 +156,18 @@ $endif$
 #show link: it => text(fill: accent)[#underline(offset: 1.5pt, stroke: 0.5pt + hairline)[#it]]
 #show strong: set text(weight: "bold")
 
-#show raw.where(block: false): it => highlight(fill: soft, extent: 1pt, radius: 2pt, text(font: ("Menlo", "DejaVu Sans Mono"), size: 0.88em, fill: ink, it))
-#show raw.where(block: true): it => block(breakable: false, fill: canvas, stroke: 0.6pt + hairline, radius: 4pt, inset: 9pt, width: 100%, text(font: ("Menlo", "DejaVu Sans Mono"), size: 7.8pt, fill: ink, it))
+#show raw.where(block: false): it => highlight(fill: soft, extent: 1pt, radius: 2pt, text(font: "Geist Mono", size: 1em, fill: ink, it))
+#show raw.where(block: true): it => block(breakable: false, fill: white, stroke: 0.6pt + hairline, radius: 8pt, inset: 10pt, width: 100%, text(font: "Geist Mono", size: 1em, fill: ink, it))
 
 #set table(
   inset: (x: 6pt, y: 5pt),
   stroke: (x, y) => (bottom: 0.5pt + hairline),
-  fill: (x, y) => if y == 0 { soft },
+  fill: (x, y) => if y == 0 { soft } else if calc.odd(y) { white } else { rgb("#f0f3fb") },
 )
-#show table: set text(size: 8.5pt)
+#show table: it => block(breakable: true, stroke: 0.7pt + hairline, radius: 7pt, clip: true, inset: 0pt)[
+  #set text(size: 8.5pt)
+  #it
+]
 #show table.cell: set align(left)
 #show table.cell.where(y: 0): set text(weight: "bold", fill: ink)
 #show figure.where(kind: table): set figure.caption(position: top)
@@ -140,12 +179,12 @@ $endif$
 #let divider = if "divider" in std { divider } else { horizontalRule }
 
 #show quote.where(block: true): it => block(
-  inset: (left: 10pt, y: 4pt), stroke: (left: 2.5pt + brand), width: 100%,
+  inset: (x: 12pt, y: 9pt), fill: soft, radius: (top-right: 8pt, bottom-right: 8pt), stroke: (left: 2.5pt + brand), width: 100%,
 )[#text(fill: muted)[#it.body]]
 
 $if(toc)$
 #block(below: 0.4cm)[
-  #text(size: 22pt, weight: "bold", fill: accent)[Contents]
+  #text(font: "Montserrat", size: 27pt, weight: 800, fill: ink)[Contents]
   #v(0.1cm)
   #line(length: 100%, stroke: 1.4pt + brand)
 ]
