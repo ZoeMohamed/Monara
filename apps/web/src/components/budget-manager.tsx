@@ -6,7 +6,6 @@ import {
   type BudgetUsage,
   type CreateBudgetInput,
   createBudgetInputSchema,
-  isExclusionCategoryName,
   type UpdateBudgetInput,
   updateBudgetInputSchema,
 } from "@monara/contracts";
@@ -174,7 +173,7 @@ function BudgetFields({
               .filter(
                 (category) =>
                   (!category.isArchived || category.id === draft.categoryId) &&
-                  !isExclusionCategoryName(category.name),
+                  category.kind === "expense",
               )
               .map((category) => (
                 <ListBox.Item
@@ -197,6 +196,7 @@ function BudgetFields({
       </Select>
       {creatingCategory && (
         <CategoryCreator
+          initialKind="expense"
           {...finance}
           onClose={() => setCreatingCategory(false)}
           onCreated={(category) => onChange({ categoryId: category.id })}

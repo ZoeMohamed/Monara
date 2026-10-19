@@ -9,7 +9,10 @@ function fakeFetcher(response) {
     async fetcher(url, init) {
       calls.push({ url, init });
       if (response instanceof Error) throw response;
-      return new Response(JSON.stringify(response.body ?? {}), { status: response.status ?? 200 });
+      return new Response(JSON.stringify(response.body ?? {}), {
+        status: response.status ?? 200,
+        headers: response.headers,
+      });
     },
   };
 }
@@ -63,6 +66,28 @@ describe("Brave Search", () => {
       fetcher: fakeFetcher(new Error("offline")).fetcher,
     });
     await assert.rejects(unreachable.search("Kopi"), { name: "BraveSearchError", status: null });
+  });
+
+  it("preserves Retry-After seconds and HTTP dates without printing provider bodies", async () => {
+    for (const [header, expected] of [
+      ["75", 75000],
+      ["invalid", null],
+    ]) {
+      const client = createBraveSearchClient({
+        apiKey: "test-key",
+        fetcher: fakeFetcher({ status: 429, headers: { "Retry-After": header } }).fetcher,
+      });
+      await assert.rejects(client.search("Kopi"), (error) => error.retryAfterMs === expected);
+    }
+    const later = new Date(Date.now() + 120000).toUTCString();
+    const client = createBraveSearchClient({
+      apiKey: "test-key",
+      fetcher: fakeFetcher({ status: 503, headers: { "Retry-After": later } }).fetcher,
+    });
+    await assert.rejects(
+      client.search("Kopi"),
+      (error) => error.retryAfterMs > 118000 && error.retryAfterMs <= 120000,
+    );
   });
 
   it("refuses to start without a key", () => {

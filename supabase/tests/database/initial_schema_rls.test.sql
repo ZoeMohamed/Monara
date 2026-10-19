@@ -159,15 +159,15 @@ values
 
 select is(
   (select count(*)::integer from public.categories where user_id = 'a0000000-0000-4000-8000-000000000001'),
-  25,
-  'new users receive the 25 current default categories'
+  31,
+  'new users receive the 31 current default categories'
 );
 
 select is(
   (select count(*)::integer from public.categories
     where user_id = 'a0000000-0000-4000-8000-000000000001'
       and is_default and not is_archived and icon <> ''),
-  25,
+  31,
   'every current default Category is active and has an icon'
 );
 
@@ -555,7 +555,7 @@ select lives_ok(
       'a1000000-0000-4000-8000-000000000001',
       (select id from public.categories
         where user_id = 'a0000000-0000-4000-8000-000000000001'
-          and slug = 'resto-cafe'),
+          and slug = 'reimbursed'),
       'manual_form', 'exclusion', 'Reimbursement', 50000, 'IDR', '2026-10-12',
       'confirmed'
     )$$::text,

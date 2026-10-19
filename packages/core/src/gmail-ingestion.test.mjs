@@ -260,3 +260,41 @@ describe("runGmailIngestionOperation", () => {
     }
   });
 });
+
+describe("typed Gmail categorization boundary", () => {
+  it("validates the activity guard without loading extraction context", async () => {
+    const calls = [];
+    const repository = { checkConnectionActive: async (id) => calls.push(id) };
+    assert.deepEqual(
+      await runGmailIngestionOperation(repository, "check-connection-active", { connectionId }),
+      {},
+    );
+    assert.deepEqual(calls, [connectionId]);
+    await assert.rejects(
+      runGmailIngestionOperation(repository, "check-connection-active", { connectionId, userId }),
+      { code: "VALIDATION_FAILED" },
+    );
+    assert.deepEqual(calls, [connectionId]);
+  });
+  it("passes an uncertain terminal outcome without triggering financial hooks", async () => {
+    const repository = fakeRepository({}, { confirmed: false });
+    const hooks = [];
+    const input = { transactionId, categoryId: null, kind: null, confidence: null };
+    assert.deepEqual(
+      await runGmailIngestionOperation(repository, "set-imported-category", input, {
+        onTransactionsConfirmed: async (...args) => hooks.push(args),
+      }),
+      { applied: true },
+    );
+    assert.deepEqual(repository.calls, [{ name: "setImportedCategory", input }]);
+    assert.deepEqual(hooks, []);
+    await assert.rejects(
+      runGmailIngestionOperation(repository, "set-imported-category", {
+        ...input,
+        kind: "expense",
+      }),
+      { code: "VALIDATION_FAILED" },
+    );
+    assert.equal(repository.calls.length, 1);
+  });
+});

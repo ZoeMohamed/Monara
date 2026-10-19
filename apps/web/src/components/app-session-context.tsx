@@ -20,7 +20,7 @@ export type AppSession = {
   budgets: Budget[];
   financialAccounts: FinancialAccount[];
   categories: Category[];
-  createDemoCategory: (input: { name: string; icon: string }) => void;
+  createDemoCategory: (input: { name: string; icon: string; kind: Category["kind"] }) => void;
   updateDemoCategory: (original: string, changes: { name: string; icon: string }) => void;
   archiveDemoCategory: (name: string) => void;
   createDemoAccount: (input: Omit<CreateFinancialAccountInput, "clientRequestId">) => void;

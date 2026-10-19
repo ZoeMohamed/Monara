@@ -47,11 +47,16 @@ function SyncStatus({ sync }: { sync: GmailMailbox["sync"] }) {
         Last import: {sync.transactions} {sync.transactions === 1 ? "transaction" : "transactions"}
         {sync.confirmed > 0 ? ` (${sync.confirmed} confirmed automatically)` : ""} · {sync.skipped}{" "}
         skipped · {sync.failed} failed
+        {sync.needsReview > 0 ? ` · ${sync.needsReview} need review in Pending` : ""}
       </p>
     );
   return (
     <p role="status" className="mt-4 text-sm text-muted">
-      {sync.state === "queued" ? "Import queued…" : "Importing transactions…"}
+      {sync.state === "queued"
+        ? "Import queued…"
+        : sync.state === "running" && sync.categorizing > 0
+          ? "Categorizing transactions…"
+          : "Importing transactions…"}
     </p>
   );
 }

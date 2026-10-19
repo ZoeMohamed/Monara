@@ -1,6 +1,6 @@
 "use client";
 
-import { type Category, calendarDateSchema, isExclusionCategoryName } from "@monara/contracts";
+import { type Category, calendarDateSchema } from "@monara/contracts";
 import { Button, FieldError, Input, Label, ListBox, Select, TextField } from "@monara/ui";
 import { type FormEvent, useState } from "react";
 import styles from "@/components/budget-manager.module.css";
@@ -64,8 +64,6 @@ function useDemoBudgetDraft(
     if (limit === null || limit <= 0) next.amount = "Enter a positive whole amount of rupiah.";
     if (draft.category.trim().length === 0 || draft.category.trim().length > 100)
       next.category = "Enter a category name, up to 100 characters.";
-    if (isExclusionCategoryName(draft.category.trim()))
-      next.category = "Choose an expense category. Exclusions do not count toward budgets.";
     if (!calendarDateSchema.safeParse(draft.startsOn).success)
       next.startsOn = "Choose a valid start date.";
     const warningPercent = Number(draft.warningPercent);
@@ -129,21 +127,18 @@ export function DemoBudgetCreator({
   const categories = (
     demoCategories
       ? demoCategories
-          .filter((category) => !category.isArchived)
+          .filter((category) => !category.isArchived && category.kind === "expense")
           .map((category) => category.name)
           .sort((a, b) => a.localeCompare(b))
       : [
           ...new Set([
             ...budgets.map((budget) => budget.category),
             ...transactions.flatMap((transaction) =>
-              transaction.category ? [transaction.category] : [],
+              transaction.kind === "expense" && transaction.category ? [transaction.category] : [],
             ),
           ]),
         ].sort((a, b) => a.localeCompare(b))
-  ).filter(
-    (category) =>
-      !budgeted.has(category.trim().toLowerCase()) && !isExclusionCategoryName(category),
-  );
+  ).filter((category) => !budgeted.has(category.trim().toLowerCase()));
   const { draft, errors, change } = editor;
   if (editor.discard)
     return (

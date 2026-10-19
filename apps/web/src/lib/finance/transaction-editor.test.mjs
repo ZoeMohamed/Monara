@@ -25,7 +25,7 @@ const hooks = registerHooks({
     }
     if (specifier === "react/jsx-runtime") {
       return {
-        url: "data:text/javascript,export const jsx = () => null, jsxs = () => null, Fragment = null;",
+        url: "data:text/javascript,export const jsx = (type, props) => ({ type, props }), jsxs = jsx, Fragment = null;",
         shortCircuit: true,
       };
     }
@@ -41,7 +41,7 @@ const hooks = registerHooks({
     if (url !== editorUrl) return nextLoad(url, context);
     // Inspect the actual private hook without adding a production export or JSX
     // renderer. TypeScript only erases types/JSX; the hook logic is unchanged.
-    const source = `${readFileSync(new URL(url), "utf8")}\nexport { useTransactionEditorState as useEditorStateForTest };`;
+    const source = `${readFileSync(new URL(url), "utf8")}\nexport { useTransactionEditorState as useEditorStateForTest, kindChange as kindChangeForTest, TransactionCategoryChoice as categoryChoiceForTest };`;
     const result = ts.transpileModule(source, {
       fileName: "transaction-editor.tsx",
       compilerOptions: {
@@ -53,15 +53,28 @@ const hooks = registerHooks({
     return { format: "module", source: result.outputText, shortCircuit: true };
   },
 });
-const { useEditorStateForTest } = await import(editorUrl);
+const { useEditorStateForTest, kindChangeForTest, categoryChoiceForTest } = await import(editorUrl);
 hooks.deregister();
 
+const originalDomGlobals = new Map(
+  ["SubmitEvent", "HTMLButtonElement"].map((name) => [
+    name,
+    Object.getOwnPropertyDescriptor(globalThis, name),
+  ]),
+);
+for (const name of originalDomGlobals.keys()) {
+  Object.defineProperty(globalThis, name, { configurable: true, value: class {} });
+}
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
 Object.defineProperty(globalThis, "window", {
   configurable: true,
   value: { addEventListener() {}, removeEventListener() {} },
 });
 after(() => {
+  for (const [name, descriptor] of originalDomGlobals) {
+    if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+    else Reflect.deleteProperty(globalThis, name);
+  }
   if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
   else Reflect.deleteProperty(globalThis, "window");
   delete globalThis[runtimeKey];
@@ -73,7 +86,7 @@ const originalVersion = "2026-10-17T10:00:00Z";
 const latestVersion = "2026-10-17T10:01:00Z";
 const resources = {
   financialAccounts: [{ id: accountId, name: "Daily bank", isActive: true }],
-  categories: [{ id: categoryId, name: "Resto & Cafe", isArchived: false }],
+  categories: [{ id: categoryId, name: "Resto & Cafe", kind: "expense", isArchived: false }],
 };
 
 function transaction(version = originalVersion, merchant = "Original lunch", amount = 25000) {
@@ -168,11 +181,13 @@ function mountEditor(overrides = {}) {
   return { props, saved, closes, draftChanges, render: useRenderEditor };
 }
 
-function submitEvent() {
+function submitEvent(action) {
   const focused = [];
+  const nativeEvent = action ? new SubmitEvent() : {};
+  if (action) nativeEvent.submitter = Object.assign(new HTMLButtonElement(), { value: action });
   return {
     focused,
-    nativeEvent: {},
+    nativeEvent,
     preventDefault() {},
     currentTarget: {
       querySelector(selector) {
@@ -187,6 +202,157 @@ function submitEvent() {
 }
 
 describe("transaction editor recovery", () => {
+  it("saves an unknown pending type while preserving its owned category hint", async () => {
+    const original = transaction();
+    const editor = mountEditor({
+      transaction: {
+        ...original,
+        kind: null,
+        status: "pending",
+        backend: { ...original.backend, kind: null },
+      },
+    });
+    editor.render().changeDraft({ merchant: "Corrected evidence" });
+    await editor.render().submit(submitEvent("edit"));
+    assert.equal(editor.saved.length, 1);
+    assert.equal(editor.saved[0][0].kind, null);
+    assert.equal(editor.saved[0][0].categoryId, categoryId);
+    assert.equal(editor.saved[0][1], "edit");
+    assert.equal(editor.render().state.errors.category, undefined);
+  });
+
+  it("preserves an unchanged archived owned hint on pending edit, while rejecting changed or conflicting hints", async () => {
+    const original = transaction();
+    const archived = structuredClone(resources);
+    archived.categories[0].isArchived = true;
+    const pending = {
+      ...original,
+      kind: null,
+      status: "pending",
+      backend: { ...original.backend, kind: null },
+    };
+    const editor = mountEditor({ resources: archived, transaction: pending });
+    await editor.render().submit(submitEvent("edit"));
+    assert.equal(editor.saved.length, 1);
+    assert.equal(editor.saved[0][0].categoryId, categoryId);
+
+    for (const changes of [
+      { kind: "income" },
+      { category: "00000000-0000-4000-8000-000000000299" },
+    ]) {
+      const unavailable = structuredClone(archived);
+      unavailable.categories.push({
+        ...unavailable.categories[0],
+        id: "00000000-0000-4000-8000-000000000299",
+      });
+      const invalid = mountEditor({ resources: unavailable, transaction: pending });
+      invalid.render().changeDraft(changes);
+      await invalid.render().submit(submitEvent("edit"));
+      assert.equal(invalid.saved.length, 0);
+      assert.match(invalid.render().state.errors.category, /available category/);
+    }
+  });
+
+  it("shows the existing hint before type selection and clears it only for a conflicting type", () => {
+    const draft = { kind: null, category: categoryId };
+    const view = categoryChoiceForTest({
+      draft,
+      resources,
+      errors: {},
+      disabled: false,
+      onChange() {},
+    });
+    assert.deepEqual(
+      view.props.options.map((option) => option.id),
+      [categoryId],
+    );
+    assert.deepEqual(kindChangeForTest(draft, null, resources), {
+      kind: null,
+      category: categoryId,
+    });
+    assert.deepEqual(kindChangeForTest(draft, "Expense", resources), {
+      kind: "expense",
+      category: categoryId,
+    });
+    assert.deepEqual(kindChangeForTest(draft, "Income", resources), {
+      kind: "income",
+      category: null,
+    });
+  });
+
+  it("still rejects an unowned category hint on an unknown pending type", async () => {
+    const original = transaction();
+    const editor = mountEditor({
+      resources: { ...resources, categories: [] },
+      transaction: {
+        ...original,
+        kind: null,
+        status: "pending",
+        backend: { ...original.backend, kind: null },
+      },
+    });
+    await editor.render().submit(submitEvent("edit"));
+    assert.equal(editor.saved.length, 0);
+    assert.match(editor.render().state.errors.category, /available category/);
+  });
+
+  it("requires an account before submitting a new live manual exclusion", async () => {
+    const editor = mountEditor({
+      transaction: undefined,
+      initialDraft: {
+        merchant: "My wallet transfer",
+        amount: "25000",
+        date: "2026-10-17",
+        time: "",
+        kind: "exclusion",
+        currency: "IDR",
+        category: null,
+        method: null,
+      },
+    });
+    const event = submitEvent();
+    await editor.render().submit(event);
+    assert.equal(editor.saved.length, 0);
+    assert.equal(editor.render().state.errors.method, "Choose an account.");
+    assert.match(event.focused[0], /data-field="method"/);
+  });
+
+  it("allows reviewing an existing pending exclusion without an assigned account", async () => {
+    const original = transaction();
+    const editor = mountEditor({
+      transaction: {
+        ...original,
+        kind: "exclusion",
+        status: "pending",
+        category: null,
+        method: null,
+        backend: { ...original.backend, categoryId: null, financialAccountId: null },
+      },
+    });
+    await editor.render().submit(submitEvent());
+    assert.equal(editor.saved.length, 1);
+    assert.equal(editor.saved[0][0].financialAccountId, null);
+    assert.equal(editor.saved[0][1], "confirm");
+  });
+
+  it("rejects an incompatible typed category even when its name looks like an expense", async () => {
+    const incompatible = structuredClone(resources);
+    incompatible.categories[0].kind = "income";
+    const editor = mountEditor({ resources: incompatible });
+    await editor.render().submit(submitEvent());
+    assert.equal(editor.saved.length, 0);
+    assert.match(editor.render().state.errors.category, /matching this transaction type/);
+  });
+
+  it("keeps a live exclusion's canonical category id when opening the editor", () => {
+    const exclusions = structuredClone(resources);
+    exclusions.categories[0].kind = "exclusion";
+    exclusions.categories[0].name = "My transfer";
+    const original = { ...transaction(), kind: "exclusion", category: "My transfer" };
+    const editor = mountEditor({ resources: exclusions, transaction: original });
+    assert.equal(editor.render().state.draft.category, categoryId);
+  });
+
   it("blocks a changed record until the user reviews it, then preserves their draft explicitly", async () => {
     const editor = mountEditor();
     editor.render().changeDraft({ merchant: "My corrected lunch", amount: "30000" });
@@ -258,7 +424,7 @@ describe("transaction editor recovery", () => {
       assert.equal(editor.saved.length, 0);
       assert.match(
         editor.render().state.errors[field],
-        field === "method" ? /active account/ : /archived or removed/,
+        field === "method" ? /active account/ : /matching this transaction type/,
       );
       assert.equal(event.focused.length, 1);
       assert.match(event.focused[0], new RegExp(`data-field="${field}"`));

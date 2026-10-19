@@ -22,6 +22,7 @@ import {
   type RecordGmailExtractionsInput,
   type RecordGmailExtractionsResult,
   type ReportGmailConnectionErrorInput,
+  type ReportGmailProcessingRetryInput,
   type ReportGmailSyncFailureInput,
   type ResolvedGmailConnection,
   type ResolvedImportedTransaction,
@@ -32,6 +33,7 @@ import {
   releaseMerchantProfileInputSchema,
   reportGmailConnectionErrorInputSchema,
   reportGmailConnectionErrorResultSchema,
+  reportGmailProcessingRetryInputSchema,
   reportGmailSyncFailureInputSchema,
   reportGmailSyncFailureResultSchema,
   resolvedGmailConnectionSchema,
@@ -145,6 +147,14 @@ export function createGmailBackend(config: BackendConfig) {
       return call("gmail.resolve-connection", input, resolvedGmailConnectionSchema);
     },
 
+    async checkConnectionActive(connectionId: string): Promise<void> {
+      await call(
+        "gmail.check-connection-active",
+        resolveGmailConnectionInputSchema.parse({ connectionId }),
+        emptyResultSchema,
+      );
+    },
+
     claimMessage(input: ClaimGmailMessageInput): Promise<ClaimGmailMessageResult> {
       return call(
         "gmail.claim-message",
@@ -183,6 +193,14 @@ export function createGmailBackend(config: BackendConfig) {
         "gmail.claim-messages",
         claimGmailMessagesInputSchema.parse(input),
         claimGmailMessagesResultSchema,
+      );
+    },
+
+    async reportProcessingRetry(input: ReportGmailProcessingRetryInput): Promise<void> {
+      await call(
+        "gmail.report-processing-retry",
+        reportGmailProcessingRetryInputSchema.parse(input),
+        emptyResultSchema,
       );
     },
 
