@@ -98,6 +98,27 @@ describe("goal projection", () => {
     assert.equal(result.paceCoveragePercent, 150);
   });
 
+  it("assigns every rupiah of proportional surplus after integer rounding", () => {
+    const secondGoal = goal({
+      id: "a1000000-0000-4000-8000-000000000002",
+      name: "Holiday",
+    });
+    const result = buildGoalPlan(
+      [goal(), secondGoal],
+      [transaction("income", 3, "2026-10-01")],
+      "2026-10-18",
+    );
+
+    assert.deepEqual(
+      result.active.map((item) => item.projectedMonthlyContribution),
+      [1n, 2n],
+    );
+    assert.equal(
+      result.active.reduce((sum, item) => sum + item.projectedMonthlyContribution, 0n),
+      result.monthlySurplus,
+    );
+  });
+
   it("never treats negative cash flow, pending records, or exclusions as savings capacity", () => {
     const result = buildGoalPlan(
       [goal()],

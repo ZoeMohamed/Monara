@@ -93,11 +93,15 @@ export function buildGoalPlan(
   const activeItems = items.filter((item) => item.goal.status === "active");
   const completed = items.filter((item) => item.goal.status === "completed");
   const totalRequiredMonthly = activeItems.reduce((sum, item) => sum + item.requiredMonthly, 0n);
-  const active = activeItems.map((item) => {
+  let unallocatedSurplus = monthlySurplus;
+  const active = activeItems.map((item, index) => {
     const projectedMonthlyContribution =
-      totalRequiredMonthly > 0n
-        ? (monthlySurplus * item.requiredMonthly) / totalRequiredMonthly
-        : 0n;
+      totalRequiredMonthly === 0n
+        ? 0n
+        : index === activeItems.length - 1
+          ? unallocatedSurplus
+          : (monthlySurplus * item.requiredMonthly) / totalRequiredMonthly;
+    unallocatedSurplus -= projectedMonthlyContribution;
     return {
       ...item,
       projectedMonthlyContribution,
