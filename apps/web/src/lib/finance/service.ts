@@ -6,9 +6,9 @@ import {
 } from "@monara/core";
 import { createMonaraServiceRoleClient } from "@monara/db";
 import { requireActiveUser } from "@/lib/auth/user-deletion";
-import { reviewBillsWithAgent } from "@/lib/bills/review";
 import { publicSupabaseConfig } from "@/lib/supabase/config";
 import { scheduleBudgetAlert } from "@/lib/whatsapp/budget-alerts";
+import { reviewBillsWithAgent } from "../bills/review.ts";
 import { GOAL_IMAGE_BUCKET } from "../goals/image.ts";
 
 const FINANCE_OPERATIONS = [

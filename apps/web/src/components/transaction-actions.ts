@@ -10,7 +10,6 @@ import {
 import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import type { TransactionDraft } from "@/components/transaction-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
-import { trackedBill } from "@/components/use-live-bills";
 import type { SaveNotice } from "@/components/use-monara-session";
 import {
   deleteConfirmedTransaction,
@@ -25,6 +24,7 @@ import {
 } from "@/data/demo-ledger";
 import type { Transaction } from "@/data/sample-data";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
+import { trackedBill } from "../lib/bills/presentation.ts";
 
 type Setter<Value> = Dispatch<SetStateAction<Value>>;
 export type CreateRequest = { id: string; values?: BackendTransactionValues; locked?: boolean };
