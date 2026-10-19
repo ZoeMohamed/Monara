@@ -1,6 +1,6 @@
 # Agent design
 
-Owner: Argya. Features: F10, F11, F12. Status: Implemented and reviewed.
+Owner: Argya. Features: F10, F11, F12, F13, F14. Status: Implemented and reviewed.
 
 ## Purpose
 
