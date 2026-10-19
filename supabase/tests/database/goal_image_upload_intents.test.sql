@@ -134,10 +134,10 @@ select lives_ok(
   'the registered exact path passes authenticated Storage authorization'
 );
 reset role;
-set local role service_role;
+-- Age the synthetic row as the migration-test owner. service_role deliberately
+-- has no direct table grants; it may only mutate upload state through RPCs.
 update private.goal_image_uploads set created_at = now() - interval '90 days'
 where upload_id = 'f1950000-0000-4000-8000-000000000002';
-reset role;
 set local role authenticated;
 select throws_ok(
   $$insert into storage.objects (bucket_id, name) values ('goal-images',
