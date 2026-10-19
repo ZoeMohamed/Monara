@@ -128,7 +128,7 @@ export function useTransactionActions(context: ActionContext) {
             ? "out"
             : values.kind === "income"
               ? "in"
-              : null,
+              : (previous?.flowDirection ?? null),
       categoryId,
       financialAccountId,
     });

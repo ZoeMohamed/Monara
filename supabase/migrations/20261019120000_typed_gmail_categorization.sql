@@ -173,7 +173,16 @@ create index transactions_pending_gmail_classification_idx on public.transaction
   where gmail_classification_status='pending';
 
 -- An absent extracted date is unknown. Legacy rows retain their existing dates.
-alter table public.transactions alter column occurred_on drop not null;
+alter table public.transactions
+  alter column occurred_on drop not null,
+  drop constraint transactions_flow_direction_check,
+  add constraint transactions_flow_direction_check check (
+    (transaction_type is null and review_status='pending'
+      and (flow_direction is null or flow_direction in ('in','out')))
+    or (transaction_type='expense' and flow_direction='out')
+    or (transaction_type='income' and flow_direction='in')
+    or (transaction_type='exclusion' and (flow_direction is null or flow_direction in ('in','out')))
+  );
 create or replace function private.normalize_transaction_foundation()
 returns trigger language plpgsql security invoker set search_path='' as $$
 begin
@@ -182,7 +191,8 @@ begin
       (statement_timestamp() at time zone 'Asia/Jakarta')::date);
   end if;
   new.flow_direction:=case new.transaction_type when 'expense' then 'out'
-    when 'income' then 'in' when 'exclusion' then new.flow_direction else null end;
+    when 'income' then 'in' when 'exclusion' then new.flow_direction
+    else case when new.flow_direction in ('in','out') then new.flow_direction end end;
   return new;
 end; $$;
 
@@ -309,7 +319,8 @@ begin
           when 'expense' then 'out'
           when 'income' then 'in'
           when 'exclusion' then entry.item ->> 'flowDirection'
-          else null
+          else case when entry.item ->> 'flowDirection' in ('in','out')
+            then entry.item ->> 'flowDirection' end
         end as flow_direction,
         entry.item ->> 'merchantName' as merchant_name,
         (entry.item -> 'money' ->> 'amountMinor')::numeric as amount,

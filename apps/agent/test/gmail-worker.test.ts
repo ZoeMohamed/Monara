@@ -255,13 +255,13 @@ describe("merchant queue provider backoff", () => {
           const url = String(input);
           if (url.endsWith("/resolve-imported-transaction"))
             return Response.json({
-              merchantName: "Synthetic Cafe",
+              merchantName: "Kopi Kenangan",
               location: null,
               needsCategory: true,
               categoryNames: [],
               kind: "expense",
               flowDirection: "out",
-              counterpartyName: "Synthetic Cafe",
+              counterpartyName: "Kopi Kenangan",
               counterpartyType: "business",
               categories: [
                 {

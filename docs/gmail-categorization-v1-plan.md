@@ -9,7 +9,7 @@ The User accepted the [reduced design](gmail-categorization-design-2026-10-19.md
 3. Enforce owned active Category/type compatibility on financial writes and expense-only budget categories.
 4. Preserve extracted counterparty identity/type and explicit transfer evidence. Use the confirmed profile full name for automated Internal evidence, without Google-name fallback.
 5. Track classification as pending, completed, or needs review for new Gmail imports. Disable personal merchant-category history reuse. Queue every new classification candidate, including missing merchants and exclusions.
-6. Apply classification by owned Category ID under a transaction lock. Preserve cash direction and financial facts, reject incompatible categories, and protect User edits. Auto-confirm only eligible complete authenticated imports with strong extraction and classification evidence; other exclusion reasons require review.
+6. Apply classification by owned Category ID under a transaction lock. Preserve stated cash direction even when the pending type is unknown, reject incompatible categories, and protect financial facts and User edits. Auto-confirm only eligible complete authenticated imports with strong extraction and classification evidence; other exclusion reasons require review.
 7. Include pending classification in sync progress. Terminal needs-review outcomes permit import completion and contribute a separate review count.
 
 ## Worker and integrations

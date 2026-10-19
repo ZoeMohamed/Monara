@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  brands,
   type ClaimMerchantProfileResult,
   type ResolvedImportedTransaction,
   resolvedImportedTransactionSchema,
@@ -206,6 +207,64 @@ describe("transaction categorization", () => {
       assert.equal(calls.prompts.length, 1);
     }
   });
+  it("searches canonical public names only for exact bundled names and aliases", async () => {
+    for (const [counterpartyName, expected] of [
+      ["  kOPi   kENAngAN  ", "Kopi Kenangan"],
+      ["Ｋｏｐｉ　Ｋｅｎａｎｇａｎ", "Kopi Kenangan"],
+      ["  BANK   CENTRAL ASIA ", "BCA"],
+      ["Spotify Premium", "Spotify"],
+    ]) {
+      const { pipeline, calls } = setup({ transaction: { counterpartyName } });
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+      assert.deepEqual(calls.searches, [expected]);
+      assert.equal(calls.claims, 1);
+      assert.equal(calls.prompts.length, 1);
+    }
+  });
+  it("skips search and profile claims for unverified businesses and private identifiers", async () => {
+    for (const counterpartyName of [
+      "Budi Santoso",
+      "BCA1234",
+      "BCA****1234",
+      "BCA１２３４",
+      "BCA 1 2 3 4",
+      "BCA ****",
+      "BCA xxxx",
+      "BCA ••••",
+      "<BCA>",
+      "BCA@example.com",
+      "https://bca.co.id",
+      "BCA account",
+      "Kopi Kenangan Budi Santoso",
+      "Kopi Kenangan Pejaten Timur",
+      "BAKED. Pejaten Timur",
+      "Unknown Local Bakery",
+    ]) {
+      const { pipeline, calls } = setup({
+        transaction: { counterpartyName, counterpartyType: "business" },
+      });
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"], counterpartyName);
+      assert.deepEqual(calls.searches, [], counterpartyName);
+      assert.equal(calls.claims, 0, counterpartyName);
+      assert.deepEqual(calls.saved, [], counterpartyName);
+      assert.equal(calls.prompts.length, 1, counterpartyName);
+      assert.equal(JSON.parse(calls.prompts[0]?.user ?? "{}").businessSearch, null);
+    }
+  });
+  it("keeps recognized brands private when transfer or holder evidence forbids lookup", async () => {
+    for (const transaction of [
+      { counterpartyName: "BCA", isTransfer: true },
+      { counterpartyName: "Kopi Kenangan", holderName: "Kopi Kenangan" },
+      { counterpartyName: "BCA", counterpartyType: "person" as const },
+      { counterpartyName: "BCA", counterpartyType: "unknown" as const },
+    ]) {
+      const { pipeline, calls } = setup({ transaction });
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+      assert.deepEqual(calls.searches, []);
+      assert.equal(calls.claims, 0);
+      assert.equal(calls.prompts.length, 1);
+    }
+  });
   it("reuses only business evidence while each transaction is classified from its own facts", async () => {
     const other = "00000000-0000-4000-8000-000000000031";
     const { pipeline, calls } = setup({
@@ -268,11 +327,16 @@ describe("transaction categorization", () => {
       { length: 20 },
       (_, index) => `00000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
     );
+    const publicNames = Object.values(brands)
+      .filter((brand) => brand.kind === "merchant" && !/\p{N}/u.test(brand.name))
+      .slice(0, ids.length)
+      .map((brand) => brand.name);
+    assert.equal(publicNames.length, ids.length);
     const scenarios = [
       {
         name: "unique businesses",
         transactions: Object.fromEntries(
-          ids.map((id, index) => [id, { counterpartyName: `Synthetic Shop ${index}` }]),
+          ids.map((id, index) => [id, { counterpartyName: publicNames[index] }]),
         ),
         expectedSearches: 20,
         expectedModels: 20,

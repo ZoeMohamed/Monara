@@ -27,7 +27,7 @@ export const transactionSourceSchema = z.enum([
 
 const transactionValuesShape = {
   kind: transactionKindSchema.nullable(),
-  /** Cash direction, retained for exclusions even though they do not affect totals. */
+  /** Stated cash direction, also retained for exclusions and unknown pending types. */
   flowDirection: transactionFlowDirectionSchema.nullable().optional(),
   merchantName: z.string().trim().min(1).max(200).nullable(),
   money: positiveMoneySchema.nullable(),
@@ -50,10 +50,9 @@ function validateTransactionValues(
   const expectedDirection =
     value.kind === "expense" ? "out" : value.kind === "income" ? "in" : null;
   if (
-    (expectedDirection !== null &&
-      value.flowDirection != null &&
-      value.flowDirection !== expectedDirection) ||
-    (value.kind === null && value.flowDirection != null)
+    expectedDirection !== null &&
+    value.flowDirection != null &&
+    value.flowDirection !== expectedDirection
   ) {
     context.addIssue({
       code: "custom",

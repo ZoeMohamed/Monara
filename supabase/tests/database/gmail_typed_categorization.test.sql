@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
-select plan(50);
+select plan(59);
 set local role service_role;
 update public.financial_accounts set institution_key='BCA_CC',
   gmail_connection_id='12000000-0000-4000-8000-000000000001'
@@ -142,5 +142,33 @@ select throws_ok($$update public.transactions set review_status='confirmed' wher
 update public.categories set is_archived=true where id=pg_temp.category('salary');
 select lives_ok($$update public.transactions set transaction_type=null,category_id=pg_temp.category('salary'),description='User update' where id='13900000-0000-4000-8000-000000000001'$$,'unchanged archived hint survives pending edits');
 select throws_ok($$update public.transactions set transaction_type=null,category_id=pg_temp.category('salary') where id=(select id from examples where name='no-choice')$$,'23514',null,'new archived hint assignments remain forbidden');
+-- Unknown transaction types retain stated cash direction without inventing one.
+-- Salary was archived for the earlier assignment tests; activate it for this distinct import.
+update public.categories set is_archived=false where id=pg_temp.category('salary');
+insert into examples values
+ ('unknown-kind-out',pg_temp.import('typed-unknown-kind-out','{"kind":null,"flowDirection":"out"}')),
+ ('unknown-kind-in',pg_temp.import('typed-unknown-kind-in','{"kind":null,"flowDirection":"in"}')),
+ ('unknown-kind-no-direction',pg_temp.import('typed-unknown-kind-none','{"kind":null,"flowDirection":null}'));
+select is((select row(kind,flow_direction)::text from public.imported_transaction_for_category((select id from examples where name='unknown-kind-out'))),
+ row(null::text,'out')::text,'resolve keeps explicit outflow for unknown type');
+select is((select row(kind,flow_direction)::text from public.imported_transaction_for_category((select id from examples where name='unknown-kind-in'))),
+ row(null::text,'in')::text,'resolve keeps explicit inflow for unknown type');
+select is((select row(kind,flow_direction)::text from public.imported_transaction_for_category((select id from examples where name='unknown-kind-no-direction'))),
+ row(null::text,null::text)::text,'resolve leaves unstated unknown cash direction null');
+select throws_ok($$select * from public.set_imported_category((select id from examples where name='unknown-kind-out'),pg_temp.category('salary'),'income',0.99)$$,
+ '22023',null,'unknown-type outflow rejects an incompatible income category');
+select throws_ok($$select * from public.set_imported_category((select id from examples where name='unknown-kind-in'),pg_temp.category('resto-cafe'),'expense',0.99)$$,
+ '22023',null,'unknown-type inflow rejects an incompatible expense category');
+select public.set_imported_category((select id from examples where name='unknown-kind-out'),pg_temp.category('resto-cafe'),'expense',0.99);
+select is((select row(transaction_type,flow_direction,review_status)::text from public.transactions where id=(select id from examples where name='unknown-kind-out')),
+ row('expense','out','pending')::text,'compatible expense suggestion preserves stated outflow and review');
+select public.set_imported_category((select id from examples where name='unknown-kind-in'),pg_temp.category('salary'),'income',0.99);
+select is((select row(transaction_type,flow_direction,review_status)::text from public.transactions where id=(select id from examples where name='unknown-kind-in')),
+ row('income','in','pending')::text,'compatible income suggestion preserves stated inflow and review');
+select throws_ok($$select * from public.set_imported_category((select id from examples where name='unknown-kind-no-direction'),pg_temp.category('resto-cafe'),'expense',0.99)$$,
+ '22023',null,'missing cash direction cannot be invented by an expense category');
+select public.set_imported_category((select id from examples where name='unknown-kind-no-direction'),null::uuid,null::text,null::numeric);
+select is((select flow_direction from public.transactions where id=(select id from examples where name='unknown-kind-no-direction')),
+ null::text,'terminal review preserves an unstated cash direction as null');
 select * from finish();
 rollback;

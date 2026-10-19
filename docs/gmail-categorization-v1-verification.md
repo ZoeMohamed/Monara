@@ -50,9 +50,12 @@ The last SQL-only confirmation guard additionally keeps nonbusiness transfers pe
 - Unknown-type pending category hints survive editor validation, picker rendering, and the live `edit_pending` boundary. Unchanged archived owned hints remain editable; changed or unowned hints and known-type mismatches are rejected.
 - Imported-transaction resolution reuses connection-path holder-name normalization. Regression tests cover a whitespace-padded 150-character confirmed name, repeated whitespace, and missing identity evidence.
 - A signed-in synthetic local browser at 390 by 844 saved an unknown-type pending row with an unchanged archived category hint through the real backend (`edit_pending` returned 200). Reload and a local database assertion confirmed the null type, same category, and pending review status were preserved.
+- Additional review coverage rejects personal names mislabeled as businesses, unrecognized businesses, four-digit account suffixes, masked identifiers, and Unicode numeric variants before any merchant-profile claim or Brave request. Exact bundled aliases send only the catalog's canonical public name.
+- The import migration, direction constraint, normalizer, public read contract, and pending-edit boundary retain explicitly stated `in` or `out` direction for unknown pending types. Known-type direction conflicts still reject. Clean database replay passed all 274 SQL assertions, SQL lint, and exact generated-type checks, including nine direction regressions.
 
 ## Limits
 
+- Brave enrichment is limited to exact names or aliases in the bundled public brand catalog. Unrecognized businesses still receive transaction-based categorization without a search; no arbitrary extracted name is sent as a query.
 - Counterparty identity, sender/recipient roles, and explicit transfer meaning still depend on the extractor's semantic reading. Text-presence checks and deterministic full-name rules constrain model output; they do not independently prove bank-account ownership.
 - Model confidence values are operational thresholds, not calibrated probabilities.
 - Provider quotas and actual first-import/new-email latency remain unmeasured. A bounded live-provider comparison is a separate follow-up.

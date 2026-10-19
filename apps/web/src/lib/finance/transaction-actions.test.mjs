@@ -181,6 +181,30 @@ function mountActions(respond, categoryKind = "expense", categoryArchived = fals
 }
 
 describe("transaction action recovery", () => {
+  it("preserves stated cash direction when a pending edit leaves the type unknown", async () => {
+    for (const flowDirection of ["in", "out"]) {
+      const original = {
+        ...backendTransaction(),
+        kind: null,
+        flowDirection,
+        reviewStatus: "pending",
+      };
+      const actions = mountActions(async (_path, input) =>
+        Response.json({ transaction: { ...original, ...input.changes }, action: receipt }),
+      );
+      actions.state.editing = {
+        ...values,
+        kind: null,
+        id: transactionId,
+        status: "pending",
+        backend: original,
+      };
+      await actions.render().save({ ...values, kind: null }, "edit", reviewedVersion);
+      assert.equal(actions.requests[0].input.changes.kind, null);
+      assert.equal(actions.requests[0].input.changes.flowDirection, flowDirection);
+    }
+  });
+
   it("preserves an owned category hint when editing a live unknown-type pending row", async () => {
     const original = { ...backendTransaction(), kind: null, reviewStatus: "pending" };
     const actions = mountActions(async (_path, input) =>
