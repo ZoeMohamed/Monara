@@ -42,7 +42,7 @@ flowchart LR
 
 | Piece | Location |
 | --- | --- |
-| Tables `forecast_runs` and `forecast_items`, and `replace_forecast` | `supabase/migrations/20261019130000_spending_forecast.sql` |
+| Tables `forecast_runs` and `forecast_items`, and `replace_forecast` | `supabase/migrations/20261019150000_spending_forecast.sql` |
 | Service and repository | `packages/core/src/forecast-service.ts`, `supabase-forecast-repository.ts` |
 | Routes | `apps/web/src/app/api/forecast/route.ts` (read and refresh), `api/agent/forecast/refresh/route.ts` (weekly run) |
 | Weekly trigger | Worker cron, Mondays 02:00 UTC (09:00 Jakarta) |
