@@ -144,7 +144,7 @@ function ConversationBody({
     return (
       <div className={styles.intro}>
         <div className={styles.introHeading}>
-          <MonaraMascot className="h-16 w-16 shrink-0" />
+          <MonaraMascot className="h-16 w-16 shrink-0" pose="hello" />
           <h2>Hey, I’m Monara.</h2>
         </div>
         <p>

@@ -59,7 +59,7 @@ export function SignInScreen({ available = true, error, next }: SignInScreenProp
         />
         <div className={styles.shade} />
         <div className={styles.preview}>
-          <MonaraMascot className={styles.mascot} />
+          <MonaraMascot className={styles.mascot} pose="peek" />
           <div className={styles.previewCard}>
             <span>October</span>
             <strong>
