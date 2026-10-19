@@ -758,6 +758,19 @@ export function createFinanceService(
     userId: userIdSchema.parse(input.userId),
   });
 
+  async function requireExpenseCategory(userId: string, categoryId: string, requireActive = true) {
+    const category = (await repository.listAllCategories(userId)).find(
+      (item) => item.id === categoryId,
+    );
+    if (!category) throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+    if (category.kind !== "expense" || (requireActive && category.isArchived)) {
+      throw new FinanceOperationError(
+        "VALIDATION_FAILED",
+        "Budgets require an active expense Category.",
+      );
+    }
+  }
+
   async function action(input: {
     caller: FinanceCaller;
     toolName: string;
@@ -1021,6 +1034,7 @@ export function createFinanceService(
         values: confirmedTransactionValuesSchema.parse({
           ...transactionValues(previous),
           kind: "exclusion",
+          categoryId: null,
           flowDirection:
             previous.flowDirection ??
             (previous.kind === "expense" ? "out" : previous.kind === "income" ? "in" : null),
@@ -1406,8 +1420,13 @@ export function createFinanceService(
         repository.listAllCategories(verified.userId),
         repository.listTransactionsForDateRange(verified.userId, basedOnStartsOn, basedOnEndsOn),
       ]);
-      if (!categories.some((category) => category.id === values.categoryId)) {
-        throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+      const category = categories.find((item) => item.id === values.categoryId);
+      if (!category) throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+      if (category.kind !== "expense" || category.isArchived) {
+        throw new FinanceOperationError(
+          "VALIDATION_FAILED",
+          "Budgets require an active expense Category.",
+        );
       }
 
       let confirmedIncome = 0n;
@@ -1454,10 +1473,9 @@ export function createFinanceService(
 
     async createBudget(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
-      const budget = await repository.createBudget(
-        verified.userId,
-        createBudgetInputSchema.parse(input),
-      );
+      const values = createBudgetInputSchema.parse(input);
+      await requireExpenseCategory(verified.userId, values.categoryId);
+      const budget = await repository.createBudget(verified.userId, values);
       const receipt = await action({
         caller: verified,
         toolName: "create_budget",
@@ -1477,6 +1495,12 @@ export function createFinanceService(
       if (!previous || previous.deletedAt) {
         throw new FinanceOperationError("NOT_FOUND", "That Budget was not found.");
       }
+      await requireExpenseCategory(
+        verified.userId,
+        values.changes.categoryId ?? previous.categoryId,
+        values.changes.categoryId !== undefined &&
+          values.changes.categoryId !== previous.categoryId,
+      );
       const budget = await repository.updateBudget(verified.userId, values);
       const receipt = await action({
         caller: verified,

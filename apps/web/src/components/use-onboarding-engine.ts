@@ -22,6 +22,9 @@ export type ImportedTransaction = {
   /** YYYY-MM-DD */
   date: string;
   kind: ImportedKind;
+  category?: string | null;
+  categoryIcon?: string | null;
+  needsReview?: boolean;
 };
 
 /**
@@ -41,6 +44,8 @@ export type ImportProgress = {
    * list transactions yet; the table then waits instead of inventing rows.
    */
   feed: ImportedTransaction[];
+  categorizing?: number;
+  needsReview?: number;
   message?: string;
 };
 

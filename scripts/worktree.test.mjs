@@ -115,6 +115,33 @@ describe("env inheritance", () => {
     assert.ok(result.startsWith(source));
     assert.ok(result.includes("NEW_KEY=\n"));
   });
+
+  it("inherits newly available source keys without replacing existing assignments or blanks", () => {
+    const existing = "TOKEN=worktree-secret\nDISABLED=\nDB=own-database\n";
+    const result = seedEnvContent({
+      template,
+      source: 'TOKEN=main-secret\nDISABLED=true\nNEW_TOKEN="first\nsecond#part"\nDB=main-db\n',
+      existing,
+      values: {},
+      blankKeys: ["DB"],
+    });
+    assert.ok(result.startsWith(existing));
+    assert.ok(result.includes('NEW_TOKEN="first\nsecond#part"\n'));
+    assert.equal(parseEnv(result).DISABLED, "");
+    assert.equal(parseEnv(result).DB, "own-database");
+    assert.equal(seedEnvContent({ template, source: "", existing: result, values: {} }), result);
+  });
+
+  it("never fills missing database keys from the source in an existing file", () => {
+    const result = seedEnvContent({
+      template,
+      source: "DB=remote-database\n",
+      existing: "TOKEN=worktree-secret\n",
+      values: {},
+      blankKeys: ["DB"],
+    });
+    assert.equal(parseEnv(result).DB, "");
+  });
 });
 
 describe("releaseSlot", () => {
@@ -131,6 +158,13 @@ describe("setEnvValues", () => {
 
   it("appends missing keys on their own line", () => {
     assert.equal(setEnvValues("A=1", { B: "2" }), "A=1\nB=2\n");
+  });
+
+  it("replaces complete quoted multiline assignments and exported or repeated keys", () => {
+    const result = setEnvValues('export TOKEN = "first\nsecond"\nTOKEN=duplicate\nKEEP=yes\n', {
+      TOKEN: "replacement",
+    });
+    assert.equal(result, "TOKEN=replacement\nTOKEN=replacement\nKEEP=yes\n");
   });
 });
 

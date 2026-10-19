@@ -1,3 +1,4 @@
+export * from "./brand-registry.ts";
 export * from "./budgets.ts";
 export * from "./category-presets.ts";
 export * from "./channels.ts";

@@ -100,11 +100,11 @@ select throws_ok(
 );
 
 reset role;
-insert into public.categories (id, user_id, name, slug, icon, color)
+insert into public.categories (id, user_id, name, slug, icon, color, kind)
 values (
   'f1000000-0000-4000-8000-000000000001',
   'f0000000-0000-4000-8000-000000000001',
-  'Forecast category', 'forecast-category', 'tag', '#3171FD'
+  'Forecast category', 'forecast-category', 'tag', '#3171FD', 'expense'
 );
 
 set local role service_role;
@@ -134,11 +134,11 @@ select is(
   'the forecast item itself stays'
 );
 
-insert into public.categories (id, user_id, name, slug, icon, color)
+insert into public.categories (id, user_id, name, slug, icon, color, kind)
 values (
   'f1000000-0000-4000-8000-000000000002',
   'f0000000-0000-4000-8000-000000000001',
-  'Second category', 'second-category', 'tag', '#3171FD'
+  'Second category', 'second-category', 'tag', '#3171FD', 'expense'
 );
 update public.forecast_items
 set category_id = 'f1000000-0000-4000-8000-000000000002'

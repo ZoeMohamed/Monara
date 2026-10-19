@@ -9,6 +9,7 @@ import { CategoryAvatar } from "@/components/category-symbol";
 
 import { Icon, type IconName } from "@/components/icon";
 import { MonaraMascot } from "@/components/monara-mascot";
+import { OnboardingBanner } from "@/components/onboarding-banner";
 import { SectionLabel, SectionTitle } from "@/components/section-title";
 import { SpendingForecastCard } from "@/components/spending-forecast-card";
 import { TransactionRow } from "@/components/transaction-row";
@@ -171,6 +172,7 @@ function SceneHero({
       <div aria-hidden className={styles.shade} />
 
       <div className={styles.sceneContent}>
+        <OnboardingBanner />
         <p className={styles.date}>{model.isCurrentMonth ? longDate(today) : formatMonth(month)}</p>
         <h1 className={styles.greeting} id="home-greeting">
           {greetings[time]}
@@ -207,7 +209,7 @@ function SceneHero({
         </p>
 
         <div className={styles.askWrap} data-tour="ask">
-          <MonaraMascot className={styles.mascot} />
+          <MonaraMascot className={styles.mascot} pose="peek" />
           <OverviewComposer openChat={openChat} />
         </div>
         <nav aria-label="Ask Monara" className={styles.prompts}>
@@ -369,7 +371,7 @@ function SpendingBlock({
 
       {categories.length === 0 ? (
         <div className={styles.empty}>
-          <MonaraMascot className={styles.emptyMascot} />
+          <MonaraMascot className={styles.emptyMascot} pose="curious" />
           <p>
             <strong>{model.emptyTitle}</strong>
             Add a payment or bring in receipts from Gmail.

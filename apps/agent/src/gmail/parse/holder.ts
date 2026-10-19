@@ -1,4 +1,4 @@
-/** Words that are titles, not names, as Indonesian banks write them. */
+/** Titles used by Indonesian banks, which are not part of a holder's name. */
 const HONORIFICS = new Set([
   "bpk",
   "bapak",
@@ -13,59 +13,55 @@ const HONORIFICS = new Set([
   "nn",
 ]);
 
-/** Lowercase name words without punctuation or titles. */
 function nameWords(name: string): string[] {
   return name
+    .normalize("NFKC")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter((word) => word.length > 0 && !HONORIFICS.has(word));
 }
 
-/**
- * True when a payer or recipient name is the account holder's. It matches the same
- * name, a longer name containing every holder word, or a cut-off start of the holder
- * name of at least two words, as banks truncate names. A shared surname alone never
- * matches, so a transfer to a sibling stays an expense.
- */
+/** Exact full-name match after case, punctuation, spacing and title normalization. */
 export function isHolderName(counterparty: string, holderName: string): boolean {
   const holder = nameWords(holderName);
   const other = nameWords(counterparty);
-  if (holder.length === 0 || other.length === 0) return false;
-  // A one-word name says too little to match anything but itself.
-  if (holder.length === 1) return other.length === 1 && other[0] === holder[0];
-  if (holder.every((word) => other.includes(word))) return true;
-  if (other.length < 2 || other.length > holder.length) return false;
-  // Every word but the last must match in order; the last may be cut off mid-word.
-  const last = other.length - 1;
-  return other.every((word, index) =>
-    index < last
-      ? word === holder[index]
-      : word === holder[index] || (word.length >= 3 && holder[index]?.startsWith(word) === true),
+  return (
+    holder.length > 0 &&
+    holder.length === other.length &&
+    holder.every((word, index) => word === other[index])
   );
 }
 
-/**
- * Turns an expense or income whose payer or recipient is the holder into an
- * exclusion: money moving between the holder's own accounts. Never the reverse.
- */
+/** A name alone never establishes a transfer between the User's own accounts. */
 export function applyHolderRules<
   T extends {
     kind: string | null;
     counterpartyName: string | null;
     flowDirection?: "in" | "out" | null;
+    isTransfer?: boolean;
+    internalTransfer?: boolean;
+    counterpartyType?: "business" | "person" | "unknown";
   },
 >(items: readonly T[], holderName: string | null): T[] {
-  if (!holderName) return [...items];
-  return items.map((item) =>
-    (item.kind === "expense" || item.kind === "income") &&
-    item.counterpartyName !== null &&
-    isHolderName(item.counterpartyName, holderName)
-      ? {
-          ...item,
-          kind: "exclusion",
-          flowDirection: item.kind === "expense" ? "out" : "in",
-        }
-      : item,
-  );
+  return items.map((item) => {
+    const internalTransfer = Boolean(
+      holderName &&
+        item.isTransfer &&
+        item.counterpartyType !== "business" &&
+        item.counterpartyName &&
+        isHolderName(item.counterpartyName, holderName),
+    );
+    return {
+      ...item,
+      internalTransfer,
+      ...(internalTransfer
+        ? {
+            kind: "exclusion",
+            flowDirection:
+              item.kind === "expense" ? "out" : item.kind === "income" ? "in" : item.flowDirection,
+          }
+        : {}),
+    };
+  });
 }
