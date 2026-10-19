@@ -9,6 +9,7 @@ import { CategoryAvatar } from "@/components/category-symbol";
 
 import { Icon, type IconName } from "@/components/icon";
 import { MonaraMascot } from "@/components/monara-mascot";
+import { OnboardingBanner } from "@/components/onboarding-banner";
 import { TransactionRow } from "@/components/transaction-row";
 import { WeeklySpendingCard } from "@/components/weekly-spending-card";
 import { categoryColor } from "@/data/category-style";
@@ -217,6 +218,7 @@ function SceneHero({
       <div aria-hidden className={styles.shade} />
 
       <div className={styles.sceneContent}>
+        <OnboardingBanner />
         <p className={styles.date}>{model.isCurrentMonth ? longDate(today) : formatMonth(month)}</p>
         <h1 className={styles.greeting} id="home-greeting">
           {greetings[time]}

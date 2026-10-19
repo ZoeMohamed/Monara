@@ -33,6 +33,8 @@ pnpm dev
 
 Bootstrap installs locked dependencies, prepares this checkout's ignored environment files and ports, starts its local Supabase stack, applies migrations, and verifies readiness. Run `pnpm dev:agent` separately when working on the agent. Existing local credentials survive repeat setup.
 
+T3's worktree setup runs this automatically. Put development integration credentials in the main checkout's `apps/web/.env.local` and `apps/agent/.dev.vars` once; fresh worktrees inherit them with their own service URLs and database credentials. The optional `apps/agent/.env.cloudflare.local` CLI file is also inherited when available. To bring newly added keys into an existing worktree, run `pnpm worktree:setup`. Existing settings, including empty values, remain yours to edit. Missing source files produce a warning rather than silently implying provider readiness.
+
 Google sign-in needs configured OAuth. Composio Gmail consent, Kapso WhatsApp, model access, and provider callbacks are separate integration requirements. Empty templates do not provide credentials. See [environment configuration](repository-structure.md#environment-configuration), the [Supabase workflow](supabase-workflow.md), and the [agent runtime](../apps/agent/README.md).
 
 Without valid public Supabase configuration, sign-in is unavailable and financial requests are denied. Failed personal ledger loads show an explicit recovery state rather than sample data.
