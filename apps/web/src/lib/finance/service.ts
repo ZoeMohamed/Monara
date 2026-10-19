@@ -6,6 +6,7 @@ import {
 } from "@monara/core";
 import { createMonaraServiceRoleClient } from "@monara/db";
 import { requireActiveUser } from "@/lib/auth/user-deletion";
+import { reviewBillsWithAgent } from "@/lib/bills/review";
 import { publicSupabaseConfig } from "@/lib/supabase/config";
 import { scheduleBudgetAlert } from "@/lib/whatsapp/budget-alerts";
 import { GOAL_IMAGE_BUCKET } from "../goals/image.ts";
@@ -39,6 +40,10 @@ const FINANCE_OPERATIONS = [
   "mark_reminder_read",
   "dismiss_reminder",
   "get_dashboard",
+  "list_recurring_bills",
+  "suggest_recurring_bills",
+  "confirm_recurring_bill",
+  "dismiss_recurring_bill_suggestion",
 ] as const;
 
 async function cleanUpDeletedGoalImage(remove: () => Promise<{ error: unknown }>): Promise<void> {
@@ -65,6 +70,10 @@ type AgentFinanceOperation = Exclude<
   | "delete_budget"
   | "mark_reminder_read"
   | "dismiss_reminder"
+  | "list_recurring_bills"
+  | "suggest_recurring_bills"
+  | "confirm_recurring_bill"
+  | "dismiss_recurring_bill_suggestion"
 >;
 const AGENT_CONFIRMATION_OPERATIONS = [
   "request_destructive_action",
@@ -82,6 +91,10 @@ function financeBackend() {
   );
   const service = createFinanceService(createRepository(client), {
     onBudgetReminder: scheduleBudgetAlert,
+    reviewBills: reviewBillsWithAgent({
+      agentUrl: process.env.MONARA_AGENT_URL,
+      secret: process.env.MONARA_AGENT_BACKEND_SECRET,
+    }),
   });
   return { client, service };
 }
@@ -109,7 +122,11 @@ function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinance
     value !== "delete_transaction" &&
     value !== "delete_budget" &&
     value !== "mark_reminder_read" &&
-    value !== "dismiss_reminder"
+    value !== "dismiss_reminder" &&
+    value !== "list_recurring_bills" &&
+    value !== "suggest_recurring_bills" &&
+    value !== "confirm_recurring_bill" &&
+    value !== "dismiss_recurring_bill_suggestion"
   );
 }
 
@@ -191,6 +208,14 @@ export async function runFinanceOperation(
       return service.dismissReminder(caller, input);
     case "get_dashboard":
       return service.getDashboard(caller, input);
+    case "list_recurring_bills":
+      return service.listRecurringBills(caller, input);
+    case "suggest_recurring_bills":
+      return service.suggestRecurringBills(caller, input);
+    case "confirm_recurring_bill":
+      return service.confirmRecurringBill(caller, input);
+    case "dismiss_recurring_bill_suggestion":
+      return service.dismissRecurringBillSuggestion(caller, input);
   }
 }
 

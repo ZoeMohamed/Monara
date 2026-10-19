@@ -7,6 +7,7 @@ import {
   exclusionCategoryPresets,
   expenseCategoryPresets,
   isExclusionCategoryName,
+  type RecurringBillProposal,
 } from "@monara/contracts";
 
 // Presentation models support both explicit demo data and validated owned backend records.
@@ -377,11 +378,15 @@ export type RecurringBill = {
   merchant: string;
   emoji: string;
   expectedAmount: number;
-  cadence: "monthly";
+  cadence: "weekly" | "monthly";
   nextDue: string;
   cancellationUrl: string | null;
   // Detected bills stay suggestions until the User confirms them (PRD F8).
   status: "active" | "suggested";
+  /** A live suggestion's detected values, sent back unchanged when the User decides. */
+  proposal?: RecurringBillProposal;
+  /** Why the AI check thinks this is a bill, when it ran. */
+  reason?: string | null;
 };
 
 export type Reminder = {

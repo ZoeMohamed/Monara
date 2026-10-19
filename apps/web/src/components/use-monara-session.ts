@@ -13,6 +13,7 @@ import type { TransactionDraft } from "@/components/transaction-editor";
 import { useAppNavigation } from "@/components/use-app-navigation";
 import { useFinanceSync } from "@/components/use-finance-sync";
 import { useFirstRun } from "@/components/use-first-run";
+import { useLiveBills } from "@/components/use-live-bills";
 import { replayTour } from "@/components/use-product-tour";
 import type { AppView } from "@/data/app-navigation";
 import type { Budget, Reminder } from "@/data/demo-ledger";
@@ -175,6 +176,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const financeSnapshot = sync.snapshot;
   const [removedId, setRemovedId] = useState<string | null>(null);
   const [bills, setBills] = useState(live ? [] : initialBills);
+  useLiveBills(live, setBills);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<SaveNotice | null>(null);
   const [drafts, setDrafts] = useState<Record<string, TransactionDraft>>({});
@@ -288,6 +290,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     setDrafts,
     setTransactions,
     setRemovedId,
+    bills,
     setBills,
     setConfirmError,
     setRejectError,

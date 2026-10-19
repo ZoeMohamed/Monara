@@ -7,6 +7,7 @@ import {
   budgetUsageSchema,
   categoryMutationResultSchema,
   categoryPageSchema,
+  confirmRecurringBillInputSchema,
   confirmTransactionInputSchema,
   createBudgetInputSchema,
   createCategoryInputSchema,
@@ -18,6 +19,7 @@ import {
   deleteBudgetInputSchema,
   deleteFinancialGoalInputSchema,
   deleteTransactionInputSchema,
+  dismissRecurringBillSuggestionInputSchema,
   dismissReminderInputSchema,
   excludeTransactionInputSchema,
   financialAccountMutationResultSchema,
@@ -29,13 +31,18 @@ import {
   listCategoriesInputSchema,
   listFinancialAccountsInputSchema,
   listFinancialGoalsInputSchema,
+  listRecurringBillsInputSchema,
   listRemindersInputSchema,
   listTransactionsInputSchema,
   markReminderReadInputSchema,
   type OperationErrorCode,
   operationErrorSchema,
+  recurringBillPageSchema,
+  recurringBillSchema,
+  recurringBillSuggestionListSchema,
   reminderPageSchema,
   reminderSchema,
+  suggestRecurringBillsInputSchema,
   transactionMutationResultSchema,
   transactionPageSchema,
   transactionSchema,
@@ -92,6 +99,16 @@ const operations = {
   edit_budget: { input: updateBudgetInputSchema, output: budgetMutationResultSchema },
   delete_budget: { input: deleteBudgetInputSchema, output: budgetSchema },
   get_dashboard: { input: getDashboardInputSchema, output: dashboardSummarySchema },
+  list_recurring_bills: { input: listRecurringBillsInputSchema, output: recurringBillPageSchema },
+  suggest_recurring_bills: {
+    input: suggestRecurringBillsInputSchema,
+    output: recurringBillSuggestionListSchema,
+  },
+  confirm_recurring_bill: { input: confirmRecurringBillInputSchema, output: recurringBillSchema },
+  dismiss_recurring_bill_suggestion: {
+    input: dismissRecurringBillSuggestionInputSchema,
+    output: recurringBillSchema,
+  },
   add_transaction: { input: createTransactionInputSchema, output: transactionMutationResultSchema },
   edit_transaction: {
     input: updateTransactionInputSchema,
@@ -168,7 +185,8 @@ export async function callFinanceOperation<Operation extends FinanceClientOperat
   const mutation =
     !operation.startsWith("list_") &&
     operation !== "get_dashboard" &&
-    operation !== "suggest_budget";
+    operation !== "suggest_budget" &&
+    operation !== "suggest_recurring_bills";
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     throw new FinanceClientError(
       "DEPENDENCY_UNAVAILABLE",

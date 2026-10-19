@@ -1,3 +1,4 @@
+import { handleBillReview } from "./bills.ts";
 import { handleChatRequest } from "./conversation/index.ts";
 import type { Env } from "./env.ts";
 import {
@@ -25,6 +26,9 @@ export default {
     }
     if (request.method === "GET" && path === "/health") {
       return healthResponse();
+    }
+    if (request.method === "POST" && path === "/bills/review") {
+      return handleBillReview(request, env);
     }
     if (request.method === "POST" && path === "/chat") {
       return handleChatRequest(request, env);
