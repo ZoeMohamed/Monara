@@ -64,20 +64,6 @@ function Row({ item }: { item: ForecastItem }) {
   );
 }
 
-function Footnote({ forecast }: { forecast: ForecastSummary }) {
-  const { discardedCount, threshold, accuracy, usedModel } = forecast;
-  const parts = [
-    usedModel ? "AI-checked" : "Rules only",
-    discardedCount > 0
-      ? `${discardedCount} unsure ${discardedCount === 1 ? "payment" : "payments"} under ${percent(threshold)} left out`
-      : null,
-    accuracy.due > 0
-      ? `${accuracy.realized} of ${accuracy.due} earlier predictions came true`
-      : null,
-  ].filter((part) => part !== null);
-  return <p className={styles.footnote}>{parts.join(" · ")}</p>;
-}
-
 /** What is still ahead. Ones that came true or whose day passed are not listed, like the chart. */
 function Items({ all, today }: { all: ForecastItem[]; today: string }) {
   const [showAll, setShowAll] = useState(false);
@@ -174,7 +160,6 @@ function Body({ forecast, context }: { forecast: ForecastSummary; context: Conte
       <ForecastProjectionChart days={days} items={forecast.items} today={context.today} />
       <Totals totals={forecast.totals} />
       <Items all={forecast.items} today={context.today} />
-      <Footnote forecast={forecast} />
     </>
   );
 }
