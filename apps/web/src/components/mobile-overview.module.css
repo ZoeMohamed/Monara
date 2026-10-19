@@ -1282,6 +1282,11 @@
     border-bottom: 0;
   }
 
+  /* The sheet already has its own top padding, so the first section starts closer to it. */
+  .sheet .slotForecast [data-home-card] {
+    padding-top: 6px;
+  }
+
   .sheet .cardLabel {
     margin: 0 0 6px;
   }

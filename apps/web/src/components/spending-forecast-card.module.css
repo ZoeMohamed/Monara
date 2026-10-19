@@ -138,8 +138,11 @@
 }
 
 .more {
-  align-self: flex-start;
-  margin-top: 4px;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  margin: 4px auto 0;
 }
 
 .footer {

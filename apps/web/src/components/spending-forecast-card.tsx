@@ -20,14 +20,6 @@ const PREVIEW_ITEMS = 4;
 const percent = (confidence: number) => `${Math.round(confidence * 100)}%`;
 const rupiah = (money: { amountMinor: string }) => BigInt(money.amountMinor);
 
-function updatedAt(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Jakarta",
-  });
-}
-
 function Totals({ totals }: { totals: ForecastSummary["totals"] }) {
   const { formatRupiah } = useAmountDisplay();
   return (
@@ -74,18 +66,16 @@ function Row({ item }: { item: ForecastItem }) {
 
 function Footnote({ forecast }: { forecast: ForecastSummary }) {
   const { discardedCount, threshold, accuracy, usedModel } = forecast;
-  return (
-    <p className={styles.footnote}>
-      Updated {updatedAt(forecast.generatedAt)}
-      {usedModel ? " · AI-checked" : " · Rules only"}
-      {discardedCount > 0
-        ? ` · ${discardedCount} unsure ${discardedCount === 1 ? "payment" : "payments"} under ${percent(threshold)} left out`
-        : ""}
-      {accuracy.due > 0
-        ? ` · ${accuracy.realized} of ${accuracy.due} earlier predictions came true`
-        : ""}
-    </p>
-  );
+  const parts = [
+    usedModel ? "AI-checked" : "Rules only",
+    discardedCount > 0
+      ? `${discardedCount} unsure ${discardedCount === 1 ? "payment" : "payments"} under ${percent(threshold)} left out`
+      : null,
+    accuracy.due > 0
+      ? `${accuracy.realized} of ${accuracy.due} earlier predictions came true`
+      : null,
+  ].filter((part) => part !== null);
+  return <p className={styles.footnote}>{parts.join(" · ")}</p>;
 }
 
 /** What is still ahead. Ones that came true or whose day passed are not listed, like the chart. */
@@ -110,12 +100,14 @@ function Items({ all, today }: { all: ForecastItem[]; today: string }) {
       </ol>
       {items.length > PREVIEW_ITEMS ? (
         <Button
+          aria-expanded={showAll}
           className={styles.more}
           onPress={() => setShowAll((value) => !value)}
           type="button"
           variant="ghost"
         >
           {showAll ? "Show fewer" : `Show all ${items.length}`}
+          <Icon aria-hidden className="h-4 w-4" name={showAll ? "chevron-up" : "chevron-down"} />
         </Button>
       ) : null}
     </>

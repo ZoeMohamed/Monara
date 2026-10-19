@@ -106,6 +106,7 @@ const glyphs = {
     </>
   ),
   "chevron-down": <path d="m6 9 6 6 6-6" />,
+  "chevron-up": <path d="m6 15 6-6 6 6" />,
   calendar: (
     <>
       <rect height="16" rx="3" width="18" x="3" y="5" />
