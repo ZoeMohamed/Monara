@@ -7,6 +7,7 @@ import { createLlmClient } from "../gmail/llm.ts";
 import { createUserIsActive } from "../user-deletion.ts";
 import { readReceipt } from "./receipt.ts";
 import { ConversationSession, type QueuedMessage } from "./session.ts";
+import { createTranscriber } from "./transcribe.ts";
 import { readVoice } from "./voice.ts";
 
 /**
@@ -53,8 +54,7 @@ export class WhatsAppConversation extends DurableObject<Env> {
           model: env.LLM_MODEL ?? "",
           reasoningEffort: env.LLM_REASONING_EFFORT,
         });
-        const read = message.type === "audio" ? readVoice : readReceipt;
-        return read({
+        const common: Parameters<typeof readReceipt>[0] = {
           userId: message.userId,
           messageId: message.messageId,
           media: message.media,
@@ -76,6 +76,21 @@ export class WhatsAppConversation extends DurableObject<Env> {
             secret: env.MONARA_AGENT_BACKEND_SECRET ?? "",
           }),
           now: new Date(),
+        };
+        if (message.type !== "audio") return readReceipt(common);
+        // Without the Speech settings a voice note gets a fixed reply instead of a failure.
+        const transcribe = createTranscriber({
+          endpoint: env.AZURE_SPEECH_ENDPOINT,
+          apiKey: env.AZURE_SPEECH_KEY,
+        });
+        return readVoice({
+          ...common,
+          transcribe: transcribe
+            ? async (audio, phrases) => {
+                await requireActive();
+                return transcribe(audio, phrases);
+              }
+            : null,
         });
       },
       now: () => Date.now(),

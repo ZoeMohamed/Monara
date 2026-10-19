@@ -206,7 +206,9 @@ function rupiah(amountMinor: string): string {
   return `Rp ${amountMinor.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 }
 
-function receiptReply(
+/** The reply for a saved pending photo or voice note, such as "Got your receipt: Rp 37.000 at ...". */
+export function pendingReply(
+  lead: string,
   values: TransactionValues,
   account: Account | null,
   categories: Category[],
@@ -223,7 +225,7 @@ function receiptReply(
   }
   const category = categories.find((candidate) => candidate.id === values.categoryId);
   const details = [account?.name, category?.name].filter(Boolean).join(", ");
-  const read = `Got your receipt: ${parts.join(" ")}${details ? ` (${details})` : ""}.`;
+  const read = `${lead}: ${parts.join(" ")}${details ? ` (${details})` : ""}.`;
   if (!account) {
     return `${read} Which account paid for it? Tell me and I'll add it, or check it in your Review Queue.`;
   }
@@ -281,7 +283,7 @@ export async function readReceipt(input: {
       confidence: extracted.confidence,
     }),
   );
-  return receiptReply(extracted.values, extracted.account, categories);
+  return pendingReply("Got your receipt", extracted.values, extracted.account, categories);
 }
 
 function toBase64(bytes: ArrayBuffer): string {

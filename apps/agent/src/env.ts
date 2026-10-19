@@ -21,6 +21,9 @@ export interface Env {
   LLM_MODEL?: string;
   /** none, minimal, low, medium, or high; defaults to low for gpt-5 and o-series names. */
   LLM_REASONING_EFFORT?: string;
+  /** Azure AI Speech resource for voice notes, e.g. https://<name>.cognitiveservices.azure.com. */
+  AZURE_SPEECH_ENDPOINT?: string;
+  AZURE_SPEECH_KEY?: string;
   /** Web search for merchant categorization. Only merchant names are sent. */
   BRAVE_SEARCH_API_KEY?: string;
   /** Emails per parse job, capped at 5 to leave room for User activity checks. */

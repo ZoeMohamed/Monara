@@ -24,6 +24,11 @@ LLM_MODEL=
 # deployment has another name. Leave empty for non-reasoning models.
 LLM_REASONING_EFFORT=
 
+# WhatsApp voice notes: Azure AI Speech fast transcription (MAI-Transcribe-2), since the
+# chat model cannot take audio. Leave empty and voice notes get a fixed reply.
+AZURE_SPEECH_ENDPOINT=
+AZURE_SPEECH_KEY=
+
 BRAVE_SEARCH_API_KEY=
 
 # Gmail parse throughput. At most (queue max_concurrency 3) x GMAIL_PARSE_CONCURRENCY

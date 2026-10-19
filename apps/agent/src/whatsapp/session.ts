@@ -20,6 +20,7 @@ export type ReadMedia = (message: QueuedMessage) => Promise<string>;
 
 /** What a photo turn looks like in the history the Agent sees next. */
 const PHOTO_TURN = "[Sent a receipt photo]";
+const VOICE_TURN = "[Sent a voice note]";
 
 interface Outbound {
   to: string;
@@ -188,7 +189,7 @@ export class ConversationSession {
           ...state.history,
           {
             role: "user" as const,
-            text: message.text ? `${PHOTO_TURN} ${message.text}` : PHOTO_TURN,
+            text: `${message.type === "audio" ? VOICE_TURN : PHOTO_TURN}${message.text ? ` ${message.text}` : ""}`,
           },
           { role: "assistant" as const, text },
         ].slice(-MAX_HISTORY_TURNS);
