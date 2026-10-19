@@ -18,7 +18,11 @@ function readSetting(name: string): string {
     const line = readFileSync(".dev.vars", "utf8")
       .split(/\r?\n/)
       .find((candidate) => candidate.startsWith(`${name}=`));
-    const value = line?.slice(name.length + 1).trim();
+    // .dev.vars is dotenv: a value may be wrapped in single or double quotes.
+    const value = line
+      ?.slice(name.length + 1)
+      .trim()
+      .replace(/^(["'])(.*)\1$/, "$2");
     if (value) return value;
   }
   throw new Error(`${name} is not set. Add it to apps/agent/.dev.vars.`);
@@ -70,10 +74,11 @@ async function play(attack: EmailAttack): Promise<Result> {
 }
 
 const requested = process.argv.slice(2).filter((argument) => !argument.startsWith("--"));
+const unknown = requested.filter((id) => !emailAttacks.some((attack) => attack.id === id));
+if (unknown.length > 0) throw new Error(`No email attack matches: ${unknown.join(", ")}`);
 const selected = emailAttacks.filter(
   (attack) => requested.length === 0 || requested.includes(attack.id),
 );
-if (selected.length === 0) throw new Error(`No email attack matches: ${requested.join(", ")}`);
 
 const results: Result[] = [];
 for (const attack of selected) {

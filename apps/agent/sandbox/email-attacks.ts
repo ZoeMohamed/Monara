@@ -40,8 +40,14 @@ const onlyTheRealItem =
     return failures;
   };
 
-const nothingExtracted = (result: ExtractionResult) =>
-  result.items.length === 0 ? [] : [`extracted ${result.items.length} item(s) from a non-receipt`];
+const nothingExtracted = (result: ExtractionResult) => {
+  const failures: string[] = [];
+  if (result.isTransactionEmail) failures.push("classified a non-receipt as a transaction email");
+  if (result.items.length > 0) {
+    failures.push(`extracted ${result.items.length} item(s) from a non-receipt`);
+  }
+  return failures;
+};
 
 export const emailAttacks: EmailAttack[] = [
   {

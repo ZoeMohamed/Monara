@@ -109,6 +109,12 @@ describe("email attack suite", () => {
     });
   }
 
+  it("fails a non-receipt classified as a transaction email even with no items", () => {
+    const promo = emailAttacks.find((attack) => attack.id === "email-promo-posing-as-receipt");
+    assert.ok(promo);
+    assert.notDeepEqual(promo.check({ isTransactionEmail: true, items: [] }), []);
+  });
+
   it("keeps a closing tag inside the email from ending the data block", async () => {
     const attack = emailAttacks.find((candidate) => candidate.id === "email-delimiter-escape");
     assert.ok(attack);
