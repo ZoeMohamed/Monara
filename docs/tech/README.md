@@ -1,6 +1,14 @@
 # Technical documentation
 
-This is the technical documentation for the FinTechathon 2026 submission. It lives in the repository so it is versioned, reviewed in pull requests, and sits next to the code it describes. Product requirements stay in the PRD (Google Doc tab "PRD"); every section here cites the PRD feature ids (F1 to F16).
+This is the technical documentation for the FinTechathon 2026 submission, versioned beside its source. The authorized [PRD v2.1](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.pm2pb9a5y3zd), refreshed on 19 October, defines F1 to F16. The repository calls spending forecast F17; it is an implemented extension, not a feature specification found in that PRD. Goals and permanent User deletion are also implemented extensions. Their inclusion here describes source behavior and does not rewrite product requirements. The [Action Tracker](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.5tiin0qzk1mg) still says 16 October; [Brainstorm](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.0) is historical context.
+
+## Source freeze and remaining review
+
+All seven technical sections describe parent [#85](https://github.com/ZoeMohamed/Monara/pull/85), branch `praya/submission-handoff-context`, at **`e74524752c538ca8866295c91bdc456e17842eb3`**. This 19 October reconciliation checks source, ordered migrations and test assertions. It does not establish deployed provider configuration or fresh browser/live acceptance. Source links in the generated PDF target GitHub main for the eventual integrated submission; the SHA here identifies the actual reviewed implementation.
+
+At inspection, main `cce75b944416585a8b073bbdcdb164e37d119f03` contains [#89](https://github.com/ZoeMohamed/Monara/pull/89), which is absent from the frozen parent. The parent requires extraction confidence **0.95** through `public.gmail_auto_confirm_confidence()` plus classification confidence **0.95**. #89 lowers the extraction gate to **0.5** and changes confidence fallback/import recovery. Owner integration and another policy check are required before final submission; this docs branch does not merge it. The separate security assessment already distinguishes its newer-main observations.
+
+Overlaps inspected, all still open: owner drafts [#65 Agent](https://github.com/ZoeMohamed/Monara/pull/65) and [#73 extraction](https://github.com/ZoeMohamed/Monara/pull/73); product work [#74 receipt/voice](https://github.com/ZoeMohamed/Monara/pull/74), [#78 transcription](https://github.com/ZoeMohamed/Monara/pull/78), [#75 extraction hardening](https://github.com/ZoeMohamed/Monara/pull/75), [#77 recurring bills](https://github.com/ZoeMohamed/Monara/pull/77), [#82 planning/recovery](https://github.com/ZoeMohamed/Monara/pull/82), and [#91 forecast refresh](https://github.com/ZoeMohamed/Monara/pull/91). Their changes and review statuses were not adopted as frozen-tree behavior. Section owners must reconcile concurrent drafts through review of this child PR. No owner sign-off is claimed or external tracker changed.
 
 ## What the competition asks for
 
@@ -9,7 +17,7 @@ The rules list three separate deliverables here, so they are built as three PDFs
 | PDF | Required part | Files |
 | --- | --- | --- |
 | Technical Documentation | System architecture | [architecture.md](architecture.md), [ui.md](ui.md) |
-| | Core algorithm description | [extraction.md](extraction.md), [agent.md](agent.md), [reminders.md](reminders.md) |
+| | Core algorithm description | [extraction.md](extraction.md), [agent.md](agent.md), [reminders.md](reminders.md), [forecast.md](forecast.md) |
 | | Security design | [data-and-security.md](data-and-security.md) |
 | Security Self-Assessment | Permission tiers and known-risk list | [security-self-assessment.md](security-self-assessment.md) |
 | Execution Evidence | Sandbox logs and measured results | [evaluation.md](evaluation.md) |
@@ -19,7 +27,7 @@ The rules list three separate deliverables here, so they are built as three PDFs
 | File | Owner | Due | Status |
 | --- | --- | --- | --- |
 | [architecture.md](architecture.md) | Abhip | 16 Oct | Draft |
-| [data-and-security.md](data-and-security.md) | Zoe | 16 Oct | Not started |
+| [data-and-security.md](data-and-security.md) | Zoe | 16 Oct | Draft |
 | [extraction.md](extraction.md) | Adlyn | 16 Oct | Draft |
 | [agent.md](agent.md) | Argya | 16 Oct | Draft |
 | [ui.md](ui.md) | Erdafa | 16 Oct | Draft |
@@ -30,9 +38,9 @@ The rules list three separate deliverables here, so they are built as three PDFs
 
 Status values: Not started, Draft, Reviewed, Final.
 
-The UI section was reconciled with current source and the PRD, Action Tracker and Brainstorm on **16 October 2026**. The [UI action checklist](../ui-actions-2026-10-16.md) maps ER1–ER12 to delivered source, remaining acceptance and teammate dependencies; the [backend handoff](../ui-backend-handoff.md) records integration boundaries and current verification. The shared tracker now lists ER4, ER7 and ER12 In review, with dated owner dependencies and evidence references. Other owners' rows and technical sections retain their existing statuses. The UI section remains Draft pending owner review. Normal documentation checks do not establish review or final submission acceptance.
+Every technical section remains Draft pending its owner's review. Data/security previously claimed review of an older account; its revised content needs renewed Zoe review. Reminders, evaluation and the security assessment contain substantive drafts, so the old Not started prose is removed. Evaluation, raw evidence and the separate security assessment retain their own workstreams and were not rewritten here.
 
-Architecture, Agent, and Gmail extraction drafts were reconciled against current source without changing their owners or review status. Receipt and voice extraction remain planned. Reminders and evaluation remain Not started with owner TODOs. The normal structure check can pass while these submission sections are unfinished; final acceptance requires completed content, measured evidence and owner review.
+WhatsApp receipt photos exist; voice and bill detection remain Planned. In-app Budget-threshold Reminders exist, while real WhatsApp budget-alert delivery is deferred for the submission. Forecast's deterministic synthetic fixture is not real-spending accuracy or measured model benefit. Historical browser and model evidence stays dated and scoped in the linked artifacts. Normal docs checks validate structure; final checks must still reject unreviewed content.
 
 ## How to write a section
 
@@ -50,7 +58,7 @@ pnpm docs:pdf security   # one of: technical, security, evidence
 pnpm docs:pdf --final    # also fails on any TODO or a Status below Reviewed
 ```
 
-The build needs `pandoc`, `typst` and `mmdc` (Mermaid CLI) on the PATH. It renders the Mermaid blocks to images, turns links to other sections into anchors (or a pointer to the PDF that holds them) and links to code into GitHub URLs, and applies the Monara cover, header and footer from `pdf/`. The PDFs use the app's Nunito Sans, brand blue and canvas colors.
+The build needs `pandoc`, `typst` and `mmdc` (Mermaid CLI) on the PATH. It renders Mermaid images, resolves section anchors and cross-PDF pointers, and links source paths to GitHub. The [approved template](pdf/README.md) keeps blue covers, white interiors, Montserrat headings, Nunito Sans body, Geist Mono code and rounded tables. Technical composition includes forecast under Core algorithms. Generated PDFs stay ignored; do not treat a produced file as a successful final build if the command reports status errors.
 
 ## Submission package
 
