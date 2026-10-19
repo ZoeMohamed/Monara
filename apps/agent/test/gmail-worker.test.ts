@@ -12,6 +12,12 @@ import {
 
 const connectionId = "00000000-0000-4000-8000-000000000010";
 const secret = "synthetic-test-secret";
+const reasoningCases = [
+  { label: "unset effort", value: undefined, expected: "medium", model: "synthetic" },
+  { label: "explicit trimmed effort", value: " low ", expected: "low", model: "synthetic" },
+  { label: "empty effort", value: "", expected: undefined, model: "gpt-4o-mini" },
+  { label: "whitespace effort", value: "   ", expected: undefined, model: "gpt-4o-mini" },
+] as const;
 
 function setup() {
   const jobs: GmailJob[] = [];
@@ -31,8 +37,12 @@ function setup() {
 }
 
 describe("manual Gmail sync worker boundary", () => {
-  for (const attempts of [1, 2]) {
-    it(`publishes three maximal extraction emails within the invocation budget on attempt ${attempts}`, async (t) => {
+  for (const fixture of [
+    ...reasoningCases.map((entry) => ({ ...entry, attempts: 1 })),
+    { ...reasoningCases[0], attempts: 2 },
+  ]) {
+    const { attempts } = fixture;
+    it(`publishes three maximal extraction emails within the invocation budget on attempt ${attempts} with ${fixture.label}`, async (t) => {
       const emails = Array.from({ length: 3 }, (_, index) => ({
         processedMessageId: `00000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
         gmailMessageId: `synthetic-${index}`,
@@ -81,7 +91,11 @@ describe("manual Gmail sync worker boundary", () => {
             });
           if (url.endsWith("/chat/completions")) {
             const request = JSON.parse(String(init?.body));
-            assert.equal(request.reasoning_effort, "medium");
+            assert.equal(request.reasoning_effort, fixture.expected);
+            assert.equal(
+              Object.hasOwn(request, "reasoning_effort"),
+              fixture.expected !== undefined,
+            );
             assert.equal(request.max_tokens, 32_000);
             return Response.json({
               choices: [
@@ -156,7 +170,8 @@ describe("manual Gmail sync worker boundary", () => {
           COMPOSIO_API_KEY: "synthetic",
           LLM_BASE_URL: "https://llm.test",
           LLM_API_KEY: "synthetic",
-          LLM_MODEL: "synthetic",
+          LLM_MODEL: fixture.model,
+          LLM_REASONING_EFFORT: fixture.value,
         },
       );
       assert.equal(acked, true);
@@ -360,83 +375,98 @@ describe("manual Gmail sync worker boundary", () => {
 });
 
 describe("merchant queue provider backoff", () => {
-  it("settles a truncated model response for review on the first delivery", async (t) => {
-    const transactionId = "00000000-0000-4000-8000-000000000030";
-    let acked = false;
-    let retries = 0;
-    let categoryWrites = 0;
-    let retryReports = 0;
-    t.mock.method(
-      globalThis,
-      "fetch",
-      async (input: string | URL | Request, init?: RequestInit) => {
-        const url = String(input);
-        if (url.endsWith("/resolve-imported-transaction"))
-          return Response.json({
-            merchantName: null,
-            location: null,
-            needsCategory: true,
-            categoryNames: [],
-            kind: "expense",
-            flowDirection: "out",
-            counterpartyName: "Synthetic Recipient",
-            counterpartyType: "person",
-            categories: [
-              {
-                id: "00000000-0000-4000-8000-000000000040",
-                name: "Food",
-                kind: "expense",
-                slug: "food",
-                isDefault: true,
+  for (const fixture of reasoningCases) {
+    it(`settles a truncated model response on the first delivery with ${fixture.label}`, async (t) => {
+      const transactionId = "00000000-0000-4000-8000-000000000030";
+      let acked = false;
+      let retries = 0;
+      let categoryWrites = 0;
+      let retryReports = 0;
+      t.mock.method(
+        globalThis,
+        "fetch",
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = String(input);
+          if (url.endsWith("/resolve-imported-transaction"))
+            return Response.json({
+              merchantName: null,
+              location: null,
+              needsCategory: true,
+              categoryNames: [],
+              kind: "expense",
+              flowDirection: "out",
+              counterpartyName: "Synthetic Recipient",
+              counterpartyType: "person",
+              categories: [
+                {
+                  id: "00000000-0000-4000-8000-000000000040",
+                  name: "Food",
+                  kind: "expense",
+                  slug: "food",
+                  isDefault: true,
+                },
+              ],
+            });
+          if (url.endsWith("/chat/completions")) {
+            const request = JSON.parse(String(init?.body));
+            assert.equal(request.reasoning_effort, fixture.expected);
+            assert.equal(
+              Object.hasOwn(request, "reasoning_effort"),
+              fixture.expected !== undefined,
+            );
+            return Response.json({
+              choices: [{ finish_reason: "length", message: { content: '{"categoryId":' } }],
+            });
+          }
+          if (url.endsWith("/set-imported-category")) {
+            const body = JSON.parse(String(init?.body));
+            assert.deepEqual(body, {
+              transactionId,
+              categoryId: null,
+              kind: null,
+              confidence: null,
+            });
+            categoryWrites += 1;
+            return Response.json({ applied: true });
+          }
+          if (url.endsWith("/report-processing-retry")) {
+            retryReports += 1;
+            return Response.json({});
+          }
+          throw new Error("Unexpected synthetic request");
+        },
+      );
+      await consumeMerchantJobs(
+        {
+          messages: [
+            {
+              body: { kind: "merchant.categorize", transactionId },
+              attempts: 1,
+              ack() {
+                acked = true;
               },
-            ],
-          });
-        if (url.endsWith("/chat/completions"))
-          return Response.json({
-            choices: [{ finish_reason: "length", message: { content: '{"categoryId":' } }],
-          });
-        if (url.endsWith("/set-imported-category")) {
-          const body = JSON.parse(String(init?.body));
-          assert.deepEqual(body, { transactionId, categoryId: null, kind: null, confidence: null });
-          categoryWrites += 1;
-          return Response.json({ applied: true });
-        }
-        if (url.endsWith("/report-processing-retry")) {
-          retryReports += 1;
-          return Response.json({});
-        }
-        throw new Error("Unexpected synthetic request");
-      },
-    );
-    await consumeMerchantJobs(
-      {
-        messages: [
-          {
-            body: { kind: "merchant.categorize", transactionId },
-            attempts: 1,
-            ack() {
-              acked = true;
+              retry() {
+                retries += 1;
+              },
             },
-            retry() {
-              retries += 1;
-            },
-          },
-        ],
-      } as unknown as MessageBatch<unknown>,
-      {
-        MONARA_BACKEND_URL: "https://backend.test",
-        MONARA_AGENT_BACKEND_SECRET: "synthetic",
-        LLM_BASE_URL: "https://llm.test",
-        LLM_API_KEY: "synthetic",
-        LLM_MODEL: "synthetic",
-        BRAVE_SEARCH_API_KEY: "synthetic",
-      },
-    );
-    assert.equal(acked, true);
-    assert.equal(retries, 0);
-    assert.equal(categoryWrites, 1);
-    assert.equal(retryReports, 0);
-  });
+          ],
+        } as unknown as MessageBatch<unknown>,
+        {
+          MONARA_BACKEND_URL: "https://backend.test",
+          MONARA_AGENT_BACKEND_SECRET: "synthetic",
+          LLM_BASE_URL: "https://llm.test",
+          LLM_API_KEY: "synthetic",
+          LLM_MODEL: fixture.model,
+          LLM_REASONING_EFFORT: fixture.value,
+          BRAVE_SEARCH_API_KEY: "synthetic",
+        },
+      );
+      assert.equal(acked, true);
+      assert.equal(retries, 0);
+      assert.equal(categoryWrites, 1);
+      assert.equal(retryReports, 0);
+    });
+  }
 
   it("retries when the final-attempt review write fails", async (t) => {
     const transactionId = "00000000-0000-4000-8000-000000000030";

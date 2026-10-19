@@ -94,7 +94,7 @@ function createLlm(env: Env) {
     apiKey: env.LLM_API_KEY ?? "",
     model: env.LLM_MODEL ?? "",
     // Import-specific settings do not change WhatsApp or conversation defaults.
-    reasoningEffort: "medium",
+    reasoningEffort: env.LLM_REASONING_EFFORT?.trim() ?? "medium",
     requestTimeoutMs: 120_000,
   });
 }
