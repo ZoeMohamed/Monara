@@ -1165,7 +1165,7 @@ function useBudgetUsage(snapshot: FinanceSnapshot) {
 
 export type BudgetManagerPanel =
   | { kind: "create"; cadence?: Budget["cadence"] }
-  | { kind: "edit" | "delete"; id: string }
+  | { kind: "details" | "edit" | "delete"; id: string }
   | null;
 
 type BudgetManagerProps = FinanceManagerProps & {
@@ -1294,11 +1294,15 @@ function ManagedBudgetRow({
 function BudgetManagerDialog({
   panel,
   budget,
+  usage,
+  onPanelChange,
   onClose,
   ...props
 }: FinanceManagerProps & {
   panel: BudgetManagerPanel;
   budget?: Budget;
+  usage: ReturnType<typeof useBudgetUsage>;
+  onPanelChange?: (panel: BudgetManagerPanel) => void;
   onClose: () => void;
   onSaved?: (result: BudgetMutationResult) => void;
 }) {
@@ -1320,6 +1324,16 @@ function BudgetManagerDialog({
           <Button onPress={onClose}>Back to budgets</Button>
         </div>
       </ModalDialog>
+    );
+  if (panel.kind === "details")
+    return (
+      <ManagedBudgetDetails
+        budget={openedBudget}
+        snapshot={props.snapshot}
+        usage={usage}
+        onClose={onClose}
+        onPanelChange={(nextPanel) => onPanelChange?.(nextPanel)}
+      />
     );
   if (panel.kind === "edit")
     return (
@@ -1618,6 +1632,8 @@ export function BudgetManager(props: BudgetManagerProps) {
         key={retainedBudgetDialogKey(panel)}
         panel={panel}
         budget={selected}
+        usage={usage}
+        onPanelChange={props.onPanelChange}
         onClose={close}
         onSaved={setSaved}
       />

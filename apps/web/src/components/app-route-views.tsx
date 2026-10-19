@@ -152,8 +152,8 @@ export function BudgetsRoute() {
               ? (cadence) => setBudgetPanel({ kind: "create", cadence })
               : undefined
           }
-          onRequestEditBudget={
-            session.financeSnapshot ? (id) => setBudgetPanel({ kind: "edit", id }) : undefined
+          onRequestBudgetDetails={
+            session.financeSnapshot ? (id) => setBudgetPanel({ kind: "details", id }) : undefined
           }
           onRequestDeleteBudget={
             session.financeSnapshot ? (id) => setBudgetPanel({ kind: "delete", id }) : undefined

@@ -7,6 +7,7 @@ import { useAmountDisplay } from "@/components/app-session-context";
 
 import { BillCalendar } from "@/components/bill-calendar";
 import { BrandMark } from "@/components/brand-mark";
+import { BudgetDetails, type BudgetDetailsRecord } from "@/components/budget-details";
 import budgetStyles from "@/components/budgets-screen.module.css";
 import { CategorySpendingGuide } from "@/components/category-spending-guide";
 import { CategoryAvatar } from "@/components/category-symbol";
@@ -111,7 +112,7 @@ function BudgetRowAction({
       <div className="flex items-center gap-1">
         <Button
           aria-describedby={descriptionId}
-          aria-label={`Edit ${budget.category} budget`}
+          aria-label={`View ${budget.category} budget details`}
           className={`${budgetStyles.budgetRow} flex-1`}
           onPress={onEdit}
           variant="ghost"
@@ -571,6 +572,50 @@ function RecurringBills({
   );
 }
 
+function DemoBudgetDetails({
+  budget,
+  transactions,
+  month,
+  today,
+  onClose,
+  onEdit,
+}: {
+  budget: Budget;
+  transactions: Transaction[];
+  month: string;
+  today: string;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
+  const progress = budgetUsage(transactions, budget, month, today);
+  const status = progress.periodStartsOn
+    ? labelByState[progress.state]
+    : budget.startsOn && budget.startsOn > today
+      ? "Not started"
+      : "Progress unavailable";
+  const record: BudgetDetailsRecord = {
+    name: budget.category,
+    category: budget.category,
+    icon: budget.icon ?? categoryIcon(budget.category),
+    cadence: budget.cadence,
+    limit: BigInt(budget.limit),
+    warningPercent: budget.warningPercent,
+    startsOn: budget.startsOn,
+    status,
+    ...(progress.periodStartsOn && progress.periodEndsOn
+      ? {
+          usage: {
+            used: progress.used,
+            remaining: progress.remaining,
+            periodStartsOn: progress.periodStartsOn,
+            periodEndsOn: progress.periodEndsOn,
+          },
+        }
+      : {}),
+  };
+  return <BudgetDetails record={record} onClose={onClose} onEdit={onEdit} />;
+}
+
 export function BudgetsScreen({
   transactions,
   budgets,
@@ -584,7 +629,7 @@ export function BudgetsScreen({
   onConfirmBill,
   onDismissBill,
   onEditBudget,
-  onRequestEditBudget,
+  onRequestBudgetDetails,
   onRequestDeleteBudget,
   onCreateBudget,
   onRequestCreateBudget,
@@ -602,7 +647,7 @@ export function BudgetsScreen({
   onConfirmBill: (id: string) => void;
   onDismissBill: (id: string) => void;
   onEditBudget?: (budgetId: string, changes: DemoBudgetChanges) => void;
-  onRequestEditBudget?: (budgetId: string) => void;
+  onRequestBudgetDetails?: (budgetId: string) => void;
   onRequestDeleteBudget?: (budgetId: string) => void;
   onCreateBudget?: (input: CreateDemoBudgetInput) => void;
   onRequestCreateBudget?: (cadence: Budget["cadence"]) => void;
@@ -614,6 +659,7 @@ export function BudgetsScreen({
   }));
   const monthly = periods[1].summary;
   const [editing, setEditing] = useState<Budget | null>(null);
+  const [viewingBudget, setViewingBudget] = useState<Budget | null>(null);
   const [creating, setCreating] = useState<Budget["cadence"] | null>(null);
   const [feedback, setFeedback] = useState<{
     message: string;
@@ -677,8 +723,8 @@ export function BudgetsScreen({
     }
   };
   const openBudget = (budget: Budget) => {
-    if (onRequestEditBudget) onRequestEditBudget(budget.id);
-    else setEditing(budget);
+    if (onRequestBudgetDetails) onRequestBudgetDetails(budget.id);
+    else setViewingBudget(budget);
   };
   const suggested = bills.filter((bill) => bill.status === "suggested");
   const active = bills
@@ -787,6 +833,19 @@ export function BudgetsScreen({
           onSave={saveDemoBudget}
           today={today}
           transactions={transactions}
+        />
+      )}
+      {viewingBudget && (
+        <DemoBudgetDetails
+          budget={viewingBudget}
+          month={month}
+          today={today}
+          transactions={transactions}
+          onClose={() => setViewingBudget(null)}
+          onEdit={() => {
+            setEditing(viewingBudget);
+            setViewingBudget(null);
+          }}
         />
       )}
       {creating && onCreateBudget && (
