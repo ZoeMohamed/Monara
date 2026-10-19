@@ -38,6 +38,7 @@ export {
   runGmailIngestionOperation,
 } from "./gmail-ingestion.ts";
 export { createProfileService, type ProfileRepository, type ProfileService } from "./profile.ts";
+export { detectRecurringBillProposals } from "./recurring-bills.ts";
 export { createSupabaseBudgetAlertRepository } from "./supabase-budget-alert-repository.ts";
 export { createSupabaseChatHistoryRepository } from "./supabase-chat-history-repository.ts";
 export { createSupabaseFinanceRepository } from "./supabase-finance-repository.ts";
