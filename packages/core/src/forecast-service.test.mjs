@@ -76,7 +76,7 @@ describe("forecast service", () => {
     assert.equal(summary.items[0].amount.amountMinor, "59000");
     assert.equal(summary.items[0].realizedTransactionId, null);
     assert.equal(summary.usedModel, false);
-    assert.equal(summary.threshold, 0.7);
+    assert.equal(summary.threshold, 0.6);
     assert.equal(summary.totals.monthRemaining.amountMinor, "59000");
     assert.equal(summary.totals.projectedMonthEnd.amountMinor, "59000");
     assert.equal(summary.totals.weekRemaining.amountMinor, "0");

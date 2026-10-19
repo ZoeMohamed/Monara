@@ -8,7 +8,7 @@ const summary = {
   generatedAt: "2026-10-14T03:00:00.000Z",
   source: "manual",
   month: "2026-10",
-  threshold: 0.7,
+  threshold: 0.6,
   usedModel: true,
   candidateCount: 1,
   discardedCount: 0,

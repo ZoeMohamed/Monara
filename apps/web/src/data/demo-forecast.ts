@@ -99,7 +99,7 @@ export function demoForecastFor(spentSoFar: bigint): ForecastSummary {
     generatedAt: `${demoToday}T03:00:00.000Z`,
     source: "manual",
     month: demoToday.slice(0, 7),
-    threshold: 0.7,
+    threshold: 0.6,
     usedModel: true,
     candidateCount: 6,
     discardedCount: 1,

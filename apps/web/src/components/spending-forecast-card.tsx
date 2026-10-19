@@ -11,6 +11,7 @@ import { type ForecastState, useForecast } from "@/components/use-forecast";
 import { demoForecastFor } from "@/data/demo-forecast";
 import { formatDay, type Transaction } from "@/data/demo-ledger";
 import { financialMonth } from "@/data/finance-analytics";
+import { upcomingForecastItems } from "@/lib/forecast/upcoming";
 import styles from "./spending-forecast-card.module.css";
 
 /** How many predictions show before the User asks for the rest. */
@@ -54,9 +55,8 @@ function Totals({ totals }: { totals: ForecastSummary["totals"] }) {
 
 function Row({ item }: { item: ForecastItem }) {
   const { formatRupiah } = useAmountDisplay();
-  const paid = item.realizedTransactionId !== null;
   return (
-    <li data-realized={paid}>
+    <li>
       <span className={styles.date}>{formatDay(item.predictedOn)}</span>
       <span className={styles.merchant}>
         <strong>{item.merchantName}</strong>
@@ -64,11 +64,8 @@ function Row({ item }: { item: ForecastItem }) {
       </span>
       <span className={styles.amount}>
         <span data-amount>{formatRupiah(rupiah(item.amount))}</span>
-        <span
-          className={styles.chip}
-          data-tone={paid ? "paid" : item.confidence >= 0.85 ? "high" : "medium"}
-        >
-          {paid ? "Paid" : `${percent(item.confidence)} sure`}
+        <span className={styles.chip} data-tone={item.confidence >= 0.85 ? "high" : "medium"}>
+          {percent(item.confidence)} sure
         </span>
       </span>
     </li>
@@ -76,10 +73,11 @@ function Row({ item }: { item: ForecastItem }) {
 }
 
 function Footnote({ forecast }: { forecast: ForecastSummary }) {
-  const { discardedCount, threshold, accuracy } = forecast;
+  const { discardedCount, threshold, accuracy, usedModel } = forecast;
   return (
     <p className={styles.footnote}>
       Updated {updatedAt(forecast.generatedAt)}
+      {usedModel ? " · AI-checked" : " · Rules only"}
       {discardedCount > 0
         ? ` · ${discardedCount} unsure ${discardedCount === 1 ? "payment" : "payments"} under ${percent(threshold)} left out`
         : ""}
@@ -90,12 +88,16 @@ function Footnote({ forecast }: { forecast: ForecastSummary }) {
   );
 }
 
-function Items({ items }: { items: ForecastItem[] }) {
+/** What is still ahead. Ones that came true or whose day passed are not listed, like the chart. */
+function Items({ all, today }: { all: ForecastItem[]; today: string }) {
   const [showAll, setShowAll] = useState(false);
+  const items = upcomingForecastItems(all, today);
   if (items.length === 0) {
     return (
       <p className={styles.note}>
-        No repeating payments stood out yet. Confirm a few months of expenses and refresh.
+        {all.length === 0
+          ? "No repeating payments stood out yet. Confirm a few months of expenses and refresh."
+          : "Nothing else is expected this month."}
       </p>
     );
   }
@@ -179,7 +181,7 @@ function Body({ forecast, context }: { forecast: ForecastSummary; context: Conte
     <>
       <ForecastProjectionChart days={days} items={forecast.items} today={context.today} />
       <Totals totals={forecast.totals} />
-      <Items items={forecast.items} />
+      <Items all={forecast.items} today={context.today} />
       <Footnote forecast={forecast} />
     </>
   );
@@ -209,7 +211,7 @@ function DemoCard({ context }: { context: Context }) {
 
 function LiveCard({ context }: { context: Context }) {
   const titleId = useId();
-  const { state, refreshing, refresh } = useForecast();
+  const { state, refreshing, refresh } = useForecast(context.today);
   const forecast = state.status === "loading" ? null : state.forecast;
   return (
     <section

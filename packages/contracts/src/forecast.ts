@@ -7,7 +7,7 @@ import {
 } from "./common.ts";
 
 /** Items below this confidence are dropped from a forecast and only counted. */
-export const DEFAULT_FORECAST_THRESHOLD = 0.7;
+export const DEFAULT_FORECAST_THRESHOLD = 0.6;
 
 export const forecastPatternSchema = z.enum(["monthly", "weekly"]);
 export const forecastSourceSchema = z.enum(["manual", "weekly", "agent"]);

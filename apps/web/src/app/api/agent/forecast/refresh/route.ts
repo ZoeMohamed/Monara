@@ -1,4 +1,4 @@
-import { FinanceOperationError } from "@monara/core";
+import { FinanceOperationError, jakartaDate } from "@monara/core";
 
 import { hasAgentCredential } from "@/lib/agent/credential";
 import { financeErrorResponse, financeSuccessResponse } from "@/lib/finance/service";
@@ -58,10 +58,14 @@ export async function POST(request: Request) {
     const known: ForecastDueCandidate[] = [];
     await inGroups(users, async (userId) => {
       const current = await service.get(userId);
-      known.push({ userId, generatedAt: current?.generatedAt ?? null });
+      known.push({
+        userId,
+        generatedAt: current?.generatedAt ?? null,
+        month: current?.month ?? null,
+      });
     });
     // Users with no forecast first, then the oldest, so no one is starved by a fixed order.
-    const due = dueForecastUsers(known, staleBefore, BATCH);
+    const due = dueForecastUsers(known, staleBefore, BATCH, jakartaDate(new Date()).slice(0, 7));
     let refreshed = 0;
     // One User's failure must not stop the others. The next run tries again.
     await inGroups(due, async (userId) => {

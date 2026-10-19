@@ -1,7 +1,7 @@
 "use client";
 
 import type { ForecastSummary } from "@monara/contracts";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ForecastClientError, fetchForecast, refreshForecast } from "@/lib/forecast/client";
 
 export type ForecastState =
@@ -12,8 +12,11 @@ export type ForecastState =
 const messageOf = (error: unknown) =>
   error instanceof ForecastClientError ? error.message : "Try again.";
 
-/** Loads the signed-in User's forecast once and offers a manual refresh. */
-export function useForecast() {
+/**
+ * Loads the signed-in User's forecast and offers a manual refresh. A saved forecast for a month
+ * that is over describes dates that have all gone by, so it is replaced once, automatically.
+ */
+export function useForecast(today: string) {
   const [state, setState] = useState<ForecastState>({ status: "loading" });
   const [refreshing, setRefreshing] = useState(false);
 
@@ -43,6 +46,14 @@ export function useForecast() {
       setRefreshing(false);
     }
   }, []);
+
+  const replacedOldMonth = useRef(false);
+  useEffect(() => {
+    if (replacedOldMonth.current || state.status !== "ready" || !state.forecast) return;
+    if (state.forecast.month >= today.slice(0, 7)) return;
+    replacedOldMonth.current = true;
+    void refresh();
+  }, [state, today, refresh]);
 
   return { state, refreshing, refresh };
 }

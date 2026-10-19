@@ -1,18 +1,22 @@
-/** A User the weekly run might refresh, and when their forecast was made (null when they have none). */
+/** A User the weekly run might refresh, and the forecast they have (null when none). */
 export interface ForecastDueCandidate {
   userId: string;
   generatedAt: string | null;
+  /** The calendar month the forecast covers, as YYYY-MM. */
+  month: string | null;
 }
 
 /**
- * The Users whose forecast is missing or older than `staleBefore`, with no forecast first and then
- * the oldest, cut to `limit`. Ordering matters: a fixed order would refresh the same first Users
- * every week and starve the rest.
+ * The Users whose forecast is missing, older than `staleBefore`, or for a month that is over,
+ * with no forecast first and then the oldest, cut to `limit`. A forecast for a past month is due
+ * however new it is, because every date in it has already gone by. Ordering matters: a fixed
+ * order would refresh the same first Users every week and starve the rest.
  */
 export function dueForecastUsers(
   candidates: ForecastDueCandidate[],
   staleBefore: number,
   limit: number,
+  currentMonth: string,
 ): string[] {
   return candidates
     .map((candidate) => ({
@@ -21,8 +25,9 @@ export function dueForecastUsers(
         candidate.generatedAt === null
           ? Number.NEGATIVE_INFINITY
           : Date.parse(candidate.generatedAt),
+      overMonth: candidate.month !== null && candidate.month < currentMonth,
     }))
-    .filter((candidate) => candidate.madeAt <= staleBefore)
+    .filter((candidate) => candidate.madeAt <= staleBefore || candidate.overMonth)
     .sort((a, b) =>
       a.madeAt === b.madeAt ? a.userId.localeCompare(b.userId) : a.madeAt - b.madeAt,
     )

@@ -237,7 +237,7 @@ describe("selectItems", () => {
   });
 
   it("falls back to the rule confidence and reason without a judgement", () => {
-    const result = selectItems(candidates, null, 0.7);
+    const result = selectItems(candidates, null);
     assert.ok(result.items.every((item) => item.reason.length > 0));
   });
 });
@@ -264,7 +264,7 @@ describe("backtest on synthetic history", () => {
   // a new subscription that no earlier payment could have predicted.
   const cutoff = "2026-10-01";
   const history = payments({ until: cutoff });
-  const draft = selectItems(detectCandidates(history, cutoff), null, 0.7);
+  const draft = selectItems(detectCandidates(history, cutoff), null);
 
   const actual = payments({ until: "2026-11-01" })
     .filter((item) => item.occurredOn >= cutoff)

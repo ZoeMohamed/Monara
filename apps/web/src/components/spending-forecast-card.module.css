@@ -89,10 +89,6 @@
   border-top: 1px solid var(--border);
 }
 
-.list > li[data-realized="true"] {
-  opacity: 0.6;
-}
-
 .date {
   color: var(--muted);
   font-size: 12px;
@@ -139,11 +135,6 @@
 .chip[data-tone="high"] {
   background: var(--accent-soft);
   color: var(--link);
-}
-
-.chip[data-tone="paid"] {
-  background: var(--surface-tertiary);
-  color: var(--muted);
 }
 
 .more {

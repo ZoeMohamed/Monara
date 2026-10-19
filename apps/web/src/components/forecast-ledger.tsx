@@ -147,7 +147,7 @@ function DemoForecastLedger({ today, query }: { today: string; query: string }) 
 }
 
 function LiveForecastLedger({ today, query }: { today: string; query: string }) {
-  const { state, refreshing, refresh } = useForecast();
+  const { state, refreshing, refresh } = useForecast(today);
   const forecast = state.status === "loading" ? null : state.forecast;
   return (
     <>

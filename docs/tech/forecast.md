@@ -15,7 +15,7 @@ flowchart LR
   Cand --> Model["Model judges each one"]
   Model --> Band["Confidence moved by at most 0.25 down or 0.15 up"]
   Cand -. "model unavailable" .-> Band
-  Band --> Cut{"At least 0.7?"}
+  Band --> Cut{"At least 0.6?"}
   Cut -- yes --> Items["Forecast items"]
   Cut -- no --> Drop["Dropped and only counted"]
   Items --> Store["Saved, replacing the old forecast"]
@@ -28,11 +28,13 @@ flowchart LR
 - *Amount.* The median of the recent payments, with the lowest and highest as the range. An amount is never made up.
 - *Rule confidence.* Monthly: 0.4 for date consistency, 0.3 for steady amounts and 0.3 for how many months it has been seen (up to four). Weekly: 0.5 for how often the weekday is hit, 0.3 for steady amounts and 0.2 for how many times it was seen.
 
-**Model** (`apps/agent/src/forecast.ts`). The web backend sends the candidates to the Agent worker (`POST /forecast/refine`, with the shared secret). The model sees only each candidate's merchant name, dates and amounts, never the User's identity. It returns a confidence and a one-line reason per candidate. The backend then keeps that confidence only within a small band around the rule confidence, down by at most 0.25 and up by at most 0.15, so the model can only mark a candidate down or up, never decide alone, and it can never add an item or change an amount. If the model is unavailable, the rule confidence and reason are used, and the forecast says it did not use the model.
+**Model** (`apps/agent/src/forecast.ts`). The web backend sends the candidates to the Agent worker (`POST /forecast/refine`, with the shared secret). The model sees only each candidate's merchant name, dates and amounts, never the User's identity. It returns a confidence and a one-line reason per candidate. The backend then keeps that confidence only within a small band around the rule confidence, down by at most 0.25 and up by at most 0.15, so the model can only mark a candidate down or up, never decide alone, and it can never add an item or change an amount. If the model is unavailable, the rule confidence and reason are used, and the card's footnote says "Rules only" instead of "AI-checked".
 
-**Threshold.** Items below 0.7 are dropped and only counted ("2 unsure payments left out").
+**Threshold.** Items below 0.6 are dropped and only counted ("2 unsure payments left out"). At 0.6 the model can only remove a candidate whose rule confidence is under 0.85, because it can lower a score by at most 0.25.
 
 **Totals.** Expected this week (to Sunday), expected this month (to the last day of the month), confirmed spending so far, and the projected month end, which is the confirmed total plus what is still expected this month.
+
+**A forecast for a past month.** Every date in it has gone by, so the Home card replaces it once, automatically, when it opens and sees a forecast from an earlier month, and the weekly run treats it as due however new it is.
 
 **Did it come true?** When a prediction's date has passed, it is matched to a confirmed expense from the same merchant, made on or after the day the forecast was made, within 3 days and within 35% of the amount. A payment from before the forecast cannot fulfil it. A matched prediction shows as Paid and leaves the remaining total. The forecast reports how many earlier predictions came true. Nothing is stored for this, so it is worked out when the forecast is read.
 
@@ -45,13 +47,13 @@ flowchart LR
 | Routes | `apps/web/src/app/api/forecast/route.ts` (read and refresh), `api/agent/forecast/refresh/route.ts` (weekly run) |
 | Weekly trigger | Worker cron, Mondays 02:00 UTC (09:00 Jakarta) |
 | Agent tools | `get_spending_forecast` and `refresh_spending_forecast` (read tier) |
-| Interface | A Home card with this week, this month, month end, the list with confidence chips and a Refresh button (`spending-forecast-card.tsx`), and a Forecast filter in History that lists every expected payment of the rest of the month by day, drawn faint because none has happened (`forecast-ledger.tsx`). The public demo shows a sample |
+| Interface | A Home card with this week, this month, month end, the list of payments still ahead with confidence chips and a Refresh button (`spending-forecast-card.tsx`), and a Forecast filter in History that lists every expected payment of the rest of the month by day, drawn faint because none has happened (`forecast-ledger.tsx`). The public demo shows a sample |
 
 ## Key decisions
 
 - **Rules first, the model second.** The alternative was asking the model to predict spending. We rejected it because a model can invent a payment or an amount, and Monara never invents financial data. Here every item and amount comes from a payment the User really made.
 - **The model can only nudge confidence.** It could have been allowed to add fuzzy patterns. We kept it to judging and explaining, inside a fixed band, so a wrong or manipulated model answer cannot create a forecast out of nothing.
-- **A threshold of 0.7, with dropped items only counted.** Showing every guess would make the forecast noisy and less trusted. Counting the dropped ones keeps it honest about what it left out. The threshold is a setting of the run and is stored with it.
+- **A threshold of 0.6, with dropped items only counted.** Showing every guess would make the forecast noisy and less trusted. We started at 0.7 and lowered it so bills with a short history or uneven amounts still appear; the cost is a smaller model veto (see above). Counting the dropped ones keeps it honest about what it left out. The threshold is a setting of the run and is stored with it.
 - **One forecast per User, replaced atomically.** Keeping history would add storage and a screen nobody asked for. A single database function replaces the old forecast in one transaction, so a refresh never leaves half a forecast.
 - **Realization is derived, not stored.** The match is cheap to compute on read, and storing it would mean writing on every new transaction.
 - **The model runs in the Agent worker.** The backend could have called the model itself. The worker already holds the model credentials, so no new secret is needed on the web host.
