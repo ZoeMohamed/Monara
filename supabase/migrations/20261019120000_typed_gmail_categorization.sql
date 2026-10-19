@@ -158,7 +158,11 @@ revoke execute on function private.seed_default_categories(uuid)
 
 do $$ declare v_user record; begin
   for v_user in select id from auth.users loop
-    perform private.seed_default_categories(v_user.id);
+    -- Share deletion acceptance's lock before checking whether writes are allowed.
+    perform pg_advisory_xact_lock(hashtextextended(v_user.id::text,190026));
+    if public.monara_user_is_active(v_user.id) then
+      perform private.seed_default_categories(v_user.id);
+    end if;
   end loop;
 end; $$;
 

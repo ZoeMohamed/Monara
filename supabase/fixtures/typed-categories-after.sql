@@ -54,4 +54,38 @@ begin
  update public.transactions set description='Edited legacy unknown pending record'
    where id='94000000-0000-4000-8000-000000000008';
 end; $$;
+-- The upgrade may seed active identities, but cannot resurrect accepted deletion.
+do $$
+begin
+ if not exists(
+  select 1 from category_upgrade_fixture.pending_deletion as expected
+  join auth.users as identity on identity.id=expected.id
+  join public.user_deletions as deletion on deletion.user_id=expected.id
+  where identity.email=expected.email
+    and identity.banned_until is not distinct from expected.banned_until
+    and identity.created_at is not distinct from expected.created_at
+    and identity.updated_at is not distinct from expected.updated_at
+    and to_jsonb(deletion)=expected.deletion_facts
+ ) then raise exception 'Pending deletion Auth identity or cleanup marker changed during upgrade.'; end if;
+ if public.monara_user_is_active('97000000-0000-4000-8000-000000000001')
+   or exists(select 1 from public.categories where user_id='97000000-0000-4000-8000-000000000001')
+   or exists(select 1 from public.profiles where id='97000000-0000-4000-8000-000000000001')
+   or exists(select 1 from auth.sessions where user_id='97000000-0000-4000-8000-000000000001')
+ then raise exception 'Upgrade reactivated or repopulated an accepted deletion.'; end if;
+ if exists(
+  select 1 from category_upgrade_fixture.active_users as active
+  where not public.monara_user_is_active(active.id)
+    or (select count(*) from public.categories as category where category.user_id=active.id
+      and category.kind='income' and category.is_default and not category.is_archived
+      and category.slug in ('salary','freelance','business','interest','gifts','other-income'))<>6
+ ) then raise exception 'Active identity did not receive the six income defaults.'; end if;
+ begin
+  insert into public.categories(user_id,name,slug,icon,color,kind)
+  values('97000000-0000-4000-8000-000000000001','Forbidden resurrection',
+    'upgrade-forbidden-resurrection','dot','#123456','expense');
+  raise exception 'Accepted deletion guard allowed a category to be recreated.';
+ exception when check_violation then
+  if sqlerrm<>'This Monara identity is unavailable.' then raise; end if;
+ end;
+end; $$;
 drop schema category_upgrade_fixture cascade;
