@@ -33,5 +33,6 @@ export async function getAuthenticatedIdentity() {
   const identity = identityFromVerifiedClaims(data?.claims);
   if (!identity) return null;
   const active = await supabase.rpc("monara_session_is_active");
-  return !active.error && active.data === true ? identity : null;
+  if (active.error) throw new Error("Session activity is unavailable.");
+  return active.data === true ? identity : null;
 }
