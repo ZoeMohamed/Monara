@@ -25,6 +25,7 @@ import {
 } from "@/data/demo-ledger";
 import type { Transaction } from "@/data/sample-data";
 import { callFinanceOperation, FinanceClientError } from "@/lib/finance/client";
+import { trackedBill } from "../lib/bills/presentation.ts";
 
 type Setter<Value> = Dispatch<SetStateAction<Value>>;
 export type CreateRequest = { id: string; values?: BackendTransactionValues; locked?: boolean };
@@ -43,6 +44,7 @@ type ActionContext = {
   setDrafts: Setter<Record<string, TransactionDraft>>;
   setTransactions: Setter<Transaction[]>;
   setRemovedId: Setter<string | null>;
+  bills: RecurringBill[];
   setBills: Setter<RecurringBill[]>;
   setConfirmError: Setter<string | null>;
   setRejectError: Setter<string | null>;
@@ -69,6 +71,7 @@ export function useTransactionActions(context: ActionContext) {
     setDrafts,
     setTransactions,
     setRemovedId,
+    bills,
     setBills,
     setConfirmError,
     setRejectError,
@@ -464,13 +467,47 @@ export function useTransactionActions(context: ActionContext) {
     navigation.navigate({ transactionId: null }, "replace");
   };
 
+  // Live suggestions are saved only when the User decides; the detected values go back unchanged.
+  const decideBill = async (bill: RecurringBill, decision: "track" | "dismiss") => {
+    if (!bill.proposal) return;
+    const input = { clientRequestId: crypto.randomUUID(), proposal: bill.proposal };
+    try {
+      const saved = await mutate(() =>
+        decision === "track"
+          ? callFinanceOperation("confirm_recurring_bill", input)
+          : callFinanceOperation("dismiss_recurring_bill_suggestion", input),
+      );
+      setBills((items) =>
+        decision === "track"
+          ? items.map((item) => (item.id === bill.id ? trackedBill(saved) : item))
+          : items.filter((item) => item.id !== bill.id),
+      );
+      setNotice({ message: decision === "track" ? "Bill tracked." : "Suggestion dismissed." });
+    } catch (failure) {
+      setNotice({
+        message:
+          failure instanceof Error ? failure.message : "That bill could not be saved. Try again.",
+        tone: "warning",
+      });
+    }
+  };
   const confirmBill = (id: string) => {
+    if (live) {
+      const bill = bills.find((item) => item.id === id);
+      if (bill) void decideBill(bill, "track");
+      return;
+    }
     setBills((items) =>
       items.map((bill) => (bill.id === id ? { ...bill, status: "active" } : bill)),
     );
     setNotice({ message: "Bill tracked." });
   };
   const dismissBill = (id: string) => {
+    if (live) {
+      const bill = bills.find((item) => item.id === id);
+      if (bill) void decideBill(bill, "dismiss");
+      return;
+    }
     setBills((items) => items.filter((bill) => bill.id !== id));
     setNotice({ message: "Suggestion dismissed." });
   };

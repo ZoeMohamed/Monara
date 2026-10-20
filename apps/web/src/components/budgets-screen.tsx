@@ -289,7 +289,9 @@ function BillRow({ bill, today }: { bill: RecurringBill; today: string }) {
           </p>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-          <span>Monthly · due {formatDay(bill.nextDue)}</span>
+          <span>
+            {bill.cadence === "weekly" ? "Weekly" : "Monthly"} · due {formatDay(bill.nextDue)}
+          </span>
           {daysUntil < 0 ? (
             <Chip color="danger" size="sm" variant="soft">
               Overdue · {Math.abs(daysUntil)} {daysUntil === -1 ? "day" : "days"}

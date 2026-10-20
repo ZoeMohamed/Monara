@@ -89,6 +89,61 @@ export const listRecurringBillsInputSchema = paginationInputSchema
   .extend({ status: recurringBillStatusSchema.optional() })
   .strict();
 
+export const suggestRecurringBillsInputSchema = z.object({}).strict();
+
+/** A detected bill the User has not confirmed or dismissed. Nothing is stored until they do. */
+export const recurringBillSuggestionSchema = z
+  .object({
+    proposal: recurringBillProposalSchema,
+    /** Confirmed payments the rules matched, newest last. */
+    paymentCount: z.number().int().min(3).max(1_000),
+    lastPaidOn: calendarDateSchema,
+    /** The model's short reason, when the AI check ran. */
+    reason: z.string().trim().min(1).max(200).nullable(),
+  })
+  .strict();
+
+export const recurringBillSuggestionListSchema = z
+  .object({ items: z.array(recurringBillSuggestionSchema).max(50) })
+  .strict();
+
+export const dismissRecurringBillSuggestionInputSchema = z
+  .object({
+    clientRequestId: clientRequestIdSchema,
+    proposal: recurringBillProposalSchema,
+  })
+  .strict();
+
+/** One rules candidate sent to the model for the AI check. No User id or account is sent. */
+export const billReviewCandidateSchema = z
+  .object({
+    key: z.string().min(1).max(200),
+    merchantName: z.string().trim().min(1).max(200),
+    intervalUnit: z.enum(["week", "month"]),
+    payments: z
+      .array(z.object({ occurredOn: calendarDateSchema, amountMinor: z.string() }).strict())
+      .min(3)
+      .max(24),
+  })
+  .strict();
+
+export const billReviewRequestSchema = z
+  .object({ candidates: z.array(billReviewCandidateSchema).min(1).max(50) })
+  .strict();
+
+export const billReviewJudgementSchema = z
+  .object({
+    key: z.string().min(1).max(200),
+    isBill: z.boolean(),
+    confidence: z.number().min(0).max(1),
+    reason: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
+export const billReviewResponseSchema = z
+  .object({ judgements: z.array(billReviewJudgementSchema).max(50) })
+  .strict();
+
 export const recurringBillPageSchema = z
   .object({
     items: z.array(recurringBillSchema),
@@ -114,3 +169,7 @@ export type DeleteRecurringBillInput = z.input<typeof deleteRecurringBillInputSc
 export type ListRecurringBillsInput = z.input<typeof listRecurringBillsInputSchema>;
 export type RecurringBillPage = z.infer<typeof recurringBillPageSchema>;
 export type RecurringBillMutationResult = z.infer<typeof recurringBillMutationResultSchema>;
+export type RecurringBillSuggestion = z.infer<typeof recurringBillSuggestionSchema>;
+export type RecurringBillSuggestionList = z.infer<typeof recurringBillSuggestionListSchema>;
+export type BillReviewCandidate = z.infer<typeof billReviewCandidateSchema>;
+export type BillReviewJudgement = z.infer<typeof billReviewJudgementSchema>;

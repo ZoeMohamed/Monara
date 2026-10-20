@@ -1,5 +1,7 @@
 import {
   addReceiptTransactionInputSchema,
+  type BillReviewCandidate,
+  type BillReviewJudgement,
   type Budget,
   type BudgetPage,
   type BudgetSuggestion,
@@ -23,6 +25,7 @@ import {
   categoryMutationResultSchema,
   confirmDestructiveActionInputSchema,
   confirmedTransactionValuesSchema,
+  confirmRecurringBillInputSchema,
   confirmTransactionInputSchema,
   createBudgetInputSchema,
   createCategoryInputSchema,
@@ -44,6 +47,7 @@ import {
   deleteFinancialGoalInputSchema,
   deleteTransactionInputSchema,
   destructiveActionConfirmationSchema,
+  dismissRecurringBillSuggestionInputSchema,
   dismissReminderInputSchema,
   excludeTransactionInputSchema,
   type FinancialAccount,
@@ -60,6 +64,7 @@ import {
   type ListCategoriesInput,
   type ListFinancialAccountsInput,
   type ListFinancialGoalsInput,
+  type ListRecurringBillsInput,
   type ListRemindersInput,
   type ListTransactionsInput,
   listBudgetsInputSchema,
@@ -67,16 +72,23 @@ import {
   listCustomBanksInputSchema,
   listFinancialAccountsInputSchema,
   listFinancialGoalsInputSchema,
+  listRecurringBillsInputSchema,
   listRemindersInputSchema,
   listTransactionsInputSchema,
   type MarkReminderReadInput,
   type Money,
   markReminderReadInputSchema,
   type OperationErrorCode,
+  type RecurringBill,
+  type RecurringBillPage,
+  type RecurringBillProposal,
+  type RecurringBillSuggestionList,
   type Reminder,
   type ReversibleActionReceipt,
+  recurringBillSuggestionListSchema,
   requestDestructiveActionInputSchema,
   type SignedMoney,
+  suggestRecurringBillsInputSchema,
   type Transaction,
   type TransactionMutationResult,
   type TransactionPage,
@@ -102,6 +114,15 @@ import {
   updateTransactionInputSchema,
   userIdSchema,
 } from "@monara/contracts";
+import {
+  applyBillReview,
+  detectRecurringBillCandidates,
+  recurringBillKey,
+  toBillReviewCandidate,
+} from "./recurring-bills.ts";
+
+/** How far back bill detection looks. A year of monthly bills plus some slack. */
+const BILL_HISTORY_DAYS = 400;
 
 export class FinanceOperationError extends Error {
   readonly code: OperationErrorCode;
@@ -232,6 +253,18 @@ export interface FinanceRepository {
     expectedUpdatedAt: string;
     deletedAt: string;
   }): Promise<Budget>;
+
+  listRecurringBills(userId: string, input: ListRecurringBillsInput): Promise<RecurringBillPage>;
+  listAllRecurringBills(userId: string): Promise<RecurringBill[]>;
+  /** Saves a confirmed or dismissed suggestion once per client request id. */
+  createRecurringBill(
+    userId: string,
+    input: {
+      clientRequestId: string;
+      proposal: RecurringBillProposal;
+      status: RecurringBill["status"];
+    },
+  ): Promise<RecurringBill>;
 
   listUnreadReminders(userId: string, limit: number): Promise<DashboardSummary["activeReminders"]>;
   listReminders(
@@ -762,6 +795,11 @@ export function createFinanceService(
      * It must not throw or block: delivery happens outside the User's request.
      */
     onBudgetReminder?: (input: { userId: string; reminderId: string }) => void;
+    /**
+     * The AI check for detected bills. Returns null when the model is unavailable, and
+     * the rules then stand alone. Only merchant names, dates and amounts are sent.
+     */
+    reviewBills?: (candidates: BillReviewCandidate[]) => Promise<BillReviewJudgement[] | null>;
   } = {},
 ) {
   const now = () => (options.now ?? (() => new Date()))().toISOString();
@@ -771,6 +809,37 @@ export function createFinanceService(
     directSource: input.directSource,
     userId: userIdSchema.parse(input.userId),
   });
+
+  async function saveBillDecision(
+    userId: string,
+    clientRequestId: string,
+    proposal: RecurringBillProposal,
+    status: RecurringBill["status"],
+  ): Promise<RecurringBill> {
+    const key = recurringBillKey(proposal.merchantName);
+    const decided = async () =>
+      (await repository.listAllRecurringBills(userId)).find(
+        (bill) => recurringBillKey(bill.merchantName) === key,
+      );
+    // One decision per merchant: repeating it returns the saved bill, reversing it is refused.
+    const settle = (bill: RecurringBill) => {
+      if (bill.status === status) return bill;
+      throw new FinanceOperationError("CONFLICT", "That bill was already decided.");
+    };
+    const existing = await decided();
+    if (existing) return settle(existing);
+    try {
+      return await repository.createRecurringBill(userId, { clientRequestId, proposal, status });
+    } catch (error) {
+      // The database allows one live bill per merchant, so a concurrent decision lands here.
+      const raced =
+        error instanceof FinanceOperationError && error.code === "CONFLICT"
+          ? await decided()
+          : undefined;
+      if (raced) return settle(raced);
+      throw error;
+    }
+  }
 
   async function requireExpenseCategory(userId: string, categoryId: string, requireActive = true) {
     const category = (await repository.listAllCategories(userId)).find(
@@ -1448,6 +1517,67 @@ export function createFinanceService(
         },
       });
       return categoryMutationResultSchema.parse({ category, action: receipt });
+    },
+
+    async listRecurringBills(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      return repository.listRecurringBills(
+        verified.userId,
+        listRecurringBillsInputSchema.parse(input),
+      );
+    },
+
+    /**
+     * Detects bills in the User's confirmed expenses (PRD F8): rules first, then the AI
+     * check. Merchants the User already tracks or dismissed are not suggested again.
+     */
+    async suggestRecurringBills(
+      operationCaller: FinanceCaller,
+      input: unknown,
+    ): Promise<RecurringBillSuggestionList> {
+      const verified = caller(operationCaller);
+      suggestRecurringBillsInputSchema.parse(input);
+      const today = now().slice(0, 10);
+      const from = new Date(Date.parse(`${today}T00:00:00Z`) - BILL_HISTORY_DAYS * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      const [transactions, bills] = await Promise.all([
+        repository.listTransactionsForDateRange(verified.userId, from, today),
+        repository.listAllRecurringBills(verified.userId),
+      ]);
+      const known = new Set(bills.map((bill) => recurringBillKey(bill.merchantName)));
+      const candidates = detectRecurringBillCandidates(transactions, today)
+        .filter((candidate) => !known.has(candidate.key))
+        .slice(0, 50);
+      if (candidates.length === 0) return { items: [] };
+      let judgements: BillReviewJudgement[] | null = null;
+      try {
+        judgements = (await options.reviewBills?.(candidates.map(toBillReviewCandidate))) ?? null;
+      } catch {
+        judgements = null;
+      }
+      return recurringBillSuggestionListSchema.parse({
+        items: applyBillReview(candidates, judgements),
+      });
+    },
+
+    /** The User tracks a suggested bill. Only the User confirms; nothing is saved before. */
+    async confirmRecurringBill(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const values = confirmRecurringBillInputSchema.parse(input);
+      return saveBillDecision(verified.userId, values.clientRequestId, values.proposal, "active");
+    },
+
+    /** The User dismisses a suggestion, so the same merchant is not suggested again. */
+    async dismissRecurringBillSuggestion(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      const values = dismissRecurringBillSuggestionInputSchema.parse(input);
+      return saveBillDecision(
+        verified.userId,
+        values.clientRequestId,
+        values.proposal,
+        "dismissed",
+      );
     },
 
     async listBudgets(operationCaller: FinanceCaller, input: unknown) {

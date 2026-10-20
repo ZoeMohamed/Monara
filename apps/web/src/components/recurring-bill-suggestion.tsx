@@ -35,8 +35,9 @@ export function RecurringBillSuggestion({
           <strong className="font-semibold text-foreground tabular-nums">
             {formatRupiah(bill.expectedAmount)}
           </strong>{" "}
-          / month · Suggested bill
+          {bill.cadence === "weekly" ? "/ week" : "/ month"} · Suggested bill
         </p>
+        {bill.reason ? <p className="mt-1 text-xs text-muted">{bill.reason}</p> : null}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button
             aria-label={`Track ${bill.merchant} bill`}

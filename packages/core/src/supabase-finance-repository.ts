@@ -7,7 +7,9 @@ import {
   type FinancialGoal,
   financialAccountSchema,
   financialGoalSchema,
+  type RecurringBill,
   type Reminder,
+  recurringBillSchema,
   reminderSchema,
   type Transaction,
   transactionSchema,
@@ -50,6 +52,7 @@ type CategoryRow = Pick<
   | "updated_at"
 >;
 type BudgetRow = Database["public"]["Tables"]["budgets"]["Row"];
+type RecurringBillRow = Database["public"]["Tables"]["recurring_bills"]["Row"];
 type FinancialGoalRow = Database["public"]["Tables"]["financial_goals"]["Row"];
 type ReminderRow = Pick<
   Database["public"]["Tables"]["reminders"]["Row"],
@@ -78,6 +81,8 @@ const CATEGORY_COLUMNS =
   "id, kind, name, slug, icon, color, is_default, is_archived, created_at, updated_at";
 const BUDGET_COLUMNS =
   "id, category_id, name, cadence, limit_amount::text, currency, warning_percent, starts_on, is_active, deleted_at, created_at, updated_at";
+const RECURRING_BILL_COLUMNS =
+  "id, financial_account_id, merchant_name, expected_amount::text, currency, interval_count, interval_unit, next_due_on, status, cancellation_url, ai_confidence, deleted_at, created_at, updated_at";
 const FINANCIAL_GOAL_COLUMNS =
   "id, name, target_amount::text, saved_amount::text, currency, target_date, status, image_path, deleted_at, created_at, updated_at";
 const REMINDER_COLUMNS =
@@ -85,6 +90,10 @@ const REMINDER_COLUMNS =
 
 type ExactTransactionRow = Omit<TransactionRow, "amount"> & { amount: string | null };
 type ExactBudgetRow = Omit<BudgetRow, "limit_amount"> & { limit_amount: string };
+type ExactRecurringBillRow = Omit<RecurringBillRow, "expected_amount" | "ai_confidence"> & {
+  expected_amount: string;
+  ai_confidence: string | number | null;
+};
 type ExactFinancialGoalRow = Omit<FinancialGoalRow, "target_amount" | "saved_amount"> & {
   target_amount: string;
   saved_amount: string;
@@ -232,6 +241,24 @@ function toBudget(row: ExactBudgetRow): Budget {
     warningPercent: row.warning_percent,
     startsOn: row.starts_on,
     isActive: row.is_active,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function toRecurringBill(row: ExactRecurringBillRow): RecurringBill {
+  return recurringBillSchema.parse({
+    id: row.id,
+    financialAccountId: row.financial_account_id,
+    merchantName: row.merchant_name,
+    expectedAmount: { amountMinor: String(row.expected_amount), currency: row.currency },
+    intervalCount: row.interval_count,
+    intervalUnit: row.interval_unit,
+    nextDueOn: row.next_due_on,
+    cancellationUrl: row.cancellation_url,
+    status: row.status,
+    confidence: row.ai_confidence === null ? null : Number(row.ai_confidence),
     deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -873,6 +900,89 @@ export function createSupabaseFinanceRepository(
       if (result.error) fail(result.error);
       if (!result.data) return missingOrConflict(client, "categories", input.categoryId, userId);
       return toCategory(result.data);
+    },
+
+    async listRecurringBills(userId, input) {
+      const offset = offsetFor(input.cursor);
+      const limit = input.limit ?? 50;
+      let query = client
+        .from("recurring_bills")
+        .select(RECURRING_BILL_COLUMNS)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .order("next_due_on", { ascending: true })
+        .order("id", { ascending: true })
+        .range(offset, offset + limit);
+      if (input.status) query = query.eq("status", input.status);
+      const result = await query;
+      if (result.error) fail(result.error);
+      return page(
+        (result.data as unknown as ExactRecurringBillRow[]).map(toRecurringBill),
+        offset,
+        limit,
+      );
+    },
+
+    async listAllRecurringBills(userId) {
+      return readAllPages(async (offset, limit) => {
+        const result = await client
+          .from("recurring_bills")
+          .select(RECURRING_BILL_COLUMNS)
+          .eq("user_id", userId)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(offset, offset + limit - 1);
+        if (result.error) fail(result.error);
+        return (result.data as unknown as ExactRecurringBillRow[]).map(toRecurringBill);
+      });
+    },
+
+    async createRecurringBill(userId, input) {
+      const { proposal } = input;
+      const inserted = await client
+        .from("recurring_bills")
+        .insert({
+          user_id: userId,
+          client_request_id: input.clientRequestId,
+          financial_account_id: proposal.financialAccountId,
+          merchant_name: proposal.merchantName,
+          expected_amount: databaseNumeric(proposal.expectedAmount.amountMinor),
+          currency: proposal.expectedAmount.currency,
+          interval_count: proposal.intervalCount,
+          interval_unit: proposal.intervalUnit,
+          next_due_on: proposal.nextDueOn,
+          cancellation_url: proposal.cancellationUrl,
+          ai_confidence: proposal.confidence,
+          status: input.status,
+        })
+        .select(RECURRING_BILL_COLUMNS)
+        .single();
+      if (!inserted.error)
+        return toRecurringBill(inserted.data as unknown as ExactRecurringBillRow);
+      if (inserted.error.code !== "23505") fail(inserted.error);
+
+      // A retried request returns what it saved; a different request under the same id is refused.
+      const existing = await client
+        .from("recurring_bills")
+        .select(RECURRING_BILL_COLUMNS)
+        .eq("user_id", userId)
+        .eq("client_request_id", input.clientRequestId)
+        .maybeSingle();
+      if (existing.error) fail(existing.error);
+      if (!existing.data) fail(inserted.error);
+      const bill = toRecurringBill(existing.data as unknown as ExactRecurringBillRow);
+      if (
+        bill.status !== input.status ||
+        bill.merchantName !== proposal.merchantName ||
+        bill.expectedAmount.amountMinor !== proposal.expectedAmount.amountMinor ||
+        bill.intervalUnit !== proposal.intervalUnit ||
+        bill.nextDueOn !== proposal.nextDueOn ||
+        bill.financialAccountId !== proposal.financialAccountId
+      ) {
+        throw new FinanceOperationError("CONFLICT", "That request ID was already used.");
+      }
+      return bill;
     },
 
     async listBudgets(userId, input) {
