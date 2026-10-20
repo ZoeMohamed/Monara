@@ -18,7 +18,7 @@ const reactSource = `
 const uiSource = `export const Button = null, FieldError = null, Form = null,
   Input = null, Label = null, ListBox = null, Select = null, TextField = null,
   BrandLogoField = null, FinanceRecovery = null, CategoryAvatar = null,
-  Icon = null, ModalDialog = null;`;
+  Icon = null, ModalDialog = null, QuickAddFields = null;`;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (context.parentURL !== editorUrl) return nextResolve(specifier, context);
@@ -298,9 +298,24 @@ describe("transaction editor recovery", () => {
     assert.match(editor.render().state.errors.category, /available category/);
   });
 
+  it("starts a new transaction on the first active account", () => {
+    const editor = mountEditor({
+      transaction: undefined,
+      resources: {
+        ...structuredClone(resources),
+        financialAccounts: [
+          { id: "00000000-0000-4000-8000-000000000999", name: "Closed", isActive: false },
+          ...structuredClone(resources).financialAccounts,
+        ],
+      },
+    });
+    assert.equal(editor.render().state.draft.method, accountId);
+  });
+
   it("requires an account before submitting a new live manual exclusion", async () => {
     const editor = mountEditor({
       transaction: undefined,
+      resources: { ...structuredClone(resources), financialAccounts: [] },
       initialDraft: {
         merchant: "My wallet transfer",
         amount: "25000",

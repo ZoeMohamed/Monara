@@ -1169,6 +1169,7 @@ export type BudgetManagerPanel =
   | null;
 
 type BudgetManagerProps = FinanceManagerProps & {
+  onSaved: (result: BudgetMutationResult) => void;
   panel?: BudgetManagerPanel;
   onPanelChange?: (panel: BudgetManagerPanel) => void;
   collapseList?: boolean;
@@ -1342,98 +1343,6 @@ function BudgetManagerDialog({
   return <BudgetDelete {...props} budget={openedBudget} key={openedBudget.id} onClose={onClose} />;
 }
 
-function BudgetSavedNotice({
-  result,
-  finance,
-  onDismiss,
-}: {
-  result: BudgetMutationResult;
-  finance: FinanceManagerProps;
-  onDismiss: () => void;
-}) {
-  const [state, setState] = useState({
-    pending: false,
-    undone: false,
-    unavailable: false,
-    error: null as string | null,
-  });
-  const inFlight = useRef(false);
-  const undo = async () => {
-    if (inFlight.current || finance.refreshRequired || state.undone || state.unavailable) return;
-    if (Date.parse(result.action.undoExpiresAt) <= Date.now()) {
-      setState((previous) => ({
-        ...previous,
-        unavailable: true,
-        error: "The undo window has ended. Open this budget to make a new change.",
-      }));
-      return;
-    }
-    inFlight.current = true;
-    setState((previous) => ({ ...previous, pending: true, error: null }));
-    try {
-      await finance.runMutation(() =>
-        callFinanceOperation("undo_action", { actionId: result.action.actionId }),
-      );
-      setState({ pending: false, undone: true, unavailable: false, error: null });
-    } catch (error) {
-      const conflict = error instanceof FinanceClientError && error.code === "CONFLICT";
-      const notSent = error instanceof FinanceClientError && !error.actionMayHaveCompleted;
-      setState({
-        pending: false,
-        undone: false,
-        unavailable: conflict,
-        error: conflict
-          ? "This budget changed again or its undo window ended. Refresh your records and review its latest details."
-          : notSent
-            ? error.message
-            : "We couldn’t confirm the undo. Refresh your records before trying again.",
-      });
-    } finally {
-      inFlight.current = false;
-    }
-  };
-  return (
-    <div className={styles.savedToast} role="status">
-      <p className="text-sm leading-6">
-        {state.undone
-          ? "Budget change undone. Your transactions haven’t changed."
-          : `${result.budget.name} saved. Its progress now uses these settings.`}
-      </p>
-      {!state.undone && !state.unavailable && (
-        <p className={styles.meta}>
-          Undo is available for a short time, unless this budget changes again.
-        </p>
-      )}
-      {state.error && (
-        <p className={styles.error} role="alert">
-          {state.error}
-        </p>
-      )}
-      {(finance.refreshRequired || state.error) && (
-        <FinanceRecovery
-          message="Refresh to check your latest budget settings."
-          onRefreshRecords={finance.onRefreshRecords}
-        />
-      )}
-      <div className="flex flex-wrap gap-2">
-        {!state.undone && (
-          <Button
-            className="min-h-11"
-            isDisabled={state.pending || state.unavailable || Boolean(finance.refreshRequired)}
-            onPress={undo}
-            variant="secondary"
-          >
-            {state.pending ? "Undoing…" : "Undo change"}
-          </Button>
-        )}
-        <Button className="min-h-11" isDisabled={state.pending} onPress={onDismiss} variant="ghost">
-          Dismiss
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function ManagedBudgetList({
   budgets,
   categories,
@@ -1585,7 +1494,6 @@ export function BudgetManager(props: BudgetManagerProps) {
   const { sessions } = useBudgetDraftSessions();
   const [localPanel, setLocalPanel] = useState<BudgetManagerPanel>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [saved, setSaved] = useState<BudgetMutationResult | null>(null);
   const panel = props.onPanelChange ? (props.panel ?? null) : localPanel;
   const setPanel = props.onPanelChange ?? setLocalPanel;
   const usage = useBudgetUsage(props.snapshot);
@@ -1602,14 +1510,6 @@ export function BudgetManager(props: BudgetManagerProps) {
   return (
     <section aria-labelledby="manage-budgets-title" className={styles.manager}>
       <RetainedBudgetDrafts onResume={setPanel} />
-      {saved && (
-        <BudgetSavedNotice
-          key={saved.action.actionId}
-          result={saved}
-          finance={props}
-          onDismiss={() => setSaved(null)}
-        />
-      )}
       <ManagedBudgetList
         budgets={listedBudgets}
         categories={props.snapshot.categories}
@@ -1635,7 +1535,7 @@ export function BudgetManager(props: BudgetManagerProps) {
         usage={usage}
         onPanelChange={props.onPanelChange}
         onClose={close}
-        onSaved={setSaved}
+        onSaved={props.onSaved}
       />
     </section>
   );

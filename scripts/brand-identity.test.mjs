@@ -105,7 +105,7 @@ test("banks and wallets resolve by exact name while merchants never become insti
   assert.equal(institutionBrand("Netflix"), undefined);
   assert.equal(merchantBrand("YouTube Premium"), "youtube");
   assert.equal(merchantBrand("Dana darurat"), undefined);
-  assert.deepEqual(searchBrands("bank n", ["bank"]), ["bni"]);
+  assert.deepEqual(searchBrands("bank n", ["bank"]), ["bnc", "bni"]);
   assert.ok(searchBrands("shop").includes("shopee"));
 });
 

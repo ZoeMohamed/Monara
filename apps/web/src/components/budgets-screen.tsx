@@ -661,67 +661,6 @@ export function BudgetsScreen({
   const [editing, setEditing] = useState<Budget | null>(null);
   const [viewingBudget, setViewingBudget] = useState<Budget | null>(null);
   const [creating, setCreating] = useState<Budget["cadence"] | null>(null);
-  const [feedback, setFeedback] = useState<{
-    message: string;
-    category?: string;
-    undo?: { budgetId: string; before: DemoBudgetChanges; after: DemoBudgetChanges };
-    error?: string;
-  } | null>(null);
-  const saveDemoBudget = (budgetId: string, changes: DemoBudgetChanges) => {
-    const current = budgets.find((budget) => budget.id === budgetId);
-    if (!current || !onEditBudget)
-      throw new Error(
-        "This budget is no longer available. Close the form and choose another budget.",
-      );
-    onEditBudget(budgetId, changes);
-    setFeedback({
-      message: `${current.category} budget updated.`,
-      category: current.category,
-      undo: {
-        budgetId,
-        before: {
-          cadence: current.cadence,
-          limit: current.limit,
-          startsOn: current.startsOn ?? `${today.slice(0, 7)}-01`,
-          warningPercent: current.warningPercent,
-          icon: current.icon,
-        },
-        after: changes,
-      },
-    });
-  };
-  const undoDemoBudget = () => {
-    if (!feedback?.undo || !onEditBudget) return;
-    const { budgetId, before, after } = feedback.undo;
-    const current = budgets.find((budget) => budget.id === budgetId);
-    if (
-      !current ||
-      current.cadence !== after.cadence ||
-      current.limit !== after.limit ||
-      current.startsOn !== after.startsOn ||
-      current.warningPercent !== after.warningPercent ||
-      current.icon !== after.icon
-    ) {
-      setFeedback({
-        message: "This budget changed again. Open it to review the latest settings.",
-        category: feedback.category,
-      });
-      return;
-    }
-    try {
-      onEditBudget(budgetId, before);
-      setFeedback({
-        message: "Budget changes undone.",
-        category: feedback.category,
-      });
-    } catch {
-      setFeedback({
-        ...feedback,
-        error:
-          "We couldn’t undo that change. Your current budget is still in place. Try again or edit it.",
-      });
-    }
-  };
   const openBudget = (budget: Budget) => {
     if (onRequestBudgetDetails) onRequestBudgetDetails(budget.id);
     else setViewingBudget(budget);
@@ -744,36 +683,6 @@ export function BudgetsScreen({
           <p className="text-xs font-semibold text-muted sm:text-sm">{formatMonth(month)}</p>
         )}
       </div>
-
-      {feedback && (
-        <div className={budgetStyles.budgetToast} role="status">
-          <p className="text-sm leading-6">{feedback.message}</p>
-          {feedback.error && (
-            <p className="mt-2 text-sm text-danger" role="alert">
-              {feedback.error}
-            </p>
-          )}
-          <div className="mt-2 flex flex-wrap gap-2">
-            {feedback.undo && (
-              <Button
-                className="min-h-11 rounded-full"
-                onPress={undoDemoBudget}
-                variant="secondary"
-              >
-                Undo change
-              </Button>
-            )}
-            <Button
-              aria-label="Dismiss budget update"
-              className="min-h-11 rounded-full"
-              onPress={() => setFeedback(null)}
-              variant="ghost"
-            >
-              Dismiss
-            </Button>
-          </div>
-        </div>
-      )}
 
       <div
         className={`mt-4 grid min-w-0 gap-5 ${showBills ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" : ""} lg:gap-6`}
@@ -830,7 +739,7 @@ export function BudgetsScreen({
           budget={editing}
           key={editing.id}
           onClose={() => setEditing(null)}
-          onSave={saveDemoBudget}
+          onSave={onEditBudget}
           today={today}
           transactions={transactions}
         />
@@ -854,13 +763,7 @@ export function BudgetsScreen({
           initialCadence={creating}
           transactions={transactions}
           today={today}
-          onSave={(input) => {
-            onCreateBudget(input);
-            setFeedback({
-              message: `${input.category} budget added.`,
-              category: input.category,
-            });
-          }}
+          onSave={onCreateBudget}
           onClose={() => setCreating(null)}
           demoCategories={demoCategories}
         />

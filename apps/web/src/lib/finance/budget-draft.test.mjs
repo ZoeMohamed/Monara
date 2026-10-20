@@ -33,7 +33,7 @@ registerHooks({
   },
   load(url, context, nextLoad) {
     if (url !== managerUrl) return nextLoad(url, context);
-    const source = `${readFileSync(new URL(url), "utf8")}\nexport { budgetSaveFailure, retainedBudgetDialogKey, retainedEditorState };`;
+    const source = `${readFileSync(new URL(url), "utf8")}\nexport { budgetSaveFailure, retainedBudgetDialogKey, retainedEditorState, executeBudgetSubmission };`;
     const result = ts.transpileModule(source, {
       fileName: "budget-manager.tsx",
       compilerOptions: {
@@ -46,9 +46,8 @@ registerHooks({
   },
 });
 
-const { budgetSaveFailure, retainedBudgetDialogKey, retainedEditorState } = await import(
-  managerUrl
-);
+const { budgetSaveFailure, retainedBudgetDialogKey, retainedEditorState, executeBudgetSubmission } =
+  await import(managerUrl);
 
 const category = { id: "expense", name: "Groceries", kind: "expense", isArchived: false };
 const saved = {
@@ -62,6 +61,41 @@ const saved = {
 };
 
 describe("budget draft recovery", () => {
+  it("announces a confirmed save once through the shared notice callback before closing", async () => {
+    const notifications = [];
+    const events = [];
+    const draft = budgetDraftOf(saved, "2026-10-19");
+    const request = { operation: "create_budget", input: {}, values: draft };
+    const result = {
+      budget: saved,
+      action: { actionId: "verified-budget-action", resourceType: "budget" },
+    };
+    let state = { uncertain: false };
+    await executeBudgetSubmission({
+      event: {},
+      draft,
+      original: undefined,
+      snapshot: {},
+      state,
+      requestRef: { current: request },
+      sessionKey: "create",
+      initial: draft,
+      runMutation: async () => result,
+      onSaved: (verified) => {
+        notifications.push(verified);
+        events.push("notice");
+      },
+      finish: () => events.push("close"),
+      setConflictSnapshot: () => assert.fail("A confirmed save has no conflict"),
+      keep: () => {},
+      setState: (update) => {
+        state = update(state);
+      },
+    });
+    assert.deepEqual(notifications, [result]);
+    assert.deepEqual(events, ["notice", "close"]);
+  });
+
   it("defaults a new budget to the selected period while existing settings and retained requests win", () => {
     assert.equal(
       retainedEditorState(undefined, undefined, "2026-10-19", "weekly").draft.cadence,

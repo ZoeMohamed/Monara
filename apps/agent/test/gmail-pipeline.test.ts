@@ -83,6 +83,9 @@ interface Overrides {
   llmOutput?: unknown;
   /** Thrown by the model on these calls (1-based); every call when set to "all". */
   llmError?: { error: unknown; calls: number[] | "all" };
+  modelForCall?: (call: number) => Promise<unknown>;
+  recordError?: unknown;
+  failMerchantEnqueueCalls?: number[];
   page?: GmailMessagePage;
   /** Registry entries the User has as accounts. */
   institutionKeys?: string[];
@@ -121,6 +124,7 @@ function setup(overrides: Overrides = {}) {
     claimedPages: [] as ClaimGmailMessagesInput[],
     syncFailures: [] as ReportGmailSyncFailureInput[],
     merchantJobs: [] as MerchantCategorizeJob[],
+    merchantEnqueueCalls: 0,
     discovered: [] as string[],
     retryReports: [] as ReportGmailProcessingRetryInput[],
     retryReportErrors: [] as unknown[],
@@ -208,6 +212,7 @@ function setup(overrides: Overrides = {}) {
     },
     async recordExtractions(input) {
       calls.recordCalls.push(input);
+      if (overrides.recordError) throw overrides.recordError;
       calls.record.push(...input.results);
       const uncategorized = overrides.uncategorized ?? [];
       return {
@@ -271,6 +276,7 @@ function setup(overrides: Overrides = {}) {
       if (failing && (failing.calls === "all" || failing.calls.includes(calls.modelCalls))) {
         throw failing.error;
       }
+      if (overrides.modelForCall) return overrides.modelForCall(calls.modelCalls);
       return overrides.llmOutput ?? receipt;
     },
   };
@@ -286,6 +292,9 @@ function setup(overrides: Overrides = {}) {
       calls.later.push({ jobs, delaySeconds });
     },
     enqueueMerchant: async (jobs) => {
+      calls.merchantEnqueueCalls += 1;
+      if (overrides.failMerchantEnqueueCalls?.includes(calls.merchantEnqueueCalls))
+        throw new Error("Synthetic merchant queue unavailable");
       calls.merchantJobs.push(...jobs);
     },
     now: () => now,
@@ -606,6 +615,38 @@ describe("syncConnection", () => {
 });
 
 describe("processBatch", () => {
+  it("publishes a fast email before the next email's slow model response completes", async () => {
+    let releaseSlow = () => {};
+    const slow = new Promise<void>((resolve) => {
+      releaseSlow = resolve;
+    });
+    const { pipeline, calls } = setup({
+      uncategorized: [transactionId],
+      async modelForCall(call) {
+        if (call === 2) await slow;
+        return receipt;
+      },
+    });
+    const processing = pipeline.runJob(parseJob(["fast", "slow"]), notFinal);
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.equal(calls.modelCalls, 2, "both emails have reached the provider");
+      assert.deepEqual(
+        calls.record.map((result) => result.processedMessageId),
+        [claimId("fast")],
+        "the first result must not wait for the second response",
+      );
+      assert.equal(
+        calls.merchantJobs.length,
+        1,
+        "classification starts as soon as the first result is persisted",
+      );
+    } finally {
+      releaseSlow();
+      await processing;
+    }
+    assert.equal(calls.record.length, 2);
+  });
   function parseJob(ids: string[]): GmailParseJob {
     return {
       kind: "gmail.parse",
@@ -619,24 +660,43 @@ describe("processBatch", () => {
     };
   }
 
-  it("rechecks connection activity at provider boundaries and records the batch in one call", async () => {
+  it("rechecks connection activity at provider boundaries and publishes each finished email", async () => {
     const { pipeline, calls } = setup({ uncategorized: [transactionId] });
     assert.equal(await pipeline.runJob(parseJob(["m1", "m2", "m3"]), notFinal), "transactions");
     assert.ok(calls.resolved > calls.modelCalls, "activity is not cached across provider calls");
     assert.deepEqual(calls.claim, [], "the first delivery needs no claim call");
     assert.equal(calls.modelCalls, 3);
-    assert.equal(calls.recordCalls.length, 1);
+    assert.equal(calls.recordCalls.length, 3);
+    assert.ok(calls.recordCalls.every((call) => call.results.length === 1));
     assert.deepEqual(
       calls.record.map((result) => result.processedMessageId),
       [claimId("m1"), claimId("m2"), claimId("m3")],
     );
-    // Categorization is queued in batches, not one job per transaction.
-    assert.deepEqual(calls.merchantJobs, [
-      {
+    assert.deepEqual(
+      calls.merchantJobs,
+      Array.from({ length: 3 }, () => ({
         kind: "merchant.categorize",
-        transactionIds: [transactionId, transactionId, transactionId],
-      },
-    ]);
+        transactionIds: [transactionId],
+      })),
+    );
+  });
+  it("queues large extracted transaction sets in three-row merchant jobs", async () => {
+    const ids = Array.from(
+      { length: 8 },
+      (_, index) => `00000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
+    );
+    const { pipeline, calls } = setup({ uncategorized: ids });
+    await pipeline.runJob(parseJob(["m1"]), notFinal);
+    assert.deepEqual(
+      calls.merchantJobs.map((job) => ("transactionIds" in job ? job.transactionIds.length : 1)),
+      [3, 3, 2],
+    );
+    assert.deepEqual(
+      calls.merchantJobs.flatMap((job) =>
+        "transactionIds" in job ? job.transactionIds : [job.transactionId],
+      ),
+      ids,
+    );
   });
 
   it("records the emails that worked, then throws so the job retries", async () => {
@@ -656,7 +716,9 @@ describe("processBatch", () => {
     });
     assert.equal(outcome, "transactions");
     assert.deepEqual(
-      calls.record.map((result) => [result.processedMessageId, result.outcome]),
+      calls.record
+        .map((result) => [result.processedMessageId, result.outcome])
+        .sort((left, right) => String(left[0]).localeCompare(String(right[0]))),
       [
         [claimId("m1"), "transactions"],
         [claimId("m2"), "failed"],
@@ -707,6 +769,36 @@ describe("processBatch", () => {
     assert.deepEqual(calls.merchantJobs, [
       { kind: "merchant.categorize", transactionIds: [transactionId] },
     ]);
+  });
+  it("recovers each committed email's classification after its immediate enqueue fails", async () => {
+    const overrides: Overrides = { uncategorized: [transactionId], failMerchantEnqueueCalls: [1] };
+    const { pipeline, calls } = setup(overrides);
+    await assert.rejects(
+      pipeline.runJob(parseJob(["m1", "m2"]), final),
+      /Synthetic merchant queue unavailable/,
+    );
+    assert.equal(calls.record.length, 2, "both successful extractions remain committed");
+    assert.ok(calls.record.every((result) => result.outcome === "transactions"));
+    assert.equal(calls.merchantJobs.length, 1, "the other email can finish its own enqueue");
+    overrides.finishedOnClaim = ["m1", "m2"];
+    overrides.recoveredUncategorized = [transactionId];
+    assert.equal(
+      await pipeline.runJob(parseJob(["m1", "m2"]), { ...final, isRetry: true }),
+      "already_finished",
+    );
+    assert.equal(calls.modelCalls, 2, "already persisted messages are never extracted again");
+    assert.equal(calls.merchantJobs.length, 2, "retry claiming recovers committed category work");
+  });
+  it("never turns a final-attempt persistence failure into a failed extraction", async () => {
+    const recordError = new BackendOperationError("gmail.record-extractions", 503, null);
+    const { pipeline, calls } = setup({ recordError });
+    await assert.rejects(
+      pipeline.runJob(parseJob(["m1"]), final),
+      (error) => error === recordError,
+    );
+    assert.equal(calls.record.length, 0);
+    assert.equal(calls.recordCalls.length, 1);
+    assert.equal(calls.recordCalls[0]?.results[0]?.outcome, "transactions");
   });
 
   it("skips mail from senders the User has no account for, without the model", async () => {
@@ -844,7 +936,8 @@ describe("processBatch", () => {
     });
     await pipeline.runJob(parseJob(["a", "b", "c", "d", "e"]), notFinal);
     assert.equal(peak, 2);
-    assert.equal(recordCalls[0]?.results.length, 5);
+    assert.equal(recordCalls.length, 5);
+    assert.equal(recordCalls.flatMap((call) => call.results).length, 5);
   });
 
   it("loads prompt context once per parse job and uses narrow guards before provider work", async () => {

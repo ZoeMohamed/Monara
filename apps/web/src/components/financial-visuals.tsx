@@ -529,7 +529,8 @@ export function CashFlowChart({
   }, BigInt(0));
   const step = 504 / periods.length;
   const columnX = (index: number) => 78 + step * (index + 0.5) - 10;
-  const barWidth = Math.min(18, step * 0.3);
+  const barWidth = Math.min(26, step * 0.36);
+  const barRadius = Math.min(7, barWidth / 3);
   const detailTop = Math.max(
     chartRatio(detail.income, maximum),
     chartRatio(detail.spending, maximum),
@@ -631,7 +632,7 @@ export function CashFlowChart({
                   className={chartStyles.bar}
                   fill="var(--success)"
                   height={incomeHeight}
-                  rx="4"
+                  rx={barRadius}
                   style={delay}
                   width={barWidth}
                   x={x + 10 - barWidth - 2}
@@ -641,7 +642,7 @@ export function CashFlowChart({
                   className={chartStyles.bar}
                   fill="var(--accent)"
                   height={expenseHeight}
-                  rx="4"
+                  rx={barRadius}
                   style={delay}
                   width={barWidth}
                   x={x + 12}
@@ -1012,7 +1013,7 @@ function CalendarPayments({
 }
 
 const heatBackgrounds = [
-  "transparent",
+  "var(--surface)",
   "var(--accent-soft)",
   "color-mix(in srgb, var(--accent) 25%, var(--surface))",
   "color-mix(in srgb, var(--accent) 80%, var(--surface))",

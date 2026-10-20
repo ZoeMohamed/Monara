@@ -15,7 +15,7 @@ function fixture(overrides = {}) {
     "/deployments": { deployments: [{ versions: [{ version_id: "v1", percentage: 100 }] }] },
     "/versions/v1": { annotations: { "workers/message": config.message } },
     "/schedules": {
-      schedules: ["* * * * *", "*/15 * * * *", "0 1 * * *"].map((cron) => ({ cron })),
+      schedules: ["* * * * *", "*/15 * * * *", "0 1 * * *", "0 17 * * *"].map((cron) => ({ cron })),
     },
     ...overrides,
   };

@@ -5,7 +5,7 @@
   padding: 20px;
   border: 1px solid var(--border);
   border-radius: 28px;
-  background: color-mix(in srgb, var(--accent-soft) 48%, var(--surface));
+  background: var(--surface);
 }
 
 .metrics {
@@ -60,6 +60,11 @@
 
 .metric[data-kind="net"] {
   --metric-color: var(--muted);
+}
+
+/* Short amounts (Rp32.9m) keep three totals on one row; the exact figure returns where there is room. */
+.exact {
+  display: none;
 }
 
 .track {
@@ -192,6 +197,14 @@
 
   .comparison {
     font-size: 13px;
+  }
+
+  .exact {
+    display: inline;
+  }
+
+  .short:has(+ .exact) {
+    display: none;
   }
 }
 

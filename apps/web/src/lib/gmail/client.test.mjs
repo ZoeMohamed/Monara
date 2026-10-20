@@ -139,9 +139,18 @@ describe("Gmail connection response boundary", () => {
     assert.deepEqual(
       mailboxes.map((mailbox) => mailbox.sync),
       [
-        { state: "running", transactions: 0, emailsRead: 0, categorizing: 0, needsReview: 0 },
+        {
+          state: "running",
+          transactions: 0,
+          emailsRead: 0,
+          totalEmails: 0,
+          categorizing: 0,
+          needsReview: 0,
+        },
         {
           state: "completed",
+          emailsRead: 7,
+          totalEmails: 7,
           transactions: 3,
           confirmed: 2,
           needsReview: 0,

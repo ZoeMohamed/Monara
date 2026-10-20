@@ -101,7 +101,7 @@ test("invalid report periods and years are discarded and annual fields do not le
 });
 
 test("ledger filters and popup states survive a serialized history roundtrip", () => {
-  for (const kindFilter of ["all", "expense", "income", "exclusion"]) {
+  for (const kindFilter of ["all", "expense", "income", "exclusion", "forecast"]) {
     for (const reviewOpen of [false, true]) {
       for (const popup of [
         {},

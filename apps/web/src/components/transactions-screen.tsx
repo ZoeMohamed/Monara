@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
 
 import { FinancialSummary } from "@/components/financial-summary";
+import { ForecastLedger } from "@/components/forecast-ledger";
 import { Icon, type IconName } from "@/components/icon";
 import { MonthSelector } from "@/components/month-selector";
 import { TransactionRow } from "@/components/transaction-row";
@@ -18,6 +19,7 @@ type KindFilter = LedgerKind;
 
 const kindFilters: { id: KindFilter; label: string; icon: IconName }[] = [
   { id: "all", label: "All", icon: "history" },
+  { id: "forecast", label: "Forecast", icon: "sparkle" },
   { id: "expense", label: "Expenses", icon: "trend-up" },
   { id: "income", label: "Income", icon: "income" },
   { id: "exclusion", label: "Exclusions", icon: "eye-off" },
@@ -333,10 +335,12 @@ function Ledger({
       );
   const visible = filteredTransactions(ledger, query, reviewOpen ? "all" : kindFilter);
   const filtersActive = query.trim().length > 0 || (!reviewOpen && kindFilter !== "all");
+  // Forecast looks ahead, so it has no month, no summary and no count of recorded transactions.
+  const forecasting = !reviewOpen && kindFilter === "forecast";
 
   return (
     <>
-      {reviewOpen ? null : (
+      {reviewOpen || forecasting ? null : (
         <FinancialSummary compact model={financialSummaryModel(transactions, month, today)} />
       )}
       <LedgerFilters
@@ -348,28 +352,34 @@ function Ledger({
         onKindChange={onKindChange}
         onReviewChange={onReviewChange}
       />
-      <LedgerResultCount
-        visibleCount={visible.length}
-        totalCount={ledger.length}
-        filtersActive={filtersActive}
-        onClear={onClearFilters}
-      />
-      {visible.length > 0 ? (
-        <GroupedLedger
-          transactions={visible}
-          openTransaction={openTransaction}
-          onConfirm={onConfirm}
-        />
+      {forecasting ? (
+        <ForecastLedger query={query} today={today} />
       ) : (
-        <EmptyLedger
-          month={month}
-          reviewing={reviewOpen}
-          noTransactions={ledger.length === 0}
-          onClear={onClearFilters}
-          onAdd={onAdd}
-          onReview={pendingCount > 0 ? () => onReviewChange(true) : undefined}
-          onConnectGmail={onConnectGmail}
-        />
+        <>
+          <LedgerResultCount
+            visibleCount={visible.length}
+            totalCount={ledger.length}
+            filtersActive={filtersActive}
+            onClear={onClearFilters}
+          />
+          {visible.length > 0 ? (
+            <GroupedLedger
+              transactions={visible}
+              openTransaction={openTransaction}
+              onConfirm={onConfirm}
+            />
+          ) : (
+            <EmptyLedger
+              month={month}
+              reviewing={reviewOpen}
+              noTransactions={ledger.length === 0}
+              onClear={onClearFilters}
+              onAdd={onAdd}
+              onReview={pendingCount > 0 ? () => onReviewChange(true) : undefined}
+              onConnectGmail={onConnectGmail}
+            />
+          )}
+        </>
       )}
     </>
   );
@@ -446,7 +456,7 @@ export function TransactionsScreen({
           <span className="lg:hidden">History</span>
           <span className="max-lg:hidden">Transactions</span>
         </h1>
-        {!reviewOpen ? (
+        {!reviewOpen && kindFilter !== "forecast" ? (
           <MonthSelector month={month} currentMonth={today.slice(0, 7)} onChange={setMonth} />
         ) : null}
       </div>

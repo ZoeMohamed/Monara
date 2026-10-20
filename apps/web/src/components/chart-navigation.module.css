@@ -41,6 +41,11 @@
   transform: translate(14px, -50%);
 }
 
+/* Keep the stacked pills inside the plot: clear of the top edge and of the axis labels below. */
+.tooltip:not(.tooltipAbove) {
+  top: clamp(32px, var(--cursor-y), calc(100% - 66px));
+}
+
 .tooltip[data-flip="true"] {
   align-items: flex-end;
   transform: translate(calc(-100% - 14px), -50%);
@@ -252,6 +257,11 @@
 .calendarDay:active,
 .calendarDay[data-pressed="true"] {
   transform: none;
+}
+
+/* A past day with nothing spent is a white box; upcoming days stay dashed and empty. */
+.calendarDay[data-spent="false"]:not([data-future="true"]) {
+  border-color: var(--border);
 }
 
 .calendarDay[data-future="true"] {

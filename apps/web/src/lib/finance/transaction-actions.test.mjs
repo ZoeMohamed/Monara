@@ -76,6 +76,15 @@ const receipt = {
   changedAt: latestVersion,
   undoExpiresAt: "2099-10-17T10:30:00Z",
 };
+const budgetBefore = {
+  id: "budget-demo",
+  category: "Ride-hail",
+  cadence: "weekly",
+  startsOn: "2026-10-12",
+  limit: 200000,
+  warningPercent: 80,
+  icon: "car",
+};
 
 function backendTransaction() {
   return {
@@ -105,7 +114,11 @@ function mountActions(respond, categoryKind = "expense", categoryArchived = fals
   const requests = [];
   const navigations = [];
   const state = {
+    live: true,
     transactions: [],
+    budgets: [],
+    restoredBudgets: [],
+    notices: [],
     editing: undefined,
     rejecting: undefined,
     resources: {
@@ -120,6 +133,7 @@ function mountActions(respond, categoryKind = "expense", categoryArchived = fals
   };
   const setter = (field) => (next) => {
     state[field] = typeof next === "function" ? next(state[field]) : next;
+    if (field === "notice") state.notices.push(state[field]);
   };
   const runtime = {
     useState(initial) {
@@ -148,7 +162,12 @@ function mountActions(respond, categoryKind = "expense", categoryArchived = fals
     cursor = 0;
     globalThis[runtimeKey] = runtime;
     return useTransactionActions({
-      live: true,
+      live: state.live,
+      budgets: state.budgets,
+      restoreDemoBudget(before, categoryIcon) {
+        state.restoredBudgets.push({ before, categoryIcon });
+        state.budgets = state.budgets.map((budget) => (budget.id === before.id ? before : budget));
+      },
       resources: state.resources,
       transactions: state.transactions,
       editing: state.editing,
@@ -377,7 +396,9 @@ describe("transaction action recovery", () => {
     assert.equal(physicalWrites, 1);
     assert.equal(actions.render().lockedCreate, false);
     assert.equal(actions.state.drafts[editorKey], undefined);
-    assert.equal(actions.state.view.transactionId, transactionId);
+    // The toast confirms the add and offers Undo, so the sheet closes instead of opening the record.
+    assert.equal(actions.state.view.adding, false);
+    assert.equal(actions.state.view.transactionId, null);
     assert.deepEqual(actions.state.notice.undo, { kind: "backend", receipt });
   });
 
@@ -463,6 +484,65 @@ describe("transaction action recovery", () => {
     assert.equal(actions.requests.length, 0);
     assert.equal(actions.state.notice.tone, "warning");
     assert.equal(actions.state.notice.recovery, "history");
+    assert.equal(actions.state.notice.undo, undefined);
+  });
+});
+
+describe("shared budget toast Undo", () => {
+  it("restores a demo budget and its category icon with one shared completion notice", async () => {
+    const actions = mountActions(() => assert.fail("Demo Undo must not call the backend"));
+    const expected = { ...budgetBefore, limit: 300000, icon: "wallet" };
+    actions.state.live = false;
+    actions.state.budgets = [expected];
+    actions.state.notice = {
+      message: "Budget updated.",
+      undo: { kind: "budget", before: budgetBefore, expected, categoryIcon: "car" },
+    };
+    await actions.render().undo();
+    assert.equal(actions.state.budgets[0], budgetBefore);
+    assert.deepEqual(actions.state.restoredBudgets, [
+      { before: budgetBefore, categoryIcon: "car" },
+    ]);
+    assert.deepEqual(actions.state.notices, [{ message: "Budget change undone." }]);
+    assert.equal(actions.state.notice.undo, undefined);
+    await actions.render().undo();
+    assert.equal(actions.state.restoredBudgets.length, 1);
+  });
+
+  it("never overwrites a newer or removed demo budget, or creates a duplicate period", async () => {
+    const expected = { ...budgetBefore, cadence: "monthly", limit: 300000 };
+    for (const budgets of [
+      [{ ...expected, limit: 350000 }],
+      [],
+      [expected, { ...budgetBefore, id: "another-weekly-budget" }],
+    ]) {
+      const actions = mountActions(() => assert.fail("Demo Undo must not call the backend"));
+      actions.state.live = false;
+      actions.state.budgets = budgets;
+      actions.state.notice = {
+        message: "Budget updated.",
+        undo: { kind: "budget", before: budgetBefore, expected },
+      };
+      await actions.render().undo();
+      assert.equal(actions.state.budgets, budgets);
+      assert.equal(actions.state.restoredBudgets.length, 0);
+      assert.equal(actions.state.notice.recovery, "budgets");
+      assert.equal(actions.state.notice.undo, undefined);
+    }
+  });
+
+  it("keeps a signed-in budget's receipt and routes expired Undo back to Budgets", async () => {
+    const actions = mountActions(() => assert.fail("Expired Undo must not reach the backend"));
+    actions.state.notice = {
+      message: "Budget saved.",
+      undo: {
+        kind: "backend",
+        receipt: { ...receipt, resourceType: "budget", undoExpiresAt: "2000-01-01T00:00:00Z" },
+      },
+    };
+    await actions.render().undo();
+    assert.equal(actions.requests.length, 0);
+    assert.equal(actions.state.notice.recovery, "budgets");
     assert.equal(actions.state.notice.undo, undefined);
   });
 });

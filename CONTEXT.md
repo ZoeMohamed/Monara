@@ -21,7 +21,7 @@ A transaction extracted from a source that awaits review and does not contribute
 _Avoid_: Confirmed transaction when review is outstanding
 
 **Confirmed Transaction**:
-A transaction accepted as final, with its Transaction Type determining whether it contributes to expense, income, or neither. A Gmail import may be confirmed automatically when its sender is authenticated and its extraction and classification meet the confirmation requirements.
+A transaction accepted as final, with its Transaction Type determining whether it contributes to expense, income, or neither. A valid Gmail import may be confirmed automatically when its Review Confidence meets the confirmation threshold.
 _Avoid_: Pending transaction
 
 **Gmail Connection**:
@@ -54,6 +54,30 @@ _Avoid_: Subscription when the payment is not one
 The Pending Transactions a User confirms, edits, or excludes, shown in the transaction list as the "To review" filter with its own count, rather than on a separate screen.
 _Avoid_: Inbox
 
+**Extraction Confidence**:
+The confidence in the transaction facts extracted from its source, such as the amount, date, and counterparty.
+_Avoid_: Category confidence when referring to extracted transaction facts
+
+**Categorization Confidence**:
+The confidence in the Category assigned to a transaction. It is separate from confidence in the underlying transaction facts.
+_Avoid_: Extraction confidence when referring to the chosen Category
+
+**Review Confidence**:
+The lower of the available Extraction Confidence and Categorization Confidence scores. When only one is known, that score is the Review Confidence; it is not a third independent assessment.
+_Avoid_: Used, third confidence score
+
+**Fallback Category**:
+A Category assigned when a more specific Category cannot be determined. Assignment of a Fallback Category does not itself establish confidence in the transaction or its classification.
+_Avoid_: No category when a fallback has been assigned
+
+**Person Category**:
+A Category for a transaction shown under another person's name, including when its purpose is known. Expense and income have separate Person Categories; a matching account-holder name belongs to Internal.
+_Avoid_: Family or Giving as a general label for every personal name
+
+**Normalized Display Name**:
+A readable transaction name with clean capitalization and spacing, recognizable business names standardized, and secondary details shortened when needed. A brand precedes its legal company name, and meaningful branch details are retained. The original source name remains separate evidence; personal-name formatting is cleaned without guessing spelling or identity.
+_Avoid_: Original counterparty name when referring to the cleaned display label
+
 **Expense**:
 A transaction for money going out, which counts toward spending and Budgets.
 _Avoid_: Debit, payment
@@ -69,6 +93,16 @@ _Avoid_: Deleting an imported record when it must remain for deduplication
 **Internal Transfer**:
 Money moving between bank accounts, wallets, or cash balances owned by the same User, whether or not both are tracked in Monara. Its Category is Internal and its Transaction Type is exclusion.
 _Avoid_: Income or expense when referring to movement of the User's own funds
+
+### Forecasting
+
+**Spending Projection**:
+An estimate of spending through the end of the month, based on recent Confirmed expenses and refined by specific Expected Payments when available. It is separate from confirmed spending and Budget usage.
+_Avoid_: Confirmed spending when referring to a future estimate
+
+**Expected Payment**:
+A specific future expense predicted from a User's recorded spending patterns. It is a prediction, not a Pending Transaction or a Confirmed Transaction.
+_Avoid_: Pending Transaction when referring to a predicted payment
 
 ### Agent
 

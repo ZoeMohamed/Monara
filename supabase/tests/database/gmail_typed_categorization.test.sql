@@ -25,7 +25,7 @@ insert into examples values('expense',pg_temp.import('typed-expense')),
  ('income',pg_temp.import('typed-income','{"kind":"income","flowDirection":"in"}')),
  ('unknown-date',pg_temp.import('typed-date','{"occurredOn":null}')),
  ('unverified',pg_temp.import('typed-unverified','{}',false)),
- ('low-confidence',pg_temp.import('typed-low','{"confidence":0.94}')),
+ ('low-confidence',pg_temp.import('typed-low','{"confidence":0.49}')),
  ('edited',pg_temp.import('typed-edit')),
  ('duplicate',pg_temp.import('typed-expense')),
  ('internal',pg_temp.import('typed-internal','{"kind":"exclusion","counterpartyName":"Bpk. Daffa Praya","counterpartyType":"person","isTransfer":true,"internalTransfer":true}')),
@@ -37,18 +37,18 @@ insert into examples values('expense',pg_temp.import('typed-expense')),
  ('no-choice',pg_temp.import('typed-no-choice'));
 update public.profiles set full_name='Daffa Praya' where id='10000000-0000-4000-8000-000000000001';
 
-select is((select count(*) from public.categories where user_id='10000000-0000-4000-8000-000000000001' and kind='income' and is_default),6::bigint,'six income defaults');
+select is((select count(*) from public.categories where user_id='10000000-0000-4000-8000-000000000001' and kind='income' and is_default),8::bigint,'eight income defaults including Misc and Person');
 select is((select kind from public.categories where id=pg_temp.category('internal')),'exclusion','Internal has stable exclusion semantics');
 select throws_ok($$update public.categories set kind='income' where id=pg_temp.category('resto-cafe')$$,'23514',null,'category kind immutable');
 select is((select id from examples where name='expense'),(select id from examples where name='duplicate'),'retry remains idempotent');
 select is((select review_status from public.transactions where id=(select id from examples where name='expense')),'pending','new import waits for classification even with merchant history');
-select is((select occurred_on from public.transactions where id=(select id from examples where name='unknown-date')),null::date,'missing extracted date stays unknown');
+select is((select occurred_on from public.transactions where id=(select id from examples where name='unknown-date')),(select (source.received_at at time zone 'Asia/Jakarta')::date from public.processed_gmail_messages as source where source.gmail_message_id='typed-date'),'missing extracted date takes the day the email arrived');
 select is(private.normalized_holder_name('BPK. Ｄａｆｆａ   Praya'),'daffa praya','title spacing and Unicode normalization match');
 select isnt(private.normalized_holder_name('Ann A'),private.normalized_holder_name('Anna'),'word boundaries cannot collide');
 select is((select internal_transfer from public.imported_transaction_for_category((select id from examples where name='internal'))),true,'server verifies full holder match');
-select is((select internal_transfer from public.imported_transaction_for_category((select id from examples where name='business-name'))),false,'business identity is not holder evidence');
+select is((select internal_transfer from public.imported_transaction_for_category((select id from examples where name='business-name'))),true,'matching name takes precedence over a business label');
 select throws_ok($$select * from public.set_imported_category((select id from examples where name='expense'),pg_temp.category('salary'),'expense',0.99)$$,'22023',null,'cannot attach income category to expense');
-select throws_ok($$select * from public.set_imported_category((select id from examples where name='expense'),pg_temp.category('resto-cafe','10000000-0000-4000-8000-000000000002'),'expense',0.99)$$,'22023',null,'cannot attach another owner category');
+select throws_ok($$select * from public.set_imported_category((select id from examples where name='expense'),pg_temp.category('resto-cafe','20000000-0000-4000-8000-000000000002'),'expense',0.99)$$,'22023',null,'cannot attach another owner category');
 select throws_ok($$select * from public.set_imported_category((select id from examples where name='expense'),pg_temp.category('salary'),'income',0.99)$$,'22023',null,'classifier cannot reverse cash direction');
 select public.set_imported_category((select id from examples where name='expense'),pg_temp.category('resto-cafe'),'expense',0.99);
 select is((select review_status from public.transactions where id=(select id from examples where name='expense')),'confirmed','qualifying expense confirms after classification');
@@ -61,13 +61,13 @@ insert into examples values
 update public.profiles set full_name=null where id='10000000-0000-4000-8000-000000000001';
 select public.set_imported_category((select id from examples where name='missing-holder-transfer'),pg_temp.category('resto-cafe'),'expense',0.99);
 select is((select row(review_status,category_id)::text from public.transactions where id=(select id from examples where name='missing-holder-transfer')),
- row('pending',pg_temp.category('resto-cafe'))::text,'personal transfer with missing holder keeps suggestion pending');
+ row('confirmed',pg_temp.category('resto-cafe'))::text,'high confidence confirms a personal transfer suggestion without holder evidence');
 update public.profiles set full_name='Daffa Praya' where id='10000000-0000-4000-8000-000000000001';
 select public.set_imported_category((select id from examples where name='short-name-transfer'),pg_temp.category('resto-cafe'),'expense',0.99);
 select is((select row(review_status,category_id)::text from public.transactions where id=(select id from examples where name='short-name-transfer')),
- row('pending',pg_temp.category('resto-cafe'))::text,'short-name transfer cannot auto-confirm an expense suggestion');
+ row('confirmed',pg_temp.category('resto-cafe'))::text,'high confidence confirms a short-name transfer suggestion');
 select public.set_imported_category((select id from examples where name='unknown-transfer'),pg_temp.category('resto-cafe'),'expense',0.99);
-select is((select review_status from public.transactions where id=(select id from examples where name='unknown-transfer')),'pending','unknown transfer counterparty requires review');
+select is((select review_status from public.transactions where id=(select id from examples where name='unknown-transfer')),'confirmed','high confidence confirms an unknown transfer suggestion');
 select public.set_imported_category((select id from examples where name='business-transfer'),pg_temp.category('resto-cafe'),'expense',0.99);
 select is((select review_status from public.transactions where id=(select id from examples where name='business-transfer')),'confirmed','clear business transfer can qualify as an expense');
 select public.set_imported_category((select id from examples where name='income'),pg_temp.category('salary'),'income',0.99);
@@ -78,31 +78,31 @@ select is((select row(transaction_type,flow_direction,review_status)::text from 
 select is((select amount from public.transactions where id=(select id from examples where name='internal')),25000::numeric,'classification preserves amount');
 select ok((select financial_account_id is not null from public.transactions where id=(select id from examples where name='internal')),'Internal retains mapped source account');
 select public.set_imported_category((select id from examples where name='partial-name'),pg_temp.category('internal'),'exclusion',1);
-select is((select row(transaction_type,category_id,gmail_classification_status)::text from public.transactions where id=(select id from examples where name='partial-name')),row('expense',null::uuid,'needs_review')::text,'partial name cannot silently exclude');
+select is((select row(transaction_type,category_id,gmail_classification_status)::text from public.transactions where id=(select id from examples where name='partial-name')),row('expense',pg_temp.category('misc'),'completed')::text,'partial name falls back to Misc without excluding');
 select public.set_imported_category((select id from examples where name='business-name'),pg_temp.category('internal'),'exclusion',1);
-select is((select category_id from public.transactions where id=(select id from examples where name='business-name')),null::uuid,'business name cannot become Internal');
+select is((select category_id from public.transactions where id=(select id from examples where name='business-name')),pg_temp.category('internal'),'matching name becomes Internal despite the business label');
 select public.set_imported_category((select id from examples where name='no-transfer'),pg_temp.category('internal'),'exclusion',1);
-select is((select category_id from public.transactions where id=(select id from examples where name='no-transfer')),null::uuid,'boolean internalTransfer alone is insufficient');
+select is((select category_id from public.transactions where id=(select id from examples where name='no-transfer')),pg_temp.category('internal'),'matching name becomes Internal without a transfer flag');
 select public.set_imported_category((select id from examples where name='no-direction'),pg_temp.category('internal'),'exclusion',1);
-select is((select review_status from public.transactions where id=(select id from examples where name='no-direction')),'pending','missing cash direction prevents automatic Internal');
+select is((select review_status from public.transactions where id=(select id from examples where name='no-direction')),'pending','matching name assigns Internal but missing cash direction needs review');
 select public.set_imported_category((select id from examples where name='other-exclusion'),pg_temp.category('repayment'),'exclusion',1);
-select is((select review_status from public.transactions where id=(select id from examples where name='other-exclusion')),'pending','other exclusions always need review');
+select is((select review_status from public.transactions where id=(select id from examples where name='other-exclusion')),'confirmed','high confidence can confirm a compatible non-Internal exclusion');
 select public.set_imported_category((select id from examples where name='unknown-date'),pg_temp.category('resto-cafe'),'expense',1);
-select is((select review_status from public.transactions where id=(select id from examples where name='unknown-date')),'pending','missing original date never auto-confirms');
+select is((select review_status from public.transactions where id=(select id from examples where name='unknown-date')),'confirmed','a date taken from the email does not hold a confident row in review');
 select public.set_imported_category((select id from examples where name='unverified'),pg_temp.category('resto-cafe'),'expense',1);
-select is((select review_status from public.transactions where id=(select id from examples where name='unverified')),'pending','unauthenticated sender never auto-confirms');
+select is((select review_status from public.transactions where id=(select id from examples where name='unverified')),'confirmed','sender verification does not gate review at high confidence');
 select public.set_imported_category((select id from examples where name='low-confidence'),pg_temp.category('resto-cafe'),'expense',1);
 select is((select review_status from public.transactions where id=(select id from examples where name='low-confidence')),'pending','low extraction confidence never auto-confirms');
 update public.transactions set description='User correction' where id=(select id from examples where name='edited');
 select is((select applied from public.set_imported_category((select id from examples where name='edited'),pg_temp.category('resto-cafe'),'expense',1)),false,'atomic apply protects User edit');
 select is((select description from public.transactions where id=(select id from examples where name='edited')),'User correction','User correction survives background work');
 select public.set_imported_category((select id from examples where name='no-choice'),null::uuid,null::text,null::numeric);
-select is((select gmail_classification_status from public.transactions where id=(select id from examples where name='no-choice')),'needs_review','no choice is terminal review');
+select is((select gmail_classification_status from public.transactions where id=(select id from examples where name='no-choice')),'completed','no model choice settles with automatic Misc fallback');
 select public.start_gmail_sync('12000000-0000-4000-8000-000000000001');
 update public.gmail_connections set sync_requested_at=statement_timestamp()-interval '1 day' where id='12000000-0000-4000-8000-000000000001';
 select public.mark_gmail_connection_synced('12000000-0000-4000-8000-000000000001',statement_timestamp());
 select is((select state from public.gmail_sync_statuses('10000000-0000-4000-8000-000000000001') where connection_id='12000000-0000-4000-8000-000000000001'),'completed','terminal review does not strand sync');
-select ok((select needs_review>=8 from public.gmail_sync_statuses('10000000-0000-4000-8000-000000000001') where connection_id='12000000-0000-4000-8000-000000000001'),'terminal pending outcomes appear in review count');
+select ok((select needs_review>=3 from public.gmail_sync_statuses('10000000-0000-4000-8000-000000000001') where connection_id='12000000-0000-4000-8000-000000000001'),'terminal pending outcomes appear in review count');
 select throws_ok($$update public.budgets set category_id=pg_temp.category('salary') where user_id='10000000-0000-4000-8000-000000000001'$$,'23514',null,'budget category must be expense');
 select throws_ok($$update public.transactions set category_id=pg_temp.category('salary') where id=(select id from examples where name='expense')$$,'23514',null,'manual transaction write also enforces category kind');
 -- A provider delay extends only an active owned processing target, with a hard cap.
@@ -161,12 +161,12 @@ select throws_ok($$select * from public.set_imported_category((select id from ex
  '22023',null,'unknown-type inflow rejects an incompatible expense category');
 select public.set_imported_category((select id from examples where name='unknown-kind-out'),pg_temp.category('resto-cafe'),'expense',0.99);
 select is((select row(transaction_type,flow_direction,review_status)::text from public.transactions where id=(select id from examples where name='unknown-kind-out')),
- row('expense','out','pending')::text,'compatible expense suggestion preserves stated outflow and review');
+ row('expense','out','confirmed')::text,'a compatible expense decision resolves type and preserves stated outflow');
 select public.set_imported_category((select id from examples where name='unknown-kind-in'),pg_temp.category('salary'),'income',0.99);
 select is((select row(transaction_type,flow_direction,review_status)::text from public.transactions where id=(select id from examples where name='unknown-kind-in')),
- row('income','in','pending')::text,'compatible income suggestion preserves stated inflow and review');
-select throws_ok($$select * from public.set_imported_category((select id from examples where name='unknown-kind-no-direction'),pg_temp.category('resto-cafe'),'expense',0.99)$$,
- '22023',null,'missing cash direction cannot be invented by an expense category');
+ row('income','in','confirmed')::text,'a compatible income decision resolves type and preserves stated inflow');
+select is((select applied from public.set_imported_category((select id from examples where name='unknown-kind-no-direction'),pg_temp.category('resto-cafe'),'expense',0.99)),
+ true,'missing cash direction settles in review rather than stranding classification');
 select public.set_imported_category((select id from examples where name='unknown-kind-no-direction'),null::uuid,null::text,null::numeric);
 select is((select flow_direction from public.transactions where id=(select id from examples where name='unknown-kind-no-direction')),
  null::text,'terminal review preserves an unstated cash direction as null');

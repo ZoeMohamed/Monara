@@ -1,18 +1,18 @@
-# Meeting UI handoff, updated 19 October 2026
+# Meeting UI handoff, updated 20 October 2026
 
-Accepted scope: complete the UI and necessary contracts on top of main, with provider workflows coordinated with their owners. This integration uses main `8778e3f`, preserving typed Gmail classification (PR76/PR79), goal intelligence (PR70), deletion recovery (PR71) and the mascot/mobile navigation (PR80). The [scoped PRD and Action Tracker](ui-actions-2026-10-16.md) were reread on 19 October; their older statuses are not proof of current source or acceptance. Publication, provider configuration and deployment are separate milestones.
+Accepted scope: complete the UI and necessary contracts on top of main, with provider workflows coordinated with their owners. This integration uses main `c390ba3`, preserving the latest onboarding (PR83/94), Gmail classification (PR87/89), forecasting (PR63/91), Home/Reports/quick-add polish (PR95), goal intelligence, deletion recovery and mascot/mobile navigation. The [scoped PRD and Action Tracker](ui-actions-2026-10-16.md) were reread on 19 October; their older statuses are not proof of current source or acceptance. Publication, provider configuration and deployment are separate milestones.
 
 ## Ledger and categories
 
-The stored types are expense, income and exclusion. Exclusions stay visible and muted in History without contributing to spending, income or budgets. Missing source amount, date and account fields stay unknown in pending imports. Every confirmed record, including an exclusion, needs an actual date. Add, edit, convert and confirm use the same owned backend operations; Undo restores only the saved version authorized by its action receipt.
+The stored types are expense, income and exclusion. Exclusions stay visible and muted in History without contributing to spending, income or budgets. Missing source amounts and account fields stay unknown in pending imports. Every confirmed record, including an exclusion, needs a date. Gmail uses its email arrival day in Jakarta when the source has no usable date; receipt/manual drafts keep missing dates unknown. Add, edit, convert and confirm use the same owned backend operations; Undo restores only the saved version authorized by its action receipt.
 
-History is one compact list. All, Expenses, Income, Exclusions and To review share a filter row. Pending rows have a subtle background and quick action, with no review tags or confidence scores. Undated imports appear under Date needed and open the date editor before confirmation.
+History is one compact list. All, Forecast, Expenses, Income, Exclusions and To review share a filter row. Pending rows have a subtle background and quick action, with no review tags or confidence scores. Undated imports appear under Date needed and open the date editor before confirmation.
 
-Main's [catalog](../packages/contracts/src/category-presets.ts) contains 19 expense presets, six income presets and the six exclusion reasons from the reference: Repayment, Internal, Reimbursed, Investment, One-off and Cancelled. Presets use drawn icons. The [typed-category decision](adr/0005-typed-transaction-categories.md) and [main migration](../supabase/migrations/20261019120000_typed_gmail_categorization.sql) preserve existing financial treatment, budgets and undo references while enforcing exact category/type compatibility and immutable category kinds. Stable owned UUIDs and canonical preset slugs supply identity; no duplicate `preset_slug` model is added. Pending unknown-type hints remain supported, including unchanged archived references.
+Main's [catalog](../packages/contracts/src/category-presets.ts) contains 20 expense, eight income and seven exclusion presets, including the reference reasons Repayment, Internal, Reimbursed, Investment, One-off and Cancelled. Presets use drawn icons. The [typed-category decision](adr/0005-typed-transaction-categories.md) and [main migration](../supabase/migrations/20261019120000_typed_gmail_categorization.sql) preserve existing financial treatment, budgets and undo references while enforcing exact category/type compatibility and immutable category kinds. Stable owned UUIDs and canonical preset slugs supply identity; no duplicate `preset_slug` model is added. Pending unknown-type hints remain supported, including unchanged archived references.
 
-Main's accepted [categorization policy](gmail-categorization-design-2026-10-19.md) supersedes the earlier fuzzy-name proposal. Internal is the only automatic exclusion and requires explicit source-supported transfer meaning, known cash direction and an exact normalized match to the confirmed profile full name. Name similarity alone cannot prove ownership or authorize writes. Other exclusion reasons require review. Expense/income classification uses compatible owned Category IDs; extraction and classification thresholds, authenticated sender, actual facts and active institution/account mapping jointly gate automatic confirmation. The initial classification threshold is 0.95. Personal/unknown transfers stay pending unless Internal is independently established. Brave queries use only exact bundled public-brand matches.
+Main's latest [categorization policy](gmail-import-fallbacks-design-2026-10-19.md) uses deterministic original-counterparty matching for Internal, then Person for another personal name, then specific categories and typed Misc fallbacks. A complete import with an active owned account and compatible category confirms when the lower available extraction/classification score reaches 0.5; a sole available score decides, and both absent or incomplete facts stay in review. Sender authentication and exclusion labels add no review gates. Original evidence and unknown cash direction remain intact. Brave queries use only exact bundled public-brand matches.
 
-Gmail and WhatsApp receipt extraction preserve missing/rejected dates as null and request review. The source-date migration removes remaining database fallback dates; historical values already backfilled cannot be corrected reliably without a source audit. No amount, currency or account mapping is manufactured.
+Gmail uses the source email arrival day in Jakarta when no usable date is stated, without adding a review gate. WhatsApp receipt and manual captures retain missing/rejected dates as null until review. The combined source-date migration preserves both rules; historical backfilled values are not rewritten. No amount, currency or account mapping is manufactured.
 
 ## Weekly gauge
 
@@ -26,7 +26,7 @@ Main's Planning area separates Budgets and Goals. Goal progress is manually reco
 
 Gmail runs automatically through the existing scheduled worker and connected-mail triggers. The UI has no manual sync button; it shows server-reported progress, reconnect/disconnect recovery and detected account suggestions. Main's first-run Home sheets guide Gmail consent, full-name confirmation, bank discovery and import progress. Metadata discovery is deterministic, asynchronous and bounded; ambiguous, inactive or mismatched accounts remain unmapped rather than guessed.
 
-Preserve main's two queues, bounded parse batches, authenticated-sender checks, structured extraction evidence, immutable typed categories, classification follow-through, backoff and terminal needs-review counts. Durable message/source-index uniqueness prevents duplicate transactions. The newer accepted reduced scope defers extraction leases, outboxes, broad replay and increased concurrency without measured provider limits; this integration removes its older unpublished lease machinery. Every poll keeps a rolling thirty-day window, even with an old queued `since` cursor, and new accounts check that institution’s recent mail. Provider behavior and performance remain Adlyn's acceptance checks. External search results never authorize writes.
+Preserve main's two queues, bounded parse batches, sender-authentication evidence, structured extraction evidence, immutable typed categories, classification follow-through, backoff and terminal needs-review counts. Durable message/source-index uniqueness prevents duplicate transactions. The newer accepted reduced scope defers extraction leases, outboxes, broad replay and increased concurrency without measured provider limits; this integration removes its older unpublished lease machinery. Every poll keeps a rolling thirty-day window, even with an old queued `since` cursor, and new accounts check that institution’s recent mail. Provider behavior and performance remain Adlyn's acceptance checks. External search results never authorize writes.
 
 ## Chat and reminders
 
@@ -40,7 +40,7 @@ WhatsApp reminders require explicit opt-in, a current verified link, preferences
 
 ## Verification boundary
 
-Core actions explain the outcome and next step. Eligible transaction/budget changes return ten-minute Undo receipts. The [atomic restoration](../supabase/migrations/20261019131000_guarded_transaction_undo.sql) checks owner, expiry and saved version, restores exact values/provenance/direction and consumes the receipt together. Confirmation/exclusion Undo may return a record to review without weakening ordinary transitions. Live deletion states when no Undo exists. Warnings offer recovery and remain visible until dismissed or resolved.
+Core actions explain the outcome and next step. Eligible transaction/budget changes return ten-minute Undo receipts. The [atomic restoration](../supabase/migrations/20261020044250_guarded_transaction_undo.sql) checks owner, expiry and saved version, restores exact values/provenance/direction and consumes the receipt together. Confirmation/exclusion Undo may return a record to review without weakening ordinary transitions. Live deletion states when no Undo exists. Warnings offer recovery and remain visible until dismissed or resolved.
 
 Uncertain creates retain the exact submitted body and request UUID. They cannot be resent with changed values. Refresh resolves uncertain results; conflicting record versions require explicit review. Removed records retain useful drafts, and form validation focuses the field that needs attention. These sessions remain in memory, not browser storage.
 
@@ -50,13 +50,14 @@ Permanent identity deletion requires the exact phrase and acknowledgement and ha
 
 ## Migration and teammate coordination
 
-Main ends at [20261019120000](../supabase/migrations/20261019120000_typed_gmail_categorization.sql). Its narrowly approved inactive-identity backfill correction is preserved byte-for-byte; the [deployment diagnosis](gmail-categorization-deployment-diagnosis-2026-10-19.md) explains that exception. Only unpublished local migrations move after main:
+Main ends at [20261019171000](../supabase/migrations/20261019171000_gmail_email_date_fallback.sql). Its narrowly approved inactive-identity backfill correction is preserved byte-for-byte; the [deployment diagnosis](gmail-categorization-deployment-diagnosis-2026-10-19.md) explains that exception. Only unpublished local migrations move after main:
 
-- [20261019131000](../supabase/migrations/20261019131000_guarded_transaction_undo.sql): atomic receipt-authorized restoration.
-- [20261019132000](../supabase/migrations/20261019132000_chat_history_recovery.sql): keyed timestamped chat-save recovery and legacy compatibility.
-- [20261019133000](../supabase/migrations/20261019133000_source_transaction_dates.sql): unknown source dates and required confirmed dates.
-- [20261019160000](../supabase/migrations/20261019160000_financial_goal_deletion_fence.sql): goal live-identity/owned-path checks.
-- [20261019161000](../supabase/migrations/20261019161000_goal_image_upload_intents.sql): durable unresolved upload tracking and final-deletion fencing.
+- [20261020044250](../supabase/migrations/20261020044250_guarded_transaction_undo.sql): atomic receipt-authorized restoration.
+- [20261020044251](../supabase/migrations/20261020044251_chat_history_recovery.sql): keyed timestamped chat-save recovery and legacy compatibility.
+- [20261020044252](../supabase/migrations/20261020044252_source_transaction_dates.sql): Gmail arrival-day fallback, unknown receipt/manual dates and required confirmed dates.
+- [20261020044253](../supabase/migrations/20261020044253_financial_goal_deletion_fence.sql): goal live-identity/owned-path checks.
+- [20261020044254](../supabase/migrations/20261020044254_goal_image_upload_intents.sql): durable unresolved upload tracking and final-deletion fencing.
+- [20261020044255](../supabase/migrations/20261020044255_bound_goal_image_upload_reconciliation.sql): bounded reconciliation of completed or expired uploads.
 
 Preserve combined generated types and test upgrade behavior as well as clean replay. No published historical migration is rewritten by this PR.
 

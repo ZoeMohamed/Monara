@@ -1,0 +1,212 @@
+.card {
+  min-width: 0;
+  margin-top: 24px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: linear-gradient(145deg, var(--surface), var(--surface-secondary));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 15px;
+}
+
+.totals > div {
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 16px;
+  background: var(--accent-soft);
+}
+
+.totals dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.totals dd {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Month end is the headline figure, so it takes the full row. */
+.totals > div:last-child {
+  grid-column: 1 / -1;
+}
+
+.totals > div:last-child dd {
+  font-size: 20px;
+}
+
+.note,
+.footnote {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.footnote {
+  margin-top: 12px;
+}
+
+.error {
+  margin-top: 12px;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.list {
+  display: grid;
+  margin-top: 8px;
+  list-style: none;
+}
+
+.list > li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+}
+
+.date {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.merchant {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.merchant > strong {
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.merchant > span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.amount {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-tertiary);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.chip[data-tone="high"] {
+  background: var(--accent-soft);
+  color: var(--link);
+}
+
+.more {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  margin: 4px auto 0;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 14px;
+}
+
+/* On a phone the card's box comes from Home's shared card style; only the layout inside differs. */
+@media (max-width: 1023.98px) {
+  .totals {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
+    margin-top: 16px;
+    border-top: 1px solid var(--separator);
+    border-bottom: 1px solid var(--separator);
+  }
+
+  .totals > div,
+  .totals > div:last-child {
+    grid-column: auto;
+    padding: 14px 8px;
+    border-radius: 0;
+    background: none;
+  }
+
+  .totals > div:first-child {
+    padding-left: 0;
+  }
+
+  .totals > div + div {
+    border-left: 1px solid var(--separator);
+  }
+
+  .totals > div dd,
+  .totals > div:last-child dd {
+    font-size: clamp(13px, 4.4vw, 16px);
+    white-space: nowrap;
+  }
+}
+
+/* Three amounts fit side by side from about 380px; narrower, they stack as label and amount rows. */
+@media (max-width: 379.98px) {
+  .totals {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .totals > div,
+  .totals > div:last-child,
+  .totals > div:first-child {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .totals > div + div {
+    border-top: 1px solid var(--separator);
+    border-left: 0;
+  }
+
+  .totals dd {
+    margin-top: 0;
+  }
+}

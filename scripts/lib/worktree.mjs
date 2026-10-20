@@ -1,4 +1,5 @@
 import { createServer } from "node:net";
+import { parseEnv as parseDotEnv } from "node:util";
 
 export const WEB_BASE_PORT = 3000;
 export const AGENT_BASE_PORT = 8787;
@@ -41,14 +42,28 @@ export function releaseSlot(claims, worktreePath) {
   return Object.fromEntries(Object.entries(claims).filter(([path]) => path !== worktreePath));
 }
 
-// Sets KEY=value lines, replacing an existing line (even an empty template value) or appending.
+// Keep quoted multiline values together when copying or replacing an assignment.
+function envAssignments(content) {
+  return content.matchAll(
+    /^[\t ]*(?:export[\t ]+)?([A-Za-z_][A-Za-z0-9_]*)[\t ]*=[\t ]*(?:'[^']*'|"[^"]*"|`[^`]*`|[^\r\n]*)[^\r\n]*/gm,
+  );
+}
+
+export function envValueLiteral(content, key) {
+  const assignment = [...envAssignments(content)].findLast((match) => match[1] === key)?.[0];
+  return assignment?.slice(assignment.indexOf("=") + 1);
+}
+
+// Values are dotenv literals. Preserve their quoting rather than re-encoding credentials.
 export function setEnvValues(content, values) {
   let result = content;
   for (const [key, value] of Object.entries(values)) {
     const line = `${key}=${value}`;
-    const pattern = new RegExp(`^${key}=.*$`, "m");
-    if (pattern.test(result)) {
-      result = result.replace(pattern, () => line);
+    const matches = [...envAssignments(result)].filter((match) => match[1] === key);
+    if (matches.length > 0) {
+      for (const match of matches.reverse()) {
+        result = `${result.slice(0, match.index)}${line}${result.slice(match.index + match[0].length)}`;
+      }
     } else {
       result = `${result}${result === "" || result.endsWith("\n") ? "" : "\n"}${line}\n`;
     }
@@ -65,18 +80,23 @@ export function parseEnv(content) {
   return entries;
 }
 
-// Templates supply new keys; inherited and existing local values take precedence.
-// Only a newly created web env must discard another checkout's database credentials.
+// Existing assignments, including intentional blanks, win. Missing keys inherit the
+// source before falling back to the template. Database credentials never cross checkouts.
 export function seedEnvContent({ template, source = "", existing, values, blankKeys = [] }) {
-  const inherited = parseEnv(existing ?? source);
+  let result = existing ?? (source || template);
+  const present = parseDotEnv(result);
+  for (const content of [source, template]) {
+    for (const match of envAssignments(content)) {
+      const key = match[1];
+      if (Object.hasOwn(present, key)) continue;
+      const assignment = blankKeys.includes(key) ? `${key}=` : match[0];
+      result = `${result}${result === "" || result.endsWith("\n") ? "" : "\n"}${assignment}\n`;
+      present[key] = "";
+    }
+  }
   const overrides =
     existing === undefined ? Object.fromEntries(blankKeys.map((key) => [key, ""])) : {};
-  return setEnvValues(existing ?? (source || template), {
-    ...parseEnv(template),
-    ...inherited,
-    ...overrides,
-    ...values,
-  });
+  return setEnvValues(result, { ...overrides, ...values });
 }
 
 export function worktreeEnvContent(slot) {

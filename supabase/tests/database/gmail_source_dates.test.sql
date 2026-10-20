@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
-select plan(12);
+select plan(15);
 set local role service_role;
 
 update public.financial_accounts set institution_key = 'BCA_CC',
@@ -9,7 +9,8 @@ update public.financial_accounts set institution_key = 'BCA_CC',
   where id = '11000000-0000-4000-8000-000000000001';
 create temporary table undated_message on commit drop as
 select * from public.claim_gmail_message(
-  '12000000-0000-4000-8000-000000000001', 'synthetic-no-source-date', now());
+  '12000000-0000-4000-8000-000000000001', 'synthetic-no-source-date',
+  '2026-10-16T18:30:00Z');
 create temporary table undated_import on commit drop as
 select * from public.record_gmail_extraction(
   (select processed_message_id from undated_message), 'transactions',
@@ -18,31 +19,53 @@ select * from public.record_gmail_extraction(
      "accountLastFour":"4242","confidence":0.99}]'::jsonb,
   true, 'BCA_CC');
 select is((select occurred_on from public.transactions where id =
-  (select transaction_ids[1] from undated_import)), null::date,
-  'delivery and insertion time do not become a transaction date');
+  (select transaction_ids[1] from undated_import)), '2026-10-17'::date,
+  'an undated Gmail import uses its source email arrival day in Jakarta');
 select is((select review_status from public.transactions where id =
   (select transaction_ids[1] from undated_import)), 'pending',
-  'an authenticated high-confidence undated expense needs review');
-select ok((select not gmail_auto_confirm_pending from public.transactions where id =
+  'an import still waits for its classification before confirmation');
+select ok((select gmail_auto_confirm_pending from public.transactions where id =
   (select transaction_ids[1] from undated_import)),
-  'category automation cannot make an undated expense eligible');
+  'the source email arrival date satisfies extraction date eligibility');
 select is((select financial_account_id from public.transactions where id =
   (select transaction_ids[1] from undated_import)), '11000000-0000-4000-8000-000000000001'::uuid,
-  'an unknown date retains a valid owned source account');
+  'a fallback date retains the valid owned source account');
 select public.set_imported_category(
   (select transaction_ids[1] from undated_import),
   (select id from public.categories where user_id = '10000000-0000-4000-8000-000000000001'
     and slug = 'resto-cafe'), 'expense', 0.99);
 select is((select review_status from public.transactions where id =
-  (select transaction_ids[1] from undated_import)), 'pending',
-  'classification leaves an undated transaction pending');
-select throws_ok($$update public.transactions set review_status = 'confirmed'
-  where id = (select transaction_ids[1] from undated_import)$$, '23514', null,
-  'direct writes cannot confirm an undated expense');
-select throws_ok($$update public.transactions set review_status = 'confirmed',
-  transaction_type = 'exclusion', category_id = null
-  where id = (select transaction_ids[1] from undated_import)$$, '23514', null,
-  'undated exclusions need an actual date too');
+  (select transaction_ids[1] from undated_import)), 'confirmed',
+  'a complete confident Gmail transaction confirms with the source email arrival date');
+
+create temporary table directionless_message on commit drop as
+select * from public.claim_gmail_message(
+  '12000000-0000-4000-8000-000000000001', 'synthetic-no-cash-direction',
+  '2026-10-16T18:30:00Z');
+create temporary table directionless_import on commit drop as
+select * from public.record_gmail_extraction(
+  (select processed_message_id from directionless_message), 'transactions',
+  '[{"kind":null,"flowDirection":null,"merchantName":"Synthetic directionless payment",
+     "money":{"amountMinor":"25000","currency":"IDR"},"occurredOn":null,
+     "accountLastFour":"4242","confidence":0.99}]'::jsonb,
+  true, 'BCA_CC');
+select public.set_imported_category(
+  (select transaction_ids[1] from directionless_import), null::uuid, null::text, 0.99);
+select is((select occurred_on from public.transactions where id =
+  (select transaction_ids[1] from directionless_import)), '2026-10-17'::date,
+  'an incomplete Gmail transaction also keeps the source email arrival date');
+select is((select transaction_type from public.transactions where id =
+  (select transaction_ids[1] from directionless_import)), 'expense',
+  'a missing cash direction can keep the latest Expense Misc fallback');
+select is((select flow_direction from public.transactions where id =
+  (select transaction_ids[1] from directionless_import)), null::text,
+  'Expense Misc never manufactures a missing Gmail cash direction');
+select is((select review_status from public.transactions where id =
+  (select transaction_ids[1] from directionless_import)), 'pending',
+  'the source email arrival date does not bypass missing cash direction review');
+select is((select gmail_classification_status from public.transactions where id =
+  (select transaction_ids[1] from directionless_import)), 'needs_review',
+  'an incomplete import terminates classification instead of keeping progress running');
 
 insert into public.transactions(id, user_id, client_request_id, source_type,
   review_status, transaction_type, flow_direction, occurred_on, merchant_name,

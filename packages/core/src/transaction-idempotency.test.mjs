@@ -169,7 +169,7 @@ describe("transaction creation retries", () => {
     const repository = createSupabaseFinanceRepository(client);
     const pending = await repository.createPendingTransaction({
       userId,
-      source: "gmail_email",
+      source: "whatsapp_receipt",
       clientRequestId: values.clientRequestId,
       confidence: 0.6,
       values,

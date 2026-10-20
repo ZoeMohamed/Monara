@@ -191,7 +191,7 @@ select public.record_gmail_extraction(
       "money": {"amountMinor": "25000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
       "accountHint": "Demo Bank ****4242", "accountLastFour": "4242",
-      "categoryName": null, "confidence": 0.89}]$$::jsonb,
+      "categoryName": null, "confidence": 0.49}]$$::jsonb,
   p_sender_verified => true,
   p_institution_key => 'BCA_CC'
 );
