@@ -26,8 +26,9 @@ async function readConnectionId(context: Context) {
 /**
  * Banks, cards, and wallets found in one of the signed-in User's mailboxes. When the
  * search never ran, failed, or stalled, it runs again here before answering.
+ * Status-only reads during name entry leave the callback's background scan alone.
  */
-export async function GET(_request: NextRequest, context: Context) {
+export async function GET(request: NextRequest, context: Context) {
   const identity = await getAuthenticatedIdentity();
   if (!identity) return unauthenticated();
   const connectionId = await readConnectionId(context);
@@ -37,7 +38,10 @@ export async function GET(_request: NextRequest, context: Context) {
     const repository = gmailIngestionRepository();
     // Ownership first: this answers NOT_FOUND for a connection that is not the User's.
     let discovery = await repository.discoveryFor(identity.id, connectionId);
-    if (discovery.state !== "completed") {
+    if (
+      discovery.state !== "completed" &&
+      new URL(request.url).searchParams.get("refresh") !== "false"
+    ) {
       // An inactive connection has nothing to search; show what is stored.
       const ran = await rerunDiscoveryIfNeeded(connectionId).catch(() => false);
       if (ran) discovery = await repository.discoveryFor(identity.id, connectionId);

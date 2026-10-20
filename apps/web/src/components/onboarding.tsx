@@ -1,5 +1,6 @@
 "use client";
 
+import { AppLoading } from "@/components/app-loading";
 import { DetectStep } from "@/components/onboarding-detect";
 import { ImportStep } from "@/components/onboarding-import";
 import { NameStep } from "@/components/onboarding-name";
@@ -10,6 +11,7 @@ import { stepIndex } from "@/lib/onboarding/flow";
 /** The first-run sheet: connect Gmail, confirm the name, confirm the banks found, then watch the import. */
 export function OnboardingSheets({ onboarding }: { onboarding: Onboarding }) {
   const { phase, sheetOpen, engine, pending, error } = onboarding;
+  if (onboarding.preparing) return <AppLoading overlay />;
   if (!sheetOpen || phase === null) return null;
   return (
     <OnboardingSheet onDismiss={onboarding.dismiss} step={stepIndex(phase)}>
