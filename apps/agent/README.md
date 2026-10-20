@@ -105,6 +105,8 @@ Add the missing Agent operations (recurring bills, Reminder preferences) and cli
 
 The Gmail and merchant queues and cron schedules are declared in `wrangler.jsonc`. `wrangler dev` simulates the queues; scheduled events need a manual trigger during local development. Creating queues or applying cloud schedules requires an authorized deploy. Do not substitute fire-and-forget promises for durable processing.
 
+The existing minute schedule also calls the authenticated backend endpoint `/api/agent/fx/recover`. The backend claims up to ten pending USD conversions, with at most five attempts per current amount/date and exponential backoff. It resolves public USD/IDR reference rates through its two-second cache-first lookup, then applies the first conversion only if the owned transaction's version is unchanged. Gmail classification completes independently; recovery can confirm an otherwise qualified import after conversion succeeds. The Worker never writes financial records or supplies rates directly. See [transaction currencies](../../docs/multi-currency-design.md).
+
 ## User deletion
 
 Every minute, the Worker calls the authenticated backend `/api/agent/account-deletions/process` endpoint to recover durable cleanup jobs. The backend owns deletion acceptance, financial erasure, Gmail cleanup and Auth hard deletion. Worker `POST /users/purge` requires the backend credential and a verified inactive User before deleting that User's WhatsApp Durable Object storage and alarms. Purge waits for in-flight conversation work, and provider/model boundaries reject deleting or deleted Users. See the [deletion design](../../docs/user-deletion-design.md) for the operational drain window, queue retention limits and rollout order.

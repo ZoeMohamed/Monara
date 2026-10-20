@@ -1,4 +1,5 @@
 import { demoSummary, isCalendarDate, type Transaction } from "./demo-ledger";
+import { reportingAmountFor } from "./demo-ledger.ts";
 
 type MerchantSpending = {
   name: string;
@@ -63,7 +64,7 @@ export function spendingFlow(transactions: Transaction[], period: string) {
       amount: BigInt(0),
       transactions: [],
     };
-    const amount = BigInt(transaction.amount ?? 0);
+    const amount = BigInt(reportingAmountFor(transaction) ?? 0);
     spending += amount;
     category.amount += amount;
     merchant.amount += amount;
@@ -107,8 +108,8 @@ export function biggestExpenses(transactions: Transaction[], period: string): Tr
   return periodRecords(transactions, period)
     .filter((transaction) => transaction.kind === "expense")
     .sort((left, right) => {
-      const leftAmount = BigInt(left.amount ?? 0);
-      const rightAmount = BigInt(right.amount ?? 0);
+      const leftAmount = BigInt(reportingAmountFor(left) ?? 0);
+      const rightAmount = BigInt(reportingAmountFor(right) ?? 0);
       if (leftAmount !== rightAmount) return leftAmount > rightAmount ? -1 : 1;
       return (
         `${right.date} ${right.time ?? ""}`.localeCompare(`${left.date} ${left.time ?? ""}`) ||

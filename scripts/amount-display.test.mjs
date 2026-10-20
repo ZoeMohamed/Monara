@@ -48,3 +48,13 @@ test("showing amounts preserves exact rupiah, compact units and original message
   assert.equal(display.compactAmount(397490n, false), "Rp397k");
   assert.equal(display.maskAmountText("Rp100 more; kopi 25rb"), "Rp100 more; kopi 25rb");
 });
+
+test("USD uses exact cents and the shared privacy setting", () => {
+  assert.equal(amountDisplay(false).formatMoney(1999, "USD"), "US$19.99");
+  assert.equal(amountDisplay(false).formatMoney(100, "USD"), "US$1.00");
+  assert.equal(amountDisplay(true).formatMoney(1999, "USD"), "••••••");
+  assert.equal(
+    amountDisplay(true).maskAmountText("US$19.99 and USD20.00 and $1,234.50"),
+    "•••••• and •••••• and ••••••",
+  );
+});

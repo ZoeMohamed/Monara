@@ -48,7 +48,7 @@ const addTransactionInputSchema = transactionValuesSchema.partial().strict();
 const addTransaction: AgentTool<typeof addTransactionInputSchema> = {
   name: "add_transaction",
   description:
-    "Records a confirmed expense, income, or exclusion. Exclusions track reimbursements, internal transfers, duplicates, and non-personal activity without affecting totals. Needs kind, money, occurredOn, a merchantName or description, and one Financial Account/payment method in financialAccountId. Leave out anything the User did not give.",
+    "Records an expense, income, or exclusion. Money uses whole rupiah for IDR and cents for USD, so US$19.99 is amountMinor 1999 with currency USD. A missing USD conversion returns a saved pending transaction excluded from totals; inspect reviewStatus and idrMoney before describing the result. Exclusions track reimbursements, internal transfers, duplicates, and non-personal activity without affecting totals. Needs kind, money, occurredOn, a merchantName or description, and one Financial Account/payment method in financialAccountId. Leave out anything the User did not give.",
   tier: "T1",
   input: addTransactionInputSchema,
   async run(input, context) {

@@ -89,7 +89,7 @@ function Stats({ progress }: { progress: ImportProgress }) {
 const staggeredRows = 8;
 
 function ImportRow({ item, index }: { item: ImportedTransaction; index: number }) {
-  const { formatRupiah } = useAmountDisplay();
+  const { formatMoney } = useAmountDisplay();
   const sign = item.kind === "income" ? "+" : item.kind === "expense" ? "−" : "";
   const category = item.category ?? "Misc";
   const style = { "--row-index": Math.min(index, staggeredRows) } as CSSProperties;
@@ -121,7 +121,7 @@ function ImportRow({ item, index }: { item: ImportedTransaction; index: number }
       <span className={styles.rowValue}>
         <span className={styles.rowAmount}>
           {sign}
-          {formatRupiah(item.amount)}
+          {formatMoney(item.amount, item.currency ?? "IDR")}
         </span>
         <span className={styles.rowDate}>{formatDay(item.date)}</span>
       </span>

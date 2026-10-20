@@ -15,6 +15,7 @@ import {
   type Budget,
   deleteConfirmedTransaction,
   excludePendingTransaction,
+  isConversionPending,
   type RecurringBill,
   type TransactionValues,
   transactionErrors,
@@ -117,7 +118,9 @@ export function useTransactionActions(context: ActionContext) {
       kind: values.kind,
       merchantName: values.merchant,
       money:
-        values.amount === null ? null : { amountMinor: String(values.amount), currency: "IDR" },
+        values.amount === null
+          ? null
+          : { amountMinor: String(values.amount), currency: values.currency },
       occurredOn: values.date,
       occurredTime: values.time,
       description: previous?.description ?? null,
@@ -180,7 +183,10 @@ export function useTransactionActions(context: ActionContext) {
           }),
         );
         setNotice({
-          message: confirmationMessage(item),
+          message:
+            result.transaction.reviewStatus === "pending" && !result.transaction.idrMoney
+              ? "Saved in USD. Conversion is pending; it is not included in totals."
+              : confirmationMessage(item),
           undo: { kind: "backend", receipt: result.action },
         });
         if (view.transactionId) navigation.closePopup();
@@ -198,7 +204,10 @@ export function useTransactionActions(context: ActionContext) {
     const expected = next.find((transaction) => transaction.id === id);
     setTransactions(next);
     setNotice({
-      message: confirmationMessage(item),
+      message:
+        expected && isConversionPending(expected)
+          ? "Saved in USD. Conversion is pending; it is not included in totals."
+          : confirmationMessage(item),
       ...(expected ? { undo: { kind: "update" as const, before: item, expected } } : {}),
     });
     if (view.transactionId) navigation.closePopup();
@@ -239,11 +248,15 @@ export function useTransactionActions(context: ActionContext) {
       });
       setNotice({
         message:
-          action === "confirm"
-            ? confirmationMessage(values)
-            : action === "edit"
-              ? "Changes saved. Still pending review."
-              : "Changes saved. Your totals are up to date.",
+          result.transaction.money?.currency === "USD" &&
+          result.transaction.reviewStatus === "pending" &&
+          !result.transaction.idrMoney
+            ? "Saved in USD. Conversion is pending; it is not included in totals."
+            : action === "confirm"
+              ? confirmationMessage(values)
+              : action === "edit"
+                ? "Changes saved. Still pending review."
+                : "Changes saved. Your totals are up to date.",
         undo: { kind: "backend", receipt: result.action },
       });
       navigation.navigate({ editId: null, transactionId: editing.id, adding: false }, "replace");
@@ -264,8 +277,9 @@ export function useTransactionActions(context: ActionContext) {
     });
     if (expected)
       setNotice({
-        message:
-          action === "confirm"
+        message: isConversionPending(expected)
+          ? "Saved in USD. Conversion is pending; it is not included in totals."
+          : action === "confirm"
             ? confirmationMessage(values)
             : action === "edit"
               ? "Changes saved. Still waiting for your review."
@@ -325,7 +339,11 @@ export function useTransactionActions(context: ActionContext) {
       });
       setNotice({
         message:
-          values.kind === "exclusion" ? "Exclusion saved, totals unchanged." : "Transaction added.",
+          result.transaction.reviewStatus === "pending" && !result.transaction.idrMoney
+            ? "Saved in USD. Conversion is pending; it is not included in totals."
+            : values.kind === "exclusion"
+              ? "Exclusion saved, totals unchanged."
+              : "Transaction added.",
         undo: { kind: "backend", receipt: result.action },
       });
       navigation.navigate({ adding: false }, "replace");
@@ -336,7 +354,7 @@ export function useTransactionActions(context: ActionContext) {
       id: crypto.randomUUID(),
       emoji: "✦",
       confidence: null,
-      status: "confirmed",
+      status: values.currency === "USD" && values.kind !== "exclusion" ? "pending" : "confirmed",
     };
     setTransactions((items) => [record, ...items]);
     setDrafts((items) => {
@@ -346,7 +364,11 @@ export function useTransactionActions(context: ActionContext) {
     });
     setNotice({
       message:
-        values.kind === "exclusion" ? "Exclusion saved, totals unchanged." : "Transaction added.",
+        record.status === "pending"
+          ? "Saved in USD. Conversion is pending; it is not included in totals."
+          : values.kind === "exclusion"
+            ? "Exclusion saved, totals unchanged."
+            : "Transaction added.",
       undo: { kind: "create", transaction: record },
     });
     navigation.navigate({ adding: false }, "replace");

@@ -486,3 +486,20 @@ test("compact monetary labels preserve signs and bigint magnitude without unsafe
   assert.equal(compactAmount(18014398509481983n), "Rp18014.3t");
   assert.equal(compactAmount(10n ** 400n), `Rp1${"0".repeat(388)}t`);
 });
+
+test("USD displays original cents while every financial aggregate uses the saved IDR value", () => {
+  const usd = record({ id: "usd", currency: "USD", amount: 1999, reportingAmount: 329837 });
+  const awaiting = record({
+    id: "awaiting-fx",
+    currency: "USD",
+    amount: 2000,
+    status: "pending",
+    reportingAmount: null,
+  });
+  const result = financialMonth([usd, awaiting], "2026-10");
+  assert.equal(result.spending, 329837n);
+  assert.equal(result.confirmedCount, 1);
+  assert.equal(result.categories[0].amount, 329837n);
+  assert.equal(result.days[10].spending, 329837n);
+  assert.equal(usd.amount, 1999);
+});

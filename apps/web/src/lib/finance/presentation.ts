@@ -17,6 +17,7 @@ import {
   financialGoalPageSchema,
   type Transaction,
   transactionPageSchema,
+  transactionReportingMoney,
 } from "@monara/contracts";
 
 import type {
@@ -61,9 +62,20 @@ export function safePresentationAmount(value: string): number {
 }
 
 /** Parse editor text before converting to a number, so fractions cannot round into valid money. */
-export function parseDraftAmount(value: string): number | null {
+export function parseDraftAmount(
+  value: string,
+  currency: "IDR" | "USD" | null = "IDR",
+): number | null {
   const trimmed = value.trim();
   if (trimmed === "") return null;
+  if (currency === "USD") {
+    if (!/^\d+(?:\.\d{0,2})?$/.test(trimmed))
+      throw new FinancePresentationError("Enter a USD amount with at most two decimal places.");
+    const [whole, fraction = ""] = trimmed.split(".");
+    return safePresentationAmount(
+      (BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0") || "0")).toString(),
+    );
+  }
   if (!/^\d+$/.test(trimmed)) {
     throw new FinancePresentationError("Enter a positive whole amount of rupiah.");
   }
@@ -89,6 +101,7 @@ export function mapOwnedTransaction(
       "A linked account or category could not be loaded. Refresh your records and try again.",
     );
   }
+  const reportingMoney = transactionReportingMoney(transaction);
   return {
     id: transaction.id,
     merchant: transaction.merchantName ?? transaction.description,
@@ -98,6 +111,8 @@ export function mapOwnedTransaction(
     amount:
       transaction.money === null ? null : safePresentationAmount(transaction.money.amountMinor),
     currency: transaction.money?.currency ?? null,
+    reportingAmount:
+      reportingMoney === null ? null : safePresentationAmount(reportingMoney.amountMinor),
     date: transaction.occurredOn,
     // SQL returns HH:mm:ss. Keep compact display time separate from the exact source value below.
     time: transaction.occurredTime?.slice(0, 5) ?? null,

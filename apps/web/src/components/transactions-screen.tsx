@@ -3,7 +3,6 @@
 import { Button, Card, InputGroup, Label, TextField } from "@monara/ui";
 import { useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
-
 import { FinancialSummary } from "@/components/financial-summary";
 import { ForecastLedger } from "@/components/forecast-ledger";
 import { Icon, type IconName } from "@/components/icon";
@@ -11,7 +10,13 @@ import { MonthSelector } from "@/components/month-selector";
 import { TransactionRow } from "@/components/transaction-row";
 import styles from "@/components/transactions-screen.module.css";
 import type { LedgerKind } from "@/data/app-navigation";
-import { demoToday, formatMonth, type Transaction, transactionErrors } from "@/data/demo-ledger";
+import {
+  demoToday,
+  formatMonth,
+  reportingAmountFor,
+  type Transaction,
+  transactionErrors,
+} from "@/data/demo-ledger";
 
 import { financialSummaryModel } from "@/data/finance-analytics";
 
@@ -42,7 +47,7 @@ function groupByDate(transactions: Transaction[]) {
     const group = groups.get(key) ?? { transactions: [], spending: BigInt(0) };
     group.transactions.push(transaction);
     if (transaction.status === "confirmed" && transaction.kind === "expense") {
-      group.spending += BigInt(transaction.amount ?? 0);
+      group.spending += BigInt(reportingAmountFor(transaction) ?? 0);
     }
     groups.set(key, group);
   }

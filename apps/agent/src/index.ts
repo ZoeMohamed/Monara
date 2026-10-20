@@ -1,6 +1,7 @@
 import { handleChatRequest } from "./conversation/index.ts";
 import type { Env } from "./env.ts";
 import { dispatchDailyForecast, FORECAST_CRON, handleForecastRefine } from "./forecast.ts";
+import { recoverCurrencyConversions } from "./fx.ts";
 import {
   consumeGmailJobs,
   consumeMerchantJobs,
@@ -46,7 +47,10 @@ export default {
   },
 
   scheduled(controller, env) {
-    if (controller.cron === "* * * * *") return processUserDeletions(env);
+    if (controller.cron === "* * * * *")
+      return Promise.all([processUserDeletions(env), recoverCurrencyConversions(env)]).then(
+        () => {},
+      );
     if (controller.cron === "0 1 * * *") return scheduleGmailDaily(env);
     if (controller.cron === "*/15 * * * *") return dispatchReminders(env);
     if (controller.cron === FORECAST_CRON) return dispatchDailyForecast(env);

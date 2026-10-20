@@ -3,6 +3,7 @@ import {
   type ExtractedTransaction,
   extractedTransactionSchema,
   localTimeSchema,
+  transactionMoneySchema,
 } from "@monara/contracts";
 import { z } from "zod";
 import type { EmailForExtraction } from "../email-text.ts";
@@ -73,8 +74,9 @@ Rules:
 - isTransfer: true only when the email explicitly states a transfer or top-up between accounts. Purchases, bill payments, and refunds are false.
 - counterpartyType: "business" only for an identifiable business name; "person" for a personal name; "unknown" when unclear. Never treat bank routing text, account numbers, or a payment reference as a business name.
 - counterpartyName: the other person or business in the transaction, as payer or recipient, copied exactly as written. Null if not stated.
-- amountText: the amount copied exactly as written in the email, including its currency symbol, for example "Rp 150.000" or "IDR 1,250,000.00". Null if no amount is stated. Never calculate or convert.
-- currency: the ISO code the email uses, such as "IDR" or "USD". Null if not stated.
+- amountText: the amount copied exactly as written, including its currency symbol. Prefer the actual bank-stated IDR debit when both an original USD price and an IDR debit appear. Otherwise copy the original amount, including cents. Null if no amount is stated. Never calculate or convert, and never split a purchase and its converted debit into two transactions.
+- originalAmountText: when amountText is a bank-stated IDR debit and the email also gives the original USD price for that same purchase, copy that original USD amount exactly, including its currency marker. Otherwise null. Never use a balance, fee, exchange rate or unrelated amount.
+- currency: IDR for Rp/IDR, USD for USD/US$ or a bare dollar sign. These are the only supported currencies. Preserve any explicit other currency code so the application can leave it for review. Null when currency is entirely absent; the application will default it to IDR. An explicit other currency is never an absent currency.
 - occurredOn (YYYY-MM-DD) and occurredTime (HH:mm) only when the email states them. Null otherwise.
 - merchantName: the merchant, payer, or recipient. description: a short neutral summary. accountHint: the card, bank, or wallet named, keeping any masking such as "BCA ****1234".
 - location: the store branch, address, or city copied exactly as written in the email. Null if not stated.
@@ -103,6 +105,7 @@ const RESPONSE_SCHEMA = {
           "counterpartyType",
           "isTransfer",
           "amountText",
+          "originalAmountText",
           "currency",
           "occurredOn",
           "occurredTime",
@@ -120,6 +123,7 @@ const RESPONSE_SCHEMA = {
           counterpartyType: { type: "string", enum: ["business", "person", "unknown"] },
           isTransfer: { type: "boolean" },
           amountText: nullableString,
+          originalAmountText: nullableString,
           currency: nullableString,
           occurredOn: nullableString,
           occurredTime: nullableString,
@@ -147,6 +151,7 @@ const modelOutputSchema = z.object({
       isTransfer: z.boolean().default(false),
       internalTransfer: z.boolean().default(false),
       amountText: z.string().nullable(),
+      originalAmountText: z.string().nullable().default(null),
       currency: z.string().nullable(),
       occurredOn: z.string().nullable(),
       occurredTime: z.string().nullable(),
@@ -208,8 +213,35 @@ function cleanDisplayName(value: string | null): string | null {
   return `${prefix}…${")".repeat(openCount(prefix))}`;
 }
 
-const RUPIAH_CURRENCY_MARKER = /(?:\bIDR\b|\bRp(?=\s|[.\d]))/i;
+const RUPIAH_CURRENCY_MARKER = /(?:\bIDR(?=\s|[.\d]|$)|\bRp(?=\s|[.\d]))/i;
 const FOREIGN_CURRENCY_MARKERS = /\$|€|£|¥|\b(?:USD|SGD|EUR|GBP|JPY|MYR|AUD|US\$)\b/i;
+
+const UNSUPPORTED_CURRENCY =
+  /(?:\b(?:SGD|EUR|GBP|JPY|MYR|AUD|CAD|HKD|NZD|CNY|INR|CHF|KRW|THB)\b|\b(?:S|A|C|HK|NZ)\s*\$|[€£¥₹₩฿])/i;
+
+export function parseTransactionAmount(amountText: string, currency: string | null = null) {
+  const hint = currency?.trim().toUpperCase() ?? null;
+  if (UNSUPPORTED_CURRENCY.test(amountText) || (hint !== null && hint !== "IDR" && hint !== "USD"))
+    return null;
+  const usd = /\$|\bUSD(?=\s|[.\d]|$)/i.test(amountText);
+  const idr = RUPIAH_CURRENCY_MARKER.test(amountText);
+  if ((usd && idr) || (usd && hint === "IDR") || (idr && hint === "USD")) return null;
+  if (usd || hint === "USD") {
+    const numeral = amountText.replace(/(?:\bUSD(?=\s|[.\d]|$)|US\$|\$)/gi, "").trim();
+    if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(numeral)) return null;
+    const [whole, fraction = ""] = numeral.replaceAll(",", "").split(".");
+    const amountMinor = (BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0") || "0")).toString();
+    const parsed = transactionMoneySchema.safeParse({ amountMinor, currency: "USD" });
+    return parsed.success ? { money: parsed.data, inferred: false } : null;
+  }
+  const inferred = !idr && hint === null;
+  if (!/^[\d.,\s]+$/.test(amountText.replace(/\bIDR(?=\s|[.\d]|$)|\bRp\.?/gi, "").trim()))
+    return null;
+  const amountMinor = parseRupiahAmount(idr ? amountText : `IDR ${amountText}`);
+  return amountMinor === null
+    ? null
+    : { money: { amountMinor, currency: "IDR" as const }, inferred };
+}
 
 /**
  * Parses a Rupiah amount as written, e.g. "Rp 150.000", "IDR 1,250,000.00",
@@ -275,15 +307,19 @@ export function lastFourFromHint(hint: string | null): string | null {
 function toExtractedTransaction(item: ModelItem, email: EmailForExtraction): ExtractedTransaction {
   let guarded = false;
 
-  let amountMinor: string | null = null;
-  if (item.amountText !== null) {
-    const currencyIsRupiah = item.currency === null || item.currency.trim().toUpperCase() === "IDR";
-    amountMinor =
-      currencyIsRupiah && appearsInEmail(item.amountText, email)
-        ? parseRupiahAmount(item.amountText)
-        : null;
-    if (amountMinor === null) guarded = true;
-  }
+  const statedCurrency =
+    item.currency !== null && appearsInEmail(item.currency, email) ? item.currency : null;
+  const parsed =
+    item.amountText !== null && appearsInEmail(item.amountText, email)
+      ? parseTransactionAmount(item.amountText, statedCurrency)
+      : null;
+  if (item.amountText !== null && parsed === null) guarded = true;
+  const original =
+    parsed?.money.currency === "IDR" &&
+    item.originalAmountText !== null &&
+    appearsInEmail(item.originalAmountText, email)
+      ? parseTransactionAmount(item.originalAmountText)
+      : null;
 
   const statedDate = guardDate(item.occurredOn, email.receivedAt);
   const rejectedDate = item.occurredOn !== null && statedDate === null;
@@ -318,7 +354,9 @@ function toExtractedTransaction(item: ModelItem, email: EmailForExtraction): Ext
     counterpartyType: item.counterpartyType,
     isTransfer: item.isTransfer,
     internalTransfer: item.internalTransfer,
-    money: amountMinor === null ? null : { amountMinor, currency: "IDR" },
+    money: parsed?.money ?? null,
+    ...(parsed?.inferred ? { currencyInferred: true } : {}),
+    ...(original?.money.currency === "USD" ? { originalMoney: original.money } : {}),
     occurredOn,
     occurredTime,
     description: cleanText(item.description, 1_000),

@@ -47,6 +47,40 @@ const callTool = (name: string, args: unknown): AssistantMessage => ({
   ],
 });
 
+test("USD tool turns preserve cents and explain pending conversion to the model", async () => {
+  const outcome = await run({
+    turns: [
+      callTool("add_transaction", {
+        kind: "expense",
+        merchantName: "YouTube",
+        money: { amountMinor: "1999", currency: "USD" },
+        occurredOn: "2026-10-13",
+        financialAccountId: accountId,
+      }),
+      { role: "assistant", content: "Saved US$19.99. Conversion is pending." },
+    ],
+    backendResult: {
+      transaction: {
+        ...lunch,
+        money: { amountMinor: "1999", currency: "USD" },
+        idrMoney: null,
+        reviewStatus: "pending",
+      },
+      action: receipt,
+    },
+  });
+  const input = outcome.operations[0]?.input as { money?: unknown };
+  assert.deepEqual(input.money, { amountMinor: "1999", currency: "USD" });
+  assert.equal(outcome.result?.transaction.reviewStatus, "pending");
+  const system = outcome.seen[0]?.find((message) => message.role === "system");
+  assert.ok(system && typeof system.content === "string");
+  assert.match(system.content, /USD.*cents/);
+  assert.match(system.content, /1999.*19\.99/);
+  assert.match(system.content, /idrMoney/);
+  assert.match(system.content, /pending.*conversion|conversion.*pending/);
+  assert.doesNotMatch(system.content, /Amounts arrive as amountMinor, a whole number of rupiah/);
+});
+
 /** Plays scripted model turns against the write tools and a fake backend. */
 async function run(input: {
   turns: AssistantMessage[];

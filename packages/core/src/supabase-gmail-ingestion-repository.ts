@@ -23,6 +23,7 @@ import {
   type GmailIngestionRepository,
 } from "./gmail-ingestion.ts";
 import { loadCustomBanks } from "./supabase-custom-banks.ts";
+import { createSupabaseFxService } from "./supabase-fx.ts";
 
 /** Postgres error codes are safe to inspect; messages and details are not returned. */
 function fail(error: { code?: string }): never {
@@ -186,6 +187,15 @@ export function createSupabaseGmailIngestionRepository(
     },
 
     async recordExtraction(input) {
+      const days = [
+        ...new Set(
+          input.items.flatMap((item) =>
+            item.money?.currency === "USD" && item.occurredOn ? [item.occurredOn] : [],
+          ),
+        ),
+      ];
+      const fx = createSupabaseFxService(client);
+      await Promise.all(days.map((day) => fx.rateFor(day)));
       const { data, error } = await client
         .rpc("record_gmail_extraction", {
           p_processed_message_id: input.processedMessageId,

@@ -19,7 +19,7 @@ export function createSupabaseForecastRepository(
       for (let offset = 0; ; offset += PAGE) {
         const result = await client
           .from("transactions")
-          .select("id, occurred_on, merchant_name, category_id, amount")
+          .select("id, occurred_on, merchant_name, category_id, amount, currency, idr_amount")
           .eq("user_id", userId)
           .eq("transaction_type", "expense")
           .eq("review_status", "confirmed")
@@ -31,13 +31,14 @@ export function createSupabaseForecastRepository(
           .range(offset, offset + PAGE - 1);
         if (result.error) fail();
         for (const row of result.data) {
-          if (row.occurred_on === null || row.amount === null) continue;
+          const amount = row.currency === "IDR" ? row.amount : row.idr_amount;
+          if (row.occurred_on === null || amount === null) continue;
           rows.push({
             id: row.id,
             occurredOn: row.occurred_on,
             merchantName: row.merchant_name,
             categoryId: row.category_id,
-            amount: Number(row.amount),
+            amount: Number(amount),
           });
         }
         if (result.data.length < PAGE) return rows;

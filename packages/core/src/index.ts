@@ -23,6 +23,7 @@ export {
   jakartaDate,
   type RefineForecast,
 } from "./forecast-service.ts";
+export { createFxService, FX_LOOKUP_TIMEOUT_MS, type FxService } from "./fx.ts";
 export { createSupabaseGmailConnectionRepository } from "./gmail-connection-repository.ts";
 export {
   createGmailConnectionService,
@@ -49,6 +50,7 @@ export { createSupabaseBudgetAlertRepository } from "./supabase-budget-alert-rep
 export { createSupabaseChatHistoryRepository } from "./supabase-chat-history-repository.ts";
 export { createSupabaseFinanceRepository } from "./supabase-finance-repository.ts";
 export { createSupabaseForecastRepository } from "./supabase-forecast-repository.ts";
+export { createSupabaseFxService, recoverTransactionFx } from "./supabase-fx.ts";
 export { createSupabaseGmailIngestionRepository } from "./supabase-gmail-ingestion-repository.ts";
 export {
   createSupabaseGoalImageUploadRepository,

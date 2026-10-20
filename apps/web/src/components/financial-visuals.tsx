@@ -79,7 +79,7 @@ function ChartTransactions({
   onOpenTransaction?: (transaction: Transaction) => void;
   showDate?: boolean;
 }) {
-  const { formatRupiah } = useAmountDisplay();
+  const { formatMoney } = useAmountDisplay();
   return (
     <ul className="mt-2 divide-y divide-border">
       {records.map((record) => (
@@ -102,7 +102,9 @@ function ChartTransactions({
                 </span>
               </span>
               <strong className="max-w-[47%] break-words text-right tabular-nums">
-                {record.amount === null ? "Amount missing" : formatRupiah(record.amount)}
+                {record.amount === null
+                  ? "Amount missing"
+                  : formatMoney(record.amount, record.currency)}
               </strong>
             </div>
           )}

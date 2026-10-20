@@ -10,6 +10,7 @@ import {
   shiftMonth,
   type Transaction,
 } from "./demo-ledger";
+import { reportingAmountFor } from "./demo-ledger.ts";
 
 type DailyFinance = {
   date: string;
@@ -83,7 +84,7 @@ export function financialMonth(transactions: Transaction[], month: string, today
         amount: BigInt(0),
         count: 0,
       };
-      category.amount += BigInt(transaction.amount ?? 0);
+      category.amount += BigInt(reportingAmountFor(transaction) ?? 0);
       category.count += 1;
       groupedCategories.set(key, category);
     }
@@ -98,8 +99,8 @@ export function financialMonth(transactions: Transaction[], month: string, today
     let spending = BigInt(0);
     let income = BigInt(0);
     for (const transaction of dayTransactions) {
-      if (transaction.kind === "expense") spending += BigInt(transaction.amount ?? 0);
-      if (transaction.kind === "income") income += BigInt(transaction.amount ?? 0);
+      if (transaction.kind === "expense") spending += BigInt(reportingAmountFor(transaction) ?? 0);
+      if (transaction.kind === "income") income += BigInt(reportingAmountFor(transaction) ?? 0);
     }
     cumulativeSpending += spending;
     if (spending > maxDailySpending) maxDailySpending = spending;
@@ -236,7 +237,7 @@ export function yearComparison(transactions: Transaction[], year: string, today 
       (record) => record.kind === "expense" && record.date !== null && record.date <= end,
     );
   const sum = (records: Transaction[]) =>
-    records.reduce((total, record) => total + BigInt(record.amount ?? 0), BigInt(0));
+    records.reduce((total, record) => total + BigInt(reportingAmountFor(record) ?? 0), BigInt(0));
   const currentSpending = sum(expensesThrough(current.confirmed, currentEnd));
   if (year === "0000") {
     return {

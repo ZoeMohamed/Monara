@@ -181,7 +181,7 @@ export function SpendingFlow({
   month: string;
   onOpenTransaction?: (transaction: Transaction) => void;
 }) {
-  const { formatRupiah } = useAmountDisplay();
+  const { formatRupiah, formatMoney } = useAmountDisplay();
   const [categorySelection, setCategorySelection] = useState<string | null>(null);
   const [merchantName, setMerchantName] = useState<string | null>(null);
   const [layout, setLayout] = useState<FlowLayout | null>(null);
@@ -328,7 +328,9 @@ export function SpendingFlow({
                     <span>
                       {record.date} · {record.method ?? "Account not assigned"}
                     </span>
-                    <strong className="tabular-nums">{formatRupiah(record.amount ?? 0)}</strong>
+                    <strong className="tabular-nums">
+                      {formatMoney(record.amount ?? 0, record.currency)}
+                    </strong>
                   </p>
                 ),
               )}

@@ -68,7 +68,7 @@ function listOf(items: string[]): string {
 
 function detailsOf(
   transaction: Transaction,
-  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
+  formatMoney: ReturnType<typeof useAmountDisplay>["formatMoney"],
 ) {
   const pending = transaction.status === "pending";
   const editable = pending || transaction.status === "confirmed";
@@ -86,6 +86,33 @@ function detailsOf(
       ["Type", transaction.kind ? typeLabels[transaction.kind] : "Not selected"],
       ["Currency", transaction.currency || "Not provided"],
       ["Status", statusLabels[transaction.status]],
+      ...(transaction.currency === "USD"
+        ? [
+            [
+              "IDR equivalent",
+              transaction.reportingAmount == null
+                ? "Conversion pending"
+                : `≈${formatMoney(transaction.reportingAmount, "IDR")}`,
+            ],
+          ]
+        : []),
+      ...(transaction.backend?.fxSnapshot
+        ? [
+            ["Reference rate day", transaction.backend.fxSnapshot.rateDate],
+            ["Rate source", "ECB via Frankfurter"],
+          ]
+        : []),
+      ...(transaction.backend?.originalMoney
+        ? [
+            [
+              "Original price",
+              formatMoney(
+                BigInt(transaction.backend.originalMoney.amountMinor),
+                transaction.backend.originalMoney.currency,
+              ),
+            ],
+          ]
+        : []),
     ],
     merchant: transaction.merchant || "Transaction",
     when: transaction.time ? `${date} · ${transaction.time}` : date,
@@ -96,19 +123,21 @@ function detailsOf(
             transaction.amount < 0 ||
             (transaction.amount === 0 && transaction.kind !== "exclusion")
           ? "Amount invalid"
-          : transaction.currency === "IDR"
-            ? `${sign}${formatRupiah(transaction.amount)}`
+          : transaction.currency === "IDR" || transaction.currency === "USD"
+            ? `${sign}${formatMoney(transaction.amount, transaction.currency)}`
             : "Currency missing",
     help:
-      missing.length === 0
-        ? transaction.kind === "exclusion"
-          ? "Confirm to finish reviewing. This exclusion will stay out of your totals."
-          : "Not included in totals until confirmed."
-        : pending
-          ? missing.includes("date")
-            ? `Open Edit to add the ${listOf(missing)}. The actual date is needed before you can confirm or exclude this record.`
-            : `Open Edit to add the ${listOf(missing)} before confirming, or exclude it to keep it out of your totals.`
-          : `Add the ${listOf(missing)} to include it in your totals.`,
+      transaction.currency === "USD" && transaction.reportingAmount == null
+        ? "Saved in USD. Awaiting conversion; this transaction stays out of IDR totals until converted and confirmed."
+        : missing.length === 0
+          ? transaction.kind === "exclusion"
+            ? "Confirm to finish reviewing. This exclusion will stay out of your totals."
+            : "Not included in totals until confirmed."
+          : pending
+            ? missing.includes("date")
+              ? `Open Edit to add the ${listOf(missing)}. The actual date is needed before you can confirm or exclude this record.`
+              : `Open Edit to add the ${listOf(missing)} before confirming, or exclude it to keep it out of your totals.`
+            : `Add the ${listOf(missing)} to include it in your totals.`,
   };
 }
 
@@ -129,7 +158,7 @@ function DeleteConfirmation({
   refreshRequired?: boolean;
   onRefreshRecords?: () => Promise<void>;
 }) {
-  const { formatRupiah } = useAmountDisplay();
+  const { formatMoney } = useAmountDisplay();
   const effect =
     transaction.kind === "expense"
       ? "This expense will leave your spending and budgets."
@@ -142,7 +171,7 @@ function DeleteConfirmation({
         Delete transaction?
       </h2>
       <p className="mt-4 break-words text-lg font-bold">
-        {transaction.merchant || "Transaction"} · {detailsOf(transaction, formatRupiah).amount}
+        {transaction.merchant || "Transaction"} · {detailsOf(transaction, formatMoney).amount}
       </p>
       <p className="mt-2 text-sm text-muted">
         {effect}{" "}
@@ -536,8 +565,8 @@ function TransactionActions({
 }
 
 export function TransactionDetails(props: TransactionDetailsProps) {
-  const { formatRupiah } = useAmountDisplay();
-  const details = detailsOf(props.transaction, formatRupiah);
+  const { formatMoney } = useAmountDisplay();
+  const details = detailsOf(props.transaction, formatMoney);
   const deletion = useTransactionDeletion(props);
   return (
     <ModalDialog labelledBy="transaction-details-title" onClose={deletion.close}>

@@ -230,3 +230,23 @@ describe("Gmail onboarding import feed", () => {
     assert.equal(receivedSignal.aborted, true);
   });
 });
+
+it("keeps original USD cents and currency in onboarding even before conversion", async () => {
+  reset();
+  state.accountPages.set("start", { items: [account()], nextCursor: null });
+  state.transactionPages.set("start", {
+    items: [
+      transaction({
+        money: { amountMinor: "1999", currency: "USD" },
+        reviewStatus: "pending",
+        idrMoney: null,
+      }),
+    ],
+    nextCursor: null,
+  });
+  const feed = await loadImportFeed(mailboxId);
+  assert.equal(feed.length, 1);
+  assert.equal(feed[0].amount, 1999);
+  assert.equal(feed[0].currency, "USD");
+  assert.equal(feed[0].needsReview, true);
+});

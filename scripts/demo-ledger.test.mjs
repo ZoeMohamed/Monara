@@ -43,6 +43,58 @@ function valuesOf(transaction) {
   return { merchant, category, amount, currency, date, time, method, kind };
 }
 
+test("USD confirmation stays pending until a saved conversion is available", () => {
+  const pending = syntheticTransaction({ currency: "USD", amount: 1999 });
+  const [unconverted] = updatePendingTransaction(
+    [pending],
+    pending.id,
+    valuesOf(pending),
+    "confirm",
+  );
+  assert.equal(unconverted.status, "pending");
+  assert.equal(demoSummary([unconverted]).spending, 0n);
+  const converted = { ...pending, reportingAmount: 329837 };
+  const [confirmed] = updatePendingTransaction(
+    [converted],
+    converted.id,
+    valuesOf(converted),
+    "confirm",
+  );
+  assert.equal(confirmed.status, "confirmed");
+  assert.equal(demoSummary([confirmed]).spending, 329837n);
+});
+
+test("USD financial edits clear stale conversions while unrelated edits retain them", () => {
+  const original = syntheticTransaction({
+    currency: "USD",
+    amount: 1999,
+    reportingAmount: 329837,
+    status: "confirmed",
+  });
+  const [renamed] = updateConfirmedTransaction([original], original.id, {
+    ...valuesOf(original),
+    merchant: "Renamed subscription",
+  });
+  assert.equal(renamed.reportingAmount, 329837);
+  assert.equal(renamed.status, "confirmed");
+  for (const changes of [{ amount: 2501 }, { date: "2026-10-12" }]) {
+    const [edited] = updateConfirmedTransaction([original], original.id, {
+      ...valuesOf(original),
+      ...changes,
+    });
+    assert.equal(edited.reportingAmount, null);
+    assert.equal(edited.status, "pending");
+  }
+  const idr = syntheticTransaction({ status: "confirmed" });
+  const [usd] = updateConfirmedTransaction([idr], idr.id, {
+    ...valuesOf(idr),
+    amount: 1999,
+    currency: "USD",
+  });
+  assert.equal(usd.status, "pending");
+  assert.equal(usd.reportingAmount, null);
+});
+
 test("calendar validation accepts leap days and rejects normalized or malformed dates", () => {
   for (const date of ["0000-02-29", "2024-02-29", "2000-02-29", "2026-02-28", "2026-12-31"]) {
     assert.equal(isCalendarDate(date), true, date);
@@ -134,7 +186,7 @@ test("amount validation rejects nonfinite, nonpositive, fractional, and unsafe r
 });
 
 test("invalid type, unsupported currency, and impossible date each prevent confirmation", () => {
-  for (const override of [{ kind: "payment" }, { currency: "USD" }, { date: "2026-02-30" }]) {
+  for (const override of [{ kind: "payment" }, { currency: "EUR" }, { date: "2026-02-30" }]) {
     const pending = syntheticTransaction(override);
     const original = [pending];
     assert.ok(Object.keys(transactionErrors(valuesOf(pending))).length > 0);
@@ -405,7 +457,7 @@ test("invalid corrections, unconfirmed records, and unknown identifiers leave th
     { amount: Number.MAX_SAFE_INTEGER + 1 },
     { date: "2026-02-30" },
     { kind: null },
-    { currency: "USD" },
+    { currency: "EUR" },
   ]) {
     assert.equal(
       updateConfirmedTransaction(original, confirmed.id, { ...valuesOf(confirmed), ...overrides }),

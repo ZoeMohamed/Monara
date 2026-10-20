@@ -10,6 +10,7 @@ import {
   type Reminder,
   reminderSchema,
   type Transaction,
+  type TransactionValues,
   transactionSchema,
 } from "@monara/contracts";
 import type { Database, MonaraServiceRoleClient } from "@monara/db";
@@ -19,6 +20,7 @@ import {
   loadCustomBanks,
   replaceCustomBank,
 } from "./supabase-custom-banks.ts";
+import { createSupabaseFxService } from "./supabase-fx.ts";
 
 type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];
 type AccountRow = Pick<
@@ -71,7 +73,7 @@ type ReminderRow = Pick<
 >;
 
 const TRANSACTION_COLUMNS =
-  "id, financial_account_id, category_id, source_type, transaction_type, flow_direction, merchant_name, amount::text, currency, occurred_on, occurred_time, description, location, account_hint, ai_confidence, review_status, deleted_at, created_at, updated_at";
+  "id, financial_account_id, category_id, source_type, transaction_type, flow_direction, merchant_name, amount::text, currency, occurred_on, occurred_time, description, location, account_hint, ai_confidence, review_status, deleted_at, created_at, updated_at, idr_amount::text, fx_snapshot, original_money";
 const ACCOUNT_COLUMNS =
   "id, name, institution, account_type, currency, last_four, institution_key, gmail_connection_id, is_active, created_at, updated_at, custom_bank:custom_banks(name, logo)";
 const CATEGORY_COLUMNS =
@@ -83,7 +85,10 @@ const FINANCIAL_GOAL_COLUMNS =
 const REMINDER_COLUMNS =
   "id, budget_id, recurring_bill_id, kind, status, dedupe_key, period_starts_on, threshold_percent, offset_days, title, message, scheduled_for, read_at, created_at, updated_at";
 
-type ExactTransactionRow = Omit<TransactionRow, "amount"> & { amount: string | null };
+type ExactTransactionRow = Omit<TransactionRow, "amount" | "idr_amount"> & {
+  amount: string | null;
+  idr_amount: string | null;
+};
 type ExactBudgetRow = Omit<BudgetRow, "limit_amount"> & { limit_amount: string };
 type ExactFinancialGoalRow = Omit<FinancialGoalRow, "target_amount" | "saved_amount"> & {
   target_amount: string;
@@ -174,6 +179,10 @@ function toTransaction(row: ExactTransactionRow): Transaction {
       row.amount === null || row.currency === null
         ? null
         : { amountMinor: String(row.amount), currency: row.currency },
+    idrMoney:
+      row.idr_amount == null ? null : { amountMinor: String(row.idr_amount), currency: "IDR" },
+    fxSnapshot: row.fx_snapshot ?? null,
+    originalMoney: row.original_money ?? null,
     occurredOn: row.occurred_on,
     occurredTime: row.occurred_time,
     description: row.description,
@@ -327,6 +336,22 @@ async function missingOrConflict(
 export function createSupabaseFinanceRepository(
   client: MonaraServiceRoleClient,
 ): FinanceRepository {
+  const fx = createSupabaseFxService(client);
+  async function prepareCurrency(
+    values: TransactionValues,
+    previous?: Transaction,
+    retryMissing = false,
+  ) {
+    if (values.money?.currency !== "USD" || !values.occurredOn) return;
+    if (
+      previous?.money?.currency === "USD" &&
+      previous.money.amountMinor === values.money.amountMinor &&
+      previous.occurredOn === values.occurredOn &&
+      (previous.fxSnapshot || !retryMissing)
+    )
+      return;
+    await fx.rateFor(values.occurredOn);
+  }
   const findTransaction = async (userId: string, transactionId: string) => {
     const result = await client
       .from("transactions")
@@ -420,6 +445,7 @@ export function createSupabaseFinanceRepository(
     },
 
     async createPendingTransaction({ userId, source, clientRequestId, values, confidence }) {
+      await prepareCurrency(values);
       const inserted = await client
         .from("transactions")
         .insert({
@@ -447,6 +473,7 @@ export function createSupabaseFinanceRepository(
     },
 
     async createTransaction({ userId, source, values }) {
+      await prepareCurrency(values);
       const inserted = await client
         .from("transactions")
         .insert({
@@ -493,6 +520,7 @@ export function createSupabaseFinanceRepository(
     },
 
     async replaceTransaction(input) {
+      await prepareCurrency(input.values, input.previous, input.reviewStatus === "confirmed");
       const result = await client
         .from("transactions")
         .update({ ...transactionUpdate(input.values), review_status: input.reviewStatus })

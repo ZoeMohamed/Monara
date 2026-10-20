@@ -1,5 +1,6 @@
 import type { FinancialGoal } from "@monara/contracts";
 import type { Transaction } from "@/data/demo-ledger";
+import { reportingAmountFor } from "../../data/demo-ledger.ts";
 
 const DAY_MS = 86_400_000;
 const dayNumber = (date: string) => Math.floor(Date.parse(`${date}T00:00:00Z`) / DAY_MS);
@@ -46,7 +47,7 @@ export function buildGoalPlan(
     if (
       transaction.status !== "confirmed" ||
       transaction.kind === "exclusion" ||
-      transaction.amount === null ||
+      reportingAmountFor(transaction) === null ||
       transaction.date === null
     )
       continue;
@@ -55,8 +56,8 @@ export function buildGoalPlan(
       continue;
     eligible += 1;
     earliestSeen = Math.min(earliestSeen, transactionDay);
-    if (transaction.kind === "income") income += BigInt(transaction.amount);
-    else expense += BigInt(transaction.amount);
+    if (transaction.kind === "income") income += BigInt(reportingAmountFor(transaction) ?? 0);
+    else expense += BigInt(reportingAmountFor(transaction) ?? 0);
   }
   const coveredDays = eligible === 0 ? 0 : todayDay - earliestSeen + 1;
   const confirmedMonths =

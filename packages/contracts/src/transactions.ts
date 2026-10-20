@@ -12,6 +12,7 @@ import {
   reversibleActionReceiptSchema,
   transactionIdSchema,
 } from "./common.ts";
+import { fxSnapshotSchema, transactionMoneySchema } from "./transaction-money.ts";
 
 export const transactionKindSchema = z.enum(["expense", "income", "exclusion"]);
 export const transactionFlowDirectionSchema = z.enum(["in", "out"]);
@@ -30,7 +31,7 @@ const transactionValuesShape = {
   /** Stated cash direction, also retained for exclusions and unknown pending types. */
   flowDirection: transactionFlowDirectionSchema.nullable().optional(),
   merchantName: z.string().trim().min(1).max(200).nullable(),
-  money: positiveMoneySchema.nullable(),
+  money: transactionMoneySchema.nullable(),
   occurredOn: calendarDateSchema.nullable(),
   occurredTime: localTimeSchema.nullable(),
   description: z.string().trim().min(1).max(1_000).nullable(),
@@ -89,6 +90,9 @@ export const transactionSchema = z
   .object({
     id: transactionIdSchema,
     ...transactionValuesShape,
+    idrMoney: positiveMoneySchema.nullable().optional(),
+    fxSnapshot: fxSnapshotSchema.nullable().optional(),
+    originalMoney: transactionMoneySchema.nullable().optional(),
     reviewStatus: transactionReviewStatusSchema,
     source: transactionSourceSchema,
     confidence: z.number().min(0).max(1).nullable(),
@@ -97,7 +101,21 @@ export const transactionSchema = z
     updatedAt: isoDateTimeSchema,
   })
   .strict()
-  .superRefine(validateTransactionValues);
+  .superRefine((value, context) => {
+    validateTransactionValues(value, context);
+    if (
+      value.reviewStatus === "confirmed" &&
+      value.kind !== "exclusion" &&
+      value.money?.currency === "USD" &&
+      !value.idrMoney
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["idrMoney"],
+        message: "Confirmed USD transactions need a saved IDR conversion.",
+      });
+    }
+  });
 
 export const confirmedTransactionValuesSchema = transactionValuesSchema.superRefine(
   (value, context) => validateTransactionValues({ ...value, reviewStatus: "confirmed" }, context),
@@ -157,7 +175,7 @@ const editableTransactionFieldsSchema = transactionValuesSchema.partial().strict
 const editableConfirmedTransactionFieldsSchema = transactionValuesSchema
   .extend({
     kind: transactionKindSchema,
-    money: positiveMoneySchema,
+    money: transactionMoneySchema,
     occurredOn: calendarDateSchema,
   })
   .partial()

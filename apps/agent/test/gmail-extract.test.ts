@@ -11,6 +11,7 @@ import {
   extractTransactions,
   lastFourFromHint,
   parseRupiahAmount,
+  parseTransactionAmount,
 } from "../src/gmail/parse/extract.ts";
 
 // Synthetic emails only. Never add real mail here.
@@ -312,13 +313,13 @@ describe("extractTransactions", () => {
     assert.equal(result.confidence, 0.5);
   });
 
-  it("never converts a foreign currency", async () => {
+  it("preserves original USD cents without letting the LLM convert", async () => {
     const llm = fakeLlm({
       isTransactionEmail: true,
       items: [item({ amountText: "USD 12.00", currency: "USD" })],
     });
     const [result] = (await extractTransactions(llm, email("Charged USD 12.00"))).items;
-    assert.equal(result.money, null);
+    assert.deepEqual(result.money, { amountMinor: "1200", currency: "USD" });
   });
 
   it("uses the email's day when the stated date is impossible, and lowers confidence", async () => {
@@ -350,14 +351,14 @@ describe("extractTransactions", () => {
     assert.equal(result.occurredOn, "2026-10-10");
   });
 
-  it("never assigns IDR when the email states only a bare number", async () => {
+  it("defaults an unmarked amount to IDR while preserving its inferred-currency review gate", async () => {
     const llm = fakeLlm({
       isTransactionEmail: true,
       items: [item({ amountText: "25000", currency: null })],
     });
     const [result] = (await extractTransactions(llm, email("Total 25000"))).items;
-    assert.equal(result.money, null);
-    assert.equal(result.confidence, 0.5);
+    assert.deepEqual(result.money, { amountMinor: "25000", currency: "IDR" });
+    assert.equal(result.currencyInferred, true);
   });
 
   it("returns no items for a non-transaction email", async () => {
@@ -411,5 +412,57 @@ describe("extractTransactions", () => {
   it("throws on output that does not match the schema", async () => {
     const llm = fakeLlm({ items: "nope" });
     await assert.rejects(extractTransactions(llm, email("Total Rp 25.000")), ExtractionOutputError);
+  });
+});
+
+describe("IDR/USD currency evidence", () => {
+  it("uses the scoped dollar convention and preserves cents", () => {
+    assert.deepEqual(parseTransactionAmount("$19.99"), {
+      money: { amountMinor: "1999", currency: "USD" },
+      inferred: false,
+    });
+    assert.deepEqual(parseTransactionAmount("US$1,234.50"), {
+      money: { amountMinor: "123450", currency: "USD" },
+      inferred: false,
+    });
+    assert.deepEqual(parseTransactionAmount("20"), {
+      money: { amountMinor: "20", currency: "IDR" },
+      inferred: true,
+    });
+  });
+  it("keeps unsupported currencies, malformed amounts and conflicting markers out of finalized money", () => {
+    for (const value of [
+      "S$20",
+      "AUD 20",
+      "KWD20",
+      "€20",
+      "$1.234,56",
+      "$20.999",
+      "Rp -20",
+      "Rp20 to 30",
+      "USD20 IDR330000",
+    ]) {
+      assert.equal(parseTransactionAmount(value), null, value);
+    }
+  });
+  it("retains the original USD price beside a bank-stated IDR debit", async () => {
+    const llm = fakeLlm({
+      isTransactionEmail: true,
+      items: [item({ amountText: "Rp330.000", originalAmountText: "USD20.00" })],
+    });
+    const result = (
+      await extractTransactions(llm, email("Purchase USD20.00. Account debited Rp330.000."))
+    ).items[0];
+    assert.deepEqual(result.money, { amountMinor: "330000", currency: "IDR" });
+    assert.deepEqual(result.originalMoney, { amountMinor: "2000", currency: "USD" });
+  });
+  it("an invented currency code cannot bypass the no-currency review rule", async () => {
+    const llm = fakeLlm({
+      isTransactionEmail: true,
+      items: [item({ amountText: "20", currency: "USD" })],
+    });
+    const result = (await extractTransactions(llm, email("Total 20"))).items[0];
+    assert.deepEqual(result.money, { amountMinor: "20", currency: "IDR" });
+    assert.equal(result.currencyInferred, true);
   });
 });

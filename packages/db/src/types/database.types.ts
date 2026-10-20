@@ -245,6 +245,20 @@ isOneToOne: false
                   Relationships: [
 
                   ]
+                },"fx_reference_rates": {
+                  Row: {
+                    "created_at": string,"rate": number,"rate_date": string,"requested_on": string,"source": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"rate": number,"rate_date": string,"requested_on": string,"source"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"rate"?: number,"rate_date"?: string,"requested_on"?: string,"source"?: string
+                  }
+                  Relationships: [
+
+                  ]
                 },"gmail_connections": {
                   Row: {
                     "composio_connected_account_id": string,"composio_trigger_id": string | null,"created_at": string,"discovery_first_completed_at": string | null,"discovery_state": string,"discovery_updated_at": string | null,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"sync_error": string | null,"sync_pending_runs": number,"sync_requested_at": string | null,"sync_retry_until": string | null,"sync_state": string,"sync_updated_at": string | null,"updated_at": string,"user_id": string
@@ -409,14 +423,14 @@ isOneToOne: false
                   ]
                 },"transactions": {
                   Row: {
-                    "account_hint": string | null,"ai_confidence": number | null,"amount": number | null,"category_id": string | null,"client_request_id": string | null,"created_at": string,"currency": string | null,"deleted_at": string | null,"description": string | null,"financial_account_id": string | null,"flow_direction": string | null,"gmail_auto_confirm_pending": boolean,"gmail_classification_confidence": number | null,"gmail_classification_status": string | null,"gmail_extraction_evidence": Json | null,"id": string,"location": string | null,"merchant_name": string | null,"occurred_on": string | null,"occurred_time": string | null,"processed_gmail_message_id": string | null,"recurring_bill_id": string | null,"review_status": string,"source_item_index": number | null,"source_type": string,"transaction_type": string | null,"updated_at": string,"user_id": string
+                    "account_hint": string | null,"ai_confidence": number | null,"amount": number | null,"category_id": string | null,"client_request_id": string | null,"created_at": string,"currency": string | null,"deleted_at": string | null,"description": string | null,"financial_account_id": string | null,"flow_direction": string | null,"fx_auto_confirm_eligible": boolean,"fx_retry_after": string,"fx_retry_count": number,"fx_snapshot": Json | null,"gmail_auto_confirm_pending": boolean,"gmail_classification_confidence": number | null,"gmail_classification_status": string | null,"gmail_extraction_evidence": Json | null,"id": string,"idr_amount": number | null,"location": string | null,"merchant_name": string | null,"occurred_on": string | null,"occurred_time": string | null,"original_money": Json | null,"processed_gmail_message_id": string | null,"recurring_bill_id": string | null,"review_status": string,"source_item_index": number | null,"source_type": string,"transaction_type": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"flow_direction"?: string | null,"gmail_auto_confirm_pending"?: boolean,"gmail_classification_confidence"?: number | null,"gmail_classification_status"?: string | null,"gmail_extraction_evidence"?: Json | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status": string,"source_item_index"?: number | null,"source_type": string,"transaction_type"?: string | null,"updated_at"?: string,"user_id": string
+                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"flow_direction"?: string | null,"fx_auto_confirm_eligible"?: boolean,"fx_retry_after"?: string,"fx_retry_count"?: number,"fx_snapshot"?: Json | null,"gmail_auto_confirm_pending"?: boolean,"gmail_classification_confidence"?: number | null,"gmail_classification_status"?: string | null,"gmail_extraction_evidence"?: Json | null,"id"?: string,"idr_amount"?: number | null,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"original_money"?: never,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status": string,"source_item_index"?: number | null,"source_type": string,"transaction_type"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"flow_direction"?: string | null,"gmail_auto_confirm_pending"?: boolean,"gmail_classification_confidence"?: number | null,"gmail_classification_status"?: string | null,"gmail_extraction_evidence"?: Json | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status"?: string,"source_item_index"?: number | null,"source_type"?: string,"transaction_type"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"flow_direction"?: string | null,"fx_auto_confirm_eligible"?: boolean,"fx_retry_after"?: string,"fx_retry_count"?: number,"fx_snapshot"?: Json | null,"gmail_auto_confirm_pending"?: boolean,"gmail_classification_confidence"?: number | null,"gmail_classification_status"?: string | null,"gmail_extraction_evidence"?: Json | null,"id"?: string,"idr_amount"?: number | null,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"original_money"?: never,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status"?: string,"source_item_index"?: number | null,"source_type"?: string,"transaction_type"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -484,6 +498,11 @@ isOneToOne: false
                            } |
 { Args: { "p_agent_result": Json,"p_agent_text": string,"p_closed_confirmation": boolean,"p_conversation_id": string,"p_title": string,"p_user_id": string,"p_user_text": string }; Returns: undefined
                            },
+"apply_transaction_fx":
+{ Args: { "p_expected_updated_at": string,"p_transaction_id": string,"p_user_id": string }; Returns: {
+              "applied": boolean,"confirmed": boolean
+            }[]
+                           },
 "begin_goal_image_upload":
 { Args: { "p_expected_updated_at": string,"p_goal_id": string,"p_object_path": string,"p_upload_id": string,"p_user_id": string }; Returns: undefined
                            },
@@ -504,6 +523,11 @@ isOneToOne: false
 "claim_merchant_profile":
 { Args: { "p_merchant_key": string }; Returns: {
               "status": string,"summary": string
+            }[]
+                           },
+"claim_transaction_fx_jobs":
+{ Args: { "p_limit"?: number }; Returns: {
+              "expected_updated_at": string,"occurred_on": string,"transaction_id": string,"user_id": string
             }[]
                            },
 "claim_user_deletion":
@@ -613,15 +637,21 @@ isOneToOne: false
 "description": string | null,
 "financial_account_id": string | null,
 "flow_direction": string | null,
+"fx_auto_confirm_eligible": boolean,
+"fx_retry_after": string,
+"fx_retry_count": number,
+"fx_snapshot": Json | null,
 "gmail_auto_confirm_pending": boolean,
 "gmail_classification_confidence": number | null,
 "gmail_classification_status": string | null,
 "gmail_extraction_evidence": Json | null,
 "id": string,
+"idr_amount": number | null,
 "location": string | null,
 "merchant_name": string | null,
 "occurred_on": string | null,
 "occurred_time": string | null,
+"original_money": Json | null,
 "processed_gmail_message_id": string | null,
 "recurring_bill_id": string | null,
 "review_status": string,

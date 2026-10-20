@@ -15,6 +15,7 @@ import {
   listTransactionsInputSchema,
   reminderPageSchema,
   transactionPageSchema,
+  transactionReportingMoney,
 } from "@monara/contracts";
 import { z } from "zod";
 import type { AgentTool, ToolContext } from "./tools.ts";
@@ -65,8 +66,9 @@ async function summariseMonth(month: string, context: ToolContext) {
       }),
     );
     for (const transaction of result.items) {
-      if (!transaction.money || transaction.deletedAt || transaction.kind === "exclusion") continue;
-      const amount = BigInt(transaction.money.amountMinor);
+      const reportingMoney = transactionReportingMoney(transaction);
+      if (!reportingMoney || transaction.deletedAt || transaction.kind === "exclusion") continue;
+      const amount = BigInt(reportingMoney.amountMinor);
       transactionCount += 1;
       if (transaction.kind === "income") {
         income += amount;
@@ -146,7 +148,7 @@ export const readTools = [
   }),
   readTool({
     name: "list_transactions",
-    description: `Lists the User's transactions, newest first. Filter by month (YYYY-MM), kind (expense, income, or exclusion), or reviewStatus (pending or confirmed). Pending and exclusion records do not count towards totals. ${PAGING}`,
+    description: `Lists the User's transactions, newest first. money is the original amount: IDR uses whole rupiah and USD uses cents. idrMoney is the saved IDR reporting value; absent conversion leaves USD pending and excluded from totals. Filter by month (YYYY-MM), kind (expense, income, or exclusion), or reviewStatus (pending or confirmed). Pending and exclusion records do not count towards totals. ${PAGING}`,
     input: listTransactionsInputSchema,
     output: transactionPageSchema,
   }),

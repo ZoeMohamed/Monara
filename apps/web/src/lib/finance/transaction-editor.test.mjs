@@ -7,6 +7,7 @@ import ts from "typescript";
 import { mapOwnedTransaction } from "./presentation.ts";
 
 const editorUrl = new URL("../../components/transaction-editor.tsx", import.meta.url).href;
+const fieldsUrl = new URL("../../components/quick-add-fields.tsx", import.meta.url).href;
 const runtimeKey = Symbol.for("monara.transaction-editor-test");
 const reactSource = `
   const runtime = () => globalThis[Symbol.for("monara.transaction-editor-test")];
@@ -14,14 +15,17 @@ const reactSource = `
   export const useState = (...args) => runtime().useState(...args);
   export const useRef = (...args) => runtime().useRef(...args);
   export const useEffect = (...args) => runtime().useEffect(...args);
+  export const useId = () => "field-error";
 `;
 const uiSource = `export const Button = null, FieldError = null, Form = null,
   Input = null, Label = null, ListBox = null, Select = null, TextField = null,
   BrandLogoField = null, FinanceRecovery = null, CategoryAvatar = null,
-  Icon = null, ModalDialog = null, QuickAddFields = null;`;
+  Icon = null, ModalDialog = null, QuickAddFields = null, AccountBadge = null,
+  BrandMark = null, useMerchantLogo = () => null;`;
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (context.parentURL !== editorUrl) return nextResolve(specifier, context);
+    if (context.parentURL !== editorUrl && context.parentURL !== fieldsUrl)
+      return nextResolve(specifier, context);
     if (specifier === "react") {
       return { url: `data:text/javascript,${encodeURIComponent(reactSource)}`, shortCircuit: true };
     }
@@ -40,10 +44,14 @@ const hooks = registerHooks({
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url !== editorUrl) return nextLoad(url, context);
+    if (url !== editorUrl && url !== fieldsUrl) return nextLoad(url, context);
     // Inspect the actual private hook without adding a production export or JSX
     // renderer. TypeScript only erases types/JSX; the hook logic is unchanged.
-    const source = `${readFileSync(new URL(url), "utf8")}\nexport { useTransactionEditorState as useEditorStateForTest, kindChange as kindChangeForTest, TransactionCategoryChoice as categoryChoiceForTest };`;
+    const exports =
+      url === editorUrl
+        ? "useTransactionEditorState as useEditorStateForTest, kindChange as kindChangeForTest, quickCategoryChoices as categoryChoicesForTest"
+        : "amountInput, groupedAmount";
+    const source = `${readFileSync(new URL(url), "utf8")}\nexport { ${exports} };`;
     const result = ts.transpileModule(source, {
       fileName: "transaction-editor.tsx",
       compilerOptions: {
@@ -55,7 +63,10 @@ const hooks = registerHooks({
     return { format: "module", source: result.outputText, shortCircuit: true };
   },
 });
-const { useEditorStateForTest, kindChangeForTest, categoryChoiceForTest } = await import(editorUrl);
+const { useEditorStateForTest, kindChangeForTest, categoryChoicesForTest } = await import(
+  editorUrl
+);
+const { amountInput, groupedAmount } = await import(fieldsUrl);
 hooks.deregister();
 
 const originalDomGlobals = new Map(
@@ -257,15 +268,8 @@ describe("transaction editor recovery", () => {
 
   it("shows the existing hint before type selection and clears it only for a conflicting type", () => {
     const draft = { kind: null, category: categoryId };
-    const view = categoryChoiceForTest({
-      draft,
-      resources,
-      errors: {},
-      disabled: false,
-      onChange() {},
-    });
     assert.deepEqual(
-      view.props.options.map((option) => option.id),
+      categoryChoicesForTest(draft, resources).map((option) => option.id),
       [categoryId],
     );
     assert.deepEqual(kindChangeForTest(draft, null, resources), {
@@ -529,5 +533,56 @@ describe("live exclusion editor", () => {
     assert.equal(editor.saved.length, 0);
     assert.match(editor.render().state.errors.category, /archived or removed/);
     assert.equal(editor.render().state.draft.category, categoryId);
+  });
+});
+
+describe("USD amount editing", () => {
+  it("saves a trailing decimal as whole dollars without losing the currency", async () => {
+    const editor = mountEditor({
+      transaction: { ...transaction(), currency: "USD", amount: 1999 },
+    });
+    editor.render().changeDraft({ amount: "19." });
+    await editor.render().submit(submitEvent());
+    assert.equal(editor.saved.length, 1);
+    assert.equal(editor.saved[0][0].amount, 1900);
+    assert.equal(editor.saved[0][0].currency, "USD");
+  });
+
+  it("preserves fractional dollar entry and grouping in the shared amount field", () => {
+    assert.equal(amountInput("19.99", "USD"), "19.99");
+    assert.equal(amountInput("1,234.50", "USD"), "1234.50");
+    assert.equal(amountInput(".01", "USD"), "0.01");
+    assert.equal(amountInput("0.", "USD"), "0.");
+    assert.equal(amountInput("", "USD"), "");
+    assert.equal(amountInput("19.999", "USD"), null);
+    assert.equal(amountInput("-19.99", "USD"), null);
+    assert.equal(groupedAmount("1234.50"), "1,234.50");
+    assert.equal(groupedAmount("0."), "0.");
+    assert.equal(amountInput("330,000", "IDR"), "330000");
+  });
+
+  it("allows editing a pending USD import before conversion is available", async () => {
+    const source = {
+      ...transaction(),
+      status: "pending",
+      currency: "USD",
+      amount: 1999,
+      reportingAmount: null,
+    };
+    const editor = mountEditor({ transaction: source });
+    await editor.render().submit(submitEvent("edit"));
+    assert.equal(editor.saved.length, 1);
+    assert.equal(editor.saved[0][0].amount, 1999);
+    assert.equal(editor.saved[0][0].currency, "USD");
+    assert.equal(editor.saved[0][1], "edit");
+  });
+
+  it("shows cents as dollars and saves the exact original currency and minor units", async () => {
+    const source = { ...transaction(), currency: "USD", amount: 1999, reportingAmount: 329837 };
+    const editor = mountEditor({ transaction: source });
+    assert.equal(editor.render().state.draft.amount, "19.99");
+    await editor.render().submit(submitEvent());
+    assert.equal(editor.saved[0][0].amount, 1999);
+    assert.equal(editor.saved[0][0].currency, "USD");
   });
 });
