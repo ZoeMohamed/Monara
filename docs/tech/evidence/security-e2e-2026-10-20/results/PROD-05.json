@@ -1,0 +1,56 @@
+{
+  "id": "PROD-05",
+  "title": "Hosted Agent routes require the secret",
+  "risk": "Risk 3: Agent-to-backend secret",
+  "environment": "production",
+  "shows": "On the live deployment, every Agent and Worker route refuses callers without the shared secret, or with a wrong one.",
+  "limits": "Only refusals are tested. The real secret is never used against production.",
+  "environmentLabel": "Production, read-only requests",
+  "verdict": "PASS",
+  "commit": "aed7b4a (deployed)",
+  "recordedAt": "2026-10-20 06:35 UTC",
+  "screenshots": [],
+  "checks": [
+    {
+      "label": "Web /api/agent/operations/list_transactions: refused",
+      "detail": "POST with a wrong secret → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Web /api/agent/gmail/list-active-connections: refused",
+      "detail": "POST with a wrong secret → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Web /api/agent/account-deletions/process: refused",
+      "detail": "POST with a wrong secret → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Web /api/webhooks/composio: refused",
+      "detail": "POST with a wrong secret → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Worker /chat: refused",
+      "detail": "POST without the secret → 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Worker /gmail/sync: refused",
+      "detail": "POST without the secret → 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Worker /users/purge: refused",
+      "detail": "POST without the secret → 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Control: Worker is live",
+      "detail": "GET /health → 200",
+      "kind": "pass"
+    }
+  ],
+  "requests": []
+}

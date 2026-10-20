@@ -1,0 +1,70 @@
+{
+  "id": "SEC-03",
+  "title": "User A cannot change User B's data",
+  "risk": "Risk 2: cross-User access",
+  "environment": "local",
+  "shows": "Edits, deletes and cross-User references with B's IDs are refused, and B's rows are unchanged afterwards.",
+  "limits": "Covers transactions and accounts; other resource types follow the same repository pattern but are not all exercised.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:31 UTC",
+  "screenshots": [
+    {
+      "caption": "B's own History afterwards: B Private Clinic, Rp 987.000, intact",
+      "file": "screens/SEC-03-1-b-ledger-intact.png"
+    }
+  ],
+  "checks": [
+    {
+      "label": "Edit B's transaction: refused",
+      "detail": "edit_transaction as A with B's IDs → 404 NOT_FOUND",
+      "kind": "pass"
+    },
+    {
+      "label": "Delete B's transaction: refused",
+      "detail": "delete_transaction as A with B's IDs → 404 NOT_FOUND",
+      "kind": "pass"
+    },
+    {
+      "label": "Rename B's account: refused",
+      "detail": "update_financial_account as A with B's IDs → 404 NOT_FOUND",
+      "kind": "pass"
+    },
+    {
+      "label": "Record on B's account: refused",
+      "detail": "add_transaction as A using B's account → 403 FORBIDDEN",
+      "kind": "pass"
+    },
+    {
+      "label": "Direct database write refused, even to A's own row",
+      "detail": "PostgREST PATCH with A's token → 403",
+      "kind": "pass"
+    },
+    {
+      "label": "B's transaction unchanged in the database",
+      "detail": "merchant B Private Clinic, updated_at unchanged, deleted no",
+      "kind": "pass"
+    }
+  ],
+  "requests": [
+    {
+      "step": "Edit B's transaction",
+      "method": "POST",
+      "path": "/api/finance/operations/edit_transaction",
+      "status": 404
+    },
+    {
+      "step": "Delete B's transaction",
+      "method": "POST",
+      "path": "/api/finance/operations/delete_transaction",
+      "status": 404
+    },
+    {
+      "step": "Rename B's account",
+      "method": "POST",
+      "path": "/api/finance/operations/update_financial_account",
+      "status": 404
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "id": "SEC-09",
+  "title": "Security headers on the hosted app",
+  "risk": "Risk 5: browser hardening",
+  "environment": "production",
+  "shows": "The live sign-in page sends HSTS, MIME-sniffing, framing, referrer and permission protections.",
+  "limits": "One page checked. A page-wide Content Security Policy is recorded as present or absent, not judged here.",
+  "environmentLabel": "Production, read-only requests",
+  "verdict": "PASS",
+  "commit": "aed7b4a (deployed)",
+  "recordedAt": "2026-10-20 06:35 UTC",
+  "screenshots": [],
+  "checks": [
+    {
+      "label": "HSTS",
+      "detail": "strict-transport-security: max-age=63072000; includeSubDomains; preload",
+      "kind": "pass"
+    },
+    {
+      "label": "No MIME sniffing",
+      "detail": "x-content-type-options: nosniff",
+      "kind": "pass"
+    },
+    {
+      "label": "No framing",
+      "detail": "x-frame-options: DENY",
+      "kind": "pass"
+    },
+    {
+      "label": "Referrer policy",
+      "detail": "referrer-policy: strict-origin-when-cross-origin",
+      "kind": "pass"
+    },
+    {
+      "label": "Permissions policy",
+      "detail": "permissions-policy: camera=(), microphone=(), geolocation=()",
+      "kind": "pass"
+    },
+    {
+      "label": "Private pages not cached",
+      "detail": "cache-control: private, no-cache, no-store, max-age=0, must-revalidate",
+      "kind": "pass"
+    },
+    {
+      "label": "No page-wide Content Security Policy",
+      "detail": "content-security-policy: (missing). Documented open risk 5",
+      "kind": "note"
+    }
+  ],
+  "requests": []
+}

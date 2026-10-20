@@ -1,0 +1,71 @@
+{
+  "id": "PROD-01",
+  "title": "Signed-out boundary on the hosted app",
+  "risk": "Risks 2 and 3: identity boundary",
+  "environment": "production",
+  "shows": "On the live app, a signed-out visitor is sent to sign-in, and private APIs refuse without a session or from another site.",
+  "limits": "Unauthenticated requests only. Signed-in isolation is shown on the local stack (SEC-02, SEC-03).",
+  "environmentLabel": "Production, read-only requests",
+  "verdict": "PASS",
+  "commit": "aed7b4a (deployed)",
+  "recordedAt": "2026-10-20 06:35 UTC",
+  "screenshots": [
+    {
+      "caption": "monara-finance.vercel.app: a signed-out visit to /transactions lands on Sign in",
+      "file": "screens/PROD-01-1-signin.png"
+    }
+  ],
+  "checks": [
+    {
+      "label": "Private page redirects to sign-in",
+      "detail": "GET /transactions → /sign-in",
+      "kind": "pass"
+    },
+    {
+      "label": "Ledger API, no session: refused",
+      "detail": "POST /api/finance/operations/list_transactions → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Ledger API, another site: refused",
+      "detail": "POST /api/finance/operations/list_transactions → 403 FORBIDDEN",
+      "kind": "pass"
+    },
+    {
+      "label": "Chat history API, no session: refused",
+      "detail": "GET /api/chat/conversations → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Forecast API, no session: refused",
+      "detail": "GET /api/forecast → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    }
+  ],
+  "requests": [
+    {
+      "step": "Ledger API, no session",
+      "method": "POST",
+      "path": "/api/finance/operations/list_transactions",
+      "status": 401
+    },
+    {
+      "step": "Ledger API, another site",
+      "method": "POST",
+      "path": "/api/finance/operations/list_transactions",
+      "status": 403
+    },
+    {
+      "step": "Chat history API, no session",
+      "method": "GET",
+      "path": "/api/chat/conversations",
+      "status": 401
+    },
+    {
+      "step": "Forecast API, no session",
+      "method": "GET",
+      "path": "/api/forecast",
+      "status": 401
+    }
+  ]
+}

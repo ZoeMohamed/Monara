@@ -35,3 +35,9 @@ supabase/.branches/
 
 # Generated submission PDFs
 docs/tech/build/
+
+# Playwright scratch output; curated evidence lives in docs/tech/evidence
+e2e/.results
+e2e/.report
+# The security evidence PDF is rebuilt with pnpm e2e:pdf
+docs/tech/evidence/security-e2e-*/*.pdf

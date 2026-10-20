@@ -7,8 +7,9 @@ const config: KnipConfig = {
   },
   workspaces: {
     ".": {
-      entry: ["scripts/*.mjs"],
-      project: ["scripts/*.mjs", "*.{ts,mjs}"],
+      // The security e2e suite: Playwright specs, the local Composio stand-in and the terminal recorder.
+      entry: ["scripts/*.mjs", "e2e/*.spec.ts", "e2e/support/*.mjs"],
+      project: ["scripts/*.mjs", "*.{ts,mjs}", "e2e/**/*.{ts,mjs}"],
       ignoreDependencies: [
         // Present since the initial prototype commit and not imported anywhere yet.
         "playwright-core",
@@ -26,8 +27,9 @@ const config: KnipConfig = {
   },
   // Scaffold packages declare workspace dependencies that no code imports yet.
   ignoreDependencies: [/^@monara\//],
-  // `pnpm dev:tunnel` uses a locally installed ngrok agent, not a package.
-  ignoreBinaries: ["ngrok"],
+  // `pnpm dev:tunnel` uses a locally installed ngrok agent, and the terminal evidence
+  // uses a locally installed VHS recorder; neither is a package.
+  ignoreBinaries: ["ngrok", "vhs"],
 };
 
 export default config;

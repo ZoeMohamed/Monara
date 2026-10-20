@@ -1,0 +1,36 @@
+{
+  "id": "SEC-14",
+  "title": "Goal images are private to their owner",
+  "risk": "Risk 2: cross-User access to stored files",
+  "environment": "local",
+  "shows": "A goal image is served only to its owner through a short-lived signed link, and non-image uploads are rejected by content, not by name.",
+  "limits": "Local storage bucket; signed-link expiry was read from the URL, not waited out.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:31 UTC",
+  "screenshots": [],
+  "checks": [
+    {
+      "label": "Owner can upload a real image",
+      "detail": "POST /api/goals/<A's goal>/image (PNG) → 200",
+      "kind": "pass"
+    },
+    {
+      "label": "Owner gets a signed, short-lived link",
+      "detail": "GET as A → 307, signed URL: true, token: true",
+      "kind": "pass"
+    },
+    {
+      "label": "Another User gets nothing",
+      "detail": "GET as B → 404 NOT_FOUND",
+      "kind": "pass"
+    },
+    {
+      "label": "Text renamed to .png is rejected",
+      "detail": "POST \"goal.png\" containing text → 400 VALIDATION_FAILED",
+      "kind": "pass"
+    }
+  ],
+  "requests": []
+}

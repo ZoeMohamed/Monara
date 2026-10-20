@@ -1,0 +1,41 @@
+{
+  "id": "SEC-05",
+  "title": "Agent routes require the backend secret",
+  "risk": "Risk 3: Agent-to-backend secret",
+  "environment": "local",
+  "shows": "Agent and Worker routes refuse callers without the shared secret. With it, the backend acts for the User named in the body, which is the documented trust model.",
+  "limits": "The secret itself is the boundary; rotation and per-request signing are open (risk 3).",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:31 UTC",
+  "screenshots": [],
+  "checks": [
+    {
+      "label": "Agent finance operations: refused",
+      "detail": "POST /api/agent/operations/list_transactions → no secret 401, wrong secret 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Agent Gmail operations: refused",
+      "detail": "POST /api/agent/gmail/list-active-connections → no secret 401, wrong secret 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Deletion processor: refused",
+      "detail": "POST /api/agent/account-deletions/process → no secret 401, wrong secret 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Worker routes, no secret: refused",
+      "detail": "/chat 401, /gmail/sync 401, /forecast/refine 401, /users/purge 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Documented open risk: the secret alone acts for any User",
+      "detail": "with the secret and B's user ID → 200; returns B's records: true",
+      "kind": "note"
+    }
+  ],
+  "requests": []
+}

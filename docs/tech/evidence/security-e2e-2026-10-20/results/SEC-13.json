@@ -1,0 +1,36 @@
+{
+  "id": "SEC-13",
+  "title": "WhatsApp webhook rejects unsigned messages",
+  "risk": "Identity: WhatsApp Channel",
+  "environment": "local",
+  "shows": "The Kapso webhook processes nothing unless the raw body carries a valid HMAC signature.",
+  "limits": "Uses a local test secret; no real Kapso delivery or WhatsApp message.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:31 UTC",
+  "screenshots": [],
+  "checks": [
+    {
+      "label": "No signature: refused",
+      "detail": "POST /webhooks/kapso → 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Wrong signature: refused",
+      "detail": "→ 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Signature for a different body: refused",
+      "detail": "→ 401",
+      "kind": "pass"
+    },
+    {
+      "label": "Control: correct signature accepted",
+      "detail": "valid HMAC, non-message event → 200, handled 0",
+      "kind": "pass"
+    }
+  ],
+  "requests": []
+}

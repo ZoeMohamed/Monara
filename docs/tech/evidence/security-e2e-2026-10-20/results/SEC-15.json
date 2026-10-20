@@ -1,0 +1,61 @@
+{
+  "id": "SEC-15",
+  "title": "Logs carry no secrets or private content",
+  "risk": "Risk 6: logging and provider data",
+  "environment": "local",
+  "shows": "After the whole suite, the web and Worker logs contain none of the test's secrets, tokens, emails or financial details.",
+  "limits": "Local server logs for this run only; hosted platform logs were not inspected.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:34 UTC",
+  "screenshots": [],
+  "checks": [
+    {
+      "label": "Server logs were captured",
+      "detail": "2 log files",
+      "kind": "pass"
+    },
+    {
+      "label": "No agent backend secret in logs",
+      "detail": "Agent backend secret: not found",
+      "kind": "pass"
+    },
+    {
+      "label": "No whatsapp webhook secret in logs",
+      "detail": "WhatsApp webhook secret: not found",
+      "kind": "pass"
+    },
+    {
+      "label": "No service-role key in logs",
+      "detail": "Service-role key: not found",
+      "kind": "pass"
+    },
+    {
+      "label": "No a's access token in logs",
+      "detail": "A's access token: not found",
+      "kind": "pass"
+    },
+    {
+      "label": "No synthetic emails in logs",
+      "detail": "Synthetic emails: not found",
+      "kind": "pass"
+    },
+    {
+      "label": "No merchant names in logs",
+      "detail": "Merchant names: not found",
+      "kind": "pass"
+    },
+    {
+      "label": "No injected record text in logs",
+      "detail": "Injected record text: not found",
+      "kind": "pass"
+    },
+    {
+      "label": "No chat content in logs",
+      "detail": "Chat content: not found",
+      "kind": "pass"
+    }
+  ],
+  "requests": []
+}
