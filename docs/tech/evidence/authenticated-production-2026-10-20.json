@@ -1,0 +1,127 @@
+{
+  "capturedAt": "2026-10-20T12:22:09Z",
+  "target": {
+    "url": "https://monara-finance.vercel.app/",
+    "environment": "production",
+    "browser": "Google Chrome 155.0.8059.84",
+    "viewportCssPixels": {
+      "width": 500,
+      "height": 773
+    },
+    "capturePixels": {
+      "width": 1000,
+      "height": 1546
+    }
+  },
+  "method": {
+    "session": "The User's existing Google-authenticated Chrome session was used in place; no cookie, token, browser profile, setup key or response payload was exported.",
+    "requests": "Only read operations were sent from the production origin. No financial mutation, provider connection, import, message or deployment was attempted.",
+    "privacy": "Monara's Hide amounts control was enabled before capture. The identity control and financial cards were additionally blurred in the live DOM before the screenshot was written.",
+    "retention": "The artifact contains no raw amount, transaction, provider-connection or identity value. The evidence records only status codes, boolean shape checks and cache counts."
+  },
+  "authenticatedChecks": [
+    {
+      "id": "AUTH-01",
+      "check": "Signed-in session status",
+      "request": "GET /api/profile/status",
+      "observed": {
+        "status": 200,
+        "sessionMarkerPresent": true,
+        "cacheControl": "private, no-store"
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "AUTH-02",
+      "check": "Owned transaction list can be read",
+      "request": "POST /api/finance/operations/list_transactions",
+      "observed": {
+        "status": 200,
+        "itemsArrayPresent": true,
+        "cacheControl": "private, no-store"
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "AUTH-03",
+      "check": "Owned Budget list can be read",
+      "request": "POST /api/finance/operations/list_budgets",
+      "observed": {
+        "status": 200,
+        "itemsArrayPresent": true
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "AUTH-04",
+      "check": "Owned dashboard summary can be read",
+      "request": "POST /api/finance/operations/get_dashboard",
+      "observed": {
+        "status": 200,
+        "objectBodyPresent": true
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "AUTH-05",
+      "check": "Owned Chat history boundary responds",
+      "request": "GET /api/chat/conversations",
+      "observed": {
+        "status": 200
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "AUTH-06",
+      "check": "Owned Gmail-connection boundary responds",
+      "request": "GET /api/gmail/connections",
+      "observed": {
+        "status": 200
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "AUTH-07",
+      "check": "Service worker does not retain API responses",
+      "observed": {
+        "cacheStorageNamespaces": 1,
+        "apiRequestsInCaches": 0
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "AUTH-08",
+      "check": "Authenticated mobile shell captured with private values redacted",
+      "artifact": "screenshots/11-authenticated-production-redacted.png",
+      "sha256": "f389de279d42dcdcc40783bb18831a4f73f61930e6a59cae475aacde2deecae4",
+      "outcome": "pass"
+    }
+  ],
+  "anonymousControlChecks": [
+    {
+      "id": "AUTH-C01",
+      "request": "POST /api/finance/operations/list_transactions",
+      "observedStatus": 401,
+      "outcome": "pass"
+    },
+    {
+      "id": "AUTH-C02",
+      "request": "GET /api/chat/conversations",
+      "observedStatus": 401,
+      "outcome": "pass"
+    },
+    {
+      "id": "AUTH-C03",
+      "request": "GET /api/gmail/connections",
+      "observedStatus": 401,
+      "outcome": "pass"
+    }
+  ],
+  "notMeasured": [
+    "Production financial writes or deletes",
+    "Gmail consent, import or mailbox content",
+    "WhatsApp linking or message delivery",
+    "Authenticated hosted-Agent mutation",
+    "Cross-User ownership with a second signed-in account"
+  ]
+}

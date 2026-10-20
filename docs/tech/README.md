@@ -1,6 +1,22 @@
 # Technical documentation
 
-This is the technical documentation for the FinTechathon 2026 submission. It lives in the repository so it is versioned, reviewed in pull requests, and sits next to the code it describes. Product requirements stay in the PRD (Google Doc tab "PRD"); every section here cites the PRD feature ids (F1 to F16).
+This is the technical documentation for the FinTechathon 2026 submission, versioned beside its source. The public [PRD v2.1](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.pm2pb9a5y3zd), read on 20 October and dated 11 October in the document, defines F1 to F16. The repository calls spending forecast F17; it is an implemented extension, not a feature specification found in that PRD. Goals and permanent User deletion are also implemented extensions. Their inclusion here describes source behavior and does not rewrite product requirements. The [Action Tracker](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.5tiin0qzk1mg) and [Brainstorm](https://docs.google.com/document/d/1JPvoReZT6AZJ6YAJz6nbJk5kblqoGbj7ztX1LPn5lBE/edit?tab=t.0) are supporting context, not implementation evidence.
+
+## Source baseline and branch reconciliation
+
+The implementation baseline is the current `origin/main`, inspected on 20 October 2026 after fetching and pruning all refs. The documentation was consolidated from every repository branch that contained technical-documentation work. A branch was treated as a source of prose or evidence, never as proof that its implementation shipped; behavior is described as implemented only when it exists on main. The latest merged release refines the daily Budget guide and Home shortcuts; production evidence was refreshed after that release.
+
+| Source branch or commit | Material retained | Reconciliation rule |
+| --- | --- | --- |
+| `origin/docs/technical-documentation-completion` (`0f49f21`) | Curated section drafts, evidence index and PDF tooling | Corrected against current main |
+| `origin/docs/security-self-assessment-review` (`191eefa`) | Permission tiers and risk register | Updated for current controls and remaining gaps |
+| `origin/docs/extraction-docs` (`3c094e0`) and merged Gmail work | Extraction rationale and validation boundaries | Current 0.5 confidence policy is authoritative |
+| `origin/docs/agent-reviewed` (`60847c8`) | Agent terminology and owner-review notes | Only claims supported by current source remain |
+| `origin/feat/spending-forecast` and merged forecast fixes | Forecast algorithm and synthetic backtest | Current daily schedule and current source win |
+| Merged planning/recovery and Custom Banks work | UI recovery, goal images, source dates and owned bank definitions | Current main replaces older gap reports |
+| `origin/docs/submission-pdfs` and the completion branch | Typst assets, Mermaid configuration and build script | Imported without generated PDFs |
+
+The latest source includes the Gmail reliability policy, daily forecast refresh, save-only Chat history recovery, source-aware transaction dates, goal-image deletion cleanup, onboarding fixes and Custom Banks. Receipt photos are implemented and always enter review. Voice ingestion, recurring-bill detection and bill-due Reminders remain Planned. Budget-alert dispatch is implemented and the production Worker reports its cron; no successful real-template delivery is claimed. Owner review and provider acceptance remain outstanding, so every section stays Draft.
 
 ## What the competition asks for
 
@@ -9,30 +25,30 @@ The rules list three separate deliverables here, so they are built as three PDFs
 | PDF | Required part | Files |
 | --- | --- | --- |
 | Technical Documentation | System architecture | [architecture.md](architecture.md), [ui.md](ui.md) |
-| | Core algorithm description | [extraction.md](extraction.md), [agent.md](agent.md), [reminders.md](reminders.md) |
+| | Core algorithm description | [extraction.md](extraction.md), [agent.md](agent.md), [reminders.md](reminders.md), [forecast.md](forecast.md) |
 | | Security design | [data-and-security.md](data-and-security.md) |
 | Security Self-Assessment | Permission tiers and known-risk list | [security-self-assessment.md](security-self-assessment.md) |
-| Execution Evidence | Sandbox logs and measured results | [evaluation.md](evaluation.md) |
+| Execution Evidence | Production mobile capture, Sandbox logs and measured results | [evaluation.md](evaluation.md) |
 
 ## Sections, owners, and status
 
-| File | Owner | Due | Status |
-| --- | --- | --- | --- |
-| [architecture.md](architecture.md) | Abhip | 16 Oct | Draft |
-| [data-and-security.md](data-and-security.md) | Zoe | 16 Oct | Not started |
-| [extraction.md](extraction.md) | Adlyn | 16 Oct | Draft |
-| [agent.md](agent.md) | Argya | 16 Oct | Draft |
-| [ui.md](ui.md) | Erdafa | 16 Oct | Draft |
-| [reminders.md](reminders.md) | Abhip | 16 Oct | Draft |
-| [forecast.md](forecast.md) | Abhip | 18 Oct | Draft |
-| [evaluation.md](evaluation.md) | Abhip | 18 Oct | Draft |
-| [security-self-assessment.md](security-self-assessment.md) | Abhip | 17 Oct | Draft |
+| File | Owner | Status |
+| --- | --- | --- |
+| [architecture.md](architecture.md) | Abhip | Draft |
+| [data-and-security.md](data-and-security.md) | Zoe | Draft |
+| [extraction.md](extraction.md) | Adlyn | Draft |
+| [agent.md](agent.md) | Argya | Draft |
+| [ui.md](ui.md) | Erdafa | Draft |
+| [reminders.md](reminders.md) | Abhip | Draft |
+| [forecast.md](forecast.md) | Abhip | Draft |
+| [evaluation.md](evaluation.md) | Abhip | Draft |
+| [security-self-assessment.md](security-self-assessment.md) | Abhip | Draft |
 
 Status values: Not started, Draft, Reviewed, Final.
 
-The UI section was reconciled with current source and the PRD, Action Tracker and Brainstorm on **16 October 2026**. The [UI action checklist](../ui-actions-2026-10-16.md) maps ER1–ER12 to delivered source, remaining acceptance and teammate dependencies; the [backend handoff](../ui-backend-handoff.md) records integration boundaries and current verification. The shared tracker now lists ER4, ER7 and ER12 In review, with dated owner dependencies and evidence references. Other owners' rows and technical sections retain their existing statuses. The UI section remains Draft pending owner review. Normal documentation checks do not establish review or final submission acceptance.
+Every technical section remains Draft pending its owner's review. Data/security previously claimed review of an older account; its revised content needs renewed Zoe review. Reminders, evaluation and the security assessment contain substantive drafts, so the old Not started prose is removed. Evaluation and its raw evidence were refreshed on 20 October; the separate security assessment retains its own workstream.
 
-Architecture, Agent, and Gmail extraction drafts were reconciled against current source without changing their owners or review status. Receipt and voice extraction remain planned. Reminders and evaluation remain Not started with owner TODOs. The normal structure check can pass while these submission sections are unfinished; final acceptance requires completed content, measured evidence and owner review.
+Forecast's deterministic fixture is not real-spending accuracy or measured model benefit. Browser, model and extraction evidence stays dated and scoped in the linked artifacts. Execution Evidence now includes an active production Gmail connection and completed import, a verified production WhatsApp Link, and a successful hosted-Agent turn. The audit did not send a new WhatsApp message or make a live financial mutation. Normal docs checks validate structure; final checks must still reject unreviewed content.
 
 ## How to write a section
 
@@ -50,7 +66,7 @@ pnpm docs:pdf security   # one of: technical, security, evidence
 pnpm docs:pdf --final    # also fails on any TODO or a Status below Reviewed
 ```
 
-The build needs `pandoc`, `typst` and `mmdc` (Mermaid CLI) on the PATH. It renders the Mermaid blocks to images, turns links to other sections into anchors (or a pointer to the PDF that holds them) and links to code into GitHub URLs, and applies the Monara cover, header and footer from `pdf/`. The PDFs use the app's Nunito Sans, brand blue and canvas colors.
+The build needs `pandoc` and `typst`; `mmdc` (Mermaid CLI) is needed only when a selected document contains a Mermaid diagram. It renders diagrams, resolves section anchors and cross-PDF pointers, and links source paths to GitHub. The [approved template](pdf/README.md) keeps blue covers, white interiors, Montserrat headings, Nunito Sans body, Geist Mono code and rounded tables. Technical composition includes forecast under Core algorithms. Generated PDFs stay ignored; do not treat a produced file as a successful final build if the command reports status errors.
 
 ## Submission package
 

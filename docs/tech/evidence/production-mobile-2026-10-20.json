@@ -1,0 +1,139 @@
+{
+  "capturedAt": "2026-10-20T12:53:58.305Z",
+  "baseUrl": "https://monara-finance.vercel.app",
+  "commit": "d586a66ffee9b2744c923adda9dbb9cc050819e0",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "deviceScaleFactor": 2
+  },
+  "scope": "Public production demo, anonymous access controls and browser-memory demo mutations only. No production financial record or provider message was created.",
+  "assertions": [
+    {
+      "id": "EV-01",
+      "claim": "The production demo loads",
+      "pass": true,
+      "observed": "HTTP 200"
+    },
+    {
+      "id": "EV-02",
+      "claim": "The 390px mobile viewport has no horizontal overflow",
+      "pass": true,
+      "observed": "scrollWidth equals clientWidth"
+    },
+    {
+      "id": "EV-03",
+      "claim": "The forecast is visibly separate from confirmed spending",
+      "pass": true,
+      "observed": "forecast and Expected labels visible"
+    },
+    {
+      "id": "EV-04",
+      "claim": "The daily budget guide exposes its financial basis",
+      "pass": true,
+      "observed": "remaining budget and remaining days visible"
+    },
+    {
+      "id": "EV-05",
+      "claim": "Unreviewed imports remain outside the confirmed ledger",
+      "pass": true,
+      "observed": "four review items visible before confirmation"
+    },
+    {
+      "id": "EV-06",
+      "claim": "Confirming one import removes exactly one review item",
+      "pass": true,
+      "observed": "review count changed from four to three"
+    },
+    {
+      "id": "EV-07",
+      "claim": "The confirmed Rp28,000 import changes October spending once",
+      "pass": true,
+      "observed": "Rp397,490 became Rp425,490"
+    },
+    {
+      "id": "EV-08",
+      "claim": "The newly confirmed import contributes to its category Budget",
+      "pass": true,
+      "observed": "Resto & Cafe usage includes Rp28,000"
+    },
+    {
+      "id": "EV-09",
+      "claim": "A conversational write returns a grounded action receipt",
+      "pass": true,
+      "observed": "demo Agent logged one Rp58,000 cash expense"
+    },
+    {
+      "id": "EV-10",
+      "claim": "The conversational write appears in the shared History view",
+      "pass": true,
+      "observed": "one matching History row"
+    },
+    {
+      "id": "EV-11",
+      "claim": "Channel setup stays distinct from the financial ledger",
+      "pass": true,
+      "observed": "Gmail and WhatsApp controls visible in Profile"
+    },
+    {
+      "id": "EV-12",
+      "claim": "The service worker cache contains no app, auth, API or financial route",
+      "pass": true,
+      "observed": "9 public cache entries; zero private entries"
+    },
+    {
+      "id": "EV-13",
+      "claim": "A protected financial route redirects an anonymous browser to sign-in",
+      "pass": true,
+      "observed": "redirected to /sign-in"
+    },
+    {
+      "id": "EV-14",
+      "claim": "The production database health boundary responds",
+      "pass": true,
+      "observed": "HTTP 200 and connected true"
+    },
+    {
+      "id": "EV-15",
+      "claim": "An unauthenticated finance operation fails closed",
+      "pass": true,
+      "observed": "HTTP 401"
+    },
+    {
+      "id": "EV-16",
+      "claim": "A foreign-origin Chat request fails closed",
+      "pass": true,
+      "observed": "HTTP 403"
+    },
+    {
+      "id": "EV-17",
+      "claim": "An unsigned Composio webhook fails closed",
+      "pass": true,
+      "observed": "HTTP 401"
+    },
+    {
+      "id": "EV-18",
+      "claim": "The mobile journey completed without browser console errors",
+      "pass": true,
+      "observed": "0 console errors"
+    },
+    {
+      "id": "EV-19",
+      "claim": "The mobile journey completed without failed network requests",
+      "pass": true,
+      "observed": "0 failed requests"
+    }
+  ],
+  "screenshots": [
+    "01-overview.png",
+    "02-intelligence.png",
+    "03-review-before.png",
+    "04-review-confirmed.png",
+    "05-overview-after-review.png",
+    "06-budgets.png",
+    "07-agent-action.png",
+    "08-agent-ledger.png",
+    "09-channels.png",
+    "10-protected-route.png"
+  ]
+}

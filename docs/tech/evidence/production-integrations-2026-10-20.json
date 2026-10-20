@@ -1,0 +1,94 @@
+{
+  "capturedAt": "2026-10-20T12:54:29Z",
+  "target": {
+    "url": "https://monara-finance.vercel.app/",
+    "environment": "production",
+    "deployedRevision": "d586a66ffee9b2744c923adda9dbb9cc050819e0",
+    "browser": "Google Chrome 155.0.8059.85",
+    "viewportCssPixels": {
+      "width": 390,
+      "height": 844
+    }
+  },
+  "method": {
+    "session": "The User's existing Google-authenticated Chrome session was used in place. No cookie, token, browser profile, provider identifier or response payload was exported.",
+    "requests": "Provider and ledger evidence used same-origin reads. One no-action message was sent through the hosted Agent solely to verify the production bridge and persisted reply.",
+    "privacy": "Only aggregate counts and status values were retained. Gmail addresses, phone digits, transaction fields, message payloads, connection identifiers and credentials were omitted. Provider screenshots were redacted in the live DOM before capture.",
+    "mutations": "The Agent verification saved one chat exchange. It returned zero financial actions and no confirmation; no transaction, Budget, connection, import, provider message or deployment was created or changed."
+  },
+  "checks": [
+    {
+      "id": "LIVE-01",
+      "check": "Production deployment is current",
+      "observed": {
+        "vercelState": "READY",
+        "vercelTarget": "production",
+        "workerDeployment": "success",
+        "workerRevisionVerified": true,
+        "workerSchedulesVerified": 4,
+        "workerHealthVerified": true
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "LIVE-02",
+      "check": "Real Gmail connection and import",
+      "observed": {
+        "httpStatus": 200,
+        "connections": 1,
+        "activeConnections": 1,
+        "latestSyncCompleted": true,
+        "latestSyncImportedEmails": 29,
+        "latestSyncImportedTransactions": 29,
+        "latestSyncConfirmedAutomatically": 7,
+        "persistedGmailTransactions": 347,
+        "persistedGmailTransactionsConfirmed": 13,
+        "persistedGmailTransactionsPending": 334
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "LIVE-03",
+      "check": "Verified WhatsApp Link",
+      "observed": {
+        "httpStatus": 200,
+        "status": "verified"
+      },
+      "outcome": "pass"
+    },
+    {
+      "id": "LIVE-04",
+      "check": "Hosted Agent production bridge",
+      "observed": {
+        "httpStatus": 200,
+        "elapsedMilliseconds": 8196,
+        "replyPresent": true,
+        "financialActions": 0,
+        "confirmationPresent": false,
+        "historySaved": true,
+        "savedRoles": ["user", "agent"]
+      },
+      "outcome": "pass"
+    }
+  ],
+  "screenshots": [
+    {
+      "artifact": "screenshots/12-production-connections-redacted.png",
+      "sha256": "db3e43ec6d6e23b292459ad3cb0c5edf0d1234b6e055f43d897352f638aa2be5"
+    },
+    {
+      "artifact": "screenshots/13-hosted-agent-production.png",
+      "sha256": "527fc927040fa78201aef1dd0b19587ae35dc5b9a25f620c8519c0737e3b7d1e"
+    },
+    {
+      "artifact": "screenshots/14-production-gmail-redacted.png",
+      "sha256": "c1d4bc4bc7a7e8776f87fc4ccc8ebf281f69fec486728dd51029e251b9e3685d"
+    }
+  ],
+  "scopeNotes": [
+    "The verified WhatsApp Link proves that the production Kapso inbound verification flow completed for this account; no new outbound or inbound delivery was sent during this audit.",
+    "The hosted Agent check proves the authenticated production bridge, configured model response and history persistence for a no-action turn; production financial mutation was not exercised.",
+    "The Gmail counts are aggregate production state for the signed-in account. Mail content and identity were neither exported nor retained.",
+    "Cross-User isolation was not tested with a second authenticated account."
+  ]
+}
