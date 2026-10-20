@@ -148,6 +148,15 @@ describe("owned financial presentation", () => {
     assert.equal(mapped.status, "pending");
   });
 
+  it("shows SQL transaction times in minutes while retaining exact source seconds", () => {
+    for (const time of ["12:00:00", "12:34:56", "00:00:00", null]) {
+      const backend = record({ occurredTime: time });
+      const mapped = mapOwnedTransaction(backend, accounts, categories);
+      assert.equal(mapped.time, time?.slice(0, 5) ?? null);
+      assert.equal(mapped.backend.occurredTime, time);
+    }
+  });
+
   it("allows Gmail expense review without inventing an account or requiring a Category", () => {
     const mapped = mapOwnedTransaction(
       record({ financialAccountId: null, categoryId: null }),
@@ -247,6 +256,17 @@ describe("owned financial presentation", () => {
     assert.deepEqual((await loadFinanceSnapshot(emptyReader(), "2026-10")).transactions, []);
   });
 
+  it("defaults financial today to Jakarta while leaving missing imported dates empty", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-18T22:00:00Z") });
+    const snapshot = await loadFinanceSnapshot(
+      emptyReader(async () => ({ items: [record({ occurredOn: null })], nextCursor: null })),
+      "2026-10",
+    );
+    assert.equal(snapshot.today, "2026-10-19");
+    assert.equal(snapshot.transactions[0].date, null);
+    assert.equal(snapshot.transactions[0].backend.occurredOn, null);
+  });
+
   it("keeps server-computed payday usage and period dates instead of recalculating calendar spending", async () => {
     const monthly = budget({ cadence: "monthly", startsOn: "2026-09-25" });
     const usage = {
@@ -277,6 +297,36 @@ describe("owned financial presentation", () => {
     assert.equal(shown.remaining, 576544n);
     assert.equal(shown.periodStartsOn, "2026-09-25");
     assert.equal(shown.periodEndsOn, "2026-10-24");
+  });
+
+  it("loads weekly budgets into the main budget view with authoritative cross-month usage", async () => {
+    const weekly = budget({ cadence: "weekly", startsOn: "2026-09-25" });
+    const usage = {
+      budget: weekly,
+      periodStartsOn: "2026-10-09",
+      periodEndsOn: "2026-10-15",
+      used: { amountMinor: "123456", currency: "IDR" },
+      remaining: { amountMinor: "576544", currency: "IDR" },
+      usagePercent: 17.63657142857143,
+      state: "on_track",
+    };
+    const base = emptyReader();
+    const snapshot = await loadFinanceSnapshot(
+      async (operation, input) =>
+        operation === "get_dashboard"
+          ? { ...emptyDashboard, budgetUsage: [usage] }
+          : operation === "list_budgets"
+            ? { items: [weekly], nextCursor: null }
+            : base(operation, input),
+      "2026-10",
+      "2026-10-14",
+    );
+    assert.equal(snapshot.budgets.length, 1);
+    assert.equal(snapshot.budgets[0].cadence, "weekly");
+    const shown = budgetUsage([], snapshot.budgets[0], "2026-10", "2026-10-14");
+    assert.equal(shown.used, 123456n);
+    assert.equal(shown.periodStartsOn, "2026-10-09");
+    assert.equal(shown.periodEndsOn, "2026-10-15");
   });
 
   it("rejects cursor loops, changing pages, and malformed results instead of displaying partial totals", async () => {

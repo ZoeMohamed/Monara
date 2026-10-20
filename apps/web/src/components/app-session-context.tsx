@@ -5,6 +5,7 @@ import { createContext, useContext } from "react";
 import type { DemoBudgetChanges } from "@/components/demo-budget-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
 import type { MutationOptions } from "@/components/use-finance-sync";
+import type { SaveNotice } from "@/components/use-monara-session";
 import type { ImportProgress } from "@/components/use-onboarding-engine";
 import { amountDisplay } from "@/data/amount-display";
 import type { Budget, RecurringBill, Reminder, Transaction } from "@/data/demo-ledger";
@@ -44,6 +45,7 @@ export type AppSession = {
   }) => void;
   today: string;
   currentMonth: string;
+  notify: (notice: SaveNotice) => void;
   dataMode: "live" | "demo";
   financeSnapshot?: FinanceSnapshot;
   refreshFinance: () => Promise<void>;

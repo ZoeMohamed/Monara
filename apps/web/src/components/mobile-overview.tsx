@@ -627,14 +627,6 @@ function SafeToSpendCard({
           <span className={styles.paceMarker} style={{ left: `${model.elapsedPercent}%` }} />
         ) : null}
       </span>
-      {model.weekly?.basis ? (
-        <span className={styles.safeNote}>
-          This week <strong data-amount>{formatRupiah(model.weekly.spending)}</strong> of{" "}
-          <strong data-amount>{formatRupiah(model.weekly.limit)}</strong>{" "}
-          {model.weekly.basis === "weekly-budgets" ? "weekly limits" : "weekly guide"}
-          {model.weekly.percent === null ? "" : ` (${model.weekly.percent}%)`}
-        </span>
-      ) : null}
       <span className={styles.paceCaption}>
         <span>
           <strong>{model.percent}%</strong> of budgets used

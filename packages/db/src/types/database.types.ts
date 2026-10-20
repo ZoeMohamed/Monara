@@ -113,14 +113,14 @@ isOneToOne: false
                   ]
                 },"chat_messages": {
                   Row: {
-                    "closed_confirmation": boolean,"conversation_id": string,"created_at": string,"id": string,"result": Json | null,"role": string,"seq": number,"text": string,"user_id": string
+                    "closed_confirmation": boolean,"conversation_id": string,"created_at": string,"exchange_id": string | null,"id": string,"result": Json | null,"role": string,"seq": number,"text": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "closed_confirmation"?: boolean,"conversation_id": string,"created_at"?: string,"id"?: string,"result"?: Json | null,"role": string,"seq"?: never,"text": string,"user_id": string
+                    "closed_confirmation"?: boolean,"conversation_id": string,"created_at"?: string,"exchange_id"?: string | null,"id"?: string,"result"?: Json | null,"role": string,"seq"?: never,"text": string,"user_id": string
                   }
                   Update: {
-                    "closed_confirmation"?: boolean,"conversation_id"?: string,"created_at"?: string,"id"?: string,"result"?: Json | null,"role"?: string,"seq"?: never,"text"?: string,"user_id"?: string
+                    "closed_confirmation"?: boolean,"conversation_id"?: string,"created_at"?: string,"exchange_id"?: string | null,"id"?: string,"result"?: Json | null,"role"?: string,"seq"?: never,"text"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -440,10 +440,18 @@ isOneToOne: false
           }
           Functions: {
             "append_chat_exchange":
+{ Args: { "p_agent_result": Json,"p_agent_text": string,"p_closed_confirmation": boolean,"p_conversation_id": string,"p_created_at": string,"p_exchange_id": string,"p_title": string,"p_user_id": string,"p_user_text": string }; Returns: undefined
+                           } |
 { Args: { "p_agent_result": Json,"p_agent_text": string,"p_closed_confirmation": boolean,"p_conversation_id": string,"p_title": string,"p_user_id": string,"p_user_text": string }; Returns: undefined
+                           },
+"begin_goal_image_upload":
+{ Args: { "p_expected_updated_at": string,"p_goal_id": string,"p_object_path": string,"p_upload_id": string,"p_user_id": string }; Returns: undefined
                            },
 "begin_user_deletion":
 { Args: { "p_acknowledged": boolean,"p_confirmation": string }; Returns: undefined
+                           },
+"cancel_unstarted_goal_image_upload":
+{ Args: { "p_expected_updated_at": string,"p_goal_id": string,"p_object_path": string,"p_upload_id": string,"p_user_id": string }; Returns: undefined
                            },
 "claim_gmail_message":
 { Args: { "p_connection_id": string,"p_gmail_message_id": string,"p_received_at": string }; Returns: {
@@ -509,6 +517,11 @@ isOneToOne: false
 "join_gmail_sync":
 { Args: { "p_connection_id": string,"p_user_id": string }; Returns: string
                            },
+"list_pending_goal_image_uploads":
+{ Args: { "p_user_id": string }; Returns: {
+              "object_path": string,"upload_id": string
+            }[]
+                           },
 "mark_gmail_connection_synced":
 { Args: { "p_connection_id": string,"p_synced_at": string }; Returns: undefined
                            },
@@ -520,6 +533,9 @@ isOneToOne: false
                            },
 "normalize_merchant_name":
 { Args: { "p_name": string }; Returns: string
+                           },
+"prepare_goal_image_identity_deletion":
+{ Args: { "p_lease_token": string,"p_user_id": string }; Returns: undefined
                            },
 "record_gmail_discovery":
 { Args: { "p_connection_id": string,"p_found": Json }; Returns: undefined
@@ -541,6 +557,43 @@ isOneToOne: false
 "request_gmail_sync":
 { Args: { "p_connection_id": string,"p_user_id": string }; Returns: string
                            },
+"restore_transaction_from_undo":
+{ Args: { "p_action_id": string,"p_user_id": string }; Returns: {
+              "account_hint": string | null,
+"ai_confidence": number | null,
+"amount": number | null,
+"category_id": string | null,
+"client_request_id": string | null,
+"created_at": string,
+"currency": string | null,
+"deleted_at": string | null,
+"description": string | null,
+"financial_account_id": string | null,
+"flow_direction": string | null,
+"gmail_auto_confirm_pending": boolean,
+"gmail_classification_confidence": number | null,
+"gmail_classification_status": string | null,
+"gmail_extraction_evidence": Json | null,
+"id": string,
+"location": string | null,
+"merchant_name": string | null,
+"occurred_on": string | null,
+"occurred_time": string | null,
+"processed_gmail_message_id": string | null,
+"recurring_bill_id": string | null,
+"review_status": string,
+"source_item_index": number | null,
+"source_type": string,
+"transaction_type": string | null,
+"updated_at": string,
+"user_id": string
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "transactions"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "save_merchant_profile":
 { Args: { "p_merchant_key": string,"p_summary"?: string }; Returns: undefined
                            },
@@ -552,6 +605,12 @@ isOneToOne: false
 { Args: { "p_category_name": string,"p_transaction_id": string }; Returns: {
               "applied": boolean,"review_status": string,"user_id": string
             }[]
+                           },
+"settle_expired_goal_image_upload":
+{ Args: { "p_upload_id": string,"p_user_id": string }; Returns: boolean
+                           },
+"settle_goal_image_upload":
+{ Args: { "p_upload_id": string,"p_user_id": string }; Returns: undefined
                            },
 "start_gmail_discovery":
 { Args: { "p_connection_id": string }; Returns: undefined

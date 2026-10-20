@@ -46,7 +46,7 @@ Built for **FinTechathon 2026**, Monara combines a mobile-first PWA with a share
 
 | Explore | What to try |
 | --- | --- |
-| [Overview](https://monara-finance.vercel.app/demo) | Check the spending snapshot and weekly guide. |
+| [Overview](https://monara-finance.vercel.app/demo) | Check the spending snapshot and recent activity; weekly and monthly gauges live in Budgets. |
 | [Transaction review](https://monara-finance.vercel.app/demo/transactions?view=review) | Inspect an incomplete receipt or confirm a pending payment. |
 | [Budgets](https://monara-finance.vercel.app/demo/budgets) | Explore category limits and the daily budget guide. |
 | [Reports](https://monara-finance.vercel.app/demo/reports) | Compare categories and spending over time. |

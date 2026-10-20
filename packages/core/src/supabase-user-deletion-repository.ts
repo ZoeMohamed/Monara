@@ -1,4 +1,5 @@
 import type { MonaraServiceRoleClient } from "@monara/db";
+import { createSupabaseGoalImageUploadRepository } from "./supabase-goal-image-upload-repository.ts";
 import type { UserDeletionRepository } from "./user-deletion.ts";
 
 function fail(): never {
@@ -55,6 +56,17 @@ export function createSupabaseUserDeletionRepository(
         lease.data.trigger_ids.length > 0
       )
         fail();
+      // An inactive identity cannot begin another upload. Check immediately before
+      // the hard delete so a late, previously authorized Storage call stays owned.
+      if (
+        (await createSupabaseGoalImageUploadRepository(client).listPending(job.userId)).length > 0
+      )
+        fail();
+      const prepared = await client.rpc("prepare_goal_image_identity_deletion", {
+        p_user_id: job.userId,
+        p_lease_token: job.leaseToken,
+      });
+      if (prepared.error) fail();
       // Never soft delete: a later Google sign-in must create a new User.
       const result = await client.auth.admin.deleteUser(job.userId, false);
       if (result.error) fail();

@@ -85,6 +85,15 @@ type ExactFinancialGoalRow = Omit<FinancialGoalRow, "target_amount" | "saved_amo
 };
 
 function fail(error: { code?: string }): never {
+  if (error.code === "P0002") {
+    throw new FinanceOperationError("NOT_FOUND", "That record was not found.");
+  }
+  if (error.code === "55000") {
+    throw new FinanceOperationError(
+      "CONFLICT",
+      "That change can no longer be undone. Refresh your records.",
+    );
+  }
   if (error.code === "23505") {
     throw new FinanceOperationError("CONFLICT", "That change conflicts with an existing record.");
   }
@@ -280,9 +289,8 @@ const transactionUpdate = (
   merchant_name: values.merchantName,
   amount: values.money ? databaseNumeric(values.money.amountMinor) : null,
   currency: values.money?.currency ?? null,
-  // Pending captures may omit a stated date. Inserts use the database's Jakarta
-  // fallback; updates leave the already-normalized date intact.
-  occurred_on: values.occurredOn ?? undefined,
+  // Unknown source dates stay null, including when correcting an earlier date.
+  occurred_on: values.occurredOn,
   occurred_time: values.occurredTime,
   description: values.description,
   location: values.location,
@@ -459,6 +467,7 @@ export function createSupabaseFinanceRepository(
       const actual = JSON.stringify(
         transactionUpdate({
           kind: transaction.kind,
+          flowDirection: transaction.flowDirection,
           merchantName: transaction.merchantName,
           money: transaction.money,
           occurredOn: transaction.occurredOn,
@@ -490,6 +499,18 @@ export function createSupabaseFinanceRepository(
       if (!result.data) {
         return missingOrConflict(client, "transactions", input.transactionId, input.userId);
       }
+      return toTransaction(result.data as unknown as ExactTransactionRow);
+    },
+
+    async restoreTransactionFromUndo(input) {
+      const result = await client
+        .rpc("restore_transaction_from_undo", {
+          p_user_id: input.userId,
+          p_action_id: input.actionId,
+        })
+        .select(TRANSACTION_COLUMNS)
+        .single();
+      if (result.error) fail(result.error);
       return toTransaction(result.data as unknown as ExactTransactionRow);
     },
 

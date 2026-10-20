@@ -152,7 +152,7 @@ test("an imported transaction can be reviewed before an Account is assigned", ()
   }
 });
 
-test("an exclusion can close an incomplete import without inventing financial facts", () => {
+test("an undated import stays pending when excluded without inventing a date", () => {
   const incomplete = syntheticTransaction({
     amount: null,
     currency: null,
@@ -160,9 +160,10 @@ test("an exclusion can close an incomplete import without inventing financial fa
     method: null,
   });
   const [excluded] = excludePendingTransaction([incomplete], incomplete.id);
-  assert.equal(excluded.kind, "exclusion");
-  assert.equal(excluded.status, "confirmed");
-  assert.deepEqual(transactionErrors(excluded), {});
+  assert.equal(excluded.kind, incomplete.kind);
+  assert.equal(excluded.status, "pending");
+  assert.ok(transactionErrors({ ...excluded, kind: "exclusion" }).date);
+  assert.equal(excluded.date, null);
   assert.equal(demoSummary([excluded]).spending, 0n);
 });
 

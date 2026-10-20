@@ -19,8 +19,6 @@ const dayFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-const percent = (confidence: number) => `${Math.round(confidence * 100)}%`;
-
 /** The merchant's logo when it is a known brand, otherwise an icon that matches its name. */
 function MerchantMark({ name }: { name: string }) {
   const brand = useMerchantLogo(name);
@@ -47,7 +45,7 @@ function Row({ item }: { item: ForecastItem }) {
       </span>
       <span className={styles.amount}>
         <strong data-amount>−{formatRupiah(BigInt(item.amount.amountMinor))}</strong>
-        <span>Expected · {percent(item.confidence)} sure</span>
+        <span>Expected</span>
       </span>
     </div>
   );

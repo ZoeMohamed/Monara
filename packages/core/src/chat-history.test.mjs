@@ -4,6 +4,7 @@ import { createChatHistoryService } from "./chat-history.ts";
 import { FinanceOperationError } from "./finance.ts";
 
 const user = "70000000-0000-4000-8000-000000000007";
+const exchangeId = "71000000-0000-4000-8000-000000000009";
 const chat = "71000000-0000-4000-8000-000000000001";
 const receipt = {
   actionId: "72000000-0000-4000-8000-000000000001",
@@ -61,16 +62,30 @@ function memory() {
 describe("web chat history", () => {
   it("saves the answer as seen, with an open confirmation closed and images dropped", async () => {
     const { repository, saved } = memory();
-    await createChatHistoryService(repository).saveExchange(
-      user,
-      { conversationId: chat, text: "  Delete my\n coffee  " },
-      {
+    await createChatHistoryService(repository).saveExchange(user, {
+      exchangeId,
+      createdAt: "2026-10-18T12:00:00Z",
+      conversationId: chat,
+      text: "  Delete my\n coffee  ",
+      response: {
         reply: "Delete Kopi?",
         actions: [receipt],
         confirmation,
-        visuals: [{ id: "x" }],
+        visuals: [
+          {
+            id: "75000000-0000-4000-8000-000000000001",
+            kind: "spending_visualization",
+            source: "supabase_storage",
+            title: "Synthetic chart",
+            alt: "Synthetic chart",
+            url: "https://synthetic.supabase.co/storage/v1/object/sign/chat-visuals/chart.png?token=synthetic",
+            expiresAt: "2030-01-01T00:00:00Z",
+            width: 100,
+            height: 100,
+          },
+        ],
       },
-    );
+    });
     assert.equal(saved.length, 1);
     const [entry] = saved;
     assert.equal(entry.userId, user);
@@ -86,11 +101,13 @@ describe("web chat history", () => {
 
   it("keeps a plain answer open and caps the title at 55 characters", async () => {
     const { repository, saved } = memory();
-    await createChatHistoryService(repository).saveExchange(
-      user,
-      { conversationId: chat, text: "k".repeat(200) },
-      { reply: "Done", actions: [], confirmation: null },
-    );
+    await createChatHistoryService(repository).saveExchange(user, {
+      exchangeId,
+      createdAt: "2026-10-18T12:00:00Z",
+      conversationId: chat,
+      text: "k".repeat(200),
+      response: { reply: "Done", actions: [], confirmation: null },
+    });
     assert.equal(saved[0].closedConfirmation, false);
     assert.equal(saved[0].title.length, 55);
   });
@@ -100,8 +117,13 @@ describe("web chat history", () => {
     const signal = AbortSignal.timeout(5_000);
     await createChatHistoryService(repository).saveExchange(
       user,
-      { conversationId: chat, text: "hi" },
-      { reply: "Done", actions: [], confirmation: null },
+      {
+        exchangeId,
+        createdAt: "2026-10-18T12:00:00Z",
+        conversationId: chat,
+        text: "hi",
+        response: { reply: "Done", actions: [], confirmation: null },
+      },
       signal,
     );
     assert.equal(saved[0].signal, signal);
@@ -112,10 +134,22 @@ describe("web chat history", () => {
     const service = createChatHistoryService(repository);
     const response = { reply: "Done", actions: [], confirmation: null };
     await assert.rejects(() =>
-      service.saveExchange(user, { conversationId: "initial", text: "hi" }, response),
+      service.saveExchange(user, {
+        exchangeId,
+        createdAt: "2026-10-18T12:00:00Z",
+        conversationId: "initial",
+        text: "hi",
+        response,
+      }),
     );
     await assert.rejects(() =>
-      service.saveExchange("someone", { conversationId: chat, text: "hi" }, response),
+      service.saveExchange("someone", {
+        exchangeId,
+        createdAt: "2026-10-18T12:00:00Z",
+        conversationId: chat,
+        text: "hi",
+        response,
+      }),
     );
     assert.equal(saved.length, 0);
   });

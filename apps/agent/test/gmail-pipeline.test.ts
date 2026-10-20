@@ -569,9 +569,8 @@ describe("syncConnection", () => {
       page: { messages: [summary("m1")], nextPageToken: "p2" },
     });
     await pipeline.runJob({ ...syncJob, since: "2026-10-12T00:00:00.000Z" }, notFinal);
-    // A catch-up reads from a day before the last finished import.
-    const after = Date.parse("2026-10-11T00:00:00.000Z") / 1000;
-    assert.equal(calls.listed[0]?.query, `after:${after} from:(KartuKreditBCA@klikbca.com)`);
+    // A cursor from an older queued job never narrows the rolling window.
+    assert.equal(calls.listed[0]?.query, "newer_than:30d from:(KartuKreditBCA@klikbca.com)");
     assert.deepEqual(calls.enqueued[1], {
       ...syncJob,
       since: "2026-10-12T00:00:00.000Z",
@@ -598,6 +597,10 @@ describe("syncConnection", () => {
       "newer_than:30d from:(a@bank.example)",
     );
     assert.equal(syncQuery(senders, null, now), "newer_than:30d from:(a@bank.example)");
+    assert.equal(
+      syncQuery(senders, "2026-10-18T23:59:00.000Z", now),
+      "newer_than:30d from:(a@bank.example)",
+    );
   });
 
   it("schedules discovery for every mailbox and a catch-up only where accounts read from it", async () => {

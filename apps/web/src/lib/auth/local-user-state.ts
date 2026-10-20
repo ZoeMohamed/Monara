@@ -1,5 +1,24 @@
 export const USER_DELETED_EVENT = "monara.user-deleted";
 export const ACTIVE_USER_KEY = "monara.active-user";
+export const USER_SESSION_EXIT_EVENT = "monara.session-exit";
+let exitingConfirmedSession = false;
+
+/** Client cleanup only. Server identity checks remain authoritative for every operation. */
+export function isConfirmedSessionExiting(): boolean {
+  return exitingConfirmedSession;
+}
+
+/** Call only after an accepted deletion or a server-confirmed identity change. */
+export function beginConfirmedSessionExit(): void {
+  if (exitingConfirmedSession) return;
+  exitingConfirmedSession = true;
+  window.dispatchEvent(new Event(USER_SESSION_EXIT_EVENT));
+}
+
+/** Ordinary navigation protects drafts; an invalid owner must leave without a draft dialog. */
+export function protectUnsavedChanges(event: BeforeUnloadEvent): void {
+  if (!exitingConfirmedSession) event.preventDefault();
+}
 
 /** SSR revokes/deletes the current cookies; reconnecting devices clear their stale copy here. */
 export function clearExpiredAuthCookies(): void {
@@ -30,6 +49,7 @@ export function clearLocalUserState(storage: Storage): void {
 
 /** The hard navigation that follows also discards drafts, history and in-memory caches. */
 export function leaveDeletedAccount(setupKey?: string): void {
+  beginConfirmedSessionExit();
   try {
     clearLocalUserState(window.localStorage);
     clearLocalUserState(window.sessionStorage);

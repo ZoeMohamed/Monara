@@ -26,13 +26,10 @@ import { parseEmail, shouldParse } from "./parse/index.ts";
 import { isSenderVerified } from "./sender.ts";
 
 /**
- * A first import, or one for a newly linked account, looks back this far. Already
+ * Each polling pass, including a newly linked account, looks back this far. Already
  * processed mail is skipped before any extraction job.
  */
 const IMPORT_WINDOW_DAYS = 30;
-/** A catch-up overlaps the last finished import by a day, for mail Gmail listed late. */
-const CATCH_UP_OVERLAP_MS = 24 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 100;
 
 export interface GmailPipelineDependencies {
@@ -166,21 +163,15 @@ export function sendersFor(institutionKeys: readonly string[]): string[] {
 }
 
 /**
- * Only mail from the given senders: since a day before `since` when it is set, never
- * further back than the import window.
+ * Only owned institution senders over the rolling 30-day window. Older queued
+ * jobs may still supply a cursor; durable message IDs prevent duplicate imports.
  */
 export function syncQuery(
   senders: readonly string[],
-  since: string | null = null,
-  now: Date = new Date(),
+  _since: string | null = null,
+  _now: Date = new Date(),
 ): string {
-  const windowStart = now.getTime() - IMPORT_WINDOW_DAYS * DAY_MS;
-  const sinceMs = since === null ? Number.NaN : Date.parse(since) - CATCH_UP_OVERLAP_MS;
-  const window =
-    Number.isFinite(sinceMs) && sinceMs > windowStart
-      ? `after:${Math.floor(sinceMs / 1000)}`
-      : `newer_than:${IMPORT_WINDOW_DAYS}d`;
-  return `${window} ${fromClause(senders)}`;
+  return `newer_than:${IMPORT_WINDOW_DAYS}d ${fromClause(senders)}`;
 }
 
 /** Builds the Gmail queue handlers from runtime-owned provider dependencies. */

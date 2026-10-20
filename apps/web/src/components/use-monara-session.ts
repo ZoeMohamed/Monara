@@ -8,6 +8,7 @@ import {
 } from "@monara/contracts";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppSession } from "@/components/app-session-context";
+import type { DemoBudgetChanges } from "@/components/demo-budget-editor";
 import { useTransactionActions } from "@/components/transaction-actions";
 import type { TransactionDraft } from "@/components/transaction-editor";
 import { useAppNavigation } from "@/components/use-app-navigation";
@@ -41,11 +42,12 @@ import type { FinanceSnapshot } from "@/lib/finance/presentation";
 export type SaveNotice = {
   message: string;
   tone?: "success" | "warning";
-  recovery?: "refresh" | "history";
+  recovery?: "refresh" | "history" | "budgets";
   undo?:
     | { kind: "update"; before: Transaction; expected: Transaction }
     | { kind: "delete"; transaction: Transaction; index: number }
     | { kind: "create"; transaction: Transaction }
+    | { kind: "budget"; before: Budget; expected: Budget; categoryIcon?: string }
     | { kind: "backend"; receipt: ReversibleActionReceipt };
 };
 
@@ -263,6 +265,45 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       editId: null,
       adding: false,
     });
+  const updateDemoBudget = (budgetId: string, changes: DemoBudgetChanges) => {
+    if (live) return;
+    const before = demoBudgets.find((budget) => budget.id === budgetId);
+    if (!before) throw new Error("This budget is no longer available. Choose another budget.");
+    if (
+      demoBudgets.some(
+        (budget) =>
+          budget.id !== budgetId &&
+          budget.category.toLowerCase() === before.category.toLowerCase() &&
+          budget.cadence === changes.cadence,
+      )
+    )
+      throw new Error(
+        `This category already has a ${changes.cadence} budget. Keep its current period or edit the other budget.`,
+      );
+    const expected = { ...before, ...changes };
+    const categoryIcon = demoCategories.find((category) => category.name === before.category)?.icon;
+    setBudgets((items) => items.map((budget) => (budget.id === budgetId ? expected : budget)));
+    if (changes.icon) {
+      setDemoCategories((categories) =>
+        categories.map((category) =>
+          category.name === before.category
+            ? { ...category, icon: changes.icon ?? category.icon }
+            : category,
+        ),
+      );
+      setTransactions((items) =>
+        items.map((transaction) =>
+          transaction.category === before.category
+            ? { ...transaction, categoryIcon: changes.icon ?? transaction.categoryIcon }
+            : transaction,
+        ),
+      );
+    }
+    setNotice({
+      message: "Budget updated.",
+      undo: { kind: "budget", before, expected, categoryIcon },
+    });
+  };
   const {
     confirm,
     save,
@@ -291,6 +332,24 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     setBills,
     setConfirmError,
     setRejectError,
+    budgets: demoBudgets,
+    restoreDemoBudget: (before, categoryIcon) => {
+      setBudgets((items) => items.map((budget) => (budget.id === before.id ? before : budget)));
+      if (categoryIcon) {
+        setDemoCategories((categories) =>
+          categories.map((category) =>
+            category.name === before.category ? { ...category, icon: categoryIcon } : category,
+          ),
+        );
+        setTransactions((items) =>
+          items.map((transaction) =>
+            transaction.category === before.category
+              ? { ...transaction, categoryIcon }
+              : transaction,
+          ),
+        );
+      }
+    },
   });
 
   // Native history updates can settle after the ledger mutation. Suppress only the
@@ -522,6 +581,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     },
     today,
     currentMonth,
+    notify: setNotice,
     dataMode: tourMode,
     financeSnapshot,
     refreshFinance,
@@ -537,42 +597,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       setAttentionStatuses((previous) => ({ ...previous, [id]: status })),
     reminderCount: updatesCount + duePersonalReminders(personalReminders, today),
     personalReminders,
-    updateDemoBudget: (budgetId, changes) => {
-      if (live) return;
-      const selected = demoBudgets.find((budget) => budget.id === budgetId);
-      if (
-        selected &&
-        demoBudgets.some(
-          (budget) =>
-            budget.id !== budgetId &&
-            budget.category.toLowerCase() === selected.category.toLowerCase() &&
-            budget.cadence === changes.cadence,
-        )
-      )
-        throw new Error(
-          `This category already has a ${changes.cadence} budget. Keep its current period or edit the other budget.`,
-        );
-      setBudgets((items) =>
-        items.map((budget) => (budget.id === budgetId ? { ...budget, ...changes } : budget)),
-      );
-      if (selected && changes.icon)
-        setDemoCategories((categories) =>
-          categories.map((category) =>
-            category.name === selected.category
-              ? { ...category, icon: changes.icon ?? category.icon }
-              : category,
-          ),
-        );
-      if (selected && changes.icon)
-        setTransactions((transactions) =>
-          transactions.map((transaction) =>
-            transaction.category === selected.category
-              ? { ...transaction, categoryIcon: changes.icon ?? transaction.categoryIcon }
-              : transaction,
-          ),
-        );
-      setNotice({ message: "Budget updated for this demo visit." });
-    },
+    updateDemoBudget,
     saveDemoReminder: (draft, id) => {
       if (live || Object.keys(personalReminderErrors(draft)).length > 0) return;
       const title = draft.title.trim();

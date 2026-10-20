@@ -17,10 +17,8 @@ import { financialSummaryModel } from "@/data/finance-analytics";
 
 type KindFilter = LedgerKind;
 
-// With nothing selected the list shows everything, so there is no "All" chip. The icons
-// match the summary card: the arrow for spending, the tray for income.
-const kindFilters: { id: Exclude<KindFilter, "all">; label: string; icon: IconName }[] = [
-  // Forecast follows To review: both hold payments that are not confirmed yet.
+const kindFilters: { id: KindFilter; label: string; icon: IconName }[] = [
+  { id: "all", label: "All", icon: "history" },
   { id: "forecast", label: "Forecast", icon: "sparkle" },
   { id: "expense", label: "Expenses", icon: "trend-up" },
   { id: "income", label: "Income", icon: "income" },
@@ -109,6 +107,21 @@ function LedgerFilters({
         aria-label="Filter transactions"
         className="mt-2 flex min-w-0 gap-2 max-lg:-mx-5 max-lg:overflow-x-auto max-lg:px-5 max-lg:[scrollbar-width:none] lg:flex-wrap"
       >
+        {kindFilters.map((filter) => {
+          const active = !reviewOpen && kindFilter === filter.id;
+          return (
+            <Button
+              aria-pressed={active}
+              className={chip(active)}
+              key={filter.id}
+              onPress={() => onKindChange(active ? "all" : filter.id)}
+              variant="ghost"
+            >
+              <Icon className="h-4 w-4" name={filter.icon} />
+              {filter.label}
+            </Button>
+          );
+        })}
         <Button
           aria-label={`To review, ${pendingCount} waiting`}
           aria-pressed={reviewOpen}
@@ -127,21 +140,6 @@ function LedgerFilters({
             </span>
           ) : null}
         </Button>
-        {kindFilters.map((filter) => {
-          const active = !reviewOpen && kindFilter === filter.id;
-          return (
-            <Button
-              aria-pressed={active}
-              className={chip(active)}
-              key={filter.id}
-              onPress={() => onKindChange(active ? "all" : filter.id)}
-              variant="ghost"
-            >
-              <Icon className="h-4 w-4" name={filter.icon} />
-              {filter.label}
-            </Button>
-          );
-        })}
       </fieldset>
     </>
   );
@@ -200,7 +198,7 @@ function GroupedLedger({
           <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 pb-1 lg:px-5">
             <h2 className="min-w-0 text-sm font-semibold" id={`ledger-day-${date}`}>
               {date === undatedKey ? (
-                "No date"
+                "Date needed"
               ) : (
                 <time dateTime={date}>
                   {ledgerDayFormatter.format(new Date(`${date}T00:00:00Z`))}

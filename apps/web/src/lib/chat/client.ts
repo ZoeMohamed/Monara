@@ -1,15 +1,17 @@
 import {
   type AgentChatResponse,
   type AgentChatTurn,
+  type ChatHistorySaveStatus,
+  chatHistorySaveStatusSchema,
   type OperationErrorCode,
   operationErrorSchema,
   type SavedChatConversation,
   type SavedChatMessage,
   savedChatListSchema,
   savedChatMessagesSchema,
-  type WebChatResponse,
+  type WebChatBridgeResponse,
+  webChatBridgeResponseSchema,
   webChatRequestSchema,
-  webChatResponseSchema,
 } from "@monara/contracts";
 
 type ChatFetch = (input: string, init: RequestInit) => Promise<Response>;
@@ -41,8 +43,13 @@ export async function sendChatMessage(
   history: AgentChatTurn[],
   conversationId: string,
   fetcher: ChatFetch = fetch,
-): Promise<WebChatResponse> {
-  const request = webChatRequestSchema.safeParse({ text, history, conversationId });
+): Promise<WebChatBridgeResponse> {
+  const request = webChatRequestSchema.safeParse({
+    text,
+    history,
+    conversationId,
+    historyRecovery: true,
+  });
   if (!request.success) {
     throw new ChatClientError(
       request.error.issues.some((issue) => issue.path[0] === "text")
@@ -60,7 +67,7 @@ export async function sendChatMessage(
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request.data),
-      signal: AbortSignal.timeout(50_000),
+      signal: AbortSignal.timeout(55_000),
     });
   } catch {
     throw new ChatClientError(
@@ -78,7 +85,7 @@ export async function sendChatMessage(
       response.status,
     );
   }
-  const result = webChatResponseSchema.safeParse(body);
+  const result = webChatBridgeResponseSchema.safeParse(body);
   if (!result.success || !result.data.reply.trim())
     throw new ChatClientError(unverifiableAnswer, true);
   return result.data;
@@ -151,4 +158,41 @@ export function loadChatMessages(
     "Monara couldn't load this chat.",
     fetcher,
   );
+}
+
+/** Save-only retry. The signed receipt contains the original verified exchange. */
+export async function retryChatHistorySave(
+  pending: Extract<ChatHistorySaveStatus, { status: "pending" }>,
+  fetcher: ChatFetch = fetch,
+): Promise<Extract<ChatHistorySaveStatus, { status: "saved" }>> {
+  let response: Response;
+  try {
+    response = await fetcher("/api/chat/conversations/retry", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recoveryToken: pending.recoveryToken }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    throw new Error("History couldn’t be reached. Keep this page open and try saving again.");
+  }
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = operationErrorSchema.safeParse(body);
+    throw new Error(
+      error.success ? error.data.message : "This reply couldn’t be saved to history yet.",
+    );
+  }
+  const saved = chatHistorySaveStatusSchema.safeParse(body);
+  if (
+    !saved.success ||
+    saved.data.status !== "saved" ||
+    saved.data.exchangeId !== pending.exchangeId
+  )
+    throw new Error(
+      "The history save couldn’t be verified. Keep this page open and try saving again.",
+    );
+  return saved.data;
 }
