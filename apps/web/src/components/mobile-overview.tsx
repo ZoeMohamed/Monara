@@ -735,7 +735,7 @@ function AttentionCard({
   return (
     <section
       aria-labelledby="attention-title"
-      className={styles.attention}
+      className={`${styles.attention} ${styles.slotAttention}`}
       data-home-card="attention"
     >
       <SectionTitle className={styles.cardLabel} icon="bell" id="attention-title">
@@ -830,7 +830,7 @@ function BackendInsightsCard({
   return (
     <section
       aria-labelledby="backend-insights-title"
-      className={styles.attention}
+      className={`${styles.attention} ${styles.slotFlags}`}
       data-home-card="flags"
     >
       <SectionTitle className={styles.cardLabel} icon="sparkle" id="backend-insights-title">
@@ -920,14 +920,18 @@ export function MobileOverview({
                 <SpendingForecastCard month={month} today={today} transactions={transactions} />
               </div>
             ) : null}
+            <BackendInsightsCard
+              insights={insights}
+              openBudgets={openBudgets}
+              openTransaction={openTransaction}
+              transactions={transactions}
+            />
             {model.isCurrentMonth ? (
-              <div className={styles.slotAttention}>
-                <AttentionCard
-                  items={model.attention}
-                  openBudgets={openBudgets}
-                  openReview={openReview}
-                />
-              </div>
+              <AttentionCard
+                items={model.attention}
+                openBudgets={openBudgets}
+                openReview={openReview}
+              />
             ) : null}
             {model.isCurrentMonth || model.recent.length > 0 ? (
               <div className={styles.slotActivity}>
@@ -957,14 +961,6 @@ export function MobileOverview({
           <div className={styles.aside}>
             <div className={styles.slotSafe}>
               <SafeToSpendCard model={model} month={month} openBudgets={openBudgets} />
-            </div>
-            <div className={styles.slotFlags}>
-              <BackendInsightsCard
-                insights={insights}
-                openBudgets={openBudgets}
-                openTransaction={openTransaction}
-                transactions={transactions}
-              />
             </div>
           </div>
         </div>
