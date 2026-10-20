@@ -5,6 +5,7 @@ import {
   currentStep,
   importPercent,
   importSteps,
+  reelTop,
   stepFromCounts,
   withReachedStep,
 } from "./import-steps.ts";
@@ -96,4 +97,8 @@ it("keeps a running import below a full bar until the sync completes", () => {
   );
   assert.equal(importPercent(progress), 99);
   assert.equal(importPercent({ ...progress, state: "completed" }), 100);
+});
+
+it("keeps the reel against the title: no empty slot above the first step", () => {
+  assert.deepEqual([0, 1, 2].map(reelTop), [0, 0, 1]);
 });

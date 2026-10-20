@@ -19,6 +19,7 @@ export default async function SignInPage({ searchParams }: PageProps<"/sign-in">
   return (
     <SignInScreen
       available={availablePublicSupabaseConfig() !== null}
+      emailOpen={params.error === "password_invalid" || params.error === "password_unavailable"}
       error={signInErrorMessage(typeof params.error === "string" ? params.error : null)}
       next={next}
     />

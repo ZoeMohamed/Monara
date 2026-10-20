@@ -168,7 +168,7 @@
   margin-top: 24px;
 }
 
-.demo,
+.emailToggle,
 .googleButton {
   display: flex;
   width: 100%;
@@ -184,14 +184,34 @@
     background-color 160ms ease-out;
 }
 
-.demo {
+.emailToggle {
   background: var(--ink);
   color: var(--surface);
+  cursor: pointer;
+  list-style: none;
 }
 
-.demo svg {
+.emailToggle svg {
   width: 18px;
   height: 18px;
+}
+
+/* The demo needs no account, so it sits last and quiet. */
+.demoLink {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.demoLink svg {
+  width: 16px;
+  height: 16px;
 }
 
 .googleButton {
@@ -205,12 +225,13 @@
   opacity: 0.5;
 }
 
-.demo:active,
+.emailToggle:active,
 .googleButton:not(:disabled):active {
   transform: scale(0.98);
 }
 
-.demo:focus-visible,
+.emailToggle:focus-visible,
+.demoLink:focus-visible,
 .googleButton:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
@@ -219,6 +240,60 @@
 .google {
   width: 20px;
   height: 20px;
+}
+
+/* A reviewer account signs in with a password; everyone else uses Google. */
+.email {
+  border-radius: 28px;
+}
+
+.emailToggle::-webkit-details-marker {
+  display: none;
+}
+
+.field input:focus-visible,
+.emailSubmit:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.emailForm {
+  display: grid;
+  gap: 12px;
+  padding: 14px 0 8px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field input {
+  min-height: 52px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.emailSubmit {
+  min-height: 52px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.emailSubmit:active {
+  transform: scale(0.98);
 }
 
 .note,

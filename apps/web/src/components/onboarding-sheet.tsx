@@ -1,7 +1,14 @@
 "use client";
 
 import { Button } from "@monara/ui";
-import { type CSSProperties, type ReactNode, useLayoutEffect, useRef } from "react";
+import {
+  type CSSProperties,
+  createContext,
+  type ReactNode,
+  useContext,
+  useLayoutEffect,
+  useRef,
+} from "react";
 
 import { Icon, type IconName } from "@/components/icon";
 import { type AvatarScene, OnboardingAvatar } from "@/components/onboarding-avatar";
@@ -15,16 +22,22 @@ export function ButtonIcon({ name }: { name: IconName }) {
 
 export const onboardingTitleId = "onboarding-title";
 
+/** The first step the tracker counts: the demo skips connecting Gmail, so it starts at 1. */
+const FirstStepContext = createContext(0);
+
 /**
  * The setup sheet: a bottom sheet over a dimmed page. There is no skip button on
  * purpose; tapping the dimmed space above it (or pressing Escape) closes it for now.
  */
 export function OnboardingSheet({
   step,
+  firstStep = 0,
   onDismiss,
   children,
 }: {
   step: number;
+  /** Steps before this one are left out of the tracker. */
+  firstStep?: number;
   onDismiss: () => void;
   children: ReactNode;
 }) {
@@ -57,15 +70,17 @@ export function OnboardingSheet({
       />
       <div className={styles.sheet}>
         <div aria-hidden className={styles.tracker}>
-          {onboardingSteps.map((name, index) => (
+          {onboardingSteps.slice(firstStep).map((name, index) => (
             <span
               className={styles.segment}
-              data-state={index < step ? "done" : index === step ? "current" : "next"}
+              data-state={
+                index + firstStep < step ? "done" : index + firstStep === step ? "current" : "next"
+              }
               key={name}
             />
           ))}
         </div>
-        {children}
+        <FirstStepContext.Provider value={firstStep}>{children}</FirstStepContext.Provider>
       </div>
     </dialog>
   );
@@ -82,6 +97,7 @@ export function StepFrame({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  const firstStep = useContext(FirstStepContext);
   const stepRef = useRef<HTMLDivElement>(null);
   const first = useRef(true);
 
@@ -98,7 +114,7 @@ export function StepFrame({
   return (
     <div className={styles.step} ref={stepRef} tabIndex={-1}>
       <span className="sr-only">
-        Step {step + 1} of {onboardingSteps.length}
+        Step {step - firstStep + 1} of {onboardingSteps.length - firstStep}
       </span>
       {children}
       {actions ? <div className={styles.actions}>{actions}</div> : null}

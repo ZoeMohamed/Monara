@@ -38,7 +38,12 @@ interface Overrides {
   transactions?: Record<string, Partial<ResolvedImportedTransaction>>;
   missing?: boolean;
   claim?: ClaimMerchantProfileResult;
+  /** Successive claim answers; the last one repeats. */
+  claims?: ClaimMerchantProfileResult[];
+  /** A rate-limited search. */
   searchFails?: boolean;
+  searchError?: Error;
+  noSearch?: boolean;
   model?: unknown;
   modelForRequest?: (request: JsonCompletionRequest) => unknown;
   applied?: boolean;
@@ -54,6 +59,8 @@ function setup(overrides: Overrides = {}) {
     prompts: [] as JsonCompletionRequest[],
     resolves: 0,
     claims: 0,
+    sleeps: 0,
+    metrics: [] as { stage: string; searchFailed?: { status: number | null } }[],
   };
   const backend = {
     async resolveImportedTransaction(id: string) {
@@ -79,7 +86,10 @@ function setup(overrides: Overrides = {}) {
     },
     async claimMerchantProfile() {
       calls.claims += 1;
-      return overrides.claim ?? { status: "claimed" };
+      const sequence = overrides.claims;
+      return sequence
+        ? (sequence[Math.min(calls.claims, sequence.length) - 1] ?? { status: "claimed" })
+        : (overrides.claim ?? { status: "claimed" });
     },
     async saveMerchantProfile(input: SaveMerchantProfileInput) {
       calls.saved.push(input);
@@ -95,6 +105,7 @@ function setup(overrides: Overrides = {}) {
   const search: BraveSearchClient = {
     async search(query) {
       calls.searches.push(query);
+      if (overrides.searchError) throw overrides.searchError;
       if (overrides.searchFails) throw new BraveSearchError("Brave Search failed.", 429);
       return [
         { title: "Kopi Kenangan", description: "Coffee shop chain", url: "https://k.example" },
@@ -110,7 +121,16 @@ function setup(overrides: Overrides = {}) {
       );
     },
   };
-  return { pipeline: createMerchantPipeline({ backend, llm, search }), backend, calls };
+  const pipeline = createMerchantPipeline({
+    backend,
+    llm,
+    search: overrides.noSearch ? null : search,
+    async sleep() {
+      calls.sleeps += 1;
+    },
+    observe: ({ stage, searchFailed }) => calls.metrics.push({ stage, searchFailed }),
+  });
+  return { pipeline, backend, calls };
 }
 
 describe("transaction categorization", () => {
@@ -310,7 +330,7 @@ describe("transaction categorization", () => {
       assert.deepEqual(calls.set, [
         { transactionId, categoryId: null, kind: null, confidence: null },
       ]);
-      assert.deepEqual(calls.searches, []);
+      assert.deepEqual(calls.searches, ["Unlisted Synthetic Business"]);
     }
   });
 
@@ -584,13 +604,92 @@ describe("transaction categorization", () => {
     assert.equal(calls.resolves, 2, "one context snapshot and one fresh provider-boundary guard");
     assert.equal(calls.set.length, 1);
   });
-  it("waits for another job and releases failed searches for retry", async () => {
+  it("waits briefly for another job's search, then retries the job only if it is still running", async () => {
     const busy = setup({ claim: { status: "busy" } });
     await assert.rejects(busy.pipeline.runJob(job), MerchantBusyError);
-    const failed = setup({ searchFails: true });
-    await assert.rejects(failed.pipeline.runJob(job), BraveSearchError);
-    assert.deepEqual(failed.calls.released, ["Kopi Kenangan"]);
-    assert.deepEqual(failed.calls.set, []);
+    assert.equal(busy.calls.claims, 3, "one claim plus two short polls");
+    assert.equal(busy.calls.sleeps, 2);
+    assert.deepEqual(busy.calls.prompts, []);
+    assert.deepEqual(busy.calls.set, []);
+  });
+  it("uses the other job's finished search instead of waiting for a queue retry", async () => {
+    const { pipeline, calls } = setup({
+      claims: [{ status: "busy" }, { status: "ready", summary: "Coffee shop chain" }],
+    });
+    assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+    assert.equal(calls.claims, 2);
+    assert.equal(calls.sleeps, 1);
+    assert.deepEqual(calls.searches, []);
+    assert.equal(JSON.parse(calls.prompts[0]?.user ?? "{}").businessSearch, "Coffee shop chain");
+  });
+  it("searches itself when the other job gave up its claim", async () => {
+    const { pipeline, calls } = setup({ claims: [{ status: "busy" }, { status: "claimed" }] });
+    assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+    assert.deepEqual(calls.searches, ["Kopi Kenangan"]);
+    assert.equal(calls.saved.length, 1);
+  });
+  it("skips a failed search of any kind, classifies from the model's knowledge and caches nothing", async () => {
+    for (const searchError of [
+      new BraveSearchError("Brave Search failed.", 429, 60_000),
+      new BraveSearchError("Brave Search failed.", 400),
+      new BraveSearchError("Brave Search failed.", 401),
+      new BraveSearchError("Brave Search failed.", 422),
+      new BraveSearchError("Brave Search failed.", 500),
+      new BraveSearchError("Brave Search could not be reached."),
+      new BraveSearchError("Brave Search returned invalid JSON.", 200),
+    ]) {
+      const { pipeline, calls } = setup({ searchError });
+      const label = String(searchError.status);
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"], label);
+      assert.deepEqual(calls.searches, ["Kopi Kenangan"], label);
+      assert.deepEqual(calls.released, ["Kopi Kenangan"], label);
+      assert.deepEqual(calls.saved, [], label);
+      assert.equal(calls.prompts.length, 1, label);
+      assert.equal(JSON.parse(calls.prompts[0]?.user ?? "{}").businessSearch, null, label);
+      assert.deepEqual(calls.set, [
+        { transactionId, categoryId, kind: "expense", confidence: 0.9 },
+      ]);
+      assert.deepEqual(
+        calls.metrics.filter((metric) => metric.searchFailed),
+        [{ stage: "search", searchFailed: { status: searchError.status } }],
+        label,
+      );
+    }
+  });
+  it("does not treat an unexpected error as a failed search", async () => {
+    const bug = setup({ searchError: new TypeError("unexpected") });
+    await assert.rejects(bug.pipeline.runJob(job), TypeError);
+    assert.deepEqual(bug.calls.released, ["Kopi Kenangan"]);
+    assert.deepEqual(bug.calls.set, []);
+  });
+  it("stops searching for the rest of a job after one search fails, and shares the result per merchant", async () => {
+    const ids = [
+      "00000000-0000-4000-8000-000000000031",
+      "00000000-0000-4000-8000-000000000032",
+      "00000000-0000-4000-8000-000000000033",
+    ];
+    const { pipeline, calls } = setup({
+      searchFails: true,
+      transactions: {
+        [ids[1] as string]: { counterpartyName: "Spotify" },
+        [ids[2] as string]: { counterpartyName: "Kopi Kenangan" },
+      },
+    });
+    assert.deepEqual(await pipeline.runJob({ kind: "merchant.categorize", transactionIds: ids }), [
+      "categorized",
+      "categorized",
+      "categorized",
+    ]);
+    assert.deepEqual(calls.searches, ["Kopi Kenangan"], "one failure ends search for this job");
+    assert.equal(calls.claims, 1, "later merchants do not even claim a profile");
+    assert.equal(calls.prompts.length, 3);
+  });
+  it("classifies without any search or profile claim when no search key is configured", async () => {
+    const { pipeline, calls } = setup({ noSearch: true });
+    assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+    assert.deepEqual(calls.searches, []);
+    assert.equal(calls.claims, 0);
+    assert.equal(calls.prompts.length, 1);
   });
   it("sends invalid category choices to backend fallback while preserving available model confidence", async () => {
     for (const model of [
@@ -752,12 +851,13 @@ describe("transaction categorization", () => {
       );
     }
   });
-  it("searches canonical public names only for exact bundled names and aliases", async () => {
+  it("searches the canonical public name for exact bundled names and aliases", async () => {
     for (const [counterpartyName, expected] of [
       ["  kOPi   kENAngAN  ", "Kopi Kenangan"],
       ["Ｋｏｐｉ　Ｋｅｎａｎｇａｎ", "Kopi Kenangan"],
       ["  BANK   CENTRAL ASIA ", "BCA"],
       ["Spotify Premium", "Spotify"],
+      ["Spotify (Stockholm SE)", "Spotify"],
     ]) {
       const { pipeline, calls } = setup({ transaction: { counterpartyName } });
       assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
@@ -766,9 +866,33 @@ describe("transaction categorization", () => {
       assert.equal(calls.prompts.length, 1);
     }
   });
-  it("skips search and profile claims for unverified businesses and private identifiers", async () => {
+  it("searches a business-labelled name as written when the catalog has no entry for it", async () => {
+    for (const [counterpartyName, expected] of [
+      ["Iga Ngebul", "Iga Ngebul"],
+      ["  iga   Ngebul ", "iga Ngebul"],
+      ["Google YouTubePremium", "Google YouTubePremium"],
+      ["Unknown Local Bakery", "Unknown Local Bakery"],
+      ["Warung Bu Sri (Pejaten Timur)", "Warung Bu Sri"],
+      ["Kopi Kenangan Pejaten Timur", "Kopi Kenangan Pejaten Timur"],
+    ]) {
+      const { pipeline, calls } = setup({ transaction: { counterpartyName } });
+      assert.deepEqual(await pipeline.runJob(job), ["categorized"], counterpartyName);
+      assert.deepEqual(calls.searches, [expected], counterpartyName);
+      assert.equal(calls.claims, 1, counterpartyName);
+      assert.equal(
+        JSON.parse(calls.prompts[0]?.user ?? "{}").businessSearch,
+        "Kopi Kenangan: Coffee shop chain",
+      );
+    }
+  });
+  it("still skips a name that is only a parenthesized note", async () => {
+    const { pipeline, calls } = setup({ transaction: { counterpartyName: "(Stockholm SE)" } });
+    assert.deepEqual(await pipeline.runJob(job), ["categorized"]);
+    assert.deepEqual(calls.searches, []);
+    assert.equal(calls.claims, 0);
+  });
+  it("skips search and profile claims for private identifiers", async () => {
     for (const counterpartyName of [
-      "Budi Santoso",
       "BCA1234",
       "BCA****1234",
       "BCA１２３４",
@@ -780,10 +904,6 @@ describe("transaction categorization", () => {
       "BCA@example.com",
       "https://bca.co.id",
       "BCA account",
-      "Kopi Kenangan Budi Santoso",
-      "Kopi Kenangan Pejaten Timur",
-      "BAKED. Pejaten Timur",
-      "Unknown Local Bakery",
     ]) {
       const { pipeline, calls } = setup({
         transaction: { counterpartyName, counterpartyType: "business" },
@@ -795,6 +915,40 @@ describe("transaction categorization", () => {
       assert.equal(calls.prompts.length, 1, counterpartyName);
       assert.equal(JSON.parse(calls.prompts[0]?.user ?? "{}").businessSearch, null);
     }
+  });
+  it("describes default categories to the model and leaves custom ones to their own names", async () => {
+    const digitalId = "00000000-0000-4000-8000-000000000050";
+    const ecommerceId = "00000000-0000-4000-8000-000000000051";
+    const customId = "00000000-0000-4000-8000-000000000052";
+    const { pipeline, calls } = setup({
+      transaction: {
+        categories: [
+          { id: digitalId, name: "Digital", slug: "digital", kind: "expense", isDefault: true },
+          {
+            id: ecommerceId,
+            name: "Ecommerce",
+            slug: "ecommerce",
+            kind: "expense",
+            isDefault: true,
+          },
+          { id: customId, name: "Digital", slug: "digital", kind: "expense", isDefault: false },
+        ],
+      },
+      model: { categoryId: digitalId, kind: "expense", confidence: 0.9 },
+    });
+    await pipeline.runJob(job);
+    const request = calls.prompts[0];
+    // The hints are static system text, so the per-call payload carries none.
+    assert.match(request?.system ?? "", /^- digital: .*Spotify/m);
+    assert.match(request?.system ?? "", /^- ecommerce: .*Shopee Express/m);
+    assert.match(request?.system ?? "", /Misc is a last resort/);
+    const sent: Record<string, unknown>[] = JSON.parse(request?.user ?? "{}").categories;
+    assert.equal(sent.length, 3);
+    assert.ok(sent.every((entry) => !("hint" in entry)));
+    assert.equal(sent.find((entry) => entry.id === customId)?.isDefault, false);
+    assert.deepEqual(calls.set, [
+      { transactionId, categoryId: digitalId, kind: "expense", confidence: 0.9 },
+    ]);
   });
   it("keeps recognized brands private when transfer or holder evidence forbids lookup", async () => {
     for (const transaction of [
@@ -858,13 +1012,11 @@ describe("transaction categorization", () => {
       );
     }
   });
-  it("finishes exhausted provider failures as needs-review without another provider attempt", async () => {
+  it("still categorizes on the final attempt when the search provider keeps failing", async () => {
     const { pipeline, calls } = setup({ searchFails: true });
-    assert.deepEqual(await pipeline.runJob(job, { isFinalAttempt: true }), ["uncategorized"]);
+    assert.deepEqual(await pipeline.runJob(job, { isFinalAttempt: true }), ["categorized"]);
     assert.equal(calls.searches.length, 1);
-    assert.deepEqual(calls.set, [
-      { transactionId, categoryId: null, kind: null, confidence: null },
-    ]);
+    assert.deepEqual(calls.set, [{ transactionId, categoryId, kind: "expense", confidence: 0.9 }]);
   });
 
   it("measures synthetic workload call counts without live providers or artificial timing claims", async () => {

@@ -90,7 +90,7 @@ Discovery reads metadata only, with no LLM, so it runs in the web app instead of
 
 - Worker: rename `POST /gmail/sync` to `POST /gmail/ingest` with body `{ connectionId, reason, institutionKeys?, messageIds? }`. Keep `/gmail/sync` as an alias for one deploy. An ingest with `institutionKeys` lists only those banks' senders.
 - Web: after `create_financial_account` succeeds for an account that has an email institution, a linked Gmail, and a profile with a name, call ingest for that bank. The same applies when `update_financial_account` changes the Gmail. The first `PUT /api/profile/full-name` ingests any linked mailbox that has never been imported.
-- Onboarding order: connect → name → confirm banks → import, in both the live and demo engines.
+- Onboarding order: connect → name → confirm banks → import in the live engine. The demo engine has no Gmail to connect, so it starts at name and runs on sample data.
 - Done when: web tests cover each trigger condition and that no ingest runs without a name; web lint, typecheck, and build pass; react-doctor stays at 95 or above with no findings.
 
 ## Phase 6: one Gmail per financial account

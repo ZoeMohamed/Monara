@@ -80,6 +80,53 @@ describe("verified auth identity", () => {
     assert.equal(identityFromVerifiedClaims({ ...baseClaims, aud: "anon" }), null);
   });
 
+  it("accepts a password session only for the administrator-flagged reviewer account", () => {
+    const claims = {
+      aud: "authenticated",
+      email: "demo@monara.app",
+      is_anonymous: false,
+      role: "authenticated",
+      sub: "78ed58f4-9fb2-4618-b715-bdf3bda2407a",
+      user_metadata: { full_name: "Demo Reviewer" },
+    };
+    const flagged = { provider: "email", providers: ["email"], monara_demo_account: true };
+    assert.deepEqual(identityFromVerifiedClaims({ ...claims, app_metadata: flagged }), {
+      demoAccount: true,
+      displayName: "Demo Reviewer",
+      email: "demo@monara.app",
+      id: "78ed58f4-9fb2-4618-b715-bdf3bda2407a",
+      initials: "DR",
+    });
+    // Without the flag, or with a flag that is not the boolean true, a password user is rejected.
+    for (const monara_demo_account of [undefined, false, "true", 1]) {
+      assert.equal(
+        identityFromVerifiedClaims({
+          ...claims,
+          app_metadata: { ...flagged, monara_demo_account },
+        }),
+        null,
+      );
+    }
+    // The flag alone does not make a Google user the reviewer account.
+    assert.equal(
+      identityFromVerifiedClaims({
+        ...claims,
+        app_metadata: { provider: "google", providers: ["google"], monara_demo_account: true },
+      })?.demoAccount,
+      undefined,
+    );
+    assert.equal(
+      profileFromIdentity({
+        demoAccount: true,
+        displayName: "Demo Reviewer",
+        email: "demo@monara.app",
+        id: "78ed58f4-9fb2-4618-b715-bdf3bda2407a",
+        initials: "DR",
+      }).demoAccount,
+      true,
+    );
+  });
+
   it("does not send the ownership key to Client Components", () => {
     assert.deepEqual(
       profileFromIdentity({
@@ -96,6 +143,8 @@ describe("verified auth identity", () => {
 describe("sign-in errors", () => {
   it("shows only known public messages", () => {
     assert.match(signInErrorMessage("oauth_start_failed"), /unavailable/);
+    assert.match(signInErrorMessage("password_invalid"), /did not match/);
+    assert.match(signInErrorMessage("password_unavailable"), /unavailable/);
     assert.equal(signInErrorMessage("raw-provider-error"), undefined);
   });
 });

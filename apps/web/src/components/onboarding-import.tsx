@@ -211,12 +211,17 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
   );
 }
 
+/** The steps explain a waiting or running import, so the title sits right above them. */
+function showsSteps(progress: ImportProgress) {
+  return progress.state === "waiting" || progress.state === "running";
+}
+
 function ImportSummary({ progress }: { progress: ImportProgress }) {
   const { title } = copy[progress.state];
   const counts = summaryCounts(progress);
   const text = summaryText(progress);
   return (
-    <div className={styles.top}>
+    <div className={styles.top} data-steps={showsSteps(progress)}>
       <div>
         <h2 className={styles.title} id={onboardingTitleId}>
           {title}
@@ -253,9 +258,7 @@ export function ImportStep({ progress, onNext }: { progress: ImportProgress; onN
     >
       <div className={styles.import}>
         <ImportSummary progress={progress} />
-        {progress.state === "waiting" || progress.state === "running" ? (
-          <ImportSteps progress={progress} />
-        ) : null}
+        {showsSteps(progress) ? <ImportSteps progress={progress} /> : null}
         <Stats progress={progress} />
         <ImportTable progress={progress} />
       </div>

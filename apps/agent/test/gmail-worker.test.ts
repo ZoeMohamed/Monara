@@ -912,20 +912,14 @@ describe("merchant queue provider backoff", () => {
   });
   for (const fixture of [
     {
-      name: "honors Brave Retry-After and persists its deadline",
-      deadlineStatus: 200,
-      busy: false,
-      delay: 125,
-    },
-    {
-      name: "keeps the provider retry when deadline reporting fails",
-      deadlineStatus: 503,
-      busy: false,
-      delay: 125,
-    },
-    {
       name: "persists a busy merchant profile wait without searching",
       deadlineStatus: 200,
+      busy: true,
+      delay: 15,
+    },
+    {
+      name: "keeps the busy merchant retry when deadline reporting fails",
+      deadlineStatus: 503,
       busy: true,
       delay: 15,
     },
@@ -1006,6 +1000,94 @@ describe("merchant queue provider backoff", () => {
       assert.deepEqual(
         reports,
         transactionIds.map((transactionId) => ({ transactionId, delaySeconds: fixture.delay })),
+      );
+    });
+  }
+  for (const brave of [
+    { name: "a rate-limited Brave search", key: "synthetic", status: 429 },
+    { name: "a rejected Brave key", key: "synthetic", status: 401 },
+    { name: "a missing Brave key", key: undefined, status: 0 },
+  ]) {
+    it(`categorizes from the model's knowledge after ${brave.name}`, async (t) => {
+      let acked = false;
+      let searches = 0;
+      const applied: { categoryId: string | null }[] = [];
+      const transactionIds = [
+        "00000000-0000-4000-8000-000000000030",
+        "00000000-0000-4000-8000-000000000031",
+      ];
+      const categoryId = "00000000-0000-4000-8000-000000000040";
+      t.mock.method(
+        globalThis,
+        "fetch",
+        async (input: string | URL | Request, init?: RequestInit) => {
+          const url = String(input);
+          if (url.endsWith("/resolve-imported-transaction"))
+            return Response.json({
+              merchantName: "Iga Ngebul",
+              location: null,
+              needsCategory: true,
+              categoryNames: [],
+              kind: "expense",
+              flowDirection: "out",
+              counterpartyName: "Iga Ngebul",
+              counterpartyType: "business",
+              categories: [
+                { id: categoryId, name: "Food", kind: "expense", slug: "food", isDefault: true },
+              ],
+            });
+          if (url.endsWith("/claim-merchant-profile")) return Response.json({ status: "claimed" });
+          if (url.endsWith("/release-merchant-profile")) return Response.json({});
+          if (url.startsWith("https://api.search.brave.com/")) {
+            searches += 1;
+            return new Response(null, { status: brave.status, headers: { "Retry-After": "125" } });
+          }
+          if (url.endsWith("/chat/completions"))
+            return Response.json({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({ categoryId, kind: "expense", confidence: 0.9 }),
+                  },
+                },
+              ],
+            });
+          if (url.endsWith("/set-imported-category")) {
+            applied.push(JSON.parse(String(init?.body)));
+            return Response.json({ applied: true });
+          }
+          throw new Error("Unexpected synthetic request");
+        },
+      );
+      await consumeMerchantJobs(
+        {
+          messages: [
+            {
+              body: { kind: "merchant.categorize", transactionIds },
+              attempts: 1,
+              ack() {
+                acked = true;
+              },
+              retry() {
+                assert.fail("a failed search must not delay categorization");
+              },
+            },
+          ],
+        } as unknown as MessageBatch<unknown>,
+        {
+          MONARA_BACKEND_URL: "https://backend.test",
+          MONARA_AGENT_BACKEND_SECRET: "synthetic",
+          LLM_BASE_URL: "https://llm.test",
+          LLM_API_KEY: "synthetic",
+          LLM_MODEL: "synthetic",
+          ...(brave.key ? { BRAVE_SEARCH_API_KEY: brave.key } : {}),
+        },
+      );
+      assert.equal(acked, true);
+      assert.equal(searches, brave.key ? 1 : 0, "one shared search, or none without a key");
+      assert.deepEqual(
+        applied.map((entry) => entry.categoryId),
+        [categoryId, categoryId],
       );
     });
   }

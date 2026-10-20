@@ -52,6 +52,7 @@ function useStepAction() {
  */
 export function useOnboarding({
   live,
+  skipSetup = false,
   scope,
   onHome,
   onHomeScreen,
@@ -61,6 +62,8 @@ export function useOnboarding({
   runMutation,
 }: {
   live: boolean;
+  /** The shared reviewer account arrives with its records, so it never runs setup. */
+  skipSetup?: boolean;
   /** Keys this browser's saved progress, so accounts on one device do not share it. */
   scope: string;
   /** Home is showing and nothing is open over it. */
@@ -74,8 +77,10 @@ export function useOnboarding({
   runMutation?: (operation: () => Promise<void>) => Promise<void>;
 }) {
   const stored = useStoredPhase(scope);
-  const mailboxId = useGmailMailbox(live && stored !== "done");
-  const phase = setupPhase({ live, stored, mailboxId });
+  const mailboxId = useGmailMailbox(live && stored !== "done" && !skipSetup);
+  const phase: OnboardingPhase | null = skipSetup
+    ? "done"
+    : setupPhase({ live, stored, mailboxId });
 
   const gmail = useGmailOnboarding(live ? mailboxId : null, live ? phase : null);
   const demo = useDemoOnboarding(!live, phase, onDemoCreateBank);
@@ -167,6 +172,7 @@ export function useOnboarding({
 
   return {
     phase,
+    live,
     preparing: live && phase === null && onHome && !dismissed,
     /** The sheet shows on Home for the three setup steps, until the User dismisses it. */
     sheetOpen: onHome && !dismissed && showsSheet(phase),

@@ -1,5 +1,5 @@
 import { type MerchantCategorizeJob, merchantKey } from "@monara/contracts";
-import type { BraveSearchClient } from "@monara/integrations";
+import { type BraveSearchClient, BraveSearchError } from "@monara/integrations";
 import { BackendOperationError, type GmailBackend } from "../gmail/backend.ts";
 import { isTemporaryLlmError, type LlmClient, LlmError } from "../gmail/llm.ts";
 import {
@@ -25,22 +25,43 @@ interface MerchantStageMetric {
   stage: "search" | "classification" | "internal" | "person" | "fallback";
   durationMs: number;
   cacheHit?: boolean;
+  /** The search failed and the model classified without it. Carries the HTTP status only. */
+  searchFailed?: { status: number | null };
 }
 export interface MerchantPipelineDependencies {
   backend: GmailBackend;
   llm: LlmClient;
-  search: BraveSearchClient;
+  /** Null when no search key is configured: every transaction is classified without a search. */
+  search: BraveSearchClient | null;
   observe?: (metric: MerchantStageMetric) => void;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** Another job's search usually ends within a second; wait for it here instead of a 15-second queue retry. */
+const BUSY_POLLS = 2;
+const BUSY_POLL_MS = 500;
+/** Business evidence shared by one job's transactions, and whether search has failed for it. */
+interface JobSearch {
+  summaries: Map<string, Promise<string | null>>;
+  failed: boolean;
 }
 
 export function createMerchantPipeline(dependencies: MerchantPipelineDependencies) {
   const { backend, llm, search } = dependencies;
+  const sleep =
+    dependencies.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   async function merchantSummary(
+    client: BraveSearchClient,
     merchantName: string,
     checkActive: () => Promise<unknown>,
+    job: JobSearch,
   ): Promise<string | null> {
     const started = performance.now();
-    const claim = await backend.claimMerchantProfile(merchantName);
+    let claim = await backend.claimMerchantProfile(merchantName);
+    for (let poll = 0; claim.status === "busy" && poll < BUSY_POLLS; poll += 1) {
+      await sleep(BUSY_POLL_MS);
+      claim = await backend.claimMerchantProfile(merchantName);
+    }
     if (claim.status === "ready") {
       dependencies.observe?.({
         stage: "search",
@@ -52,7 +73,7 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
     if (claim.status === "busy") throw new MerchantBusyError();
     try {
       await checkActive();
-      const summary = summarizeSearchResults(await search.search(merchantName));
+      const summary = summarizeSearchResults(await client.search(merchantName));
       await backend.saveMerchantProfile({ merchantName, summary });
       dependencies.observe?.({
         stage: "search",
@@ -62,13 +83,24 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
       return summary;
     } catch (error) {
       await backend.releaseMerchantProfile(merchantName).catch(() => undefined);
-      throw error;
+      if (!(error instanceof BraveSearchError)) throw error;
+      // Search only adds to what the model already knows. Any failed search (rate
+      // limit, 4xx, outage, timeout) is skipped: it is not cached as "nothing found"
+      // and this job does not try again for its other merchants.
+      job.failed = true;
+      dependencies.observe?.({
+        stage: "search",
+        durationMs: performance.now() - started,
+        cacheHit: false,
+        searchFailed: { status: error.status },
+      });
+      return null;
     }
   }
 
   async function runTransaction(
     transactionId: string,
-    summaries: Map<string, Promise<string | null>> = new Map(),
+    job: JobSearch = { summaries: new Map(), failed: false },
     modelUnavailable: LlmError | null = null,
   ): Promise<MerchantJobOutcome> {
     let transaction: Awaited<ReturnType<GmailBackend["resolveImportedTransaction"]>>;
@@ -99,14 +131,14 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
       // Deterministic name decisions remain available during an outage.
       // Only rows that need provider work must wait for the same model to recover.
       if (modelUnavailable) throw modelUnavailable;
-      const businessName = businessSearchName(transaction);
+      const businessName = search && !job.failed ? businessSearchName(transaction) : null;
       let summary: string | null = null;
-      if (businessName) {
+      if (search && businessName) {
         const key = merchantKey(businessName);
-        let lookup = summaries.get(key);
+        let lookup = job.summaries.get(key);
         if (!lookup) {
-          lookup = merchantSummary(businessName, checkActive);
-          summaries.set(key, lookup);
+          lookup = merchantSummary(search, businessName, checkActive, job);
+          job.summaries.set(key, lookup);
         }
         try {
           summary = await lookup;
@@ -116,9 +148,9 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
           if (
             error instanceof BackendOperationError &&
             error.isNotFound &&
-            summaries.get(key) === lookup
+            job.summaries.get(key) === lookup
           )
-            summaries.delete(key);
+            job.summaries.delete(key);
           throw error;
         }
       }
@@ -158,10 +190,10 @@ export function createMerchantPipeline(dependencies: MerchantPipelineDependencie
       const failures: unknown[] = [];
       let modelUnavailable: LlmError | null = null;
       // Cache business evidence only. Each transaction receives its own fact-based classification.
-      const summaries = new Map<string, Promise<string | null>>();
+      const jobSearch: JobSearch = { summaries: new Map(), failed: false };
       for (const transactionId of transactionIds) {
         try {
-          outcomes.push(await runTransaction(transactionId, summaries, modelUnavailable));
+          outcomes.push(await runTransaction(transactionId, jobSearch, modelUnavailable));
         } catch (error) {
           if (isTemporaryLlmError(error)) modelUnavailable = error;
           if (error instanceof BackendOperationError && error.isNotFound)
