@@ -38,6 +38,29 @@
   aspect-ratio: 176 / 200;
 }
 
+/*
+ * With the steps below, the header is only as tall as the title: the cat is centred on it
+ * and takes no height of its own, so the first step starts right under the title. It stays
+ * clear of the step above the active one, whose count sits at the right.
+ */
+.top[data-steps="true"] {
+  --avatar: 42px;
+  position: relative;
+  display: block;
+  margin-bottom: -8px;
+}
+
+.top[data-steps="true"] .title {
+  padding-right: calc(var(--avatar) + 8px);
+}
+
+.top[data-steps="true"] .avatar {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(calc(-50% - 3px));
+}
+
 .meter {
   display: flex;
   flex-direction: column;

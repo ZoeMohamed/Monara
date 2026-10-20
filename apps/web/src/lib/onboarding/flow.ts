@@ -35,7 +35,8 @@ export function resolvePhase(stored: OnboardingPhase | null, hasMailbox: boolean
 
 /**
  * The phase for what is known right now, or null while the live mailbox is still being
- * checked. The demo has no mailbox: it counts as connected once past the first step.
+ * checked. The demo has no mailbox and no Gmail to connect: it starts at the name step
+ * and runs on sample data.
  */
 export function setupPhase(input: {
   live: boolean;
@@ -45,7 +46,7 @@ export function setupPhase(input: {
 }): OnboardingPhase | null {
   const { live, stored, mailboxId } = input;
   if (stored === "done") return "done";
-  if (!live) return resolvePhase(stored, stored !== null && stored !== "connect");
+  if (!live) return stored === null ? "name" : resolvePhase(stored, true);
   return mailboxId === undefined ? null : resolvePhase(stored, mailboxId !== null);
 }
 
@@ -54,8 +55,13 @@ export function showsSheet(phase: OnboardingPhase | null): boolean {
   return phase === "connect" || phase === "detect" || phase === "name" || phase === "import";
 }
 
-/** Steps shown as the progress tracker. Background import is still the third step. */
+/** Steps shown as the progress tracker. Background import is still the last step. */
 export const onboardingSteps = ["connect", "name", "detect", "import"] as const;
+
+/** The demo has no Gmail to connect, so its tracker starts after the connect step. */
+export function firstOnboardingStep(live: boolean): number {
+  return live ? 0 : 1;
+}
 
 export function stepIndex(phase: OnboardingPhase): number {
   switch (phase) {

@@ -1,14 +1,15 @@
 .steps {
   --slot: 34px;
   position: relative;
-  height: calc(var(--slot) * 3);
+  height: calc(var(--slot) * var(--rows));
   margin: 0;
   padding: 0;
   list-style: none;
-  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 60%), #000 30%, #000 70%, rgb(0 0 0 / 60%));
+  /* A step on its way out slides under the title instead of over it. */
+  overflow: clip;
+  transition: height 520ms var(--ease-out);
 }
 
-/* Slot 0 is above the middle, so the active step (offset 0) lands in slot 1. */
 .step {
   position: absolute;
   inset: 0 0 auto;
@@ -19,24 +20,21 @@
   color: var(--muted);
   font-size: 14px;
   font-weight: 600;
-  opacity: 0;
-  transform: translateY(calc((var(--offset) + 1) * var(--slot)));
+  opacity: 0.7;
+  transform: translateY(calc(var(--slot-index) * var(--slot)));
   transition:
     transform 520ms var(--ease-out),
     opacity 360ms var(--ease-out),
     color 260ms var(--ease-out);
 }
 
-.step[data-distance="1"] {
-  opacity: 0.7;
-}
-
-.step[data-distance="0"] {
+.step[data-state="active"] {
   opacity: 1;
 }
 
-/* Two steps away is parked off the reel, never between the visible slots. */
-.step[data-distance="2"] {
+/* A finished step above the reel is out of sight and out of reach. */
+.step[data-gone="true"] {
+  opacity: 0;
   pointer-events: none;
 }
 
@@ -70,9 +68,9 @@
   white-space: nowrap;
 }
 
+/* Right after the label, not at the right edge, where the header's cat hangs over the reel. */
 .detail {
   flex-shrink: 0;
-  margin-left: auto;
   color: var(--muted);
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
@@ -121,6 +119,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .steps {
+    transition: none;
+  }
+
   .step,
   .marker {
     transition: opacity 200ms linear;

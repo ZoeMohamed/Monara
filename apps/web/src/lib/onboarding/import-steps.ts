@@ -40,6 +40,15 @@ export function currentStep(progress: ImportProgress): ImportStepIndex {
   return progress.step ?? stepFromCounts(progress);
 }
 
+/**
+ * The step in the top slot of the reel. The reel starts under the title with no empty slot
+ * above it: the first two steps sit in the top slots from the start, and later steps push
+ * the oldest finished one out through the top.
+ */
+export function reelTop(active: ImportStepIndex): number {
+  return Math.max(0, active - 1);
+}
+
 function processed(progress: ImportProgress) {
   const transactions = progress.transactions ?? 0;
   return progress.state === "completed"
