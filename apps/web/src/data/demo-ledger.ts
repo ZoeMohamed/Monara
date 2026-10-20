@@ -19,7 +19,9 @@ export type Transaction = {
   categoryIcon?: string;
   categoryKind?: TransactionKind;
   amount: number | null;
-  currency: "IDR" | null;
+  currency: "IDR" | "USD" | null;
+  /** Persisted whole-rupiah reporting value for USD; absent while conversion is pending. */
+  reportingAmount?: number | null;
   date: string | null;
   time: string | null;
   method: string | null;
@@ -31,6 +33,23 @@ export type Transaction = {
   categoryId?: string | null;
   financialAccountId?: string | null;
 };
+
+export function reportingAmountFor(transaction: {
+  amount: number | null;
+  currency: string | null;
+  reportingAmount?: number | null;
+}): number | null {
+  return transaction.currency === "IDR"
+    ? transaction.amount
+    : transaction.currency === "USD"
+      ? (transaction.reportingAmount ?? null)
+      : null;
+}
+
+export function formatUsdMinor(value: number | bigint): string {
+  const cents = BigInt(value);
+  return `US$${(cents / 100n).toLocaleString("en-US")}.${(cents % 100n).toString().padStart(2, "0")}`;
+}
 
 export type TransactionValues = Pick<
   Transaction,
@@ -72,10 +91,10 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
     (!isExclusion || values.amount !== null) &&
     (values.amount === null || !Number.isSafeInteger(values.amount) || values.amount <= 0)
   ) {
-    errors.amount = "Enter a positive whole amount of rupiah within the supported range.";
+    errors.amount = "Enter a positive amount within the supported range.";
   }
-  if (!isExclusion && values.currency !== "IDR") {
-    errors.currency = "Choose IDR. Monara supports rupiah only.";
+  if (!isExclusion && values.currency !== "IDR" && values.currency !== "USD") {
+    errors.currency = "Choose IDR or USD.";
   }
   if (!isCalendarDate(values.date)) {
     errors.date = "Enter a valid transaction date.";
@@ -244,7 +263,7 @@ export function daysBetween(from: string, to: string): number {
 }
 
 function sumAmounts(transactions: Transaction[]): bigint {
-  return transactions.reduce((sum, item) => sum + BigInt(item.amount ?? 0), BigInt(0));
+  return transactions.reduce((sum, item) => sum + BigInt(reportingAmountFor(item) ?? 0), BigInt(0));
 }
 
 // Newest first by date, then time; records without a date sort last.
@@ -258,6 +277,7 @@ export function demoSummary(transactions: Transaction[], month = demoMonth) {
       transaction.status === "confirmed" &&
       (transaction.kind === "expense" || transaction.kind === "income") &&
       Object.keys(transactionErrors(transaction)).length === 0 &&
+      reportingAmountFor(transaction) !== null &&
       transaction.date?.startsWith(`${month}-`),
   );
   const spending = sumAmounts(confirmed.filter((transaction) => transaction.kind === "expense"));

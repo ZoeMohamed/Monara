@@ -33,6 +33,7 @@ Never import from another apps/* package. Share code through packages/*. Keep br
 - Keep database access behind repositories, with ownership checks and RLS. Never treat a service-role key as a replacement for authorization.
 - Real data operations require connectivity initially. Do not cache financial data or auth responses in the service worker.
 - Never invent financial amounts, dates, currencies, or account mappings when extraction is uncertain.
+- Transactions support IDR and USD while Financial Accounts, Budgets, and financial reporting remain IDR. USD amounts use cents; IDR amounts use whole rupiah. Treat a bare `$` as USD, default entirely unstated currency to IDR with pending review, and keep explicit unsupported currencies in review. Prefer a bank-stated actual IDR debit over its original USD price. Preserve original money and the saved IDR reporting value separately. The backend uses cached Frankfurter ECB reference rates for the transaction day, with a two-second FX lookup deadline and no fixed fallback rate. Missing conversion leaves the USD transaction visible and pending, excluded from totals; bounded background recovery must preserve ownership, versions, classification completion, and Undo snapshots. Do not revalue saved conversions on retries or unrelated edits.
 
 ## Implementation practices
 

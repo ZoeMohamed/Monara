@@ -1,4 +1,5 @@
 import type { ForecastItem } from "@monara/contracts";
+import { reportingAmountFor } from "../../data/demo-ledger.ts";
 
 export interface SpendingDay {
   day: number;
@@ -10,6 +11,7 @@ export interface SpendingDay {
 interface ProjectionRecord {
   date: string | null;
   amount: number | null;
+  reportingAmount?: number | null;
   merchant: string | null;
   currency: string | null;
   kind: string | null;
@@ -59,15 +61,15 @@ function coveredExpenses(
   for (const item of items) {
     for (const expense of [...history].sort(
       (a, b) =>
-        Math.abs((a.amount ?? 0) - Number(item.amount.amountMinor)) -
-        Math.abs((b.amount ?? 0) - Number(item.amount.amountMinor)),
+        Math.abs((reportingAmountFor(a) ?? 0) - Number(item.amount.amountMinor)) -
+        Math.abs((reportingAmountFor(b) ?? 0) - Number(item.amount.amountMinor)),
     )) {
       if (!expense.date || expense.amount === null || covered.has(expense)) continue;
       const key = merchantKey(item.merchantName);
       if (!key || merchantKey(expense.merchant) !== key) continue;
       if (
-        expense.amount < Number(item.amountLow.amountMinor) ||
-        expense.amount > Number(item.amountHigh.amountMinor)
+        (reportingAmountFor(expense) ?? 0) < Number(item.amountLow.amountMinor) ||
+        (reportingAmountFor(expense) ?? 0) > Number(item.amountHigh.amountMinor)
       )
         continue;
       const date = new Date(`${expense.date}T00:00:00Z`);
@@ -105,11 +107,11 @@ export function projectSpending(
     (record) =>
       record.status === "confirmed" &&
       record.kind === "expense" &&
-      record.currency === "IDR" &&
+      reportingAmountFor(record) !== null &&
       record.date !== null &&
       record.date <= today &&
       Number.isSafeInteger(record.amount) &&
-      (record.amount ?? 0) > 0,
+      (reportingAmountFor(record) ?? 0) > 0,
   );
   const earliest = expenses.reduce(
     (first, expense) => Math.min(first, dayNumber(expense.date ?? today)),
@@ -123,7 +125,7 @@ export function projectSpending(
   const currentItems = items.filter((item) => item.predictedOn.slice(0, 7) === today.slice(0, 7));
   const covered = coveredExpenses(history, currentItems);
   const ordinary = history.reduce(
-    (sum, expense) => sum + (covered.has(expense) ? 0n : BigInt(expense.amount ?? 0)),
+    (sum, expense) => sum + (covered.has(expense) ? 0n : BigInt(reportingAmountFor(expense) ?? 0)),
     0n,
   );
   const divisor = BigInt(Math.max(historyDays, 1));

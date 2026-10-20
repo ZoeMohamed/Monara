@@ -83,6 +83,7 @@ import {
   type TransactionSource,
   type TransactionValues,
   transactionMutationResultSchema,
+  transactionReportingMoney,
   transactionValuesSchema,
   type UpdateBudgetInput,
   type UpdateCategoryInput,
@@ -123,7 +124,15 @@ export interface FinanceCaller {
 
 export interface ActionState {
   operation: string;
-  [key: string]: boolean | null | number | string | TransactionValues | ActionState;
+  [key: string]:
+    | boolean
+    | null
+    | number
+    | string
+    | TransactionValues
+    | ActionState
+    | Transaction["fxSnapshot"]
+    | Transaction["idrMoney"];
 }
 
 export type DestructiveConfirmationState =
@@ -171,6 +180,7 @@ export interface FinanceRepository {
     transactionId: string;
     expectedUpdatedAt: string;
     values: TransactionValues;
+    previous?: Transaction;
     reviewStatus: Transaction["reviewStatus"];
   }): Promise<Transaction>;
   /** Restores the stored snapshot and consumes its receipt atomically. */
@@ -385,7 +395,7 @@ export function calculateBudgetUsage(
     ) {
       return sum;
     }
-    return sum + amountOf(transaction.money);
+    return sum + amountOf(transactionReportingMoney(transaction));
   }, 0n);
   const limit = amountOf(budget.limit);
   const remaining = limit - used;
@@ -508,7 +518,7 @@ export function calculateFinancialInsights(input: {
       continue;
     }
     const amounts = historyByCategory.get(transaction.categoryId) ?? [];
-    amounts.push(amountOf(transaction.money));
+    amounts.push(amountOf(transactionReportingMoney(transaction)));
     historyByCategory.set(transaction.categoryId, amounts);
   }
   for (const amounts of historyByCategory.values()) {
@@ -535,7 +545,7 @@ export function calculateFinancialInsights(input: {
         history.length % 2 === 1
           ? (history[middle] ?? 0n)
           : roundedRatio((history[middle - 1] ?? 0n) + (history[middle] ?? 0n), 2n);
-      const amount = amountOf(transaction.money);
+      const amount = amountOf(transactionReportingMoney(transaction));
       if (median <= 0n || amount < median * 2n) return [];
       return [
         {
@@ -603,7 +613,7 @@ export function calculateDashboard(input: {
   const categoryTotals = new Map<string | null, bigint>();
   for (const transaction of confirmed) {
     if (!transaction.money) continue;
-    const amount = amountOf(transaction.money);
+    const amount = amountOf(transactionReportingMoney(transaction));
     if (transaction.kind === "income") income += amount;
     if (transaction.kind === "expense") {
       spending += amount;
@@ -635,8 +645,10 @@ export function calculateDashboard(input: {
   let insightSpending = 0n;
   for (const transaction of confirmedAsOf) {
     if (!transaction.money) continue;
-    if (transaction.kind === "income") insightIncome += amountOf(transaction.money);
-    if (transaction.kind === "expense") insightSpending += amountOf(transaction.money);
+    if (transaction.kind === "income")
+      insightIncome += amountOf(transactionReportingMoney(transaction));
+    if (transaction.kind === "expense")
+      insightSpending += amountOf(transactionReportingMoney(transaction));
   }
   const remainingBudget = budgetUsage.reduce(
     (sum, usage) => sum + BigInt(usage.remaining.amountMinor),
@@ -881,6 +893,8 @@ export function createFinanceService(
         expectedUpdatedAt: next.updatedAt,
         reviewStatus: previous.reviewStatus,
         values: transactionValues(previous),
+        idrMoney: transactionReportingMoney(previous),
+        fxSnapshot: previous.fxSnapshot ?? null,
       },
     });
     await evaluateBudgetThresholds(operationCaller.userId, next);
@@ -982,6 +996,7 @@ export function createFinanceService(
         transactionId: values.transactionId,
         expectedUpdatedAt: values.expectedUpdatedAt,
         values: merged,
+        previous,
         reviewStatus: "confirmed",
       });
       return mutateTransaction(verified, "edit_transaction", previous, transaction);
@@ -1006,6 +1021,7 @@ export function createFinanceService(
         transactionId: values.transactionId,
         expectedUpdatedAt: values.expectedUpdatedAt,
         values: { ...transactionValues(previous), ...values.changes },
+        previous,
         reviewStatus: "pending",
       });
       return mutateTransaction(verified, "edit_pending", previous, transaction);
@@ -1026,6 +1042,7 @@ export function createFinanceService(
         transactionId: values.transactionId,
         expectedUpdatedAt: values.expectedUpdatedAt,
         values: values.values,
+        previous,
         reviewStatus: "confirmed",
       });
       return mutateTransaction(verified, "confirm_pending", previous, transaction);
@@ -1099,7 +1116,12 @@ export function createFinanceService(
         resourceType = "transaction";
         resourceId = transaction.id;
         const merchant = transaction.merchantName ?? "unknown merchant";
-        const amount = transaction.money ? ` for IDR ${transaction.money.amountMinor}` : "";
+        const money = transaction.money;
+        const amount = money
+          ? money.currency === "USD"
+            ? ` for USD ${BigInt(money.amountMinor) / 100n}.${(BigInt(money.amountMinor) % 100n).toString().padStart(2, "0")}`
+            : ` for IDR ${money.amountMinor}`
+          : "";
         const date = transaction.occurredOn ? ` on ${transaction.occurredOn}` : "";
         summary = `Delete the ${transaction.kind} at ${merchant}${amount}${date}.`;
       } else if (request.action === "delete_budget") {
@@ -1488,9 +1510,9 @@ export function createFinanceService(
           continue;
         }
         if (transaction.kind === "income") {
-          confirmedIncome += amountOf(transaction.money);
+          confirmedIncome += amountOf(transactionReportingMoney(transaction));
         } else if (transaction.kind === "expense" && transaction.categoryId === values.categoryId) {
-          confirmedSpending += amountOf(transaction.money);
+          confirmedSpending += amountOf(transactionReportingMoney(transaction));
         }
       }
       if (confirmedSpending === 0n) {

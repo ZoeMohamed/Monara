@@ -134,7 +134,7 @@ test("amount validation rejects nonfinite, nonpositive, fractional, and unsafe r
 });
 
 test("invalid type, unsupported currency, and impossible date each prevent confirmation", () => {
-  for (const override of [{ kind: "payment" }, { currency: "USD" }, { date: "2026-02-30" }]) {
+  for (const override of [{ kind: "payment" }, { currency: "EUR" }, { date: "2026-02-30" }]) {
     const pending = syntheticTransaction(override);
     const original = [pending];
     assert.ok(Object.keys(transactionErrors(valuesOf(pending))).length > 0);
@@ -375,7 +375,7 @@ test("invalid corrections, unconfirmed records, and unknown identifiers leave th
     { amount: Number.MAX_SAFE_INTEGER + 1 },
     { date: "2026-02-30" },
     { kind: null },
-    { currency: "USD" },
+    { currency: "EUR" },
   ]) {
     assert.equal(
       updateConfirmedTransaction(original, confirmed.id, { ...valuesOf(confirmed), ...overrides }),

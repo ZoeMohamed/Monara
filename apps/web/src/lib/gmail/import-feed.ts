@@ -19,6 +19,7 @@ export type GmailImportFeedItem = {
   bankName: string;
   merchant: string;
   amount: number;
+  currency?: "IDR" | "USD";
   date: string;
   kind: TransactionKind;
   category?: string | null;
@@ -60,6 +61,7 @@ function feedItem(
     bankName: account.name,
     merchant: transaction.merchantName ?? transaction.description ?? "Transaction",
     amount,
+    ...(transaction.money.currency === "USD" ? { currency: "USD" as const } : {}),
     date: transaction.occurredOn,
     kind: transaction.kind,
     category: matchingCategory?.name ?? null,

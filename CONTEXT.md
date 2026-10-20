@@ -42,6 +42,26 @@ _Avoid_: Phone number as proof of identity
 
 ### Transactions
 
+**Primary Currency**:
+The default currency a User uses to understand their finances. It may differ from the currency of an individual transaction.
+_Avoid_: Transaction Currency when referring to the User's default
+
+**Transaction Currency**:
+The currency in which a transaction's recorded amount is denominated.
+_Avoid_: Primary Currency when referring to an individual transaction's denomination
+
+**Original Amount**:
+The amount and currency stated for a purchase before currency conversion, which may differ from the amount a bank reports debiting.
+_Avoid_: IDR Equivalent when referring to the original purchase price
+
+**IDR Equivalent**:
+An estimate of a USD transaction's value in IDR, calculated using an exchange rate. It is distinct from an actual IDR debit stated by the bank.
+_Avoid_: Actual debit when referring to a reference-rate estimate
+
+**FX Snapshot**:
+The exchange rate, source, and applicable rate day used for a particular currency conversion.
+_Avoid_: Current rate when referring to a past conversion
+
 **Transaction Type**:
 The financial treatment of a transaction: expense, income, or exclusion.
 _Avoid_: Category when referring to whether money counts as spending, income, or neither

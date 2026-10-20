@@ -1277,6 +1277,23 @@ describe("ZO6 Review Queue service simulation", () => {
 });
 
 describe("Agent T2 confirmation simulation", () => {
+  it("describes a USD deletion using dollars and cents from the source amount", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository);
+    const pending = memory.seedPending(ownerA, {
+      money: { amountMinor: "1999", currency: "USD" },
+    });
+    const confirmation = await service.requestDestructiveAction(callerA, {
+      action: "delete_transaction",
+      input: {
+        transactionId: pending.id,
+        expectedUpdatedAt: pending.updatedAt,
+      },
+    });
+    assert.match(confirmation.summary, /USD 19\.99/);
+    assert.doesNotMatch(confirmation.summary, /IDR/);
+  });
+
   it("binds a transaction delete to its User and allows it exactly once", async () => {
     const memory = createMemoryFinanceRepository();
     let currentTime = new Date("2026-10-15T05:00:00.000Z");
@@ -1817,5 +1834,31 @@ describe("receipt photos", () => {
       (error) => error instanceof FinanceOperationError && error.code === "FORBIDDEN",
     );
     await assert.rejects(service.addReceiptTransaction(whatsApp, { ...receipt, confidence: 2 }));
+  });
+});
+
+describe("persisted USD reporting values", () => {
+  it("uses the IDR equivalent for dashboard, insights and budget usage without mutating original cents", () => {
+    const usd = transaction({
+      money: { amountMinor: "1999", currency: "USD" },
+      idrMoney: { amountMinor: "329837", currency: "IDR" },
+    });
+    const pending = transaction({
+      id: "30000000-0000-4000-8000-000000000005",
+      money: { amountMinor: "2000", currency: "USD" },
+      idrMoney: null,
+      reviewStatus: "pending",
+    });
+    const result = calculateDashboard({
+      month: "2026-10",
+      today: "2026-10-14",
+      transactions: [usd, pending],
+      budgets: [budget],
+      categories: [category],
+      reminders: [],
+    });
+    assert.equal(result.spending.amountMinor, "329837");
+    assert.equal(result.budgetUsage[0].used.amountMinor, "329837");
+    assert.equal(usd.money.amountMinor, "1999");
   });
 });

@@ -10,7 +10,7 @@ import { formatDay, type Transaction } from "@/data/demo-ledger";
 function transactionRowModel(
   transaction: Transaction,
   showDate: boolean,
-  formatRupiah: ReturnType<typeof useAmountDisplay>["formatRupiah"],
+  formatMoney: ReturnType<typeof useAmountDisplay>["formatMoney"],
 ) {
   const date = showDate && transaction.date ? formatDay(transaction.date) : null;
   const metadata = [transaction.kind === "exclusion" ? "Excluded" : null, date, transaction.time]
@@ -24,7 +24,9 @@ function transactionRowModel(
     category,
     account: transaction.method ?? "Account not assigned",
     amount:
-      transaction.amount === null ? "Amount missing" : `${sign}${formatRupiah(transaction.amount)}`,
+      transaction.amount === null
+        ? "Amount missing"
+        : `${sign}${formatMoney(transaction.amount, transaction.currency)}`,
     amountColor:
       transaction.kind === "exclusion"
         ? "text-muted"
@@ -48,9 +50,9 @@ export function TransactionRow({
   onConfirm?: () => void;
   showDate?: boolean;
 }) {
-  const { formatRupiah } = useAmountDisplay();
+  const { formatMoney } = useAmountDisplay();
   const account = useTransactionAccount(transaction);
-  const model = transactionRowModel(transaction, showDate, formatRupiah);
+  const model = transactionRowModel(transaction, showDate, formatMoney);
   const content = (
     <>
       <AccountBadge account={account} name={transaction.method} size={36} />

@@ -10,6 +10,7 @@ import {
   type Transaction,
   transactionErrors,
 } from "./demo-ledger";
+import { reportingAmountFor } from "./demo-ledger.ts";
 import { financialMonth, monthComparison } from "./finance-analytics";
 
 export type SceneTime = "morning" | "afternoon" | "evening" | "night";
@@ -97,7 +98,10 @@ function monthFacts(transactions: Transaction[], month: string, today: string, s
     (item) => item.kind === "expense",
   );
   const largest = expenses.reduce<Transaction | null>(
-    (best, item) => (best === null || (item.amount ?? 0) > (best.amount ?? 0) ? item : best),
+    (best, item) =>
+      best === null || (reportingAmountFor(item) ?? 0) > (reportingAmountFor(best) ?? 0)
+        ? item
+        : best,
     null,
   );
   const currentMonth = today.slice(0, 7);
@@ -105,7 +109,7 @@ function monthFacts(transactions: Transaction[], month: string, today: string, s
     month === currentMonth
       ? expenses
           .filter((item) => item.date !== null && item.date <= today)
-          .reduce((total, item) => total + BigInt(item.amount ?? 0), BigInt(0))
+          .reduce((total, item) => total + BigInt(reportingAmountFor(item) ?? 0), BigInt(0))
       : spending;
   const daysCounted =
     month === currentMonth
@@ -194,7 +198,7 @@ export function overviewModel(
     expenseCount: expenses.length,
     todaySpending: expenses
       .filter((item) => item.date === today)
-      .reduce((total, item) => total + BigInt(item.amount ?? 0), BigInt(0)),
+      .reduce((total, item) => total + BigInt(reportingAmountFor(item) ?? 0), BigInt(0)),
     todayCount: expenses.filter((item) => item.date === today).length,
     isCurrentMonth: month === currentMonth,
     currentDay,

@@ -5,11 +5,11 @@ import {
   gmailConnectionIdSchema,
   isoDateTimeSchema,
   localTimeSchema,
-  positiveMoneySchema,
   transactionIdSchema,
   userIdSchema,
 } from "./common.ts";
 import { institutionKeySchema, resolvedInstitutionSchema } from "./institutions.ts";
+import { transactionMoneySchema } from "./transaction-money.ts";
 import { transactionFlowDirectionSchema, transactionKindSchema } from "./transactions.ts";
 
 export const gmailMessageIdSchema = z.string().trim().min(1).max(500);
@@ -37,7 +37,9 @@ export const extractedTransactionSchema = z
     counterpartyType: counterpartyTypeSchema.default("unknown"),
     isTransfer: z.boolean().default(false),
     internalTransfer: z.boolean().default(false),
-    money: positiveMoneySchema.nullable(),
+    money: transactionMoneySchema.nullable(),
+    originalMoney: transactionMoneySchema.nullable().optional(),
+    currencyInferred: z.boolean().optional(),
     occurredOn: calendarDateSchema.nullable(),
     occurredTime: localTimeSchema.nullable(),
     description: z.string().trim().min(1).max(1_000).nullable(),

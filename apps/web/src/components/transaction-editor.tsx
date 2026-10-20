@@ -1,12 +1,10 @@
 "use client";
 
 import type { Category, FinancialAccount } from "@monara/contracts";
-import { Button, FieldError, Form, Input, Label, ListBox, Select, TextField } from "@monara/ui";
+import { Button, Form } from "@monara/ui";
 import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { BrandLogoField } from "@/components/brand-logo-field";
 import { FinanceRecovery } from "@/components/budget-manager";
-import { CategoryAvatar } from "@/components/category-symbol";
-import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import { type QuickAddChoice, QuickAddFields } from "@/components/quick-add-fields";
 import {
@@ -15,6 +13,7 @@ import {
   demoIncomeNames,
   demoMethods,
   demoToday,
+  formatUsdMinor,
   type Transaction,
   type TransactionErrors,
   type TransactionValues,
@@ -129,7 +128,12 @@ function draftOf(
     merchant: transaction?.backend
       ? (transaction.backend.merchantName ?? "")
       : (transaction?.merchant ?? ""),
-    amount: transaction?.amount?.toString() ?? "",
+    amount:
+      transaction?.amount == null
+        ? ""
+        : transaction.currency === "USD"
+          ? `${Math.floor(transaction.amount / 100)}.${String(transaction.amount % 100).padStart(2, "0")}`
+          : transaction.amount.toString(),
     date: transaction ? (transaction.date ?? "") : today,
     // Time is not edited here; retain source seconds through unrelated corrections.
     time: transaction?.backend
@@ -155,9 +159,6 @@ function draftOf(
   };
 }
 
-const typeLabels = { expense: "Expense", income: "Income", exclusion: "Exclusion" } as const;
-const kinds = ["Expense", "Income", "Exclusion"];
-
 /** The account used for the last transaction added in this tab, so the next one starts there. */
 let lastAccountId: string | null = null;
 
@@ -174,14 +175,18 @@ function withDefaultAccount(
   return draft.method === null ? { ...draft, method: defaultAccountId(resources) } : draft;
 }
 
-function quickAccountChoices(resources?: TransactionEditorResources): QuickAddChoice[] {
+function quickAccountChoices(
+  draft: TransactionDraft,
+  resources?: TransactionEditorResources,
+): QuickAddChoice[] {
   if (!resources) return demoMethods.map((name) => ({ id: name, label: name }));
   return resources.financialAccounts
-    .filter((account) => account.isActive)
+    .filter((account) => account.isActive || account.id === draft.method)
     .map((account) => ({
       id: account.id,
       label: `${account.name}${account.lastFour ? ` · ${account.lastFour}` : ""}`,
       account,
+      disabled: !account.isActive,
     }));
 }
 
@@ -191,8 +196,18 @@ function quickCategoryChoices(
 ): QuickAddChoice[] {
   if (resources) {
     return resources.categories
-      .filter((category) => !category.isArchived && category.kind === draft.kind)
-      .map((category) => ({ id: category.id, label: category.name, icon: category.icon }));
+      .filter((category) =>
+        draft.kind === null
+          ? category.id === draft.category
+          : category.kind === draft.kind &&
+            (!category.isArchived || category.id === draft.category),
+      )
+      .map((category) => ({
+        id: category.id,
+        label: category.name,
+        icon: category.icon,
+        disabled: category.isArchived,
+      }));
   }
   const names =
     draft.kind === "exclusion"
@@ -203,141 +218,13 @@ function quickCategoryChoices(
   return names.map((name) => ({ id: name, label: name }));
 }
 
-function ChoiceField({
-  name,
-  label,
-  options,
-  value,
-  error,
-  disabled,
-  onChange,
-}: {
-  name: string;
-  label: string;
-  options: (string | { id: string; label: string; disabled?: boolean; icon?: string })[];
-  value: string | null;
-  error?: string;
-  disabled: boolean;
-  onChange: (value: string | null) => void;
-}) {
-  return (
-    <Select
-      name={name}
-      placeholder="Not selected"
-      value={value}
-      onChange={(key) => onChange(key === null ? null : String(key))}
-      isInvalid={!!error}
-      isDisabled={disabled}
-      className="w-full"
-      data-field={name}
-    >
-      <Label>{label}</Label>
-      <Select.Trigger className="min-h-11" aria-invalid={!!error}>
-        <Select.Value />
-        <Select.ClearButton />
-        <Select.Indicator />
-      </Select.Trigger>
-      <Select.Popover>
-        <ListBox>
-          {options.map((option) => {
-            const choice = typeof option === "string" ? { id: option, label: option } : option;
-            return (
-              <ListBox.Item
-                key={choice.id}
-                id={choice.id}
-                textValue={choice.label}
-                isDisabled={choice.disabled}
-              >
-                {"icon" in choice ? (
-                  <CategoryAvatar
-                    name={choice.label}
-                    icon={choice.icon}
-                    size={24}
-                    className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-surface-secondary"
-                    iconClassName="h-4 w-4"
-                  />
-                ) : null}
-                {choice.label}
-                <ListBox.ItemIndicator />
-              </ListBox.Item>
-            );
-          })}
-        </ListBox>
-      </Select.Popover>
-      <FieldError>{error}</FieldError>
-    </Select>
-  );
-}
-
-function TransactionFields({
-  draft,
-  errors,
-  disabled,
-  onChange,
-}: {
-  draft: TransactionDraft;
-  errors: TransactionErrors;
-  disabled: boolean;
-  onChange: (patch: Partial<TransactionDraft>) => void;
-}) {
-  const party =
-    draft.kind === "income"
-      ? { label: "Income source", placeholder: "e.g. Monthly salary" }
-      : { label: "Merchant", placeholder: "e.g. Kopi Kenangan" };
-  return (
-    <>
-      <TextField
-        name="merchant"
-        value={draft.merchant}
-        onChange={(merchant) => onChange({ merchant })}
-        isInvalid={!!errors.merchant}
-        isDisabled={disabled}
-      >
-        <Label>{party.label}</Label>
-        <Input autoFocus className="min-h-11 text-base" placeholder={party.placeholder} />
-        <FieldError>{errors.merchant}</FieldError>
-      </TextField>
-      <BrandLogoField disabled={disabled} label={draft.merchant} scope="merchant" />
-      <TextField
-        name="amount"
-        type="number"
-        value={draft.amount}
-        onChange={(amount) => onChange({ amount })}
-        isInvalid={!!errors.amount}
-        isDisabled={disabled}
-      >
-        <Label>Amount in rupiah</Label>
-        <Input
-          className="min-h-11 text-base"
-          inputMode="numeric"
-          min={draft.kind === "exclusion" ? "0" : "1"}
-          step="1"
-        />
-        <FieldError>{errors.amount}</FieldError>
-      </TextField>
-      <TextField
-        name="date"
-        type="date"
-        value={draft.date}
-        onChange={(date) => onChange({ date })}
-        isInvalid={!!errors.date}
-        isDisabled={disabled}
-      >
-        <Label>Date</Label>
-        <Input className="min-h-11 text-base" />
-        <FieldError>{errors.date}</FieldError>
-      </TextField>
-    </>
-  );
-}
-
 function valuesOf(
   draft: TransactionDraft,
   resources?: TransactionEditorResources,
 ): TransactionValues {
   return {
     merchant: draft.merchant.trim() || null,
-    amount: parseDraftAmount(draft.amount),
+    amount: parseDraftAmount(draft.amount, draft.currency),
     date: draft.date.trim() || null,
     time: draft.time.trim() || null,
     kind: draft.kind,
@@ -382,8 +269,13 @@ function validateDraft(
     for (const field of ["kind", "amount", "currency", "date", "method"] as const) {
       if (values[field] === null) delete validation[field];
     }
-    if (resources && values.amount !== null && values.currency !== "IDR") {
-      validation.currency = "Choose IDR for this amount.";
+    if (
+      resources &&
+      values.amount !== null &&
+      values.currency !== "IDR" &&
+      values.currency !== "USD"
+    ) {
+      validation.currency = "Choose IDR or USD for this amount.";
     }
   }
   if (!transaction) {
@@ -490,121 +382,6 @@ type TransactionChoiceProps = {
   resources?: TransactionEditorResources;
 };
 
-function TransactionAccountChoices({
-  draft,
-  errors,
-  disabled,
-  onChange,
-  resources,
-}: TransactionChoiceProps) {
-  const accounts = resources?.financialAccounts.map((account) => ({
-    id: account.id,
-    label: `${account.name}${account.lastFour ? ` · ${account.lastFour}` : ""}`,
-    disabled: !account.isActive,
-  }));
-  return (
-    <ChoiceField
-      name="method"
-      label="Account"
-      options={accounts ?? demoMethods}
-      value={draft.method}
-      error={errors.method}
-      disabled={disabled}
-      onChange={(method) => onChange({ method })}
-    />
-  );
-}
-
-function TransactionCategoryChoice({
-  draft,
-  errors,
-  disabled,
-  onChange,
-  resources,
-}: TransactionChoiceProps) {
-  const exclusion = draft.kind === "exclusion";
-  // Each category belongs to exactly one transaction type.
-  const options = resources
-    ? resources.categories
-        .filter((category) =>
-          draft.kind === null ? category.id === draft.category : category.kind === draft.kind,
-        )
-        .map((category) => ({
-          id: category.id,
-          label: category.name,
-          icon: category.icon,
-          disabled: category.isArchived,
-        }))
-    : exclusion
-      ? demoExclusionNames
-      : draft.kind === "income"
-        ? demoIncomeNames
-        : demoCategoryNames;
-  if (options.length === 0) return null;
-  return (
-    <ChoiceField
-      name="category"
-      label={exclusion ? "Reason (optional)" : "Category (optional)"}
-      options={options}
-      value={draft.category}
-      error={errors.category}
-      disabled={disabled}
-      onChange={(category) => onChange({ category })}
-    />
-  );
-}
-
-function TransactionChoices({
-  draft,
-  errors,
-  disabled,
-  onChange,
-  resources,
-}: TransactionChoiceProps) {
-  const exclusion = draft.kind === "exclusion";
-  return (
-    <>
-      <ChoiceField
-        name="kind"
-        label="Type"
-        options={kinds}
-        value={draft.kind ? typeLabels[draft.kind] : null}
-        error={errors.kind}
-        disabled={disabled}
-        onChange={(label) => onChange(kindChange(draft, label, resources))}
-      />
-      <ChoiceField
-        name="currency"
-        label="Currency"
-        options={["IDR"]}
-        value={draft.currency}
-        error={errors.currency}
-        disabled={disabled}
-        onChange={(currency) => onChange({ currency: currency === "IDR" ? "IDR" : null })}
-      />
-      <TransactionAccountChoices
-        draft={draft}
-        errors={errors}
-        disabled={disabled}
-        onChange={onChange}
-        resources={resources}
-      />
-      <TransactionCategoryChoice
-        draft={draft}
-        errors={errors}
-        disabled={disabled}
-        onChange={onChange}
-        resources={resources}
-      />
-      {exclusion ? (
-        <p className="rounded-xl bg-surface-secondary px-3 py-2 text-xs leading-5 text-muted">
-          Kept in your history. This amount stays out of spending, income, and budgets.
-        </p>
-      ) : null}
-    </>
-  );
-}
-
 function useTransactionEditorState({
   transaction,
   initialDraft,
@@ -684,7 +461,7 @@ function useTransactionEditorState({
     if (firstInvalid) {
       event.currentTarget
         .querySelector<HTMLElement>(
-          `input[name="${firstInvalid}"], [data-field="${firstInvalid}"] button`,
+          `input[name="${firstInvalid}"], select[name="${firstInvalid}"], [data-field="${firstInvalid}"] button`,
         )
         ?.focus();
       return;
@@ -760,39 +537,6 @@ function useTransactionEditorState({
   };
 }
 
-function EditorHeader({
-  title,
-  private: privateLedger,
-  disabled,
-  onClose,
-}: {
-  title: string;
-  private: boolean;
-  disabled: boolean;
-  onClose: () => void;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <h2 id="transaction-editor-title" className="text-xl font-bold">
-          {title}
-        </h2>
-        {privateLedger ? <p className="mt-1 text-sm text-muted">Your private ledger</p> : null}
-      </div>
-      <Button
-        className="-mt-1 -mr-2"
-        isIconOnly
-        variant="ghost"
-        aria-label="Close transaction form"
-        onPress={onClose}
-        isDisabled={disabled}
-      >
-        <Icon name="close" />
-      </Button>
-    </div>
-  );
-}
-
 type EditorFieldsProps = TransactionChoiceProps & {
   props: TransactionEditorProps;
   requestClose: () => void;
@@ -801,7 +545,7 @@ type EditorFieldsProps = TransactionChoiceProps & {
   reviewLatest: (useCurrent: boolean) => void;
 };
 
-/** Adding is a short sheet; reviewing or editing an existing record keeps the full form. */
+/** Creation, review, and correction share the same amount-first fields. */
 function EditorFields({
   props,
   draft,
@@ -814,10 +558,18 @@ function EditorFields({
   reviewLatest,
 }: EditorFieldsProps) {
   const { transaction, resources } = props;
-  if (!transaction) {
-    return (
+  return (
+    <>
+      {changedElsewhere && transaction ? (
+        <LatestTransaction
+          transaction={transaction}
+          onUseLatest={() => reviewLatest(true)}
+          onKeepDraft={() => reviewLatest(false)}
+          disabled={Boolean(props.refreshRequired)}
+        />
+      ) : null}
       <QuickAddFields
-        accounts={quickAccountChoices(resources)}
+        accounts={quickAccountChoices(draft, resources)}
         categories={quickCategoryChoices(draft, resources)}
         disabled={disabled}
         draft={draft}
@@ -827,26 +579,11 @@ function EditorFields({
         onClose={requestClose}
         onKind={(label) => onChange(kindChange(draft, label, resources))}
         today={props.today ?? demoToday}
-      />
-    );
-  }
-  return (
-    <>
-      <TransactionFields draft={draft} errors={errors} disabled={disabled} onChange={onChange} />
-      {changedElsewhere ? (
-        <LatestTransaction
-          transaction={transaction}
-          onUseLatest={() => reviewLatest(true)}
-          onKeepDraft={() => reviewLatest(false)}
-          disabled={Boolean(props.refreshRequired)}
-        />
-      ) : null}
-      <TransactionChoices
-        draft={draft}
-        errors={errors}
-        disabled={disabled}
-        onChange={onChange}
-        resources={resources}
+        merchantAccessory={
+          transaction ? (
+            <BrandLogoField disabled={disabled} label={draft.merchant} scope="merchant" />
+          ) : undefined
+        }
       />
     </>
   );
@@ -858,7 +595,6 @@ export function TransactionEditor(props: TransactionEditorProps) {
   const isSaving = state.phase === "saving";
   const locked = isSaving || state.uncertain || changedElsewhere || Boolean(props.refreshRequired);
   const labels = editorLabels(props.transaction, isSaving);
-  const quick = !props.transaction;
 
   return (
     <ModalDialog labelledBy="transaction-editor-title" onClose={requestClose}>
@@ -866,24 +602,15 @@ export function TransactionEditor(props: TransactionEditorProps) {
         <DiscardChanges onKeep={keepEditing} onDiscard={() => props.onClose()} />
       ) : (
         <Form
-          className={quick ? "space-y-4 p-4 sm:p-5" : "space-y-4 p-4 sm:p-6"}
+          className="space-y-4 p-4 sm:p-5"
           onSubmit={submit}
           validationBehavior="aria"
           aria-busy={isSaving}
         >
-          {quick ? (
-            // The quick-add sheet is self-explanatory, so its title is for screen readers only.
-            <h2 id="transaction-editor-title" className="sr-only">
-              {labels.title}
-            </h2>
-          ) : (
-            <EditorHeader
-              disabled={isSaving}
-              onClose={requestClose}
-              private={Boolean(props.resources && !props.resources.demo)}
-              title={labels.title}
-            />
-          )}
+          {/* The amount-first sheet keeps its title available to screen readers. */}
+          <h2 id="transaction-editor-title" className="sr-only">
+            {labels.title}
+          </h2>
           <EditorFields
             changedElsewhere={changedElsewhere}
             disabled={locked}
@@ -903,10 +630,8 @@ export function TransactionEditor(props: TransactionEditorProps) {
             onRefreshRecords={props.onRefreshRecords}
           />
           <EditorFooter
-            compact={quick}
             labels={labels}
             state={state}
-            onClose={requestClose}
             locked={locked}
             reviewRequired={changedElsewhere || Boolean(props.refreshRequired)}
           />
@@ -917,44 +642,22 @@ export function TransactionEditor(props: TransactionEditorProps) {
 }
 
 function EditorFooter({
-  compact,
   labels,
   state,
-  onClose,
   locked,
   reviewRequired,
 }: {
-  compact: boolean;
   labels: ReturnType<typeof editorLabels>;
   state: EditorState;
-  onClose: () => void;
   locked: boolean;
   reviewRequired: boolean;
 }) {
   const isSaving = state.phase === "saving";
-  if (compact) {
-    // Closing is the X or the backdrop; the sheet's only job past the fields is Save.
-    return (
-      // Pinned to the bottom edge, so Save stays in reach when a long category list scrolls.
-      <div className="sticky bottom-0 -mx-4 -mb-4 bg-surface px-4 pt-2 pb-4 sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
-        <Button
-          className="min-h-12 w-full text-base"
-          type="submit"
-          isDisabled={isSaving || reviewRequired}
-        >
-          {state.uncertain && !isSaving ? "Retry same change" : labels.save}
-        </Button>
-      </div>
-    );
-  }
   return (
-    <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-5">
-      <Button className="min-h-11" variant="secondary" onPress={onClose} isDisabled={isSaving}>
-        Cancel
-      </Button>
+    <div className="sticky bottom-0 -mx-4 -mb-4 flex gap-2 bg-surface px-4 pt-2 pb-4 sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
       {labels.pending ? (
         <Button
-          className="min-h-11"
+          className="min-h-12 min-w-0 flex-1 text-base"
           variant="secondary"
           type="submit"
           name="action"
@@ -964,7 +667,11 @@ function EditorFooter({
           Save changes
         </Button>
       ) : null}
-      <Button className="min-h-11" type="submit" isDisabled={isSaving || reviewRequired}>
+      <Button
+        className="min-h-12 min-w-0 flex-1 text-base"
+        type="submit"
+        isDisabled={isSaving || reviewRequired}
+      >
         {state.uncertain && !isSaving ? "Retry same change" : labels.save}
       </Button>
     </div>
@@ -1026,16 +733,19 @@ function LatestTransaction({
     >
       <h3 className="font-bold">This transaction changed elsewhere</h3>
       <p className="text-sm leading-6 text-muted">
-        Your entries are kept above. Compare them with the latest saved details before choosing what
-        to save.
+        Your entries are kept in the form. Compare them with the latest saved details before
+        choosing what to save.
       </p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
         <dt>Merchant</dt>
         <dd className="break-words font-semibold">{transaction.merchant ?? "Not provided"}</dd>
         <dt>Amount</dt>
         <dd data-amount>
-          {transaction.amount?.toLocaleString("en-US") ?? "Not provided"}{" "}
-          {transaction.currency ?? ""}
+          {transaction.amount == null
+            ? "Not provided"
+            : transaction.currency === "USD"
+              ? formatUsdMinor(transaction.amount)
+              : `${transaction.amount.toLocaleString("en-US")} ${transaction.currency ?? ""}`}
         </dd>
         <dt>Date</dt>
         <dd>{transaction.date ?? "Not provided"}</dd>

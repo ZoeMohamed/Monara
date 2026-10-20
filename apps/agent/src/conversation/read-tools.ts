@@ -15,6 +15,7 @@ import {
   listTransactionsInputSchema,
   reminderPageSchema,
   transactionPageSchema,
+  transactionReportingMoney,
 } from "@monara/contracts";
 import { z } from "zod";
 import type { AgentTool, ToolContext } from "./tools.ts";
@@ -65,8 +66,9 @@ async function summariseMonth(month: string, context: ToolContext) {
       }),
     );
     for (const transaction of result.items) {
-      if (!transaction.money || transaction.deletedAt || transaction.kind === "exclusion") continue;
-      const amount = BigInt(transaction.money.amountMinor);
+      const reportingMoney = transactionReportingMoney(transaction);
+      if (!reportingMoney || transaction.deletedAt || transaction.kind === "exclusion") continue;
+      const amount = BigInt(reportingMoney.amountMinor);
       transactionCount += 1;
       if (transaction.kind === "income") {
         income += amount;

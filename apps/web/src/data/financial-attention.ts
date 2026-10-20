@@ -6,6 +6,7 @@ import {
   formatRupiah,
   type RecurringBill,
   type Reminder,
+  reportingAmountFor,
   type Transaction,
   transactionErrors,
 } from "./demo-ledger.ts";
@@ -133,7 +134,7 @@ function budgetAttention(
         (budget.categoryId
           ? transaction.categoryId === budget.categoryId
           : transaction.category === budget.category)
-          ? sum + BigInt(transaction.amount ?? 0)
+          ? sum + BigInt(reportingAmountFor(transaction) ?? 0)
           : sum,
       0n,
     );

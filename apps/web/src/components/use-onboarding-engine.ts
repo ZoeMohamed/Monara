@@ -19,6 +19,7 @@ export type ImportedTransaction = {
   merchant: string;
   /** Always positive; the kind says which way the money moved. */
   amount: number;
+  currency?: "IDR" | "USD";
   /** YYYY-MM-DD */
   date: string;
   kind: ImportedKind;
