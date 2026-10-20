@@ -8,6 +8,7 @@ import type {
   GmailJobInput,
   GmailParseJob,
   GmailSyncJob,
+  Institution,
   MarkGmailConnectionSyncedInput,
   MerchantCategorizeJob,
   RecordGmailExtractionInput,
@@ -89,6 +90,7 @@ interface Overrides {
   page?: GmailMessagePage;
   /** Registry entries the User has as accounts. */
   institutionKeys?: string[];
+  customInstitutions?: Institution[];
   fromAddress?: string | null;
   authenticationResults?: string[];
   uncategorized?: string[];
@@ -153,6 +155,7 @@ function setup(overrides: Overrides = {}) {
         categoryNames: ["Food & Drink", "Transport"],
         holderName: overrides.holderName ?? null,
         institutionKeys: overrides.institutionKeys ?? ["BCA_CC"],
+        customInstitutions: overrides.customInstitutions,
       };
     },
     async checkConnectionActive(_id) {
@@ -1039,5 +1042,62 @@ describe("backend errors", () => {
     );
     // A missing route returns 404 without our error body; that must retry and surface, not drop.
     assert.equal(new BackendOperationError("gmail.claim-message", 404, null).isNotFound, false);
+  });
+});
+
+describe("custom bank sources", () => {
+  const source: Institution = {
+    key: "custom_d7000000000040008000000000000001",
+    name: "Local Bank",
+    provider: "Local Bank",
+    platform: "BANKING_APP",
+    senderEmails: ["alerts@localbank.example"],
+  };
+  it("lists only custom senders resolved for an active account of this mailbox", () => {
+    assert.deepEqual(sendersFor([source.key]), []);
+    assert.deepEqual(sendersFor([source.key], [source]), source.senderEmails);
+    assert.equal(sendersFor(["BCA_CC"], [source]).includes(source.senderEmails[0] ?? ""), false);
+  });
+  it("extracts an owned custom sender without adding an authentication gate", async () => {
+    const { pipeline, calls } = setup({
+      institutionKeys: [source.key],
+      customInstitutions: [source],
+      fromAddress: "ALERTS@LOCALBANK.EXAMPLE",
+      authenticationResults: [],
+    });
+    await pipeline.runJob(
+      { kind: "gmail.extract", connectionId, gmailMessageId: "custom-one", receivedAt },
+      notFinal,
+    );
+    assert.equal(calls.record[0]?.institutionKey, source.key);
+    assert.equal(calls.record[0]?.outcome, "transactions");
+    assert.equal(calls.record[0]?.senderVerified, false);
+  });
+  it("skips custom senders that have no active linked account", async () => {
+    const { pipeline, calls } = setup({
+      institutionKeys: ["BCA_CC"],
+      customInstitutions: [source],
+      fromAddress: source.senderEmails[0],
+    });
+    await pipeline.runJob(
+      { kind: "gmail.extract", connectionId, gmailMessageId: "custom-foreign", receivedAt },
+      notFinal,
+    );
+    assert.equal(calls.modelCalls, 0);
+    assert.equal(calls.record[0]?.outcome, "skipped");
+  });
+  it("uses current sender configuration for a later queued job", async () => {
+    const config: Overrides = {
+      institutionKeys: [source.key],
+      customInstitutions: [{ ...source, senderEmails: ["replacement@localbank.example"] }],
+      fromAddress: source.senderEmails[0],
+    };
+    const { pipeline, calls } = setup(config);
+    await pipeline.runJob(
+      { kind: "gmail.extract", connectionId, gmailMessageId: "custom-stale", receivedAt },
+      notFinal,
+    );
+    assert.equal(calls.modelCalls, 0);
+    assert.equal(calls.record[0]?.outcome, "skipped");
   });
 });

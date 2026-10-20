@@ -5,6 +5,7 @@ import {
   claimGmailMessageResultSchema,
   claimGmailMessagesResultSchema,
   claimMerchantProfileResultSchema,
+  customBankInstitution,
   findInstitution,
   gmailDiscoverySchema,
   gmailSyncCountsSchema,
@@ -21,6 +22,7 @@ import {
   GmailIngestionError,
   type GmailIngestionRepository,
 } from "./gmail-ingestion.ts";
+import { loadCustomBanks } from "./supabase-custom-banks.ts";
 
 /** Postgres error codes are safe to inspect; messages and details are not returned. */
 function fail(error: { code?: string }): never {
@@ -101,7 +103,7 @@ export function createSupabaseGmailIngestionRepository(
       if (connection.error) fail(connection.error);
       if (!connection.data) throw connectionNotActive();
 
-      const [categories, accounts, holderName] = await Promise.all([
+      const [categories, accounts, holderName, customBanks] = await Promise.all([
         client
           .from("categories")
           .select("name")
@@ -119,21 +121,26 @@ export function createSupabaseGmailIngestionRepository(
           .not("institution_key", "is", null)
           .limit(100),
         holderNameOf(client, connection.data.user_id),
+        loadCustomBanks(client, connection.data.user_id),
       ]);
       if (categories.error) fail(categories.error);
       if (accounts.error) fail(accounts.error);
 
+      const customInstitutions = customBanks.map(customBankInstitution);
+      const customKeys = new Set(customInstitutions.map((entry) => entry.key));
       return resolvedGmailConnectionSchema.parse({
         connectionId: connection.data.id,
         userId: connection.data.user_id,
         composioConnectedAccountId: connection.data.composio_connected_account_id,
         categoryNames: categories.data.map((category) => category.name),
         holderName,
+        ...(customInstitutions.length > 0 ? { customInstitutions } : {}),
         // Keys no longer in the registry are ignored rather than failing the sync.
         institutionKeys: [
           ...new Set(
             accounts.data.flatMap((account) =>
-              account.institution_key !== null && findInstitution(account.institution_key)
+              account.institution_key !== null &&
+              (findInstitution(account.institution_key) || customKeys.has(account.institution_key))
                 ? [account.institution_key]
                 : [],
             ),
@@ -377,6 +384,10 @@ export function createSupabaseGmailIngestionRepository(
     },
 
     async discoveryFor(userId, connectionId) {
+      const customBanks = await loadCustomBanks(client, userId);
+      const customInstitutions = new Map(
+        customBanks.map((bank) => [bank.key, customBankInstitution(bank)]),
+      );
       const [connection, findings, accounts] = await Promise.all([
         client
           .from("gmail_connections")
@@ -408,7 +419,9 @@ export function createSupabaseGmailIngestionRepository(
       return gmailDiscoverySchema.parse({
         state: connection.data.discovery_state,
         suggestions: findings.data.flatMap((finding) => {
-          const institution = findInstitution(finding.institution_key);
+          const institution =
+            customInstitutions.get(finding.institution_key) ??
+            findInstitution(finding.institution_key);
           if (!institution) return [];
           return [
             {

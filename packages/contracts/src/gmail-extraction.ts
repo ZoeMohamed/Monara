@@ -9,7 +9,7 @@ import {
   transactionIdSchema,
   userIdSchema,
 } from "./common.ts";
-import { institutionKeySchema } from "./institutions.ts";
+import { institutionKeySchema, resolvedInstitutionSchema } from "./institutions.ts";
 import { transactionFlowDirectionSchema, transactionKindSchema } from "./transactions.ts";
 
 export const gmailMessageIdSchema = z.string().trim().min(1).max(500);
@@ -224,6 +224,7 @@ export const resolvedGmailConnectionSchema = z
      * only from these entries' senders.
      */
     institutionKeys: z.array(institutionKeySchema).max(100),
+    customInstitutions: z.array(resolvedInstitutionSchema).max(100).optional(),
   })
   .strict();
 

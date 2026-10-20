@@ -14,9 +14,12 @@ import {
   type CategoryPage,
   type CreateBudgetInput,
   type CreateCategoryInput,
+  type CreateCustomBankInput,
+  type CreateCustomBankResult,
   type CreateFinancialAccountInput,
   type CreateFinancialGoalInput,
   type CreateTransactionInput,
+  type CustomBank,
   categoryMutationResultSchema,
   confirmDestructiveActionInputSchema,
   confirmedTransactionValuesSchema,
@@ -24,9 +27,12 @@ import {
   createBudgetInputSchema,
   createCategoryInputSchema,
   createCategoryResultSchema,
+  createCustomBankInputSchema,
+  createCustomBankResultSchema,
   createFinancialAccountInputSchema,
   createFinancialGoalInputSchema,
   createTransactionInputSchema,
+  customBankListSchema,
   type DashboardSummary,
   type DeleteBudgetInput,
   type DeleteFinancialGoalInput,
@@ -58,6 +64,7 @@ import {
   type ListTransactionsInput,
   listBudgetsInputSchema,
   listCategoriesInputSchema,
+  listCustomBanksInputSchema,
   listFinancialAccountsInputSchema,
   listFinancialGoalsInputSchema,
   listRemindersInputSchema,
@@ -79,6 +86,7 @@ import {
   transactionValuesSchema,
   type UpdateBudgetInput,
   type UpdateCategoryInput,
+  type UpdateCustomBankInput,
   type UpdateFinancialAccountInput,
   type UpdateFinancialGoalInput,
   type UpdatePendingTransactionInput,
@@ -86,6 +94,8 @@ import {
   undoActionInputSchema,
   updateBudgetInputSchema,
   updateCategoryInputSchema,
+  updateCustomBankInputSchema,
+  updateCustomBankResultSchema,
   updateFinancialAccountInputSchema,
   updateFinancialGoalInputSchema,
   updatePendingTransactionInputSchema,
@@ -171,6 +181,10 @@ export interface FinanceRepository {
     expectedUpdatedAt: string;
     deletedAt: string;
   }): Promise<Transaction>;
+
+  listCustomBanks(userId: string): Promise<CustomBank[]>;
+  createCustomBank(userId: string, input: CreateCustomBankInput): Promise<CreateCustomBankResult>;
+  updateCustomBank(userId: string, input: UpdateCustomBankInput): Promise<CustomBank>;
 
   listFinancialAccounts(
     userId: string,
@@ -1264,6 +1278,41 @@ export function createFinanceService(
       });
       if (!consumed) throw new FinanceOperationError("CONFLICT", "That change was already undone.");
       return { ok: true as const };
+    },
+
+    async listCustomBanks(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      listCustomBanksInputSchema.parse(input);
+      return customBankListSchema.parse(await repository.listCustomBanks(verified.userId));
+    },
+
+    async createCustomBank(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      if (verified.channel !== "web")
+        throw new FinanceOperationError("FORBIDDEN", "Create custom banks in Monara.");
+      return createCustomBankResultSchema.parse(
+        await repository.createCustomBank(
+          verified.userId,
+          createCustomBankInputSchema.parse(input),
+        ),
+      );
+    },
+
+    async updateCustomBank(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      if (verified.channel !== "web")
+        throw new FinanceOperationError("FORBIDDEN", "Edit custom banks in Monara.");
+      const values = updateCustomBankInputSchema.parse(input);
+      const previous = (await repository.listCustomBanks(verified.userId)).find(
+        (bank) => bank.id === values.bankId,
+      );
+      if (!previous)
+        throw new FinanceOperationError("NOT_FOUND", "That custom bank was not found.");
+      const customBank = await repository.updateCustomBank(verified.userId, values);
+      const sendersChanged =
+        JSON.stringify([...previous.senderEmails].sort()) !==
+        JSON.stringify([...customBank.senderEmails].sort());
+      return updateCustomBankResultSchema.parse({ customBank, sendersChanged });
     },
 
     async listFinancialAccounts(operationCaller: FinanceCaller, input: unknown) {

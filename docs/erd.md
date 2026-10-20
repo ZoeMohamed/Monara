@@ -366,6 +366,14 @@ erDiagram
 - Financial Account creates carry a `client_request_id` that is unique per User. Account deletion is outside the MVP and is not exposed to the Agent. Setting `is_active = false` stops new writes from selecting the Account while historical transactions keep their reference.
 - Seed 15 default Category rows per User. `(user_id, slug)` is unique. Category names are editable presentation data; transactions and budgets reference Category UUIDs.
 
+### Custom Banks
+
+- A Custom Bank is owned by one User and reusable across Financial Accounts. It records a name, immutable Bank/Credit card/Wallet product kind, optional persisted logo choice, and one to twenty exact notification senders.
+- `custom_banks.id` is a UUID; its generated institution key is `custom_` followed by the UUID without hyphens. Built-in institution keys remain unchanged. `financial_accounts.custom_bank_id`, `user_id`, and `institution_key` reference the same owned bank through a composite foreign key.
+- `custom_bank_senders` normalizes addresses and makes `(user_id, sender_email)` unique. The backend rejects built-in catalog addresses. Different Users may independently configure the same custom sender.
+- Bank and first-account creation is one idempotent transaction. Metadata edits use optimistic concurrency and preserve account nicknames and financial history. Referenced banks cannot be hard-deleted; deletion/archiving has no v1 product control. Full User Deletion still removes the owned graph.
+- See the [Custom Bank design](custom-bank-design.md) and [ownership decision](adr/0006-user-owned-custom-banks.md).
+
 ### Gmail ingestion and deduplication
 
 - A User may have at most three active Gmail Connections; the backend enforces the count transactionally.

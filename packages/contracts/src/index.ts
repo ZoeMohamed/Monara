@@ -7,6 +7,7 @@ export * from "./chat-history.ts";
 export * from "./chat-limits.ts";
 export * from "./chat-media.ts";
 export * from "./common.ts";
+export * from "./custom-banks.ts";
 export * from "./dashboard.ts";
 export * from "./forecast.ts";
 export * from "./gmail.ts";

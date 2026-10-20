@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  type CreateCustomBankInput,
+  type CustomBank,
   calendarDateSchema,
   createFinancialAccountInputSchema,
   type ReversibleActionReceipt,
@@ -37,6 +39,7 @@ import {
   type Transaction,
 } from "@/data/sample-data";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
+import { createDemoBank, editDemoBank } from "@/lib/finance/custom-banks";
 import type { FinanceSnapshot } from "@/lib/finance/presentation";
 
 export type SaveNotice = {
@@ -161,6 +164,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const [demoTransactions, setTransactions] = useState(initialTransactions);
   const [demoBudgets, setBudgets] = useState(initialBudgets);
   const [demoAccounts, setDemoAccounts] = useState(initialDemoAccounts);
+  const [demoCustomBanks, setDemoCustomBanks] = useState<CustomBank[]>([]);
   const [demoCategories, setDemoCategories] = useState(() => demoEditorCategories(initialBudgets));
   const [personalReminders, setPersonalReminders] = useState<PersonalReminder[]>([]);
   const [notificationStatuses, setNotificationStatuses] = useState<
@@ -185,6 +189,16 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const [amountsHidden, toggleAmounts] = useAmountsHidden();
   const [chatPrompt, setChatPrompt] = useState<string | null>(null);
   const tourMode: "live" | "demo" = live ? "live" : "demo";
+  const createDemoCustomBank = useCallback(
+    (input: CreateCustomBankInput) => {
+      if (live || demoCustomBanks.some((bank) => bank.id === input.bankId)) return;
+      const result = createDemoBank(input, demoCustomBanks);
+      setDemoCustomBanks((banks) => [...banks, result.customBank]);
+      setDemoAccounts((accounts) => [...accounts, result.financialAccount]);
+      setNotice({ message: "Custom bank added for this demo visit." });
+    },
+    [live, demoCustomBanks],
+  );
   const { onboarding, tourPending, startReplay, finishTour } = useFirstRun({
     live,
     email: profile.email,
@@ -193,6 +207,8 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     homeOpen: homeIsUncovered(view),
     homeScreen: view.screen === "home",
     refreshFinance: sync.refresh,
+    onDemoCreateBank: createDemoCustomBank,
+    runMutation: sync.runMutation,
   });
   const {
     transactions,
@@ -371,6 +387,21 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     transactions,
     budgets: selectedBudgets,
     financialAccounts: resources.financialAccounts,
+    customBanks: financeSnapshot?.customBanks ?? demoCustomBanks,
+    createDemoCustomBank,
+    updateDemoCustomBank: (input) => {
+      if (live) return;
+      const bank = editDemoBank(input, demoCustomBanks);
+      setDemoCustomBanks((banks) => banks.map((item) => (item.id === bank.id ? bank : item)));
+      setDemoAccounts((accounts) =>
+        accounts.map((account) =>
+          account.institutionKey === bank.key
+            ? { ...account, institution: bank.name, institutionLogo: bank.logo }
+            : account,
+        ),
+      );
+      setNotice({ message: "Custom bank updated for this demo visit." });
+    },
     categories: resources.categories,
     createDemoCategory: (input) => {
       if (live) return;
@@ -454,11 +485,13 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       )
         throw new Error("Choose a different account name.");
       const { clientRequestId, ...values } = parsed.data;
+      const customBank = demoCustomBanks.find((bank) => bank.key === values.institutionKey);
       const timestamp = new Date().toISOString();
       setDemoAccounts((accounts) => [
         ...accounts,
         {
           ...values,
+          ...(customBank ? { institution: customBank.name, institutionLogo: customBank.logo } : {}),
           id: clientRequestId,
           isActive: true,
           createdAt: timestamp,
@@ -484,9 +517,16 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
         )
       )
         throw new Error("Choose a different account name.");
+      const institutionKey =
+        parsed.data.changes.institutionKey !== undefined
+          ? parsed.data.changes.institutionKey
+          : account.institutionKey;
+      const customBank = demoCustomBanks.find((bank) => bank.key === institutionKey);
       const updated = {
         ...account,
         ...parsed.data.changes,
+        institutionLogo: customBank?.logo,
+        ...(customBank ? { institution: customBank.name } : {}),
         updatedAt: new Date().toISOString(),
       };
       setDemoAccounts((accounts) =>

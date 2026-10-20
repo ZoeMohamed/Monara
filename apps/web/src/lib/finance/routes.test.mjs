@@ -42,7 +42,8 @@ const mockCore = `
 const mockDb = "export const createMonaraServiceRoleClient = () => ({});";
 const mockConfig = "export const publicSupabaseConfig = () => ({});";
 const mockNextServer = "export const after = () => {};";
-const mockGmailImport = "export async function importAfterAccountLinked() {}";
+const mockGmailImport = `export async function importAfterCustomBankEdited() {}
+export async function importAfterAccountLinked() {}`;
 const mockGmailTrigger = "export async function syncUserTriggers() {}";
 const mockBudgetAlerts = "export function scheduleBudgetAlert() {}";
 const mockUserDeletion = `

@@ -3,9 +3,11 @@ import {
   type BudgetUsage,
   budgetPageSchema,
   type Category,
+  type CustomBank,
   calendarDateSchema,
   calendarMonthSchema,
   categoryPageSchema,
+  customBankListSchema,
   type DashboardSummary,
   dashboardSummarySchema,
   type FinancialAccount,
@@ -30,6 +32,7 @@ export type FinanceSnapshot = {
   transactions: OwnedTransaction[];
   budgets: OwnedBudget[];
   financialAccounts: FinancialAccount[];
+  customBanks: CustomBank[];
   financialGoals: FinancialGoal[];
   categories: Category[];
   allBudgets: Budget[];
@@ -140,7 +143,7 @@ type ListOperation =
   | "list_categories"
   | "list_budgets";
 export type FinanceReader = (
-  operation: ListOperation | "get_dashboard",
+  operation: ListOperation | "get_dashboard" | "list_custom_banks",
   input: unknown,
 ) => Promise<unknown>;
 
@@ -194,15 +197,23 @@ export async function loadFinanceSnapshot(
 ): Promise<FinanceSnapshot> {
   calendarMonthSchema.parse(month);
   calendarDateSchema.parse(today);
-  const [records, financialAccounts, financialGoals, categories, allBudgets, dashboardResult] =
-    await Promise.all([
-      loadAllPages("list_transactions", read),
-      loadAllPages("list_financial_accounts", read),
-      loadAllPages("list_financial_goals", read),
-      loadAllPages("list_categories", read),
-      loadAllPages("list_budgets", read),
-      read("get_dashboard", { month }),
-    ]);
+  const [
+    records,
+    financialAccounts,
+    financialGoals,
+    categories,
+    allBudgets,
+    dashboardResult,
+    customBanksResult,
+  ] = await Promise.all([
+    loadAllPages("list_transactions", read),
+    loadAllPages("list_financial_accounts", read),
+    loadAllPages("list_financial_goals", read),
+    loadAllPages("list_categories", read),
+    loadAllPages("list_budgets", read),
+    read("get_dashboard", { month }),
+    read("list_custom_banks", {}),
+  ]);
   const dashboard = dashboardSummarySchema.parse(dashboardResult);
   if (dashboard.month !== month) {
     throw new FinancePresentationError("The requested month could not be loaded. Try again.");
@@ -213,6 +224,7 @@ export async function loadFinanceSnapshot(
       .map((record) => mapOwnedTransaction(record, financialAccounts, categories)),
     budgets: dashboard.budgetUsage.map((usage) => mapOwnedBudget(usage, categories, month)),
     financialAccounts,
+    customBanks: customBankListSchema.parse(customBanksResult),
     financialGoals,
     categories,
     allBudgets,

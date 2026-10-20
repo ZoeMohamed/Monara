@@ -9,7 +9,7 @@ import {
   paginationInputSchema,
   reversibleActionReceiptSchema,
 } from "./common.ts";
-import { institutionKeySchema } from "./institutions.ts";
+import { bankLogoSchema, institutionKeySchema } from "./institutions.ts";
 import { transactionKindSchema } from "./transactions.ts";
 
 export const financialAccountTypeSchema = z.enum(["bank", "wallet", "cash"]);
@@ -42,6 +42,7 @@ export const financialAccountSchema = z
     id: financialAccountIdSchema,
     ...financialAccountValuesShape,
     institutionKey: institutionKeyValueSchema,
+    institutionLogo: bankLogoSchema.nullable().optional(),
     gmailConnectionId: gmailConnectionValueSchema.default(null),
     isActive: z.boolean(),
     createdAt: isoDateTimeSchema,

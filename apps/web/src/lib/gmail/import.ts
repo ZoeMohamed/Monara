@@ -1,4 +1,4 @@
-import { findInstitution, type GmailIngestReason } from "@monara/contracts";
+import { customBankIdForKey, findInstitution, type GmailIngestReason } from "@monara/contracts";
 import { GmailIngestionError } from "@monara/core";
 import { requestAgentIngest } from "@/lib/gmail/agent-sync";
 import { gmailConnectionService, gmailIngestionRepository } from "@/lib/gmail/service";
@@ -44,13 +44,17 @@ export async function importAfterAccountLinked(
   const key = account.institutionKey;
   const connectionId = account.gmailConnectionId;
   if (!account.isActive || !key || !connectionId) return;
-  if ((findInstitution(key)?.senderEmails.length ?? 0) === 0) return;
+  if (!customBankIdForKey(key) && (findInstitution(key)?.senderEmails.length ?? 0) === 0) return;
   if (!(await profileService().fullName(userId))) return;
   // The link itself was checked by the database; this also requires it to be active now.
   const active = (await gmailConnectionService().list(userId)).some(
     (connection) => connection.id === connectionId && connection.status === "active",
   );
   if (!active) return;
+  if (customBankIdForKey(key)) {
+    const resolved = await gmailIngestionRepository().resolveConnection(connectionId);
+    if (resolved.userId !== userId || !resolved.institutionKeys.includes(key)) return;
+  }
   await startImport(userId, connectionId, { reason, institutionKeys: [key] });
 }
 
@@ -72,4 +76,22 @@ export async function importAfterNameSaved(userId: string): Promise<void> {
   );
   const failure = results.find((result) => result.status === "rejected");
   if (failure) throw failure.reason;
+}
+
+/** A sender edit imports only the bank's currently linked active accounts, once per mailbox. */
+export async function importAfterCustomBankEdited(userId: string, key: string): Promise<void> {
+  const connections = (await gmailConnectionService().list(userId)).filter(
+    (item) => item.status === "active",
+  );
+  await Promise.all(
+    connections.map(async (connection) => {
+      const resolved = await gmailIngestionRepository().resolveConnection(connection.id);
+      if (resolved.userId !== userId || !resolved.institutionKeys.includes(key)) return;
+      await importAfterAccountLinked(
+        userId,
+        { institutionKey: key, gmailConnectionId: connection.id, isActive: true },
+        "account_added",
+      );
+    }),
+  );
 }

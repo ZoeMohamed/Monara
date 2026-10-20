@@ -1,6 +1,13 @@
 "use client";
 
-import type { Category, CreateFinancialAccountInput, FinancialAccount } from "@monara/contracts";
+import type {
+  Category,
+  CreateCustomBankInput,
+  CreateFinancialAccountInput,
+  CustomBank,
+  FinancialAccount,
+  UpdateCustomBankInput,
+} from "@monara/contracts";
 import { createContext, useContext } from "react";
 import type { DemoBudgetChanges } from "@/components/demo-budget-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
@@ -26,6 +33,9 @@ export type AppSession = {
   transactions: Transaction[];
   budgets: Budget[];
   financialAccounts: FinancialAccount[];
+  customBanks: CustomBank[];
+  createDemoCustomBank: (input: CreateCustomBankInput) => void;
+  updateDemoCustomBank: (input: UpdateCustomBankInput) => void;
   categories: Category[];
   createDemoCategory: (input: { name: string; icon: string; kind: Category["kind"] }) => void;
   updateDemoCategory: (original: string, changes: { name: string; icon: string }) => void;

@@ -21,6 +21,9 @@ const FINANCE_OPERATIONS = [
   "exclude_pending",
   "delete_transaction",
   "undo_action",
+  "list_custom_banks",
+  "create_custom_bank",
+  "update_custom_bank",
   "list_financial_accounts",
   "create_financial_account",
   "update_financial_account",
@@ -58,6 +61,9 @@ async function cleanUpDeletedGoalImage(remove: () => Promise<{ error: unknown }>
 export type FinanceOperation = (typeof FINANCE_OPERATIONS)[number];
 type AgentFinanceOperation = Exclude<
   FinanceOperation,
+  | "create_custom_bank"
+  | "update_custom_bank"
+  | "list_custom_banks"
   | "create_category"
   | "list_financial_goals"
   | "create_financial_goal"
@@ -109,6 +115,9 @@ export function isFinanceOperation(value: string): value is FinanceOperation {
 
 function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinanceOperation {
   return (
+    value !== "create_custom_bank" &&
+    value !== "update_custom_bank" &&
+    value !== "list_custom_banks" &&
     value !== "create_category" &&
     value !== "list_financial_goals" &&
     value !== "create_financial_goal" &&
@@ -153,6 +162,12 @@ export async function runFinanceOperation(
       return service.deleteTransaction(caller, input);
     case "undo_action":
       return service.undoAction(caller, input);
+    case "list_custom_banks":
+      return service.listCustomBanks(caller, input);
+    case "create_custom_bank":
+      return service.createCustomBank(caller, input);
+    case "update_custom_bank":
+      return service.updateCustomBank(caller, input);
     case "list_financial_accounts":
       return service.listFinancialAccounts(caller, input);
     case "create_financial_account":

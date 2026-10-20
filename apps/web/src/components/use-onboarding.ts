@@ -1,5 +1,6 @@
 "use client";
 
+import type { CreateCustomBankInput } from "@monara/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDemoOnboarding } from "@/components/use-demo-onboarding";
 import {
@@ -56,6 +57,8 @@ export function useOnboarding({
   onHomeScreen,
   suggestedName,
   refreshFinance,
+  onDemoCreateBank,
+  runMutation,
 }: {
   live: boolean;
   /** Keys this browser's saved progress, so accounts on one device do not share it. */
@@ -67,13 +70,15 @@ export function useOnboarding({
   /** What the name step starts with: the name Google gave Monara, which the User can change. */
   suggestedName: string;
   refreshFinance: () => Promise<void>;
+  onDemoCreateBank?: (input: CreateCustomBankInput) => void;
+  runMutation?: (operation: () => Promise<void>) => Promise<void>;
 }) {
   const stored = useStoredPhase(scope);
   const mailboxId = useGmailMailbox(live && stored !== "done");
   const phase = setupPhase({ live, stored, mailboxId });
 
   const gmail = useGmailOnboarding(live ? mailboxId : null, live ? phase : null);
-  const demo = useDemoOnboarding(!live, phase);
+  const demo = useDemoOnboarding(!live, phase, onDemoCreateBank);
   const engine: OnboardingEngine = live ? gmail : demo;
 
   const [dismissed, setDismissed] = useState(false);
@@ -130,11 +135,14 @@ export function useOnboarding({
   const saveBanks = useCallback(
     (choices: BankChoice[]) =>
       run(async () => {
-        await engine.saveBanks(choices);
-        await refreshFinance().catch(() => undefined);
+        if (live && runMutation) await runMutation(() => engine.saveBanks(choices));
+        else {
+          await engine.saveBanks(choices);
+          await refreshFinance();
+        }
         go("import");
       }),
-    [engine, go, refreshFinance, run],
+    [engine, go, live, refreshFinance, run, runMutation],
   );
 
   const saveName = useCallback(
