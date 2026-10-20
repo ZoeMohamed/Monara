@@ -8,7 +8,6 @@ import {
   requestGmailSyncInputSchema,
 } from "@monara/contracts";
 import {
-  BraveSearchError,
   createBraveSearchClient,
   createComposioGmailReader,
   GmailReadError,
@@ -47,7 +46,6 @@ function failureFields(error: unknown): Record<string, unknown> {
   if (error instanceof BackendOperationError) {
     return { reason, operation: error.operation, status: error.status, code: error.code };
   }
-  if (error instanceof BraveSearchError) return { reason, status: error.status };
   if (error instanceof LlmError) {
     return { reason, status: error.status, code: error.failure, detail: error.message };
   }
@@ -328,7 +326,7 @@ export async function consumeGmailJobs(batch: MessageBatch<unknown>, env: Env): 
 
 /**
  * Merchant queue consumer: categorizes imported transactions concurrently. A merchant
- * another job is searching, or a rate-limited search, is retried after a short wait.
+ * another job is still searching is retried after a short wait; a failed search is skipped.
  */
 export async function consumeMerchantJobs(batch: MessageBatch<unknown>, env: Env): Promise<void> {
   // A delivery already in flight can still use the previous five-message
@@ -346,10 +344,15 @@ export async function consumeMerchantJobs(batch: MessageBatch<unknown>, env: Env
     return;
   }
   const backend = createBackend(env);
+  if (!env.BRAVE_SEARCH_API_KEY?.trim())
+    logEvent("error", { event: "merchant.search_unconfigured" });
   const pipeline = createMerchantPipeline({
     backend,
     llm: createLlm(env),
-    search: createBraveSearchClient({ apiKey: env.BRAVE_SEARCH_API_KEY ?? "" }),
+    // Search is optional enrichment: without a key the model classifies on its own knowledge.
+    search: env.BRAVE_SEARCH_API_KEY?.trim()
+      ? createBraveSearchClient({ apiKey: env.BRAVE_SEARCH_API_KEY })
+      : null,
     observe: (metric) => logEvent("info", { event: "merchant.stage", ...metric }),
   });
   await Promise.all(
@@ -400,8 +403,7 @@ export async function consumeMerchantJobs(batch: MessageBatch<unknown>, env: Env
             : Math.max(
                 retryDelaySeconds(attempts),
                 // A busy model said how long to wait; asking sooner only fails again.
-                (isTemporaryLlmError(error) || error instanceof BraveSearchError) &&
-                  error.retryAfterMs !== null
+                isTemporaryLlmError(error) && error.retryAfterMs !== null
                   ? Math.min(Math.ceil(error.retryAfterMs / 1000), 900)
                   : 0,
               );
