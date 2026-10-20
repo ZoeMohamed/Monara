@@ -4,6 +4,11 @@ export interface AuthenticatedProfile {
   displayName: string;
   email: string | null;
   initials: string;
+  /**
+   * The shared reviewer account, set up by an administrator with seeded records. It signs in
+   * with a password, skips Gmail setup, and cannot be deleted. Absent for everyone else.
+   */
+  demoAccount?: true;
 }
 
 export interface AuthenticatedIdentity extends AuthenticatedProfile {
@@ -38,12 +43,17 @@ export function identityFromVerifiedClaims(claims: unknown): AuthenticatedIdenti
   const providers = Array.isArray(appMetadata.providers) ? appMetadata.providers : [];
   const hasGoogleProvider =
     appMetadata.provider === "google" || providers.some((provider) => provider === "google");
+  // Only an administrator can write app_metadata, so a password session counts as the
+  // reviewer account only when the flag was set by the seed script, never by a visitor.
+  const demoAccount =
+    appMetadata.monara_demo_account === true &&
+    (appMetadata.provider === "email" || providers.some((provider) => provider === "email"));
   if (
     !id ||
     claims.aud !== "authenticated" ||
     claims.role !== "authenticated" ||
     claims.is_anonymous === true ||
-    !hasGoogleProvider
+    !(hasGoogleProvider || demoAccount)
   ) {
     return null;
   }
@@ -61,6 +71,7 @@ export function identityFromVerifiedClaims(claims: unknown): AuthenticatedIdenti
     email,
     id,
     initials: initialsFor(displayName),
+    ...(demoAccount ? { demoAccount: true as const } : {}),
   };
 }
 
@@ -70,5 +81,6 @@ export function profileFromIdentity(identity: AuthenticatedIdentity): Authentica
     displayName: identity.displayName,
     email: identity.email,
     initials: identity.initials,
+    ...(identity.demoAccount ? { demoAccount: true as const } : {}),
   };
 }

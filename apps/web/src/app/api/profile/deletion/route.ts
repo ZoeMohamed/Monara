@@ -24,6 +24,9 @@ export async function POST(request: Request) {
     const claims = await supabase.auth.getClaims();
     const identity = claims.error ? null : identityFromVerifiedClaims(claims.data?.claims);
     if (!identity) throw new FinanceOperationError("UNAUTHENTICATED", "Sign in to continue.");
+    if (identity.demoAccount) {
+      throw new FinanceOperationError("FORBIDDEN", "The shared demo account cannot be deleted.");
+    }
     // Build the receipt before the irreversible transaction so missing signing
     // configuration cannot accept deletion without a usable progress receipt.
     const receipt = deletionReceipt(identity.id, process.env.SUPABASE_SERVICE_ROLE_KEY ?? "");

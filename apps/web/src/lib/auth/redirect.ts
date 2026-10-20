@@ -27,6 +27,10 @@ export function signInErrorMessage(code: string | null | undefined): string | un
       return "Google could not finish signing you in. Please try again.";
     case "oauth_start_failed":
       return "Google sign-in is unavailable right now. Please try again later.";
+    case "password_invalid":
+      return "That email and password did not match. Please check them and try again.";
+    case "password_unavailable":
+      return "Email sign-in is unavailable right now. Please try again later.";
     case "session_invalid":
       return "Your sign-in session could not be verified. Please try again.";
     default:
