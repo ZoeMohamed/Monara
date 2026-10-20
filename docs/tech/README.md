@@ -1,76 +1,55 @@
-# Technical documentation
+# Submission documentation
 
-This is the technical documentation for the FinTechathon 2026 submission. It lives in the repository so it is versioned, reviewed in pull requests, and sits next to the code it describes. Product requirements stay in the PRD (Google Doc tab "PRD"); every section here cites the PRD feature ids (F1 to F16).
+Monara's submission documentation is maintained as three complementary sources. Each document has one job, so architecture, security reasoning, and execution proof remain consistent without repeating one another.
 
-## What the competition asks for
+## Canonical documents
 
-The rules list three separate deliverables here, so they are built as three PDFs from the files below.
-
-| PDF | Required part | Files |
+| Deliverable | Canonical source | Responsibility |
 | --- | --- | --- |
-| Technical Documentation | System architecture | [architecture.md](architecture.md), [ui.md](ui.md) |
-| | Core algorithm description | [extraction.md](extraction.md), [agent.md](agent.md), [reminders.md](reminders.md) |
-| | Security design | [data-and-security.md](data-and-security.md) |
-| Security Self-Assessment | Permission tiers and known-risk list | [security-self-assessment.md](security-self-assessment.md) |
-| Execution Evidence | Sandbox logs and measured results | [evaluation.md](evaluation.md) |
+| Technical Documentation | [technical-documentation.md](technical-documentation.md) | System boundaries, data model, workflows, algorithms, operations, and recovery |
+| Security Self-Assessment | [security-self-assessment.md](security-self-assessment.md) | Threat model, permission tiers, mandatory controls, failure behavior, and risk decisions |
+| Execution Evidence | [execution-evidence.md](execution-evidence.md) | Release acceptance cases, evidence requirements, observed outcomes, and sign-off |
 
-## Sections, owners, and status
+All three canonical sources use the same domain terms, transaction model, trust boundaries, and acceptance IDs. Topic files in this directory are working notes; they are not composed into the final submission package.
 
-| File | Owner | Due | Status |
-| --- | --- | --- | --- |
-| [architecture.md](architecture.md) | Abhip | 16 Oct | Draft |
-| [data-and-security.md](data-and-security.md) | Zoe | 16 Oct | Not started |
-| [extraction.md](extraction.md) | Adlyn | 16 Oct | Draft |
-| [agent.md](agent.md) | Argya | 16 Oct | Draft |
-| [ui.md](ui.md) | Erdafa | 16 Oct | Draft |
-| [reminders.md](reminders.md) | Abhip | 16 Oct | Draft |
-| [forecast.md](forecast.md) | Abhip | 18 Oct | Draft |
-| [evaluation.md](evaluation.md) | Abhip | 18 Oct | Draft |
-| [security-self-assessment.md](security-self-assessment.md) | Abhip | 17 Oct | Draft |
+## Working notes
 
-Status values: Not started, Draft, Reviewed, Final.
+These supporting files remain indexed for maintainers but are not canonical submission sources: [architecture.md](architecture.md), [data-and-security.md](data-and-security.md), [extraction.md](extraction.md), [agent.md](agent.md), [ui.md](ui.md), [reminders.md](reminders.md), [forecast.md](forecast.md), and [evaluation.md](evaluation.md).
 
-The UI section was reconciled with current source and the PRD, Action Tracker and Brainstorm on **16 October 2026**. The [UI action checklist](../ui-actions-2026-10-16.md) maps ER1–ER12 to delivered source, remaining acceptance and teammate dependencies; the [backend handoff](../ui-backend-handoff.md) records integration boundaries and current verification. The shared tracker now lists ER4, ER7 and ER12 In review, with dated owner dependencies and evidence references. Other owners' rows and technical sections retain their existing statuses. The UI section remains Draft pending owner review. Normal documentation checks do not establish review or final submission acceptance.
+## Separation of concerns
 
-Architecture, Agent, and Gmail extraction drafts were reconciled against current source without changing their owners or review status. Receipt and voice extraction remain planned. Reminders and evaluation remain Not started with owner TODOs. The normal structure check can pass while these submission sections are unfinished; final acceptance requires completed content, measured evidence and owner review.
+- Technical Documentation explains how the system is designed to work.
+- Security Self-Assessment explains why the boundaries are safe and how failures close.
+- Execution Evidence explains what must be observed before a release can be accepted.
+- An ideal expected result is not a deployment claim. The evidence document records a release observation only when the corresponding production artifact exists.
+- Screenshots may demonstrate visible application state, but authorization, ownership, replay protection, and deletion require deterministic boundary evidence.
 
-## How to write a section
-
-1. Copy [_template.md](_template.md) or open your stub, and keep its five headings.
-2. Describe what the code does today. Mark anything not built as "Planned". Never claim a number you did not measure.
-3. Name real file paths and link tests, ADRs, and Sandbox scenarios.
-4. Run `pnpm docs:check`. Run `pnpm docs:check --final` before the submission freeze: it also fails on any leftover TODO.
-5. Open a pull request. Abhip builds the PDFs from these files.
-
-## Build the submission PDFs
+## Validate and build
 
 ```sh
-pnpm docs:pdf            # all three PDFs into docs/tech/build (ignored by git)
-pnpm docs:pdf security   # one of: technical, security, evidence
-pnpm docs:pdf --final    # also fails on any TODO or a Status below Reviewed
+pnpm docs:check
+pnpm docs:check --final
+
+pnpm docs:pdf
+pnpm docs:pdf technical
+pnpm docs:pdf security
+pnpm docs:pdf evidence
+pnpm docs:pdf --final
 ```
 
-The build needs `pandoc`, `typst` and `mmdc` (Mermaid CLI) on the PATH. It renders the Mermaid blocks to images, turns links to other sections into anchors (or a pointer to the PDF that holds them) and links to code into GitHub URLs, and applies the Monara cover, header and footer from `pdf/`. The PDFs use the app's Nunito Sans, brand blue and canvas colors.
+The PDF build requires `pandoc` and `typst`. Mermaid CLI (`mmdc`) is required only when a selected source contains a Mermaid diagram. Generated PDFs are written to `docs/tech/build/` and remain ignored by Git.
 
-## Submission package
-
-The rules ask for six items, sent by email to `fintechathon@ican-x.com` with clear labels on each attachment (the organizers confirmed this on 14 October).
-
-| Item | Where it is |
+| Output | Source |
 | --- | --- |
-| Technical documentation | `Team808-Technical-Documentation.pdf`, built by `pnpm docs:pdf` |
-| Presentation deck | Canva deck exported to PDF |
-| Demo video (optional, up to 5 minutes) | Link, to be added |
-| Source code | This repository, which will be public: https://github.com/ZoeMohamed/Monara |
-| Security self-assessment | `Team808-Security-Self-Assessment.pdf` |
-| Execution evidence | `Team808-Execution-Evidence.pdf`, with raw logs in [evidence/](evidence/) |
+| `Team808-Technical-Documentation.pdf` | `technical-documentation.md` |
+| `Team808-Security-Self-Assessment.pdf` | `security-self-assessment.md` |
+| `Team808-Execution-Evidence.pdf` | `execution-evidence.md` |
 
-Hosted app for the judges: https://monara-finance.vercel.app. Test accounts are to be added.
+## Publication rules
 
-If you use an AI agent to draft a section, ask it to follow `.agents/skills/tech-doc/SKILL.md`.
-
-## Rules
-
-- English only.
-- No secrets, keys, real emails, passports, or personal data.
-- Diagrams are Mermaid code blocks, which GitHub renders.
+- Keep the three canonical sources at `Status: Final` before packaging.
+- Use English in the deliverables.
+- Never include credentials, tokens, raw provider payloads, private financial records, or personal identifiers.
+- Use synthetic or redacted screenshots only.
+- Keep control IDs and end-to-end case IDs stable across all three documents.
+- Rebuild all PDFs after any canonical-source or template change.

@@ -13,7 +13,7 @@
 #let doc-index = if "$kind$" == "Technical Documentation" { 1 } else if "$kind$" == "Security Self-Assessment" { 2 } else { 3 }
 #let doc-code = "0" + str(doc-index)
 #let cover-title = if doc-index == 1 { [Technical\ Documentation] } else if doc-index == 2 { [Security\ Self-Assessment] } else { [Execution\ Evidence] }
-#let motifs = if doc-index == 1 { ("Architecture", "Algorithms", "Security") } else if doc-index == 2 { ("Identity", "Permissions", "Known risks") } else { ("Tasks", "Attacks", "Extraction") }
+#let motifs = if doc-index == 1 { ("Architecture", "Financial rules", "Recovery") } else if doc-index == 2 { ("Identity", "Permissions", "Residual risk") } else { ("16 acceptance cases", "Release-bound proof", "Redacted artifacts") }
 
 #set document(title: "$title$ $kind$", author: "Monara, Team 808")
 #set text(font: ("Nunito Sans", "Helvetica Neue", "Arial"), size: 10pt, fill: ink, lang: "en")
@@ -55,22 +55,9 @@ $endif$
       International Track, Topic A: Personal Finance Assistant],
     )
     #v(0.3cm)
-    #grid(columns: (1fr, 1fr), column-gutter: 0.7cm,
-      [#text(size: 6.5pt, weight: "bold", tracking: 0.09em, fill: rgb("#bad0ff"))[TEAM]
-      #v(0.1cm)
-      Team 808],
-$if(owner)$
-      [#text(size: 6.5pt, weight: "bold", tracking: 0.09em, fill: rgb("#bad0ff"))[OWNER / FEATURES]
-      #v(0.1cm)
-      $owner$ / $features$],
-$else$
-      [],
-$endif$
-    )
-    #v(0.45cm)
-    #box(inset: (x: 9pt, y: 5pt), radius: 20pt, stroke: 0.5pt + white.transparentize(60%))[
-      #text(font: "Montserrat", size: 7pt, weight: "bold")[$version$, $date$]
-    ]
+    #text(size: 6.5pt, weight: "bold", tracking: 0.09em, fill: rgb("#bad0ff"))[TEAM]
+    #v(0.1cm)
+    Team 808
   ])
   #place(bottom + left, dx: 1.4cm, dy: -0.65cm, text(size: 6.5pt, tracking: 0.09em, fill: rgb("#c4d8ff"))[#upper[$title$, an AI personal finance Agent]])
   #place(bottom + right, dx: -1.4cm, dy: -0.65cm, text(size: 6.5pt, fill: rgb("#c4d8ff"))[#doc-code / 03])
@@ -107,7 +94,11 @@ $endif$
     #v(0.16cm)
     #grid(columns: (1fr, auto), align: (left + horizon, right + horizon),
       text(font: "Montserrat", size: 6.5pt, weight: "bold", fill: navy)[MONARA / TEAM 808],
-      text(size: 7pt, fill: muted)[$version$ #h(0.4em) · #h(0.4em) #current / #total],
+      if doc-index == 3 {
+        text(size: 7pt, fill: muted)[#current / #total]
+      } else {
+        text(size: 7pt, fill: muted)[$version$ #h(0.4em) · #h(0.4em) #current / #total]
+      },
     )
   ],
   footer-descent: 38%,

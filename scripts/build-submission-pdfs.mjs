@@ -1,5 +1,6 @@
 // Builds the three submission PDFs from docs/tech: technical documentation, security self-assessment
-// and execution evidence. Needs pandoc, typst and mmdc (Mermaid CLI) on the PATH.
+// and execution evidence. Needs Pandoc and Typst; Mermaid CLI is needed only for a selected
+// document that contains a Mermaid diagram.
 //
 //   pnpm docs:pdf               build all three into docs/tech/build
 //   pnpm docs:pdf --final       also fail on leftover TODOs and a status below Reviewed
@@ -26,42 +27,23 @@ const DOCUMENTS = {
   technical: {
     output: "Team808-Technical-Documentation.pdf",
     kind: "Technical Documentation",
-    subtitle: "System architecture, core algorithms and security design",
+    subtitle: "Ideal system architecture, financial rules and security design",
     toc: true,
-    parts: [
-      {
-        title: "System architecture and interface",
-        intro:
-          "How the product is split across the web app, the Agent and the database, and how the interface is built.",
-        files: ["architecture", "ui"],
-      },
-      {
-        title: "Core algorithms",
-        intro:
-          "How emails become transactions, how the Agent plans and acts within its permission tiers, and how Reminders are chosen.",
-        files: ["extraction", "agent", "reminders"],
-      },
-      {
-        title: "Security design",
-        intro:
-          "How data is owned, isolated and protected. The permission tiers and the known-risk list are in the Security Self-Assessment PDF.",
-        files: ["data-and-security"],
-      },
-    ],
+    files: ["technical-documentation"],
   },
   security: {
     output: "Team808-Security-Self-Assessment.pdf",
     kind: "Security Self-Assessment",
-    subtitle: "Permission tiers, identity, data protection and known risks",
-    toc: false,
+    subtitle: "Ideal control model, assurance criteria and residual risks",
+    toc: true,
     files: ["security-self-assessment"],
   },
   evidence: {
     output: "Team808-Execution-Evidence.pdf",
     kind: "Execution Evidence",
-    subtitle: "Sandbox runs, measured results and red-team outcomes",
-    toc: false,
-    files: ["evaluation"],
+    subtitle: "Ideal acceptance cases, evidence rules and release sign-off",
+    toc: true,
+    files: ["execution-evidence"],
   },
 };
 
@@ -79,7 +61,7 @@ function run(command, commandArgs, options = {}) {
   }
 }
 
-for (const tool of ["pandoc", "typst", "mmdc"]) {
+for (const tool of ["pandoc", "typst"]) {
   try {
     execFileSync("which", [tool], { stdio: "ignore" });
   } catch {
@@ -162,6 +144,12 @@ function rewriteLinks(markdown, file, docId) {
       if (/^(https?:|mailto:|#|xdoc:)/.test(target)) return match;
       const [pathPart, fragment] = target.split("#");
       const repoPath = posix.normalize(posix.join(sourceDir, pathPart));
+      if (/\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(repoPath)) {
+        if (!existsSync(join(root, repoPath))) {
+          warnings.push(`${file}.md links to ${repoPath}, which does not exist`);
+        }
+        return `](/${repoPath}${fragment ? `#${fragment}` : ""})`;
+      }
       const section = repoPath.match(/^docs\/tech\/([a-z-]+)\.md$/)?.[1];
       if (section && homeOf.has(section)) {
         const home = homeOf.get(section);
@@ -253,7 +241,7 @@ for (const [id, doc] of Object.entries(DOCUMENTS)) {
 
   run("pandoc", [
     "-f",
-    "gfm+attributes",
+    "gfm+attributes+raw_attribute",
     "-t",
     "typst",
     "--syntax-highlighting=none",
