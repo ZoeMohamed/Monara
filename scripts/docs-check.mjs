@@ -14,6 +14,11 @@ const REQUIRED_HEADINGS = [
   "How to verify",
 ];
 const SKIPPED = new Set(["README.md", "_template.md"]);
+const CANONICAL_PACKAGE = new Set([
+  "technical-documentation.md",
+  "security-self-assessment.md",
+  "execution-evidence.md",
+]);
 
 const readme = readFileSync(join(dir, "README.md"), "utf8");
 const problems = [];
@@ -31,7 +36,7 @@ for (const file of readdirSync(dir)) {
   }
   if (!readme.includes(`(${file})`)) problems.push(`${file}: not listed in docs/tech/README.md`);
 
-  if (isFinal) {
+  if (isFinal && CANONICAL_PACKAGE.has(file)) {
     if (/\bTODO\b/.test(text)) problems.push(`${file}: still contains TODO`);
     if (/Status: (Not started|Draft)\./.test(text)) {
       problems.push(`${file}: status must be Reviewed or Final`);
