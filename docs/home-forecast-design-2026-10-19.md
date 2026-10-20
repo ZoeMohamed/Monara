@@ -5,7 +5,7 @@ Status: Accepted and implemented locally. Production deployment and the live mid
 ## Agreed behavior
 
 - Remove the text on the right of the live Spending forecast card header, including "Expected, not confirmed".
-- Order the Home cards: Spending forecast, Safe to spend today, Needs attention, then Latest activity.
+- On desktop, group Forecasts and flags and then Needs attention in the left column below Spending forecast; Safe to spend today stays on the right. On mobile, order the cards Spending forecast, Safe to spend today, Forecasts and flags when available, Needs attention, then Latest activity.
 - Generate specific Expected Payments automatically each day at midnight and retain a manual forecast button.
 - Below the manual button, show exactly: "Forecast will update every night at 00.00".
 - Automatically generate a first forecast when none exists.
