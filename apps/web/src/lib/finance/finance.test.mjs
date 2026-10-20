@@ -128,6 +128,7 @@ const emptyDashboard = {
 function emptyReader(transactionReader = async () => ({ items: [], nextCursor: null })) {
   return async (operation, input) => {
     if (operation === "get_dashboard") return emptyDashboard;
+    if (operation === "list_custom_banks") return [];
     if (operation === "list_financial_accounts") return { items: accounts, nextCursor: null };
     if (operation === "list_categories") return { items: categories, nextCursor: null };
     if (operation === "list_transactions") return transactionReader(input);

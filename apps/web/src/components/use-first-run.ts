@@ -1,5 +1,6 @@
 "use client";
 
+import type { CreateCustomBankInput } from "@monara/contracts";
 import { useCallback, useState } from "react";
 
 import { useOnboarding } from "@/components/use-onboarding";
@@ -17,6 +18,8 @@ export function useFirstRun({
   homeOpen,
   homeScreen,
   refreshFinance,
+  onDemoCreateBank,
+  runMutation,
 }: {
   live: boolean;
   email: string | null;
@@ -25,6 +28,8 @@ export function useFirstRun({
   homeOpen: boolean;
   homeScreen: boolean;
   refreshFinance: () => Promise<void>;
+  onDemoCreateBank?: (input: CreateCustomBankInput) => void;
+  runMutation?: (operation: () => Promise<void>) => Promise<void>;
 }) {
   const onboarding = useOnboarding({
     live,
@@ -34,6 +39,8 @@ export function useFirstRun({
     // The demo guest has no real name to suggest.
     suggestedName: live ? displayName : "",
     refreshFinance,
+    onDemoCreateBank,
+    runMutation,
   });
   const [replaying, setReplaying] = useState(false);
   const stored = useTourPending(live ? "live" : "demo", homeOpen);

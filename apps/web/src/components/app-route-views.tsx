@@ -426,6 +426,9 @@ export function ProfileRoute() {
             accounts={session.financialAccounts}
             onCreate={session.createDemoAccount}
             onUpdate={session.updateDemoAccount}
+            customBanks={session.customBanks}
+            onCreateCustom={session.createDemoCustomBank}
+            onUpdateCustom={session.updateDemoCustomBank}
           />
         )
       }

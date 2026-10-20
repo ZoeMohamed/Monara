@@ -1,6 +1,4 @@
 import {
-  findInstitution,
-  findInstitutionBySender,
   GMAIL_PARSE_JOB_MAX_EMAILS,
   type GmailDiscoveryJob,
   type GmailExtractionJob,
@@ -8,6 +6,8 @@ import {
   type GmailJobInput,
   type GmailParseJob,
   type GmailSyncJob,
+  type Institution,
+  institutionSources,
   type MerchantCategorizeJob,
   type RecordGmailExtractionInput,
   type ResolvedGmailConnection,
@@ -158,8 +158,15 @@ function fromClause(senders: readonly string[]): string {
 }
 
 /** The exact sender addresses of the given registry entries. */
-export function sendersFor(institutionKeys: readonly string[]): string[] {
-  return institutionKeys.flatMap((key) => findInstitution(key)?.senderEmails ?? []);
+export function sendersFor(
+  institutionKeys: readonly string[],
+  resolved: readonly Institution[] = [],
+): string[] {
+  return [
+    ...new Set(
+      institutionSources(institutionKeys, resolved).flatMap((entry) => entry.senderEmails),
+    ),
+  ];
 }
 
 /**
@@ -215,7 +222,13 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
       count: 1,
     });
     const extractStarted = performance.now();
-    const institution = message.fromAddress ? findInstitutionBySender(message.fromAddress) : null;
+    const sources = institutionSources(connection.institutionKeys, connection.customInstitutions);
+    const address = message.fromAddress?.trim().toLowerCase();
+    const institution = address
+      ? (sources.find((entry) =>
+          entry.senderEmails.some((sender) => sender.toLowerCase() === address),
+        ) ?? null)
+      : null;
     const owned =
       institution !== null && connection.institutionKeys.includes(institution.key)
         ? institution
@@ -303,7 +316,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
         job.institutionKeys === null
           ? connection.institutionKeys
           : connection.institutionKeys.filter((key) => job.institutionKeys?.includes(key));
-      const senders = sendersFor(keys);
+      const senders = sendersFor(keys, connection.customInstitutions);
       if (senders.length === 0) {
         await finish();
         return "listed";
@@ -549,7 +562,7 @@ export function createGmailPipeline(dependencies: GmailPipelineDependencies) {
      */
     async processRecent(job: GmailSyncJob, maxMessages: number): Promise<GmailJobOutcome> {
       const connection = await backend.resolveConnection(job.connectionId);
-      const senders = sendersFor(connection.institutionKeys);
+      const senders = sendersFor(connection.institutionKeys, connection.customInstitutions);
       if (senders.length === 0) return "listed";
       const page = await read(connection, () =>
         reader.listMessages(toMailbox(connection), {

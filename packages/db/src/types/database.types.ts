@@ -131,19 +131,59 @@ isOneToOne: false
       referencedColumns: ["id","user_id"]
     }
                   ]
-                },"financial_accounts": {
+                },"custom_bank_senders": {
                   Row: {
-                    "account_type": string,"client_request_id": string,"created_at": string,"currency": string,"gmail_connection_id": string | null,"id": string,"institution": string | null,"institution_key": string | null,"is_active": boolean,"last_four": string | null,"name": string,"updated_at": string,"user_id": string
+                    "custom_bank_id": string,"sender_email": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_type": string,"client_request_id": string,"created_at"?: string,"currency"?: string,"gmail_connection_id"?: string | null,"id"?: string,"institution"?: string | null,"institution_key"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name": string,"updated_at"?: string,"user_id": string
+                    "custom_bank_id": string,"sender_email": string,"user_id": string
                   }
                   Update: {
-                    "account_type"?: string,"client_request_id"?: string,"created_at"?: string,"currency"?: string,"gmail_connection_id"?: string | null,"id"?: string,"institution"?: string | null,"institution_key"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name"?: string,"updated_at"?: string,"user_id"?: string
+                    "custom_bank_id"?: string,"sender_email"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "custom_bank_senders_custom_bank_id_user_id_fkey"
+      columns: ["custom_bank_id","user_id"]
+isOneToOne: false
+      referencedRelation: "custom_banks"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"custom_banks": {
+                  Row: {
+                    "client_request_id": string,"created_at": string,"creation_payload": NonNullable<Json>,"id": string,"institution_key": string | null,"logo": string | null,"name": string,"platform": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "client_request_id": string,"created_at"?: string,"creation_payload": NonNullable<Json>,"id"?: string,"institution_key"?: never,"logo"?: string | null,"name": string,"platform": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "client_request_id"?: string,"created_at"?: string,"creation_payload"?: NonNullable<Json>,"id"?: string,"institution_key"?: never,"logo"?: string | null,"name"?: string,"platform"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+
+                  ]
+                },"financial_accounts": {
+                  Row: {
+                    "account_type": string,"client_request_id": string,"created_at": string,"currency": string,"custom_bank_id": string | null,"gmail_connection_id": string | null,"id": string,"institution": string | null,"institution_key": string | null,"is_active": boolean,"last_four": string | null,"name": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_type": string,"client_request_id": string,"created_at"?: string,"currency"?: string,"custom_bank_id"?: string | null,"gmail_connection_id"?: string | null,"id"?: string,"institution"?: string | null,"institution_key"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "account_type"?: string,"client_request_id"?: string,"created_at"?: string,"currency"?: string,"custom_bank_id"?: string | null,"gmail_connection_id"?: string | null,"id"?: string,"institution"?: string | null,"institution_key"?: string | null,"is_active"?: boolean,"last_four"?: string | null,"name"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "financial_accounts_custom_bank_owner_fkey"
+      columns: ["custom_bank_id","user_id","institution_key"]
+isOneToOne: false
+      referencedRelation: "custom_banks"
+      referencedColumns: ["id","user_id","institution_key"]
+    },{
       foreignKeyName: "financial_accounts_gmail_connection_fkey"
       columns: ["gmail_connection_id","user_id"]
 isOneToOne: false
@@ -484,6 +524,9 @@ isOneToOne: false
         isOneToOne: false
         isSetofReturn: true
       } },
+"create_custom_bank_account":
+{ Args: { "p_bank_id": string,"p_client_request_id": string,"p_user_id": string,"p_values": Json }; Returns: string
+                           },
 "fail_gmail_discovery":
 { Args: { "p_connection_id": string }; Returns: undefined
                            },
@@ -617,6 +660,9 @@ isOneToOne: false
                            },
 "start_gmail_sync":
 { Args: { "p_connection_id": string }; Returns: undefined
+                           },
+"update_custom_bank":
+{ Args: { "p_bank_id": string,"p_expected_updated_at": string,"p_user_id": string,"p_values": Json }; Returns: undefined
                            },
 "user_merchant_category":
 { Args: { "p_merchant_name": string,"p_user_id": string }; Returns: string
