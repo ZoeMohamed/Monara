@@ -88,3 +88,12 @@ it("shows no categorizing count when the emails held no transactions", () => {
   assert.equal(importSteps(progress)[2].detail, null);
   assert.equal(importPercent(progress), null);
 });
+
+it("keeps a running import below a full bar until the sync completes", () => {
+  const progress = withReachedStep(
+    running({ emailsRead: 66, totalEmails: 66, transactions: 16, categorizing: 0 }),
+    waiting,
+  );
+  assert.equal(importPercent(progress), 99);
+  assert.equal(importPercent({ ...progress, state: "completed" }), 100);
+});

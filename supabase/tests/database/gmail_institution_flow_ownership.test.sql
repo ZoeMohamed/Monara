@@ -332,9 +332,9 @@ select is(
   array[
     row('inst-007', 'pending', false)::text,
     row('inst-008', 'pending', true)::text,
-    row('inst-009', 'pending', false)::text
+    row('inst-009', 'pending', true)::text
   ],
-  'below 50 percent and incomplete facts never qualify'
+  'below 50 percent never qualifies, and a missing date does not disqualify a confident row'
 );
 
 select is(

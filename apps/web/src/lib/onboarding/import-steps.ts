@@ -1,6 +1,6 @@
 import type { ImportProgress } from "@/components/use-onboarding-engine";
 
-const importStepLabels = [
+export const importStepLabels = [
   "Reading the last 30 days of email",
   "Extracting transactions",
   "Categorizing transactions",
@@ -65,7 +65,11 @@ export function importSteps(progress: ImportProgress): ImportStepView[] {
   }));
 }
 
-/** Reading emails fills the first half of the bar and categorizing the second. */
+/**
+ * Reading emails fills the first half of the bar and categorizing the second. Only a
+ * completed import reaches 100, even if every transaction is categorized before the
+ * sync says it is done.
+ */
 export function importPercent(progress: ImportProgress): number | null {
   if (progress.state === "completed") return 100;
   const step = currentStep(progress);
@@ -75,7 +79,9 @@ export function importPercent(progress: ImportProgress): number | null {
   }
   if (step === 2) {
     const transactions = progress.transactions ?? 0;
-    return transactions > 0 ? 50 + Math.round((processed(progress) / transactions) * 50) : null;
+    return transactions > 0
+      ? Math.min(99, 50 + Math.round((processed(progress) / transactions) * 50))
+      : null;
   }
   return null;
 }
