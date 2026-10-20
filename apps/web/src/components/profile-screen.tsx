@@ -181,7 +181,7 @@ function ProfileConnections({ demo }: { demo: boolean }) {
   );
 }
 
-function ProfileAccount({ online, setupKey }: { online: boolean; setupKey?: string }) {
+function ProfileAccount({ online, profile }: { online: boolean; profile: AuthenticatedProfile }) {
   return (
     <Group id="account" title="Account">
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 py-2.5">
@@ -195,7 +195,9 @@ function ProfileAccount({ online, setupKey }: { online: boolean; setupKey?: stri
           </Button>
         </form>
       </div>
-      <DeleteAccountControl online={online} setupKey={setupKey} />
+      {profile.demoAccount ? null : (
+        <DeleteAccountControl online={online} setupKey={profile.setupKey} />
+      )}
     </Group>
   );
 }
@@ -304,9 +306,7 @@ export function ProfileScreen({
       {financialAccounts}
       {financialCategories}
       <ProfileConnections demo={demo} />
-      {demo || profile.demoAccount ? null : (
-        <ProfileAccount online={online} setupKey={profile.setupKey} />
-      )}
+      {demo ? null : <ProfileAccount online={online} profile={profile} />}
       <ProfileReminderSettings onOpenReminders={onOpenReminders} />
       <ProfileAppSettings online={online} onReplayTour={onReplayTour} />
       <ProfileLegal />
