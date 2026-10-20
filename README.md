@@ -9,7 +9,7 @@
   </picture>
 </a>
 
-### No more scattered spending.
+### Know where your money goes. Talk to your money.
 
 An AI personal-finance assistant for tracking spending,<br>reviewing transactions, and managing budgets.
 
@@ -17,7 +17,7 @@ An AI personal-finance assistant for tracking spending,<br>reviewing transaction
 
 [![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat-square&logo=nextdotjs&logoColor=white)](apps/web) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](packages/contracts) [![Supabase](https://img.shields.io/badge/Supabase-1C4735?style=flat-square&logo=supabase&logoColor=3FCF8E)](supabase) [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-F38020?style=flat-square&logo=cloudflareworkers&logoColor=white)](apps/agent)
 
-[Overview](#overview) · [Try it](#try-it) · [Architecture](#architecture) · [Run locally](#run-locally) · [Documentation](#documentation)
+[Overview](#overview) · [Submission](#fintechathon-2026-submission) · [Try it](#try-it) · [Architecture](#architecture) · [Run locally](#run-locally) · [Tests](#tests) · [Deploy](#deploy) · [Documentation](#documentation)
 
 <a href="https://monara-finance.vercel.app/demo"><img src="docs/assets/readme/showcase.png" alt="Four real Monara mobile screens: spending overview, transaction review, budgets, and demo chat" width="100%"></a>
 
@@ -35,10 +35,23 @@ Built for **FinTechathon 2026**, Monara combines a mobile-first PWA with a share
 - **Bring supported bank emails together.** Connect Gmail separately from sign-in. Background jobs extract and categorize notifications from supported institutions, with deduplication and review for uncertain records.
 - **Keep control of your ledger.** Add, edit, confirm, exclude, or delete transactions. Only confirmed records contribute to financial totals.
 - **Plan with budgets.** Set category limits and follow spending against weekly or monthly budget periods.
+- **Know your month before it ends.** Forecast the rest of the month's spending from your history. Each predicted payment shows how sure it is, and forecasts never count as spent.
 - **Ask Monara.** Use natural-language questions and supported ledger operations in-app or through a verified WhatsApp link. WhatsApp receipt photos create pending entries for review.
 
 > [!NOTE]
 > The public demo runs without sign-in and resets on reload. The repository includes the backend and integration implementations, but real Google sign-in, Gmail, WhatsApp, model calls, and alerts require configured services and live acceptance. Recurring bills and personal reminders remain demo features. See the [runtime guide](apps/agent/README.md) for supported operations and remaining work.
+
+## FinTechathon 2026 submission
+
+Team 808, International Track, Topic A (Personal Finance Assistant).
+
+| Item | Link |
+| --- | --- |
+| Hosted app | <https://monara-finance.vercel.app> (best on a phone or a mobile-sized window) |
+| Demo without an account | <https://monara-finance.vercel.app/demo> |
+| Presentation deck | <https://canva.link/monara-app> |
+| Demo video | <https://youtu.be/NkF_SbO0Zng> |
+| Technical documentation, security self-assessment, execution evidence | [docs/tech](docs/tech/README.md) |
 
 ## Try it
 
@@ -89,6 +102,28 @@ For the backend, start a Docker-compatible runtime and run `pnpm worktree:bootst
 pnpm check   # Lint, types, dependency checks, tests, React Doctor, docs, DB prerequisites
 pnpm build   # Web build and local agent dry-run bundle
 ```
+
+## Tests
+
+```bash
+pnpm test                          # Unit and boundary tests for every package, app, and script
+pnpm db:check --reset              # Replays migrations on a disposable local database and runs the pgTAP tests
+pnpm --filter @monara/agent sandbox  # Agent scenarios and red-team attacks against a real model and an in-memory ledger
+```
+
+- **Unit and boundary tests** sit next to the code they cover in `apps/*`, `packages/*`, and `scripts/`, and run with the Node.js test runner.
+- **Database tests** in [supabase/tests](supabase/tests) use pgTAP to check migrations, ownership, and row-level security. Read the [Supabase workflow](docs/supabase-workflow.md) before using `--reset`.
+- **The Agent sandbox** in [apps/agent/sandbox](apps/agent/sandbox) runs scripted tasks and attacks against a seeded synthetic User. It needs `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` in `apps/agent/.dev.vars`, and touches no real ledger.
+
+CI runs `pnpm check` and `pnpm build` on every pull request; the pre-push hook runs the same gates.
+
+## Deploy
+
+- **Web:** the Vercel project builds `apps/web` from `main` and serves <https://monara-finance.vercel.app>. Other branches get preview deployments.
+- **Agent:** CI deploys the `monara-agent` Cloudflare Worker after every successful `main` push, then verifies the release.
+- **Database:** Supabase migrations live in [supabase/migrations](supabase/migrations).
+
+The [team deployment workflow](docs/local-development.md#team-deployment-workflow) lists the required settings, secrets, and manual release steps.
 
 ## Documentation
 
