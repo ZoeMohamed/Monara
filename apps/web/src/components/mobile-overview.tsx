@@ -920,19 +920,6 @@ export function MobileOverview({
                 <SpendingForecastCard month={month} today={today} transactions={transactions} />
               </div>
             ) : null}
-            <BackendInsightsCard
-              insights={insights}
-              openBudgets={openBudgets}
-              openTransaction={openTransaction}
-              transactions={transactions}
-            />
-            {model.isCurrentMonth ? (
-              <AttentionCard
-                items={model.attention}
-                openBudgets={openBudgets}
-                openReview={openReview}
-              />
-            ) : null}
             {model.isCurrentMonth || model.recent.length > 0 ? (
               <div className={styles.slotActivity}>
                 <ActivityCard
@@ -962,6 +949,19 @@ export function MobileOverview({
             <div className={styles.slotSafe}>
               <SafeToSpendCard model={model} month={month} openBudgets={openBudgets} />
             </div>
+            <BackendInsightsCard
+              insights={insights}
+              openBudgets={openBudgets}
+              openTransaction={openTransaction}
+              transactions={transactions}
+            />
+            {model.isCurrentMonth ? (
+              <AttentionCard
+                items={model.attention}
+                openBudgets={openBudgets}
+                openReview={openReview}
+              />
+            ) : null}
           </div>
         </div>
       </div>
