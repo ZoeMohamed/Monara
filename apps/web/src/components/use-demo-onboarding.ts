@@ -40,7 +40,10 @@ function wait(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
-/** Plays setup with sample banks, so the public demo and design review need no Gmail. */
+/**
+ * Plays setup with sample banks, so the public demo and design review need no Gmail. It starts
+ * at the name step: there is nothing to connect.
+ */
 export function useDemoOnboarding(
   enabled: boolean,
   phase: OnboardingPhase | null,
@@ -93,9 +96,9 @@ export function useDemoOnboarding(
     return () => window.clearInterval(timer);
   }, [importing, finished]);
 
-  const connect = useCallback(async (onConnected: () => void) => {
-    await wait(1_200);
-    onConnected();
+  // The demo starts past the connect step, so reaching this is a bug, not a connection.
+  const connect = useCallback(async () => {
+    throw new Error("The demo runs on sample data and has no Gmail to connect.");
   }, []);
   const saveBanks = useCallback(
     async (choices: Parameters<OnboardingEngine["saveBanks"]>[0]) => {

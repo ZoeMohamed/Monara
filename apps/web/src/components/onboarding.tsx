@@ -7,16 +7,23 @@ import { ImportStep } from "@/components/onboarding-import";
 import { NameStep } from "@/components/onboarding-name";
 import { ConnectStep, OnboardingSheet } from "@/components/onboarding-sheet";
 import type { Onboarding } from "@/components/use-onboarding";
-import { stepIndex } from "@/lib/onboarding/flow";
+import { firstOnboardingStep, stepIndex } from "@/lib/onboarding/flow";
 
-/** The first-run sheet: connect Gmail, confirm the name, confirm the banks found, then watch the import. */
+/**
+ * The first-run sheet: connect Gmail (live only), confirm the name, confirm the banks found,
+ * then watch the import.
+ */
 export function OnboardingSheets({ onboarding }: { onboarding: Onboarding }) {
-  const { phase, sheetOpen, engine, pending, error } = onboarding;
+  const { phase, live, sheetOpen, engine, pending, error } = onboarding;
   const session = useAppSession();
   if (onboarding.preparing) return <AppLoading overlay />;
   if (!sheetOpen || phase === null) return null;
   return (
-    <OnboardingSheet onDismiss={onboarding.dismiss} step={stepIndex(phase)}>
+    <OnboardingSheet
+      firstStep={firstOnboardingStep(live)}
+      onDismiss={onboarding.dismiss}
+      step={stepIndex(phase)}
+    >
       {phase === "connect" ? (
         <ConnectStep error={error} onConnect={() => void onboarding.connect()} pending={pending} />
       ) : null}

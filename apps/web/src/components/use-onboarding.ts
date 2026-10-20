@@ -167,6 +167,7 @@ export function useOnboarding({
 
   return {
     phase,
+    live,
     preparing: live && phase === null && onHome && !dismissed,
     /** The sheet shows on Home for the three setup steps, until the User dismisses it. */
     sheetOpen: onHome && !dismissed && showsSheet(phase),

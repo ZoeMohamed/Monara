@@ -10,6 +10,7 @@ import {
   removeChoice,
 } from "./banks.ts";
 import {
+  firstOnboardingStep,
   migrateLegacyOnboardingPhase,
   parseOnboardingPhase,
   resolvePhase,
@@ -64,8 +65,16 @@ describe("onboarding phase", () => {
     assert.equal(setupPhase({ live: true, stored: null, mailboxId: null }), "connect");
     assert.equal(setupPhase({ live: true, stored: null, mailboxId: "m1" }), "done");
     assert.equal(setupPhase({ live: true, stored: "name", mailboxId: "m1" }), "name");
-    assert.equal(setupPhase({ live: false, stored: null, mailboxId: undefined }), "connect");
     assert.equal(setupPhase({ live: false, stored: "detect", mailboxId: undefined }), "detect");
+  });
+
+  it("starts the demo at the name step, since it has no Gmail to connect", () => {
+    assert.equal(setupPhase({ live: false, stored: null, mailboxId: undefined }), "name");
+    assert.equal(setupPhase({ live: false, stored: "connect", mailboxId: undefined }), "name");
+    assert.equal(setupPhase({ live: false, stored: "import", mailboxId: undefined }), "import");
+    assert.equal(setupPhase({ live: false, stored: "done", mailboxId: undefined }), "done");
+    assert.equal(firstOnboardingStep(false), 1);
+    assert.equal(firstOnboardingStep(true), 0);
   });
 
   it("opens the sheet for the four steps only", () => {
