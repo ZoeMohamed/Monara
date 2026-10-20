@@ -49,6 +49,8 @@ export type ImportProgress = {
   categorizing?: number;
   needsReview?: number;
   message?: string;
+  /** The furthest import step reached: 0 finding emails, 1 reading them, 2 categorizing. */
+  step?: 0 | 1 | 2;
 };
 
 export const waitingProgress: ImportProgress = {

@@ -20,6 +20,7 @@ import { loadImportSnapshot } from "@/lib/gmail/import-snapshot";
 import { mergeImportFeed } from "@/lib/gmail/merge-import-feed";
 import { accountInputFor, choiceFromSuggestion, choicesToCreate } from "@/lib/onboarding/banks";
 import type { OnboardingPhase } from "@/lib/onboarding/flow";
+import { withReachedStep } from "@/lib/onboarding/import-steps";
 import { saveFullName } from "@/lib/profile/client";
 
 const POLL_MS = 3_000;
@@ -125,6 +126,53 @@ function useDetection(mailboxId: string | null | undefined, enabled: boolean) {
   return { detection, retry };
 }
 
+function nextProgress(
+  current: ImportProgress,
+  sync: NonNullable<Awaited<ReturnType<typeof loadImportSnapshot>>>["sync"],
+  feed: ImportProgress["feed"],
+): ImportProgress {
+  const merged = mergeImportFeed(current.feed, feed);
+  if (sync.state === "completed") {
+    return {
+      state: "completed",
+      emailsRead: sync.emailsRead,
+      totalEmails: sync.totalEmails,
+      totalEmailsFinal: true,
+      transactions: sync.transactions,
+      totalTransactions: sync.transactions,
+      needsReview: sync.needsReview,
+      categorizing: 0,
+      feed: merged,
+    };
+  }
+  if (sync.state === "failed") {
+    return {
+      state: "failed",
+      emailsRead: null,
+      totalEmails: null,
+      transactions: null,
+      totalTransactions: null,
+      feed: merged,
+      message: sync.message,
+    };
+  }
+  return {
+    ...waitingProgress,
+    state: sync.state === "running" ? "running" : "waiting",
+    ...(sync.state === "running"
+      ? {
+          emailsRead: sync.emailsRead,
+          totalEmails: sync.totalEmails,
+          totalEmailsFinal: false,
+          transactions: sync.transactions,
+          categorizing: sync.categorizing,
+          needsReview: sync.needsReview,
+        }
+      : {}),
+    feed: merged,
+  };
+}
+
 /**
  * Reads how the mailbox's latest sync is going and the transactions it has imported so
  * far. It only reads: starting the import belongs to the backend, which runs it as soon
@@ -148,48 +196,7 @@ function useImportProgress(mailboxId: string | null | undefined, enabled: boolea
         const { sync, feed } = snapshot;
         hasRows ||= feed.length > 0;
         keepPolling = sync.state !== "completed" && sync.state !== "failed";
-        setProgress((current) => {
-          const merged = mergeImportFeed(current.feed, feed);
-          if (sync.state === "completed") {
-            return {
-              state: "completed",
-              emailsRead: sync.emailsRead,
-              totalEmails: sync.totalEmails,
-              totalEmailsFinal: true,
-              transactions: sync.transactions,
-              totalTransactions: sync.transactions,
-              needsReview: sync.needsReview,
-              categorizing: 0,
-              feed: merged,
-            };
-          }
-          if (sync.state === "failed") {
-            return {
-              state: "failed",
-              emailsRead: null,
-              totalEmails: null,
-              transactions: null,
-              totalTransactions: null,
-              feed: merged,
-              message: sync.message,
-            };
-          }
-          return {
-            ...waitingProgress,
-            state: sync.state === "running" ? "running" : "waiting",
-            ...(sync.state === "running"
-              ? {
-                  emailsRead: sync.emailsRead,
-                  totalEmails: sync.totalEmails,
-                  totalEmailsFinal: false,
-                  transactions: sync.transactions,
-                  categorizing: sync.categorizing,
-                  needsReview: sync.needsReview,
-                }
-              : {}),
-            feed: merged,
-          };
-        });
+        setProgress((current) => withReachedStep(nextProgress(current, sync, feed), current));
       });
     // Schedule after each response, so slow reads never overlap. A failed check
     // keeps the last known state and follows the same bounded refresh schedule.

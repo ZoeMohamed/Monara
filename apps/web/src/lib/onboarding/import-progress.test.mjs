@@ -9,7 +9,8 @@ const componentUrl = new URL("../../components/onboarding-import.tsx", import.me
 const jsx = "export const jsx = (type, props) => ({type,props}), jsxs = jsx, Fragment = null;";
 const dependencies = `export const Button = null, ProgressBar = { Track: "track", Fill: "fill" }, OnboardingAvatar = null, OnboardingMark = null,
   BankBadge = null, ButtonIcon = null, StepFrame = null, onboardingTitleId = "onboarding-title",
-  useAmountDisplay = null, formatDay = null, CategoryAvatar = null, Icon = null;
+  useAmountDisplay = null, formatDay = null, CategoryAvatar = null, Icon = null,
+  ImportSteps = "ImportSteps", importPercent = () => null;
   let appSession = {};
   export const useAppSession = () => appSession;
   export const setAppSession = (value) => { appSession = value; };`;
@@ -39,9 +40,7 @@ const hooks = registerHooks({
     if (![componentUrl, bannerUrl].includes(url)) return nextLoad(url, context);
     const source =
       readFileSync(new URL(url), "utf8") +
-      (url === componentUrl
-        ? "\nexport { ImportSummary as summaryForTest, percent as percentForTest };"
-        : "");
+      (url === componentUrl ? "\nexport { ImportSummary as summaryForTest };" : "");
     return {
       format: "module",
       source: ts.transpileModule(source, {
@@ -55,7 +54,7 @@ const hooks = registerHooks({
     };
   },
 });
-const { ImportStep, summaryForTest, percentForTest } = await import(componentUrl);
+const { ImportStep, summaryForTest } = await import(componentUrl);
 const { OnboardingBanner } = await import(bannerUrl);
 const { setAppSession } = await import(dependenciesUrl);
 hooks.deregister();
@@ -74,16 +73,20 @@ function paragraphs(node, className) {
   return matches.concat(paragraphs(node.props?.children, className));
 }
 
-function countRow(progress) {
-  const rows = paragraphs(summaryForTest({ progress }), "counts");
-  assert.equal(rows.length, 1, "summary should render exactly one count row");
-  return text(rows[0]);
+function countRows(progress) {
+  return paragraphs(summaryForTest({ progress }), "counts").map(text);
+}
+
+function hasSteps(node) {
+  if (node === null || node === undefined || typeof node !== "object") return false;
+  if (Array.isArray(node)) return node.some(hasSteps);
+  return node.type === "ImportSteps" || hasSteps(node.props?.children);
 }
 
 const running = {
   state: "running",
   emailsRead: 67,
-  totalEmails: null,
+  totalEmails: 67,
   transactions: 64,
   categorizing: 54,
   needsReview: 10,
@@ -91,57 +94,33 @@ const running = {
   totalTransactions: null,
 };
 
-it("shows one concise transaction count row while categorizing", () => {
-  assert.equal(countRow(running), "10 / 64 transactions processed");
-  const advanced = { ...running, categorizing: 13, needsReview: 51 };
-  assert.equal(countRow(advanced), "51 / 64 transactions processed");
-});
-
-it("uses only currently imported transactions when extraction overlaps categorization", () => {
-  const growing = {
-    ...running,
-    emailsRead: 70,
-    transactions: 68,
-    categorizing: 14,
-    needsReview: 54,
-  };
-  assert.equal(countRow(growing), "54 / 68 transactions processed");
-  assert.equal(percentForTest(growing), null);
-  assert.equal(percentForTest({ ...growing, totalEmails: 70 }), null);
-});
-
-it("shows a provisional email count when discovery is incomplete", () => {
-  const progress = { ...running, categorizing: 0, totalEmails: 67, totalEmailsFinal: false };
-  assert.equal(countRow(progress), "67 / 67 emails processed (found so far)");
-});
-
-it("shows only the email counter after discovery reaches its final total", () => {
-  const progress = { ...running, categorizing: 0, totalEmails: 65, totalEmailsFinal: true };
-  assert.equal(countRow(progress), "67 / 65 emails processed");
+it("shows the steps instead of text and counts while the import works", () => {
+  for (const progress of [running, { ...running, state: "waiting" }]) {
+    assert.deepEqual(paragraphs(summaryForTest({ progress }), "sub"), []);
+    assert.deepEqual(countRows(progress), []);
+    const step = ImportStep({ progress, onNext() {} });
+    assert.ok(hasSteps(step.props.children), "the import steps should be on screen");
+  }
 });
 
 it("lets terminal review results complete with a full bar and an exit action", () => {
   const completed = { ...running, state: "completed", categorizing: 0, needsReview: 51 };
   const summary = text(summaryForTest({ progress: completed }));
   assert.match(summary, /All caught up/);
-  assert.doesNotMatch(summary, /Categorizing your transactions/);
-  assert.equal(countRow(completed), "64 transactions imported");
-  assert.equal(percentForTest(completed), 100);
+  assert.deepEqual(countRows(completed), ["64 transactions imported"]);
   const step = ImportStep({ progress: completed, onNext() {} });
+  assert.equal(hasSteps(step.props.children), false);
   assert.match(text(step.props.actions), /Explore Monara/);
+});
+
+it("explains a failed import with its message", () => {
+  const failed = { ...running, state: "failed", message: "Gmail could not be read." };
+  assert.match(text(summaryForTest({ progress: failed })), /Gmail could not be read\./);
+  assert.equal(hasSteps(ImportStep({ progress: failed, onNext() {} }).props.children), false);
 });
 
 it("keeps the background banner honest during classification", () => {
   setAppSession({ gmailImport: { progress: running, onOpen() {}, onFinish() {} } });
   const banner = OnboardingBanner();
   assert.match(text(banner), /10 \/ 64 transactions processed/);
-});
-
-it("labels the live email denominator as provisional and never treats discovered work as a final total", () => {
-  const progress = { ...running, totalEmails: 67, totalEmailsFinal: false, categorizing: 0 };
-  const summary = text(summaryForTest({ progress }));
-  assert.match(summary, /67 \/ 67 emails processed \(found so far\)/);
-  assert.equal(percentForTest(progress), null);
-  assert.equal(percentForTest({ ...progress, totalEmails: 70 }), null);
-  assert.equal(percentForTest({ ...progress, totalEmails: 70, totalEmailsFinal: true }), 96);
 });

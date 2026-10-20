@@ -42,7 +42,7 @@ select is((select kind from public.categories where id=pg_temp.category('interna
 select throws_ok($$update public.categories set kind='income' where id=pg_temp.category('resto-cafe')$$,'23514',null,'category kind immutable');
 select is((select id from examples where name='expense'),(select id from examples where name='duplicate'),'retry remains idempotent');
 select is((select review_status from public.transactions where id=(select id from examples where name='expense')),'pending','new import waits for classification even with merchant history');
-select is((select occurred_on from public.transactions where id=(select id from examples where name='unknown-date')),null::date,'missing extracted date stays unknown');
+select is((select occurred_on from public.transactions where id=(select id from examples where name='unknown-date')),(select (source.received_at at time zone 'Asia/Jakarta')::date from public.processed_gmail_messages as source where source.gmail_message_id='typed-date'),'missing extracted date takes the day the email arrived');
 select is(private.normalized_holder_name('BPK. Ｄａｆｆａ   Praya'),'daffa praya','title spacing and Unicode normalization match');
 select isnt(private.normalized_holder_name('Ann A'),private.normalized_holder_name('Anna'),'word boundaries cannot collide');
 select is((select internal_transfer from public.imported_transaction_for_category((select id from examples where name='internal'))),true,'server verifies full holder match');
@@ -88,7 +88,7 @@ select is((select review_status from public.transactions where id=(select id fro
 select public.set_imported_category((select id from examples where name='other-exclusion'),pg_temp.category('repayment'),'exclusion',1);
 select is((select review_status from public.transactions where id=(select id from examples where name='other-exclusion')),'confirmed','high confidence can confirm a compatible non-Internal exclusion');
 select public.set_imported_category((select id from examples where name='unknown-date'),pg_temp.category('resto-cafe'),'expense',1);
-select is((select review_status from public.transactions where id=(select id from examples where name='unknown-date')),'pending','missing original date never auto-confirms');
+select is((select review_status from public.transactions where id=(select id from examples where name='unknown-date')),'confirmed','a date taken from the email does not hold a confident row in review');
 select public.set_imported_category((select id from examples where name='unverified'),pg_temp.category('resto-cafe'),'expense',1);
 select is((select review_status from public.transactions where id=(select id from examples where name='unverified')),'confirmed','sender verification does not gate review at high confidence');
 select public.set_imported_category((select id from examples where name='low-confidence'),pg_temp.category('resto-cafe'),'expense',1);

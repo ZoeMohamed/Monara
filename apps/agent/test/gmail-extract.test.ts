@@ -252,7 +252,7 @@ describe("extractTransactions", () => {
         holderName: "Adlyn Fakhreyz Pratama",
         institutionName: "BCA",
       });
-      assert.equal(result.items[0]?.occurredOn, null);
+      assert.equal(result.items[0]?.occurredOn, "2026-10-12");
       assert.equal(result.items[0]?.internalTransfer, fixture.expected);
       assert.equal(result.items[0]?.isTransfer, /\btransfer\b/i.test(fixture.body));
     }
@@ -321,12 +321,33 @@ describe("extractTransactions", () => {
     assert.equal(result.money, null);
   });
 
-  it("leaves an invalid future date missing for review", async () => {
+  it("uses the email's day when the stated date is impossible, and lowers confidence", async () => {
     const llm = fakeLlm({ isTransactionEmail: true, items: [item({ occurredOn: "2026-11-30" })] });
     const [result] = (await extractTransactions(llm, email("Total Rp 25.000"))).items;
-    assert.equal(result.occurredOn, null);
+    assert.equal(result.occurredOn, "2026-10-12");
     assert.equal(result.occurredTime, null);
     assert.equal(result.money?.amountMinor, "25000");
+    assert.equal(result.confidence, 0.5);
+  });
+
+  it("uses the email's day when the email states no date", async () => {
+    const llm = fakeLlm({ isTransactionEmail: true, items: [item({ occurredOn: null })] });
+    const [result] = (await extractTransactions(llm, email("Total Rp 25.000"))).items;
+    assert.equal(result.occurredOn, "2026-10-12");
+    assert.equal(result.confidence, 0.9);
+  });
+
+  it("counts the email's day in Jakarta, not UTC", async () => {
+    const llm = fakeLlm({ isTransactionEmail: true, items: [item({ occurredOn: null })] });
+    const late = { ...email("Total Rp 25.000"), receivedAt: "2026-10-12T20:30:00.000Z" };
+    const [result] = (await extractTransactions(llm, late)).items;
+    assert.equal(result.occurredOn, "2026-10-13");
+  });
+
+  it("keeps a date the email states, even when it differs from the arrival day", async () => {
+    const llm = fakeLlm({ isTransactionEmail: true, items: [item({ occurredOn: "2026-10-10" })] });
+    const [result] = (await extractTransactions(llm, email("Total Rp 25.000"))).items;
+    assert.equal(result.occurredOn, "2026-10-10");
   });
 
   it("never assigns IDR when the email states only a bare number", async () => {

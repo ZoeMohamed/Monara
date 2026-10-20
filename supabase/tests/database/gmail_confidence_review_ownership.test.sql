@@ -151,10 +151,10 @@ select public.set_imported_category((select id from cases where name='no-directi
 select is((select row(transaction_type,category_id,flow_direction,review_status)::text from public.transactions where id=(select id from cases where name='no-direction-specific')),
   row('expense',pg_temp.category('misc'),null::text,'pending')::text,'non-Person specific decision without direction becomes Expense Misc in review');
 select public.set_imported_category(id,null::uuid,null::text,1) from cases
-  where name in ('missing-amount','missing-date','missing-direction','missing-account');
-select is((select count(*) from public.transactions where id in(select id from cases where name in ('missing-amount','missing-date','missing-direction','missing-account'))
-  and review_status='pending' and gmail_classification_status='needs_review'),4::bigint,
-  'missing amount date direction or account retains review even for high-score exclusions');
+  where name in ('missing-amount','missing-direction','missing-account');
+select is((select count(*) from public.transactions where id in(select id from cases where name in ('missing-amount','missing-direction','missing-account'))
+  and review_status='pending' and gmail_classification_status='needs_review'),3::bigint,
+  'missing amount direction or account retains review even for high-score exclusions');
 
 update public.transactions set description='User correction' where id=(select id from cases where name='edited');
 select is((select applied from public.set_imported_category((select id from cases where name='edited'),pg_temp.category('resto-cafe'),'expense',1)),
