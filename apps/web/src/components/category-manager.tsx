@@ -420,8 +420,12 @@ function DemoCategoryForm({
       setError("A category with this name already exists for this type.");
       return;
     }
-    onSave({ name, kind: draft.kind, icon: categoryIconChoice(name, draft.icon) });
-    onClose();
+    try {
+      onSave({ name, kind: draft.kind, icon: categoryIconChoice(name, draft.icon) });
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't save this category. Try again.");
+    }
   };
   return (
     <ModalDialog labelledBy="demo-category-title" onClose={onClose}>
