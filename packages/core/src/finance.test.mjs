@@ -1883,6 +1883,7 @@ describe("persisted USD reporting values", () => {
     });
     assert.equal(result.spending.amountMinor, "329837");
     assert.equal(result.budgetUsage[0].used.amountMinor, "329837");
+    assert.equal(result.insights.savingsRate.spending.amountMinor, "329837");
     assert.equal(usd.money.amountMinor, "1999");
   });
 });
