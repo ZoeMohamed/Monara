@@ -615,18 +615,6 @@ function BudgetGuideNote({ month, model }: { month: string; model: OverviewModel
   );
 }
 
-function OverallSpendingEstimate({ model }: { model: OverviewModel }) {
-  const { formatRupiah } = useAmountDisplay();
-  const guide = model.budgetGuide;
-  const safe = model.safeToSpend;
-  if (!guide || !safe || safe.perDay === guide.perDay) return null;
-  return (
-    <span className={styles.safeNote}>
-      Across all spending: <strong data-amount>{formatRupiah(safe.perDay)}</strong>/day
-    </span>
-  );
-}
-
 function BudgetGuidePace({ model }: { model: OverviewModel }) {
   const guide = model.budgetGuide;
   const percent = guide?.percent ?? model.percent;
@@ -658,7 +646,7 @@ function BudgetGuidePace({ model }: { model: OverviewModel }) {
   );
 }
 
-// Category allowance and overall estimate keep their different spending scopes visible.
+// The daily allowance describes the monthly categories the User chose to budget.
 function SafeToSpendCard({
   month,
   model,
@@ -687,7 +675,6 @@ function SafeToSpendCard({
         {guide ? <small>/day</small> : null}
       </span>
       <BudgetGuideNote model={model} month={month} />
-      <OverallSpendingEstimate model={model} />
       <BudgetGuidePace model={model} />
     </Button>
   );
