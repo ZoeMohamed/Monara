@@ -297,18 +297,22 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
         `This category already has a ${changes.cadence} budget. Keep its current period or edit the other budget.`,
       );
     const expected = { ...before, ...changes };
-    const categoryIcon = demoCategories.find((category) => category.name === before.category)?.icon;
+    const categoryIcon = demoCategories.find(
+      (category) => category.kind === "expense" && category.name === before.category,
+    )?.icon;
     setBudgets((items) => items.map((budget) => (budget.id === budgetId ? expected : budget)));
     if (changes.icon) {
       setDemoCategories((categories) =>
         categories.map((category) =>
-          category.name === before.category
+          category.kind === "expense" && category.name === before.category
             ? { ...category, icon: changes.icon ?? category.icon }
             : category,
         ),
       );
       setTransactions((items) =>
         items.map((transaction) =>
+          transaction.kind === "expense" &&
+          (transaction.categoryKind ?? transaction.kind) === "expense" &&
           transaction.category === before.category
             ? { ...transaction, categoryIcon: changes.icon ?? transaction.categoryIcon }
             : transaction,
@@ -354,18 +358,19 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       if (categoryIcon) {
         setDemoCategories((categories) =>
           categories.map((category) =>
-            category.id === before.categoryId ||
-            (!before.categoryId && category.kind === "expense" && category.name === before.category)
+            category.kind === "expense" &&
+            (category.id === before.categoryId ||
+              (!before.categoryId && category.name === before.category))
               ? { ...category, icon: categoryIcon }
               : category,
           ),
         );
         setTransactions((items) =>
           items.map((transaction) =>
-            transaction.categoryId === before.categoryId ||
-            (!transaction.categoryId &&
-              transaction.kind === "expense" &&
-              transaction.category === before.category)
+            transaction.kind === "expense" &&
+            (transaction.categoryKind ?? transaction.kind) === "expense" &&
+            (transaction.categoryId === before.categoryId ||
+              (!before.categoryId && transaction.category === before.category))
               ? { ...transaction, categoryIcon }
               : transaction,
           ),
