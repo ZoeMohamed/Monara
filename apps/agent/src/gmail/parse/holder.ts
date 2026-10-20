@@ -1,39 +1,8 @@
-/** Titles used by Indonesian banks, which are not part of a holder's name. */
-const HONORIFICS = new Set([
-  "bpk",
-  "bapak",
-  "ibu",
-  "sdr",
-  "sdri",
-  "mr",
-  "mrs",
-  "ms",
-  "tn",
-  "ny",
-  "nn",
-]);
+import { isHolderName } from "@monara/contracts";
 
-function nameWords(name: string): string[] {
-  return name
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .split(/\s+/)
-    .filter((word) => word.length > 0 && !HONORIFICS.has(word));
-}
+export { isHolderName };
 
-/** Exact full-name match after case, punctuation, spacing and title normalization. */
-export function isHolderName(counterparty: string, holderName: string): boolean {
-  const holder = nameWords(holderName);
-  const other = nameWords(counterparty);
-  return (
-    holder.length > 0 &&
-    holder.length === other.length &&
-    holder.every((word, index) => word === other[index])
-  );
-}
-
-/** A name alone never establishes a transfer between the User's own accounts. */
+/** A matching counterparty name establishes Internal independently of email semantics. */
 export function applyHolderRules<
   T extends {
     kind: string | null;
@@ -46,11 +15,7 @@ export function applyHolderRules<
 >(items: readonly T[], holderName: string | null): T[] {
   return items.map((item) => {
     const internalTransfer = Boolean(
-      holderName &&
-        item.isTransfer &&
-        item.counterpartyType !== "business" &&
-        item.counterpartyName &&
-        isHolderName(item.counterpartyName, holderName),
+      holderName && item.counterpartyName && isHolderName(item.counterpartyName, holderName),
     );
     return {
       ...item,

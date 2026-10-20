@@ -12,6 +12,7 @@ import type { TransactionDraft } from "@/components/transaction-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
 import type { SaveNotice } from "@/components/use-monara-session";
 import {
+  type Budget,
   deleteConfirmedTransaction,
   excludePendingTransaction,
   type RecurringBill,
@@ -47,6 +48,8 @@ type ActionContext = {
   setBills: Setter<RecurringBill[]>;
   setConfirmError: Setter<string | null>;
   setRejectError: Setter<string | null>;
+  budgets?: Budget[];
+  restoreDemoBudget?: (before: Budget, categoryIcon?: string) => void;
 };
 
 /** Coordinates presentation actions through verified backend operations, or explicit demo memory. */
@@ -153,7 +156,7 @@ export function useTransactionActions(context: ActionContext) {
     }
     if (
       Object.keys(transactionErrors(item)).length > 0 ||
-      (item.kind !== "exclusion" && !item.method)
+      (!item.method && item.kind !== "exclusion")
     ) {
       navigation.openEdit(id);
       return;
@@ -284,7 +287,8 @@ export function useTransactionActions(context: ActionContext) {
     if (
       Object.keys(transactionErrors(values)).length > 0 ||
       !values.merchant ||
-      (values.kind !== "exclusion" && !values.method)
+      !values.method ||
+      values.amount === null
     )
       throw new Error("Check the transaction details.");
     if (live) {
@@ -323,10 +327,11 @@ export function useTransactionActions(context: ActionContext) {
         return next;
       });
       setNotice({
-        message: "Transaction added. You can edit its details anytime.",
+        message:
+          values.kind === "exclusion" ? "Exclusion saved, totals unchanged." : "Transaction added.",
         undo: { kind: "backend", receipt: result.action },
       });
-      navigation.navigate({ adding: false, transactionId: result.transaction.id }, "replace");
+      navigation.navigate({ adding: false }, "replace");
       return;
     }
     const record: Transaction = {
@@ -343,10 +348,11 @@ export function useTransactionActions(context: ActionContext) {
       return next;
     });
     setNotice({
-      message: "Transaction added. You can edit its details anytime.",
+      message:
+        values.kind === "exclusion" ? "Exclusion saved, totals unchanged." : "Transaction added.",
       undo: { kind: "create", transaction: record },
     });
-    navigation.navigate({ adding: false, transactionId: record.id }, "replace");
+    navigation.navigate({ adding: false }, "replace");
   };
 
   const undo = async () => {
@@ -354,11 +360,12 @@ export function useTransactionActions(context: ActionContext) {
     if (!notice?.undo) return;
     if (notice.undo.kind === "backend") {
       const receipt = notice.undo.receipt;
+      const recovery = receipt.resourceType === "budget" ? "budgets" : "history";
       if (Date.parse(receipt.undoExpiresAt) <= Date.now()) {
         setNotice({
           message: "Undo has expired. Open the record to make another change.",
           tone: "warning",
-          recovery: "history",
+          recovery,
         });
         return;
       }
@@ -372,13 +379,11 @@ export function useTransactionActions(context: ActionContext) {
             error instanceof FinanceClientError && error.actionMayHaveCompleted
               ? "Undo may have completed. Refresh to check before trying again."
               : error instanceof FinanceClientError && error.code === "CONFLICT"
-                ? "This record changed or its Undo expired. Open History to review it."
+                ? `This record changed or its Undo expired. Open ${recovery === "budgets" ? "Budgets" : "History"} to review it.`
                 : "Undo couldn’t be completed. Refresh to check the latest record.",
           tone: "warning",
           recovery:
-            error instanceof FinanceClientError && error.code === "CONFLICT"
-              ? "history"
-              : "refresh",
+            error instanceof FinanceClientError && error.code === "CONFLICT" ? recovery : "refresh",
         });
       } finally {
         undoing.current = false;
@@ -386,6 +391,27 @@ export function useTransactionActions(context: ActionContext) {
       return;
     }
     if (live) return;
+    if (notice.undo.kind === "budget") {
+      const { before, expected, categoryIcon } = notice.undo;
+      const current = context.budgets?.find((budget) => budget.id === expected.id);
+      const duplicate = context.budgets?.some(
+        (budget) =>
+          budget.id !== before.id &&
+          budget.category.toLowerCase() === before.category.toLowerCase() &&
+          budget.cadence === before.cadence,
+      );
+      if (current !== expected || duplicate || !context.restoreDemoBudget) {
+        setNotice({
+          message: "This budget changed again. Review its latest settings.",
+          tone: "warning",
+          recovery: "budgets",
+        });
+        return;
+      }
+      context.restoreDemoBudget(before, categoryIcon);
+      setNotice({ message: "Budget change undone." });
+      return;
+    }
     const restored =
       notice.undo.kind === "delete"
         ? undoTransactionDeletion(transactions, notice.undo.transaction, notice.undo.index)
@@ -507,18 +533,26 @@ export function useTransactionActions(context: ActionContext) {
     if (!rejecting) return;
 
     setRejectError(null);
+    if (transactionErrors({ ...rejecting, kind: "exclusion" }).date) {
+      setRejectError(
+        "Add the actual transaction date in Edit, then try Exclude again. Your record is still waiting for review.",
+      );
+      return;
+    }
     if (live && !rejecting.backend) {
       setRejectError("This record could not be verified. Refresh your records.");
       return;
     }
+    let action: TransactionMutationResult["action"] | undefined;
     if (live && rejecting.backend) {
       try {
-        await mutate(() =>
+        const result = await mutate(() =>
           callFinanceOperation("exclude_pending", {
             transactionId: rejecting.id,
             expectedUpdatedAt: rejecting.backend?.updatedAt,
           }),
         );
+        action = result.action;
       } catch (error) {
         setRejectError(
           error instanceof FinanceClientError
@@ -535,9 +569,11 @@ export function useTransactionActions(context: ActionContext) {
     navigation.closePopup();
     setNotice({
       message: "Moved to Exclusions. It won’t count toward your totals.",
-      ...(!live && expected
-        ? { undo: { kind: "update" as const, before: rejecting, expected } }
-        : {}),
+      ...(action
+        ? { undo: { kind: "backend" as const, receipt: action } }
+        : expected
+          ? { undo: { kind: "update" as const, before: rejecting, expected } }
+          : {}),
     });
   };
 

@@ -55,7 +55,7 @@ The last SQL-only confirmation guard additionally keeps nonbusiness transfers pe
 
 ## Limits
 
-- Brave enrichment is limited to exact names or aliases in the bundled public brand catalog. Unrecognized businesses still receive transaction-based categorization without a search; no arbitrary extracted name is sent as a query.
+- Brave enrichment was first limited to exact names or aliases in the bundled public brand catalog. On 2026-10-20 it was widened to any counterparty the extractor labelled a business, after the identifier, contact, transfer and holder-name filters; see the [design amendment](gmail-categorization-design-2026-10-19.md). A personal name the extractor mislabels as a business can now be searched. Brave quota under the larger query volume is unmeasured.
 - Counterparty identity, sender/recipient roles, and explicit transfer meaning still depend on the extractor's semantic reading. Text-presence checks and deterministic full-name rules constrain model output; they do not independently prove bank-account ownership.
 - Model confidence values are operational thresholds, not calibrated probabilities.
 - Provider quotas and actual first-import/new-email latency remain unmeasured. A bounded live-provider comparison is a separate follow-up.

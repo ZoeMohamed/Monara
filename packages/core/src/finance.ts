@@ -16,9 +16,12 @@ import {
   type CategoryPage,
   type CreateBudgetInput,
   type CreateCategoryInput,
+  type CreateCustomBankInput,
+  type CreateCustomBankResult,
   type CreateFinancialAccountInput,
   type CreateFinancialGoalInput,
   type CreateTransactionInput,
+  type CustomBank,
   categoryMutationResultSchema,
   confirmDestructiveActionInputSchema,
   confirmedTransactionValuesSchema,
@@ -27,9 +30,12 @@ import {
   createBudgetInputSchema,
   createCategoryInputSchema,
   createCategoryResultSchema,
+  createCustomBankInputSchema,
+  createCustomBankResultSchema,
   createFinancialAccountInputSchema,
   createFinancialGoalInputSchema,
   createTransactionInputSchema,
+  customBankListSchema,
   type DashboardSummary,
   type DeleteBudgetInput,
   type DeleteFinancialGoalInput,
@@ -50,6 +56,7 @@ import {
   type FinancialGoalPage,
   type FinancialInsights,
   financialAccountMutationResultSchema,
+  financialCalendarDate,
   financialInsightsSchema,
   type GetDashboardInput,
   getDashboardInputSchema,
@@ -62,6 +69,7 @@ import {
   type ListTransactionsInput,
   listBudgetsInputSchema,
   listCategoriesInputSchema,
+  listCustomBanksInputSchema,
   listFinancialAccountsInputSchema,
   listFinancialGoalsInputSchema,
   listRecurringBillsInputSchema,
@@ -90,6 +98,7 @@ import {
   transactionValuesSchema,
   type UpdateBudgetInput,
   type UpdateCategoryInput,
+  type UpdateCustomBankInput,
   type UpdateFinancialAccountInput,
   type UpdateFinancialGoalInput,
   type UpdatePendingTransactionInput,
@@ -97,6 +106,8 @@ import {
   undoActionInputSchema,
   updateBudgetInputSchema,
   updateCategoryInputSchema,
+  updateCustomBankInputSchema,
+  updateCustomBankResultSchema,
   updateFinancialAccountInputSchema,
   updateFinancialGoalInputSchema,
   updatePendingTransactionInputSchema,
@@ -183,12 +194,18 @@ export interface FinanceRepository {
     values: TransactionValues;
     reviewStatus: Transaction["reviewStatus"];
   }): Promise<Transaction>;
+  /** Restores the stored snapshot and consumes its receipt atomically. */
+  restoreTransactionFromUndo(input: { userId: string; actionId: string }): Promise<Transaction>;
   softDeleteTransaction(input: {
     userId: string;
     transactionId: string;
     expectedUpdatedAt: string;
     deletedAt: string;
   }): Promise<Transaction>;
+
+  listCustomBanks(userId: string): Promise<CustomBank[]>;
+  createCustomBank(userId: string, input: CreateCustomBankInput): Promise<CreateCustomBankResult>;
+  updateCustomBank(userId: string, input: UpdateCustomBankInput): Promise<CustomBank>;
 
   listFinancialAccounts(
     userId: string,
@@ -711,9 +728,6 @@ export function calculateDashboard(input: {
 const directSource = (input: FinanceCaller): TransactionSource =>
   input.directSource ?? (input.channel === "whatsapp" ? "whatsapp_text" : "in_app_chat");
 
-const jakartaDateForInstant = (instant: string) =>
-  new Date(Date.parse(instant) + 7 * 60 * 60 * 1_000).toISOString().slice(0, 10);
-
 const transactionValues = (transaction: Transaction): TransactionValues => ({
   kind: transaction.kind,
   flowDirection: transaction.flowDirection,
@@ -1107,7 +1121,6 @@ export function createFinanceService(
           flowDirection:
             previous.flowDirection ??
             (previous.kind === "expense" ? "out" : previous.kind === "income" ? "in" : null),
-          occurredOn: previous.occurredOn ?? jakartaDateForInstant(previous.createdAt),
         }),
         reviewStatus: "confirmed",
       });
@@ -1282,15 +1295,15 @@ export function createFinanceService(
           if (reviewStatus !== "pending" && reviewStatus !== "confirmed") {
             throw undoStateError();
           }
-          const restored = await repository.replaceTransaction({
+          transactionValuesSchema.parse(state.values);
+          const restored = await repository.restoreTransactionFromUndo({
             userId: verified.userId,
-            transactionId: stored.resourceId,
-            expectedUpdatedAt,
-            values: transactionValuesSchema.parse(state.values),
-            reviewStatus,
+            actionId,
           });
           await evaluateBudgetThresholds(verified.userId, restored);
-          break;
+          // This repository operation consumes the receipt in the same database
+          // transaction as the restoration. Never consume it a second time below.
+          return { ok: true as const };
         }
         case "delete_created_budget":
           await repository.softDeleteBudget({
@@ -1318,7 +1331,7 @@ export function createFinanceService(
           await evaluateBudgetThresholdsFor(
             verified.userId,
             previous.categoryId,
-            undoneAt.slice(0, 10),
+            financialCalendarDate(undoneAt),
           );
           break;
         }
@@ -1334,6 +1347,41 @@ export function createFinanceService(
       });
       if (!consumed) throw new FinanceOperationError("CONFLICT", "That change was already undone.");
       return { ok: true as const };
+    },
+
+    async listCustomBanks(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      listCustomBanksInputSchema.parse(input);
+      return customBankListSchema.parse(await repository.listCustomBanks(verified.userId));
+    },
+
+    async createCustomBank(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      if (verified.channel !== "web")
+        throw new FinanceOperationError("FORBIDDEN", "Create custom banks in Monara.");
+      return createCustomBankResultSchema.parse(
+        await repository.createCustomBank(
+          verified.userId,
+          createCustomBankInputSchema.parse(input),
+        ),
+      );
+    },
+
+    async updateCustomBank(operationCaller: FinanceCaller, input: unknown) {
+      const verified = caller(operationCaller);
+      if (verified.channel !== "web")
+        throw new FinanceOperationError("FORBIDDEN", "Edit custom banks in Monara.");
+      const values = updateCustomBankInputSchema.parse(input);
+      const previous = (await repository.listCustomBanks(verified.userId)).find(
+        (bank) => bank.id === values.bankId,
+      );
+      if (!previous)
+        throw new FinanceOperationError("NOT_FOUND", "That custom bank was not found.");
+      const customBank = await repository.updateCustomBank(verified.userId, values);
+      const sendersChanged =
+        JSON.stringify([...previous.senderEmails].sort()) !==
+        JSON.stringify([...customBank.senderEmails].sort());
+      return updateCustomBankResultSchema.parse({ customBank, sendersChanged });
     },
 
     async listFinancialAccounts(operationCaller: FinanceCaller, input: unknown) {
@@ -1540,7 +1588,7 @@ export function createFinanceService(
     async suggestBudget(operationCaller: FinanceCaller, input: unknown): Promise<BudgetSuggestion> {
       const verified = caller(operationCaller);
       const values = budgetSuggestionInputSchema.parse(input);
-      const currentMonth = now().slice(0, 7);
+      const currentMonth = financialCalendarDate(now()).slice(0, 7);
       const range = previousThreeMonthRange(currentMonth);
       if (!range) {
         throw new FinanceOperationError("CONFLICT", "No supported history range is available.");
@@ -1614,7 +1662,11 @@ export function createFinanceService(
         changedAt: budget.updatedAt,
         state: { operation: "delete_created_budget", expectedUpdatedAt: budget.updatedAt },
       });
-      await evaluateBudgetThresholdsFor(verified.userId, budget.categoryId, now().slice(0, 10));
+      await evaluateBudgetThresholdsFor(
+        verified.userId,
+        budget.categoryId,
+        financialCalendarDate(now()),
+      );
       return budgetMutationResultSchema.parse({ budget, action: receipt });
     },
 
@@ -1644,7 +1696,11 @@ export function createFinanceService(
           values: JSON.stringify(previous),
         },
       });
-      await evaluateBudgetThresholdsFor(verified.userId, budget.categoryId, now().slice(0, 10));
+      await evaluateBudgetThresholdsFor(
+        verified.userId,
+        budget.categoryId,
+        financialCalendarDate(now()),
+      );
       return budgetMutationResultSchema.parse({ budget, action: receipt });
     },
 
@@ -1663,7 +1719,7 @@ export function createFinanceService(
       const verified = caller(operationCaller);
       const parsed = getDashboardInputSchema.parse(input);
       const budgets = await repository.listAllBudgets(verified.userId);
-      const today = now().slice(0, 10);
+      const today = financialCalendarDate(now());
       const monthStart = `${parsed.month}-01`;
       const monthEnd = lastDayOfMonth(parsed.month);
       const date = today < monthStart ? monthStart : today > monthEnd ? monthEnd : today;
@@ -1762,7 +1818,7 @@ export function createFinanceService(
     async getDashboard(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
       const parsed: GetDashboardInput = getDashboardInputSchema.parse(input);
-      const today = now().slice(0, 10);
+      const today = financialCalendarDate(now());
       const historyRange = previousThreeMonthRange(parsed.month);
       const [transactions, budgets, categories, reminders, historyTransactions] = await Promise.all(
         [

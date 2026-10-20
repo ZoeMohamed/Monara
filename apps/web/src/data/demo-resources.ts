@@ -15,7 +15,7 @@ export function initialDemoAccounts(): FinancialAccount[] {
     id: `a0000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     name,
     institution: name === "Cash" ? null : name,
-    accountType: name === "Cash" ? "cash" : name === "GoPay" ? "wallet" : "bank",
+    accountType: name === "Cash" ? "cash" : name === "ShopeePay" ? "wallet" : "bank",
     currency: "IDR",
     lastFour: null,
     institutionKey: null,
@@ -26,28 +26,34 @@ export function initialDemoAccounts(): FinancialAccount[] {
   }));
 }
 
-// Demo category IDs are editor choices only; the synthetic ledger groups by name.
+// Demo categories use the same stable identity as the signed-in ledger.
 export function demoEditorCategories(budgets: Budget[]): Category[] {
   const presets = [
     ...expenseCategoryPresets.map((preset) => ({ ...preset, kind: "expense" as const })),
     ...incomeCategoryPresets.map((preset) => ({ ...preset, kind: "income" as const })),
     ...exclusionCategoryPresets.map((preset) => ({ ...preset, kind: "exclusion" as const })),
   ];
-  const names = [
-    ...new Set([
-      ...presets.map((preset) => preset.name),
-      ...budgets.map((budget) => budget.category),
-    ]),
+  const extraNames = [...new Set(budgets.map((budget) => budget.category))].filter(
+    (name) => !presets.some((preset) => preset.kind === "expense" && preset.name === name),
+  );
+  const choices = [
+    ...presets,
+    ...extraNames.map((name, index) => ({
+      name,
+      kind: "expense" as const,
+      slug: `demo-category-${presets.length + index + 1}`,
+      icon: "auto",
+    })),
   ];
-  return names.map((name, index) => ({
+  return choices.map((preset, index) => ({
     id: `c0000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-    name,
-    kind: presets.find((preset) => preset.name === name)?.kind ?? "expense",
-    slug: presets.find((preset) => preset.name === name)?.slug ?? `demo-category-${index + 1}`,
+    name: preset.name,
+    kind: preset.kind,
+    slug: preset.slug,
     icon:
-      budgets.find((budget) => budget.category === name)?.icon ??
-      presets.find((preset) => preset.name === name)?.icon ??
-      "auto",
+      (preset.kind === "expense"
+        ? budgets.find((budget) => budget.category === preset.name)?.icon
+        : undefined) ?? preset.icon,
     color: "#2865e5",
     isDefault: index < presets.length,
     isArchived: false,
@@ -70,6 +76,7 @@ export function demoTransactionSelection(
   const category = resources.categories.find((item) => item.id === draft.category);
   return {
     category: category?.name ?? null,
+    categoryId: category?.id ?? null,
     categoryIcon: category?.icon,
     categoryKind: category?.kind,
     method: payment?.name ?? null,

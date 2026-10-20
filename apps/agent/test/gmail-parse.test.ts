@@ -26,9 +26,9 @@ describe("isHolderName", () => {
   const cases: [string, boolean][] = [
     ["ADLYN FAKHREYZ PRATAMA", true],
     ["Bpk. Adlyn Fakhreyz Pratama", true],
-    ["adlyn  fakhreyz pratama s.kom", false],
-    // Cut-off names need review.
-    ["ADLYN FAKHREY", false],
+    ["adlyn  fakhreyz pratama s.kom", true],
+    // Two substantive name words can omit extras or contain a one-letter typo.
+    ["ADLYN FAKHREY", true],
     ["ADLYN FAKHREYZ PRA", false],
     // One-letter prefixes are too ambiguous to identify the same person.
     ["ADLYN F", false],
@@ -160,7 +160,7 @@ describe("parseEmail", () => {
       first.requests[0]?.user ?? "",
       /^<holder>Adlyn Fakhreyz<\/holder>\nInstitution: MyBCA \(BCA\)\n/,
     );
-    assert.match(first.requests[0]?.system ?? "", /Internal transfer/);
+    assert.match(first.requests[0]?.system ?? "", /Internal:/);
   });
 
   it("preserves a valid 150-character confirmed full name in the prompt and exact comparison", async () => {

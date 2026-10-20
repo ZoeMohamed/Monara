@@ -1,9 +1,16 @@
 "use client";
 
-import type { Institution } from "@monara/contracts";
+import {
+  type CustomBank,
+  customBankInstitution,
+  customBankKey,
+  type FinancialAccount,
+  type Institution,
+} from "@monara/contracts";
 import { Button } from "@monara/ui";
 import { type CSSProperties, useState } from "react";
-
+import { AccountBadge } from "@/components/account-badge";
+import { CustomBankForm } from "@/components/custom-bank-form";
 import { Icon, type IconName } from "@/components/icon";
 import { BankBadge } from "@/components/onboarding-bank-badge";
 import { ButtonIcon, SheetStep } from "@/components/onboarding-sheet";
@@ -18,7 +25,23 @@ import {
 } from "@/lib/onboarding/banks";
 import { stepIndex } from "@/lib/onboarding/flow";
 
-function BankBadgeOf({ choice }: { choice: Pick<BankChoice, "provider" | "name" | "platform"> }) {
+function BankBadgeOf({
+  choice,
+}: {
+  choice: Pick<BankChoice, "provider" | "name" | "platform" | "logo">;
+}) {
+  if (choice.logo !== undefined)
+    return (
+      <AccountBadge
+        name={choice.name}
+        account={{
+          name: choice.name,
+          institution: choice.provider,
+          accountType: choice.platform === "E_WALLET" ? "wallet" : "bank",
+          institutionLogo: choice.logo,
+        }}
+      />
+    );
   return (
     <BankBadge name={choice.name} platform={choice.platform} provider={choice.provider} size={40} />
   );
@@ -30,26 +53,36 @@ function meta(choice: BankChoice) {
   return choice.lastFours.length > 0 ? `${emails} · ending ${choice.lastFours.join(", ")}` : emails;
 }
 
-type Mode = "view" | "edit" | "add";
+type Mode = "view" | "edit" | "add" | "custom";
 
 function AddBankPicker({
   choices,
+  customBanks,
+  onCreateCustom,
   onPick,
   onBack,
 }: {
   choices: BankChoice[];
+  customBanks: readonly CustomBank[];
+  onCreateCustom: () => void;
   onPick: (institution: Institution) => void;
   onBack: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const results = institutionsToAdd(choices, query);
+  const results = institutionsToAdd(choices, query, customBanks.map(customBankInstitution));
   return (
     <SheetStep
       actions={
-        <Button className="min-h-12" onPress={onBack} variant="secondary">
-          <ButtonIcon name="chevron-left" />
-          Back
-        </Button>
+        <>
+          <Button className="min-h-12" onPress={onBack} variant="secondary">
+            <ButtonIcon name="chevron-left" />
+            Back
+          </Button>
+          <Button className="min-h-12" onPress={onCreateCustom}>
+            <ButtonIcon name="plus" />
+            Create custom bank
+          </Button>
+        </>
       }
       list={
         results.length === 0 ? (
@@ -59,7 +92,14 @@ function AddBankPicker({
             {results.map((institution) => (
               <li key={institution.key}>
                 <button className={styles.pick} onClick={() => onPick(institution)} type="button">
-                  <BankBadgeOf choice={institution} />
+                  <BankBadgeOf
+                    choice={{
+                      ...institution,
+                      ...(customBanks.some((bank) => bank.key === institution.key)
+                        ? { logo: customBanks.find((bank) => bank.key === institution.key)?.logo }
+                        : {}),
+                    }}
+                  />
                   <span className={styles.bankText}>
                     <span className={styles.bankName}>{choiceTitle(institution)}</span>
                   </span>
@@ -189,6 +229,8 @@ function EditorActions({
 /** The banks found in the last 30 days, with room to remove some and add others. */
 function BankEditor({
   initial,
+  customBanks,
+  financialAccounts,
   notice,
   pending,
   error,
@@ -196,6 +238,8 @@ function BankEditor({
   onSave,
 }: {
   initial: BankChoice[];
+  customBanks: readonly CustomBank[];
+  financialAccounts: readonly FinancialAccount[];
   notice?: string;
   pending: boolean;
   error: string | null;
@@ -207,13 +251,70 @@ function BankEditor({
   const empty = choices.length === 0;
   const editing = mode === "edit" && !empty;
 
+  if (mode === "custom") {
+    const drafts = choices.flatMap((choice) =>
+      choice.customInput
+        ? [{ id: choice.customInput.bankId, senderEmails: choice.customInput.senderEmails }]
+        : [],
+    );
+    return (
+      <SheetStep
+        actions={null}
+        scene="found"
+        side
+        step={stepIndex("detect")}
+        title="Create custom bank"
+      >
+        <CustomBankForm
+          banks={[...customBanks, ...drafts]}
+          embedded
+          onCancel={() => setMode("add")}
+          onSave={(input) => {
+            setChoices((current) => [
+              ...current,
+              {
+                institutionKey: customBankKey(input.bankId),
+                provider: input.name,
+                name: input.name,
+                platform: input.platform,
+                emailCount: 0,
+                lastFours: input.lastFour ? [input.lastFour] : [],
+                linked: false,
+                manual: true,
+                customInput: input,
+                accountName: input.accountName,
+                logo: input.logo,
+              },
+            ]);
+            setMode("edit");
+          }}
+        />
+      </SheetStep>
+    );
+  }
+
   if (mode === "add") {
     return (
       <AddBankPicker
         choices={choices}
+        customBanks={customBanks}
+        onCreateCustom={() => setMode("custom")}
         onBack={() => setMode("edit")}
         onPick={(institution) => {
-          setChoices((current) => addChoice(current, institution));
+          setChoices((current) =>
+            addChoice(current, institution).map((choice) => {
+              const bank = customBanks.find((item) => item.key === choice.institutionKey);
+              return bank
+                ? {
+                    ...choice,
+                    logo: bank.logo,
+                    linked: financialAccounts.some(
+                      (account) => account.institutionKey === bank.key && account.isActive,
+                    ),
+                  }
+                : choice;
+            }),
+          );
           setMode("edit");
         }}
       />
@@ -277,12 +378,16 @@ function BankEditor({
 
 export function DetectStep({
   detection,
+  customBanks,
+  financialAccounts,
   pending,
   error,
   onRetry,
   onSave,
 }: {
   detection: Detection;
+  customBanks: readonly CustomBank[];
+  financialAccounts: readonly FinancialAccount[];
   pending: boolean;
   error: string | null;
   onRetry: () => void;
@@ -318,8 +423,17 @@ export function DetectStep({
   const failed = detection.status === "failed";
   return (
     <BankEditor
+      customBanks={customBanks}
+      financialAccounts={financialAccounts}
       error={error}
-      initial={detection.status === "ready" ? detection.choices : []}
+      initial={
+        detection.status === "ready"
+          ? detection.choices.map((choice) => {
+              const bank = customBanks.find((item) => item.key === choice.institutionKey);
+              return bank ? { ...choice, logo: bank.logo } : choice;
+            })
+          : []
+      }
       key={failed ? "failed" : "ready"}
       {...(failed ? { notice: detection.message, onRetry } : {})}
       onSave={onSave}

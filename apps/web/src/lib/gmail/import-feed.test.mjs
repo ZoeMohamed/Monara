@@ -11,6 +11,8 @@ function reset() {
   Object.assign(state, {
     accountPages: new Map(),
     transactionPages: new Map(),
+    categoryPages: new Map(),
+    categoryCursors: [],
     accountCursors: [],
     transactionCursors: [],
     transactionInputs: [],
@@ -26,6 +28,10 @@ export async function callFinanceOperation(operation, input, fetcher) {
   if (operation === "list_financial_accounts") {
     test.accountCursors.push(input.cursor);
     return test.accountPages.get(key) ?? { items: [], nextCursor: null };
+  }
+  if (operation === "list_categories") {
+    test.categoryCursors.push(input.cursor);
+    return test.categoryPages.get(key) ?? { items: [], nextCursor: null };
   }
   test.transactionInputs.push(input);
   test.transactionCursors.push(input.cursor);
@@ -93,6 +99,8 @@ describe("Gmail onboarding import feed", () => {
         amount: 25000,
         date: "2026-10-18",
         kind: "expense",
+        category: null,
+        categoryIcon: null,
         needsReview: false,
       },
     ]);
@@ -101,6 +109,49 @@ describe("Gmail onboarding import feed", () => {
     assert.deepEqual(state.transactionInputs, [
       { limit: 100, cursor: null, financialAccountIds: [accountId] },
     ]);
+  });
+
+  it("pages current categories and preserves pending classification hints", async () => {
+    state.accountPages.set("start", { items: [account()], nextCursor: null });
+    state.categoryPages.set("start", { items: [], nextCursor: "100" });
+    state.categoryPages.set("100", {
+      items: [{ id: "food", name: "Food & drinks", icon: "food", kind: "expense" }],
+      nextCursor: null,
+    });
+    state.transactionPages.set("start", {
+      items: [transaction({ categoryId: "food", reviewStatus: "pending" })],
+      nextCursor: null,
+    });
+
+    const [item] = await loadImportFeed(mailboxId);
+    assert.equal(item.category, "Food & drinks");
+    assert.equal(item.categoryIcon, "food");
+    assert.equal(item.needsReview, true);
+    assert.deepEqual(state.categoryCursors, [null, "100"]);
+  });
+
+  it("does not display a category from a different transaction type", async () => {
+    state.accountPages.set("start", { items: [account()], nextCursor: null });
+    state.categoryPages.set("start", {
+      items: [{ id: "salary", name: "Salary", icon: "income", kind: "income" }],
+      nextCursor: null,
+    });
+    state.transactionPages.set("start", {
+      items: [transaction({ categoryId: "salary" })],
+      nextCursor: null,
+    });
+
+    const [item] = await loadImportFeed(mailboxId);
+    assert.equal(item.category, null);
+    assert.equal(item.categoryIcon, null);
+  });
+
+  it("fails explicitly when category pagination repeats a cursor", async () => {
+    state.accountPages.set("start", { items: [account()], nextCursor: null });
+    state.categoryPages.set("start", { items: [], nextCursor: "100" });
+    state.categoryPages.set("100", { items: [], nextCursor: "100" });
+
+    await assert.rejects(loadImportFeed(mailboxId), /category list did not finish loading/);
   });
 
   it("does not read transactions when the mailbox owns no accounts", async () => {

@@ -3,14 +3,23 @@
 import type { FinancialInsights } from "@monara/contracts";
 import { Button, Input, Label, ListBox, Select, TextField } from "@monara/ui";
 import Image from "next/image";
-import { type CSSProperties, type ReactNode, useId, useState, useSyncExternalStore } from "react";
+import {
+  type CSSProperties,
+  type FocusEvent,
+  type ReactNode,
+  useId,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
 import { CategoryAvatar } from "@/components/category-symbol";
 
 import { Icon, type IconName } from "@/components/icon";
 import { MonaraMascot } from "@/components/monara-mascot";
+import { OnboardingBanner } from "@/components/onboarding-banner";
+import { SectionLabel, SectionTitle } from "@/components/section-title";
+import { SpendingForecastCard } from "@/components/spending-forecast-card";
 import { TransactionRow } from "@/components/transaction-row";
-import { WeeklySpendingCard } from "@/components/weekly-spending-card";
 import { categoryColor } from "@/data/category-style";
 import {
   daysInMonth,
@@ -50,6 +59,18 @@ const prompts: { text: string; icon: IconName; prompt: string }[] = [
   { text: "Where did it go?", icon: "pie", prompt: "Where did my money go this month?" },
   { text: "Can I afford it?", icon: "sparkle", prompt: "Can I afford a 300k dinner?" },
 ];
+
+function revealFocusedPrompt(event: FocusEvent<HTMLElement>) {
+  const scroller = event.currentTarget;
+  if (scroller.scrollWidth <= scroller.clientWidth) return;
+  const viewport = scroller.getBoundingClientRect();
+  const target = event.target.getBoundingClientRect();
+  const padding = getComputedStyle(scroller);
+  const start = viewport.left + Number.parseFloat(padding.paddingLeft);
+  const end = viewport.right - Number.parseFloat(padding.paddingRight);
+  const left = target.left < start ? target.left - start : Math.max(0, target.right - end);
+  if (left) scroller.scrollBy({ left, behavior: "instant" });
+}
 
 function OverviewComposer({ openChat }: { openChat: (prompt?: string) => void }) {
   const [draft, setDraft] = useState("");
@@ -110,67 +131,20 @@ function monthName(month: string) {
   return formatMonth(month).split(" ")[0] ?? month;
 }
 
-function budgetLeftOf(model: OverviewModel) {
-  return model.safeToSpend?.remaining ?? model.remaining;
-}
-
-function Chip({
-  icon,
-  tone,
-  children,
-  onClick,
-  label,
-}: {
-  icon: IconName;
-  tone?: "up" | "down" | "accent";
-  children: ReactNode;
-  onClick: () => void;
-  label?: string;
-}) {
-  return (
-    <Button
-      variant="ghost"
-      aria-label={label}
-      className={styles.chip}
-      onPress={onClick}
-      type="button"
-    >
-      <span aria-hidden className={styles.chipIcon} data-tone={tone}>
-        <Icon name={icon} strokeWidth={2.2} />
-      </span>
-      <span>{children}</span>
-    </Button>
-  );
-}
-
-function ComparisonChip({
-  comparison,
-  onOpen,
-}: {
-  comparison: OverviewModel["comparison"];
-  onOpen: () => void;
-}) {
-  const { formatRupiah, compactAmount } = useAmountDisplay();
+// How this month compares with the last one, as plain words beside the headline figure.
+function ComparisonNote({ comparison }: { comparison: OverviewModel["comparison"] }) {
+  const { compactAmount } = useAmountDisplay();
   if (comparison.state !== "available") return null;
   const difference = comparison.current - comparison.previous;
+  const previous = monthName(comparison.previousMonth).slice(0, 3);
+  if (difference === BigInt(0)) return <> · same as {previous}</>;
   const size = difference < BigInt(0) ? -difference : difference;
-  const previous = monthName(comparison.previousMonth);
-  const direction = difference > BigInt(0) ? "more" : "less";
   return (
-    <Chip
-      icon={difference > BigInt(0) ? "trend-up" : "trend-down"}
-      label={`${difference === BigInt(0) ? "Same as" : `${formatRupiah(size)} ${direction} than`} ${previous}. Open reports`}
-      onClick={onOpen}
-      tone={difference > BigInt(0) ? "up" : "down"}
-    >
-      {difference === BigInt(0) ? (
-        `Same as ${previous}`
-      ) : (
-        <span
-          data-amount
-        >{`${compactAmount(size)} ${direction} than ${previous.slice(0, 3)}`}</span>
-      )}
-    </Chip>
+    <>
+      {" · "}
+      <span data-amount>{compactAmount(size)}</span> {difference > BigInt(0) ? "more" : "less"} than{" "}
+      {previous}
+    </>
   );
 }
 
@@ -217,6 +191,7 @@ function SceneHero({
       <div aria-hidden className={styles.shade} />
 
       <div className={styles.sceneContent}>
+        <OnboardingBanner />
         <p className={styles.date}>{model.isCurrentMonth ? longDate(today) : formatMonth(month)}</p>
         <h1 className={styles.greeting} id="home-greeting">
           {greetings[time]}
@@ -249,13 +224,18 @@ function SceneHero({
         <p className={styles.caption}>
           {monthName(month)} spending
           {model.isCurrentMonth ? ` · day ${model.currentDay}` : ""}
+          <ComparisonNote comparison={model.comparison} />
         </p>
 
         <div className={styles.askWrap} data-tour="ask">
           <MonaraMascot className={styles.mascot} pose="peek" />
           <OverviewComposer openChat={openChat} />
         </div>
-        <nav aria-label="Ask Monara" className={styles.prompts}>
+        <nav
+          aria-label="Ask Monara"
+          className={styles.prompts}
+          onFocusCapture={revealFocusedPrompt}
+        >
           {prompts.map((item) => (
             <Button
               variant="ghost"
@@ -270,44 +250,6 @@ function SceneHero({
         </nav>
       </div>
     </section>
-  );
-}
-
-function SceneChips({
-  model,
-  openReview,
-  openBudgets,
-  openReports,
-}: {
-  model: OverviewModel;
-  openReview: () => void;
-  openBudgets: () => void;
-  openReports: () => void;
-}) {
-  const { compactAmount } = useAmountDisplay();
-  const quiet =
-    model.pendingCount === 0 &&
-    model.upcomingBillCount === 0 &&
-    model.comparison.state !== "available";
-  return (
-    <div className={styles.chips} data-tour="chips">
-      {model.pendingCount > 0 ? (
-        <Chip icon="inbox" onClick={openReview} tone="accent">
-          {model.pendingCount} to review
-        </Chip>
-      ) : null}
-      {model.upcomingBillCount > 0 ? (
-        <Chip icon="calendar" onClick={openBudgets}>
-          {model.upcomingBillCount} {model.upcomingBillCount === 1 ? "bill" : "bills"} this week
-        </Chip>
-      ) : null}
-      <ComparisonChip comparison={model.comparison} onOpen={openReports} />
-      {quiet ? (
-        <Chip icon="budgets" onClick={openBudgets}>
-          <span data-amount>{compactAmount(budgetLeftOf(model))}</span> budget left
-        </Chip>
-      ) : null}
-    </div>
   );
 }
 
@@ -353,7 +295,15 @@ function CategoryItem({
         <CategoryAvatar className={styles.categoryIcon} icon={icon} name={name} size={44} />
         <span className={styles.categoryBody}>
           <span className={styles.categoryLabel}>
-            <strong>{name}</strong>
+            <span className={styles.categoryName}>
+              <strong>{name}</strong>
+              {budgetLimit !== null ? (
+                <span className={styles.budgetCaption}>
+                  {over ? "Over · " : "of "}
+                  <span data-amount>{compactAmount(budgetLimit)}</span>
+                </span>
+              ) : null}
+            </span>
             <strong data-amount data-over={over}>
               {compactAmount(amount)}
             </strong>
@@ -364,12 +314,6 @@ function CategoryItem({
               style={{ width: `${Math.min(chartRatio(amount, scale) * 100, 100)}%` }}
             />
           </span>
-          {budgetLimit !== null ? (
-            <span className={styles.budgetCaption}>
-              {over ? "Over · " : "of "}
-              <span data-amount>{compactAmount(budgetLimit)}</span>
-            </span>
-          ) : null}
         </span>
       </Button>
       {open ? (
@@ -415,11 +359,11 @@ function SpendingBlock({
   const months = Array.from({ length: 13 }, (_, index) => shiftMonth(currentMonth, -index));
 
   return (
-    <section aria-labelledby="spending-title" className={styles.block}>
+    <section aria-labelledby="spending-title" className={styles.block} data-home-card="where">
       <div className={styles.blockHead}>
-        <h2 className={styles.quiet} id="spending-title">
+        <SectionTitle icon="reports" id="spending-title">
           Where it went
-        </h2>
+        </SectionTitle>
         <Select
           className={styles.monthPicker}
           onChange={(value) => {
@@ -549,11 +493,15 @@ function ActivityCard({
   openAdd?: () => void;
 }) {
   return (
-    <section aria-labelledby="activity-title" className={styles.todayCard}>
+    <section
+      aria-labelledby="activity-title"
+      className={styles.todayCard}
+      data-home-card="activity"
+    >
       <div className={styles.activityHead}>
-        <h2 id="activity-title">
+        <SectionTitle icon="history" id="activity-title">
           {model.isCurrentMonth ? "Latest activity" : `Latest in ${monthName(month)}`}
-        </h2>
+        </SectionTitle>
         {openTransactions && model.recent.length > 0 ? (
           <Button
             variant="ghost"
@@ -591,37 +539,6 @@ function ActivityCard({
   );
 }
 
-function Feature({
-  name,
-  icon,
-  tone,
-  value,
-  hint,
-  onOpen,
-  amount = false,
-}: {
-  name: string;
-  icon: IconName;
-  tone: "green" | "violet" | "blue" | "amber" | "red";
-  value: string;
-  hint: string;
-  onOpen: () => void;
-  amount?: boolean;
-}) {
-  return (
-    <Button variant="ghost" onPress={onOpen} type="button">
-      <span className={styles.featureName}>
-        <span aria-hidden className={styles.featureIcon} data-tone={tone}>
-          <Icon name={icon} />
-        </span>
-        {name}
-      </span>
-      <strong data-amount={amount || undefined}>{value}</strong>
-      <span className={styles.featureHint}>{hint}</span>
-    </Button>
-  );
-}
-
 function AttentionLine({ model }: { model: OverviewModel }) {
   const { compactAmount } = useAmountDisplay();
   const attention = model.attentionBudget;
@@ -642,18 +559,25 @@ function AttentionLine({ model }: { model: OverviewModel }) {
 }
 
 function paceOf(model: OverviewModel) {
+  if (model.budgetGuide) {
+    if (model.budgetGuide.spending > model.budgetGuide.limit) return "over";
+    return model.budgetGuide.percent > model.elapsedPercent ? "ahead" : "on-track";
+  }
   if (model.overBudgetCount > 0) return "over";
   return model.percent > model.elapsedPercent ? "ahead" : "on-track";
 }
 
 function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
   return (
-    <Button variant="ghost" className={styles.safe} onPress={openBudgets} type="button">
+    <Button
+      variant="ghost"
+      className={styles.safe}
+      data-home-card="safe"
+      onPress={openBudgets}
+      type="button"
+    >
       <span className={styles.featureName}>
-        <span aria-hidden className={styles.featureIcon} data-tone="green">
-          <Icon name="budgets" />
-        </span>
-        Safe to spend today
+        <SectionLabel icon="budgets">Daily budget guide</SectionLabel>
       </span>
       <strong className={styles.safeEmpty}>Set monthly budgets</strong>
       <span className={styles.safeNote}>Monara will turn them into a daily spending guide.</span>
@@ -662,10 +586,10 @@ function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
 }
 
 // Explains the headline: the daily split this month, or the budget total for a past month.
-function SafeToSpendNote({ month, model }: { month: string; model: OverviewModel }) {
+function BudgetGuideNote({ month, model }: { month: string; model: OverviewModel }) {
   const { formatRupiah } = useAmountDisplay();
-  const safe = model.safeToSpend;
-  if (!safe) {
+  const guide = model.budgetGuide;
+  if (!guide) {
     return (
       <span className={styles.safeNote}>
         of <strong data-amount>{formatRupiah(model.budgetTotal)}</strong>{" "}
@@ -675,23 +599,54 @@ function SafeToSpendNote({ month, model }: { month: string; model: OverviewModel
       </span>
     );
   }
-  if (safe.shortfall > BigInt(0)) {
+  if (guide.shortfall > BigInt(0)) {
     return (
       <span className={styles.safeNote}>
-        Spending is <strong data-amount>{formatRupiah(safe.shortfall)}</strong> over your total
-        limits.
+        Budgeted categories are <strong data-amount>{formatRupiah(guide.shortfall)}</strong> over
+        their limits.
       </span>
     );
   }
   return (
     <span className={styles.safeNote}>
-      <strong data-amount>{formatRupiah(safe.remaining)}</strong> left in budgets ÷ {safe.daysLeft}{" "}
-      {safe.daysLeft === 1 ? "day" : "days"}, including today
+      <strong data-amount>{formatRupiah(guide.remaining)}</strong> left in monthly budgets ÷{" "}
+      {guide.daysLeft} {guide.daysLeft === 1 ? "day" : "days"}, including today
     </span>
   );
 }
 
-// The daily guide: what can still be spent today without breaking the month's total limits.
+function BudgetGuidePace({ model }: { model: OverviewModel }) {
+  const guide = model.budgetGuide;
+  const percent = guide?.percent ?? model.percent;
+  const hasCalendarProgress = model.isCurrentMonth && model.calendarBudgetPeriods;
+  return (
+    <>
+      <span
+        aria-hidden
+        className={styles.pace}
+        data-pace={model.calendarBudgetPeriods ? paceOf(model) : undefined}
+      >
+        <span className={styles.paceFill} style={{ width: `${Math.min(percent, 100)}%` }} />
+        {hasCalendarProgress ? (
+          <span className={styles.paceMarker} style={{ left: `${model.elapsedPercent}%` }} />
+        ) : null}
+      </span>
+      <span className={styles.paceCaption}>
+        <span>
+          <strong>{percent}%</strong> of budgets used
+          {hasCalendarProgress ? ` · ${model.elapsedPercent}% of month gone` : ""}
+        </span>
+        {!guide ? (
+          <span data-state={model.attentionBudget?.state ?? "on-track"}>
+            <AttentionLine model={model} />
+          </span>
+        ) : null}
+      </span>
+    </>
+  );
+}
+
+// The daily allowance describes the monthly categories the User chose to budget.
 function SafeToSpendCard({
   month,
   model,
@@ -703,41 +658,24 @@ function SafeToSpendCard({
 }) {
   const { formatRupiah } = useAmountDisplay();
   if (model.budgetTotal === BigInt(0)) return <SafeToSpendSetup openBudgets={openBudgets} />;
-  const safe = model.safeToSpend;
+  const guide = model.budgetGuide;
   return (
-    <Button variant="ghost" className={styles.safe} onPress={openBudgets} type="button">
+    <Button
+      variant="ghost"
+      className={styles.safe}
+      data-home-card="safe"
+      onPress={openBudgets}
+      type="button"
+    >
       <span className={styles.featureName}>
-        <span aria-hidden className={styles.featureIcon} data-tone="green">
-          <Icon name="budgets" />
-        </span>
-        {safe ? "Safe to spend today" : "Budgets left"}
+        <SectionLabel icon="budgets">{guide ? "Daily budget guide" : "Budgets left"}</SectionLabel>
       </span>
       <span className={styles.safeAmount}>
-        <strong data-amount>{formatRupiah(safe ? safe.perDay : model.remaining)}</strong>
-        {safe ? <small>/day</small> : null}
+        <strong data-amount>{formatRupiah(guide ? guide.perDay : model.remaining)}</strong>
+        {guide ? <small>/day</small> : null}
       </span>
-      <SafeToSpendNote model={model} month={month} />
-      <span
-        aria-hidden
-        className={styles.pace}
-        data-pace={model.calendarBudgetPeriods ? paceOf(model) : undefined}
-      >
-        <span className={styles.paceFill} style={{ width: `${Math.min(model.percent, 100)}%` }} />
-        {model.isCurrentMonth && model.calendarBudgetPeriods ? (
-          <span className={styles.paceMarker} style={{ left: `${model.elapsedPercent}%` }} />
-        ) : null}
-      </span>
-      <span className={styles.paceCaption}>
-        <span>
-          <strong>{model.percent}%</strong> of budgets used
-          {model.isCurrentMonth && model.calendarBudgetPeriods
-            ? ` · ${model.elapsedPercent}% of month gone`
-            : ""}
-        </span>
-        <span data-state={model.attentionBudget?.state ?? "on-track"}>
-          <AttentionLine model={model} />
-        </span>
-      </span>
+      <BudgetGuideNote model={model} month={month} />
+      <BudgetGuidePace model={model} />
     </Button>
   );
 }
@@ -833,10 +771,14 @@ function AttentionCard({
 }) {
   const display = useAmountDisplay();
   return (
-    <section aria-labelledby="attention-title" className={styles.attention}>
-      <h2 className={styles.cardLabel} id="attention-title">
+    <section
+      aria-labelledby="attention-title"
+      className={`${styles.attention} ${styles.slotAttention}`}
+      data-home-card="attention"
+    >
+      <SectionTitle className={styles.cardLabel} icon="bell" id="attention-title">
         Needs attention
-      </h2>
+      </SectionTitle>
       {items.length === 0 ? (
         <p className={styles.allClear}>
           <span aria-hidden className={styles.alertIcon} data-tone="success">
@@ -898,63 +840,6 @@ function Fact({
   );
 }
 
-// Plain facts about the month, each one a way into the detail behind it.
-function FactsCard({
-  month,
-  model,
-  openReports,
-  openTransaction,
-}: {
-  month: string;
-  model: OverviewModel;
-  openReports: () => void;
-  openTransaction: (transaction: Transaction) => void;
-}) {
-  const { formatRupiah, compactAmount } = useAmountDisplay();
-  const { topCategory, dailyAverage, largest } = model.facts;
-  if (!topCategory && !dailyAverage && !largest && model.savingsRate === null) {
-    return null;
-  }
-  return (
-    <section aria-labelledby="facts-title" className={styles.attention}>
-      <h2 className={styles.cardLabel} id="facts-title">
-        {model.isCurrentMonth ? "This month in numbers" : `${monthName(month)} in numbers`}
-      </h2>
-      <ul className={styles.alerts}>
-        {topCategory ? (
-          <Fact icon="pie" onOpen={openReports}>
-            <strong>{topCategory.name}</strong> is {topCategory.share}% of spending
-          </Fact>
-        ) : null}
-        {dailyAverage ? (
-          <Fact icon="pulse" onOpen={openReports}>
-            <strong data-amount>{compactAmount(dailyAverage)}</strong> a day on average
-          </Fact>
-        ) : null}
-        {largest ? (
-          <Fact icon="transactions" onOpen={() => openTransaction(largest)}>
-            Largest payment: <strong>{largest.merchant ?? "Unnamed"}</strong>,{" "}
-            <strong data-amount>{formatRupiah(largest.amount ?? 0)}</strong>
-          </Fact>
-        ) : null}
-        {model.savingsRate !== null ? (
-          <Fact icon="sparkle" onOpen={openReports}>
-            {model.savingsRate < 0 ? (
-              <>
-                Spending is <strong>{-model.savingsRate}%</strong> above income
-              </>
-            ) : (
-              <>
-                You kept <strong>{model.savingsRate}%</strong> of income
-              </>
-            )}
-          </Fact>
-        ) : null}
-      </ul>
-    </section>
-  );
-}
-
 function BackendInsightsCard({
   insights,
   transactions,
@@ -981,10 +866,14 @@ function BackendInsightsCard({
     return null;
   }
   return (
-    <section aria-labelledby="backend-insights-title" className={styles.attention}>
-      <h2 className={styles.cardLabel} id="backend-insights-title">
+    <section
+      aria-labelledby="backend-insights-title"
+      className={`${styles.attention} ${styles.slotFlags}`}
+      data-home-card="flags"
+    >
+      <SectionTitle className={styles.cardLabel} icon="sparkle" id="backend-insights-title">
         Forecasts and flags
-      </h2>
+      </SectionTitle>
       <ul className={styles.alerts}>
         {insights.overspendForecasts.slice(0, 2).map((forecast) => (
           <Fact icon="trend-up" key={forecast.budgetId} onOpen={openBudgets} tone="down">
@@ -1014,74 +903,6 @@ function BackendInsightsCard({
   );
 }
 
-// Shortcuts into the deeper screens; what needs action lives in Needs attention.
-function FeatureGrid({
-  model,
-  openBudgets,
-  openReports,
-  openConnectGmail,
-  openAccounts,
-}: {
-  model: OverviewModel;
-  openBudgets: () => void;
-  openReports: () => void;
-  openConnectGmail?: () => void;
-  openAccounts?: () => void;
-}) {
-  const { compactAmount } = useAmountDisplay();
-  const budgetCount = model.usage.length;
-  return (
-    <section aria-labelledby="features-title" className={styles.features}>
-      <h2 className="sr-only" id="features-title">
-        Shortcuts
-      </h2>
-      <div className={styles.featureGrid}>
-        <Feature
-          amount
-          hint="Daily trend, categories and places"
-          icon="reports"
-          name="Reports"
-          onOpen={openReports}
-          tone="blue"
-          value={`${compactAmount(model.summary.spending)} out`}
-        />
-        <Feature
-          hint="Limits and bills"
-          icon="budgets"
-          name="Budgets"
-          onOpen={openBudgets}
-          tone="green"
-          value={
-            budgetCount === 0
-              ? "Set limits"
-              : `${budgetCount} ${budgetCount === 1 ? "budget" : "budgets"}`
-          }
-        />
-        {openAccounts ? (
-          <Feature
-            hint="Accounts for your payments"
-            icon="wallet"
-            name="Banks & wallets"
-            onOpen={openAccounts}
-            tone="violet"
-            value="Your accounts"
-          />
-        ) : null}
-        {openConnectGmail ? (
-          <Feature
-            hint="Up to 3 mailboxes"
-            icon="mail"
-            name="Gmail"
-            onOpen={openConnectGmail}
-            tone="red"
-            value="Import receipts"
-          />
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
 export function MobileOverview({
   setup,
   month,
@@ -1094,13 +915,11 @@ export function MobileOverview({
   toggleAmounts,
   openTransaction,
   openTransactions,
-  openReports,
   openBudgets,
   openReview,
   openChat,
   openAdd,
   openConnectGmail,
-  openAccounts,
 }: {
   month: string;
   setMonth: (month: string) => void;
@@ -1112,13 +931,11 @@ export function MobileOverview({
   toggleAmounts: () => void;
   openTransaction: (transaction: Transaction) => void;
   openTransactions?: () => void;
-  openReports: () => void;
   openBudgets: () => void;
   openReview: () => void;
   openChat: (prompt?: string) => void;
   openAdd?: () => void;
   openConnectGmail?: () => void;
-  openAccounts?: () => void;
   setup?: ReactNode;
 }) {
   return (
@@ -1136,15 +953,46 @@ export function MobileOverview({
         {setup}
         <div className={styles.columns}>
           <div className={styles.lead}>
-            <SceneChips
-              model={model}
-              openReview={openReview}
-              openBudgets={openBudgets}
-              openReports={openReports}
-            />
-            {model.weekly ? (
-              <WeeklySpendingCard week={model.weekly} openBudgets={openBudgets} />
+            {model.isCurrentMonth ? (
+              <div className={styles.slotForecast}>
+                <SpendingForecastCard month={month} today={today} transactions={transactions} />
+              </div>
             ) : null}
+            {model.isCurrentMonth || model.recent.length > 0 ? (
+              <div className={styles.slotActivity}>
+                <ActivityCard
+                  model={model}
+                  month={month}
+                  openAdd={openAdd}
+                  openTransaction={openTransaction}
+                  openTransactions={openTransactions}
+                />
+              </div>
+            ) : null}
+            <div className={styles.slotWhere}>
+              <SpendingBlock
+                model={model}
+                month={month}
+                openAdd={openAdd}
+                openConnectGmail={openConnectGmail}
+                openReview={openReview}
+                openTransaction={openTransaction}
+                setMonth={setMonth}
+                today={today}
+                transactions={transactions}
+              />
+            </div>
+          </div>
+          <div className={styles.aside}>
+            <div className={styles.slotSafe}>
+              <SafeToSpendCard model={model} month={month} openBudgets={openBudgets} />
+            </div>
+            <BackendInsightsCard
+              insights={insights}
+              openBudgets={openBudgets}
+              openTransaction={openTransaction}
+              transactions={transactions}
+            />
             {model.isCurrentMonth ? (
               <AttentionCard
                 items={model.attention}
@@ -1152,48 +1000,6 @@ export function MobileOverview({
                 openReview={openReview}
               />
             ) : null}
-            {model.isCurrentMonth || model.recent.length > 0 ? (
-              <ActivityCard
-                model={model}
-                month={month}
-                openAdd={openAdd}
-                openTransaction={openTransaction}
-                openTransactions={openTransactions}
-              />
-            ) : null}
-            <SpendingBlock
-              model={model}
-              month={month}
-              openAdd={openAdd}
-              openConnectGmail={openConnectGmail}
-              openReview={openReview}
-              openTransaction={openTransaction}
-              setMonth={setMonth}
-              today={today}
-              transactions={transactions}
-            />
-          </div>
-          <div className={styles.aside}>
-            <SafeToSpendCard model={model} month={month} openBudgets={openBudgets} />
-            <FactsCard
-              model={model}
-              month={month}
-              openReports={openReports}
-              openTransaction={openTransaction}
-            />
-            <BackendInsightsCard
-              insights={insights}
-              openBudgets={openBudgets}
-              openTransaction={openTransaction}
-              transactions={transactions}
-            />
-            <FeatureGrid
-              model={model}
-              openBudgets={openBudgets}
-              openConnectGmail={openConnectGmail}
-              openAccounts={openAccounts}
-              openReports={openReports}
-            />
           </div>
         </div>
       </div>

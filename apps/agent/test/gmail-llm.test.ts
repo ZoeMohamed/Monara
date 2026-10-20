@@ -106,6 +106,25 @@ describe("busy or failing model providers", () => {
     assert.equal(body.max_tokens, 2000);
   });
 
+  it("honors a thirty-two-thousand-token import budget including reasoning", async () => {
+    for (const model of ["synthetic-deployment", "gpt-5-mini", "gpt-6-luna"]) {
+      let body: Record<string, unknown> = {};
+      const llm = createLlmClient({
+        baseUrl: "https://synthetic.openai.azure.com/openai/v1",
+        apiKey: "synthetic",
+        model,
+        async fetcher(_input, init) {
+          body = JSON.parse(String(init.body));
+          return answer();
+        },
+      });
+      await llm.completeJson({ ...request, maxOutputTokens: 32_000 });
+      assert.equal(body.max_completion_tokens, 32_000, model);
+      await llm.completeJson({ ...request, maxOutputTokens: 50_000 });
+      assert.equal(body.max_completion_tokens, 32_000, "the total cap includes reasoning");
+    }
+  });
+
   it("waits out a short rate limit in the same call, as long as the provider asks", async () => {
     const waits: number[] = [];
     const { llm, calls } = client(
@@ -215,6 +234,35 @@ describe("reasoning models", () => {
     await llm.completeJson({ ...request, maxOutputTokens: 1500 });
     return body;
   }
+
+  it("recognizes gpt-6 and supports the import timeout without changing other client defaults", async (t) => {
+    const timeoutCalls: number[] = [];
+    t.mock.method(AbortSignal, "timeout", (ms: number) => {
+      timeoutCalls.push(ms);
+      return new AbortController().signal;
+    });
+    let body: Record<string, unknown> = {};
+    const llm = createLlmClient({
+      baseUrl: "https://res.openai.azure.com/openai/v1",
+      apiKey: "synthetic",
+      model: "gpt-6-luna",
+      reasoningEffort: "medium",
+      requestTimeoutMs: 120_000,
+      maxInlineRetries: 0,
+      async fetcher(_input, init) {
+        body = JSON.parse(String(init.body));
+        return Response.json({ choices: [{ message: { content: "{}" } }] });
+      },
+    });
+    await llm.completeJson({ ...request, maxOutputTokens: 32_000 });
+    assert.equal(body.reasoning_effort, "medium");
+    assert.equal(body.max_completion_tokens, 32_000);
+    assert.deepEqual(timeoutCalls, [120_000]);
+    const defaults = await bodyFor("https://res.openai.azure.com/openai/v1", "gpt-6-luna");
+    assert.equal(defaults.reasoning_effort, "low");
+    assert.equal(defaults.max_completion_tokens, 3500);
+    assert.deepEqual(timeoutCalls, [120_000, 60_000]);
+  });
 
   it("sends Azure's max_completion_tokens and low effort, with room to reason, for gpt-5", async () => {
     const body = await bodyFor("https://res.openai.azure.com/openai/v1", "gpt-5.4-mini");

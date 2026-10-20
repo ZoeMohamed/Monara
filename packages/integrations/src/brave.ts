@@ -3,7 +3,9 @@
 // email content, or anything that identifies a User.
 
 const SEARCH_URL = "https://api.search.brave.com/res/v1/web/search";
-const REQUEST_TIMEOUT_MS = 10_000;
+// A search is optional enrichment that a failure skips, and normally answers in under a
+// second, so a slow one is not worth waiting for.
+const REQUEST_TIMEOUT_MS = 4_000;
 const MAX_RESULTS = 5;
 const MAX_QUERY_LENGTH = 200;
 

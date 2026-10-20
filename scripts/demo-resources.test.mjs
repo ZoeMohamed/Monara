@@ -13,7 +13,7 @@ test("demo accounts retain explicit types and distinct UUIDs instead of relying 
   assert.equal(new Set(accounts.map(({ id }) => id)).size, accounts.length);
   for (const account of accounts)
     assert.equal(financialAccountSchema.parse(account).id, account.id);
-  assert.equal(accounts.find(({ name }) => name === "GoPay").accountType, "wallet");
+  assert.equal(accounts.find(({ name }) => name === "ShopeePay").accountType, "wallet");
   assert.equal(accounts.find(({ name }) => name === "Cash").institution, null);
 });
 

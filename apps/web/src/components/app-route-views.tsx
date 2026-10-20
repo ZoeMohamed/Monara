@@ -48,9 +48,6 @@ export function OverviewRoute() {
       setMonth={navigation.setMonth}
       transactions={session.transactions}
       budgets={session.budgets}
-      weeklyBudgets={session.financeSnapshot?.allBudgets.filter(
-        (budget) => budget.cadence === "weekly",
-      )}
       today={session.today}
       bills={session.bills}
       insights={
@@ -63,12 +60,10 @@ export function OverviewRoute() {
       openTransaction={(transaction) => navigation.openTransaction(transaction.id)}
       openTransactions={() => navigation.navigate({ screen: "transactions", reviewOpen: false })}
       openReview={session.openReview}
-      openReports={() => navigation.navigate({ screen: "reports" })}
       openBudgets={() => navigation.navigate({ screen: "budgets" })}
       openChat={session.openChat}
       openAdd={navigation.openAdd}
       openConnectGmail={navigation.openGmail}
-      openAccounts={() => navigation.navigate({ screen: "account" })}
     />
   );
 }
@@ -133,6 +128,8 @@ export function BudgetsRoute() {
           demo={session.dataMode === "demo"}
           goals={session.financeSnapshot?.financialGoals ?? []}
           runMutation={session.financeSnapshot ? session.runMutation : undefined}
+          refreshRequired={session.refreshRequired}
+          onRefreshRecords={session.refreshFinance}
           today={session.today}
           transactions={session.transactions}
         />
@@ -149,10 +146,12 @@ export function BudgetsRoute() {
           demoCategories={session.dataMode === "demo" ? session.categories : undefined}
           onCreateBudget={session.dataMode === "demo" ? session.createDemoBudget : undefined}
           onRequestCreateBudget={
-            session.financeSnapshot ? () => setBudgetPanel({ kind: "create" }) : undefined
+            session.financeSnapshot
+              ? (cadence) => setBudgetPanel({ kind: "create", cadence })
+              : undefined
           }
-          onRequestEditBudget={
-            session.financeSnapshot ? (id) => setBudgetPanel({ kind: "edit", id }) : undefined
+          onRequestBudgetDetails={
+            session.financeSnapshot ? (id) => setBudgetPanel({ kind: "details", id }) : undefined
           }
           onRequestDeleteBudget={
             session.financeSnapshot ? (id) => setBudgetPanel({ kind: "delete", id }) : undefined
@@ -160,6 +159,12 @@ export function BudgetsRoute() {
           management={
             session.financeSnapshot ? (
               <BudgetManager
+                onSaved={(result) =>
+                  session.notify({
+                    message: "Budget saved.",
+                    undo: { kind: "backend", receipt: result.action },
+                  })
+                }
                 collapseList
                 hiddenBudgetIds={session.budgets.map((budget) => budget.id)}
                 panel={budgetPanel}
@@ -203,7 +208,9 @@ export function ChatRoute() {
   const demo = session.dataMode === "demo";
 
   // Saved chats are listed once per page load, then each is fetched when it is opened.
-  const [listFailed, setListFailed] = useState(false);
+  const [listFailure, setListFailure] = useState<{ attempt: number } | null>(null);
+  const [listAttempt, setListAttempt] = useState(0);
+  const listFailed = listFailure?.attempt === listAttempt;
   const listed = chat.state.listed;
   useEffect(() => {
     if (demo || listed) return;
@@ -211,14 +218,14 @@ export function ChatRoute() {
     loadChatConversations()
       .then((conversations) => {
         if (!current) return;
-        setListFailed(false);
+        setListFailure(null);
         dispatch({ type: "saved-list", conversations });
       })
-      .catch(() => current && setListFailed(true));
+      .catch(() => current && setListFailure({ attempt: listAttempt }));
     return () => {
       current = false;
     };
-  }, [demo, listed, dispatch]);
+  }, [demo, listed, dispatch, listAttempt]);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [failedLoad, setFailedLoad] = useState<{ id: string; attempt: number } | null>(null);
   const conversationId = conversation.id;
@@ -264,6 +271,7 @@ export function ChatRoute() {
         async () => {
           try {
             const response = await sendChatMessage(text, conversation.history, conversation.id);
+            chat.rememberSave(response.historySave);
             const safeResponse = mounted.current ? response : { ...response, confirmation: null };
             dispatch({
               type: "history",
@@ -355,6 +363,7 @@ export function ChatRoute() {
       pending={chat.pending}
       saved={!demo}
       savedLoadFailed={listFailed}
+      onRetrySavedList={() => setListAttempt((attempt) => attempt + 1)}
       status={status}
       onRetryLoad={() => setLoadAttempt((attempt) => attempt + 1)}
       onRestoreConversation={(id) => {
@@ -417,6 +426,9 @@ export function ProfileRoute() {
             accounts={session.financialAccounts}
             onCreate={session.createDemoAccount}
             onUpdate={session.updateDemoAccount}
+            customBanks={session.customBanks}
+            onCreateCustom={session.createDemoCustomBank}
+            onUpdateCustom={session.updateDemoCustomBank}
           />
         )
       }

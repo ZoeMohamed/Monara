@@ -1,6 +1,6 @@
 import { webChatRequestSchema, webChatResponseSchema } from "@monara/contracts";
-import { after } from "next/server";
 
+import { persistChatExchange } from "@/lib/chat/persist-exchange";
 import { chatHistoryService } from "@/lib/chat/service";
 import { isSameOriginRequest } from "@/lib/http/origin";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/http/rate-limit";
@@ -9,7 +9,6 @@ import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 const headers = { "Cache-Control": "private, no-store" };
-const HISTORY_SAVE_TIMEOUT_MS = 5_000;
 
 function failure(status: number, code: string, message: string) {
   return Response.json({ code, message, requestId: null }, { status, headers });
@@ -48,7 +47,7 @@ export async function POST(request: Request) {
   const body = webChatRequestSchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return failure(400, "VALIDATION_FAILED", "Write a message to send.");
 
-  const { conversationId, ...message } = body.data;
+  const { conversationId, historyRecovery, ...message } = body.data;
   let response: Response;
   try {
     response = await fetch(new URL("/chat", agentUrl), {
@@ -80,19 +79,16 @@ export async function POST(request: Request) {
       "Monara's answer couldn't be verified. Check your records before trying again.",
     );
   }
-  // The Agent may already have changed records. Send its verified reply immediately;
-  // Next keeps the invocation alive briefly to persist history after the response.
-  after(async () => {
-    try {
-      await chatHistoryService().saveExchange(
-        identity.id,
-        { conversationId, text: message.text },
-        result.data,
-        AbortSignal.timeout(HISTORY_SAVE_TIMEOUT_MS),
-      );
-    } catch {
-      // The chat still works; only its history is missing this exchange.
-    }
-  });
-  return Response.json(result.data, { headers });
+  // Return the financial answer even when history is unavailable, with an explicit,
+  // signed save-only recovery receipt. Retrying it never invokes the Agent.
+  const reply = await persistChatExchange(
+    identity.id,
+    { conversationId, text: message.text },
+    result.data,
+    secret,
+    (owner, exchange, signal) => chatHistoryService().saveExchange(owner, exchange, signal),
+  );
+  // Older open tabs validate the legacy strict reply schema. Opt in to the new
+  // status envelope so deployment does not turn a verified financial reply into an error.
+  return Response.json(historyRecovery ? reply : result.data, { headers });
 }

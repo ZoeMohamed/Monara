@@ -76,16 +76,24 @@ export function CategorySpendingGuide({
   insights,
   month,
   today,
+  budgetIds,
 }: {
   insights?: FinancialInsights;
   month: string;
   today: string;
+  /** Omit outside Budgets to retain every available guide. */
+  budgetIds?: readonly string[];
 }) {
+  const allowed = budgetIds === undefined ? null : new Set(budgetIds);
+  const guides =
+    insights?.safeToSpend.byCategory.filter(
+      (guide) => allowed === null || allowed.has(guide.budgetId),
+    ) ?? [];
   if (
     !insights ||
     insights.asOf.slice(0, 7) !== month ||
     insights.asOf > today ||
-    insights.safeToSpend.byCategory.length === 0
+    guides.length === 0
   ) {
     return null;
   }
@@ -99,7 +107,7 @@ export function CategorySpendingGuide({
           <time dateTime={insights.asOf}>{guideDate(insights.asOf)}</time> · Confirmed spending
         </p>
         <ul className="min-w-0 divide-y divide-separator">
-          {insights.safeToSpend.byCategory.map((guide) => (
+          {guides.map((guide) => (
             <CategoryGuide asOf={insights.asOf} guide={guide} key={guide.budgetId} />
           ))}
         </ul>

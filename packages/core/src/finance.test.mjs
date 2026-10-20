@@ -38,9 +38,11 @@ const budget = {
 };
 
 function transaction(overrides = {}) {
+  const kind = overrides.kind === undefined ? "expense" : overrides.kind;
   return {
     id: "30000000-0000-4000-8000-000000000003",
     kind: "expense",
+    flowDirection: kind === "expense" ? "out" : kind === "income" ? "in" : null,
     merchantName: "Synthetic Coffee",
     money: { amountMinor: "800", currency: "IDR" },
     occurredOn: "2026-10-14",
@@ -225,6 +227,30 @@ describe("dashboard aggregates", () => {
 });
 
 describe("financial insights", () => {
+  it("keeps overall affordability conservative without consuming an unrelated category allowance", () => {
+    const cafeBudget = { ...budget, limit: { amountMinor: "1000000", currency: "IDR" } };
+    const summary = calculateDashboard({
+      month: "2026-10",
+      today: "2026-10-20",
+      categories: [category],
+      budgets: [cafeBudget],
+      reminders: [],
+      transactions: [
+        transaction({ money: { amountMinor: "200000", currency: "IDR" } }),
+        transaction({
+          id: crypto.randomUUID(),
+          categoryId: null,
+          money: { amountMinor: "1200000", currency: "IDR" },
+        }),
+      ],
+    });
+    assert.equal(summary.spending.amountMinor, "1400000");
+    assert.equal(summary.insights.safeToSpend.overall.dailyAmount.amountMinor, "0");
+    assert.equal(summary.insights.safeToSpend.overall.shortfall.amountMinor, "400000");
+    assert.equal(summary.insights.safeToSpend.byCategory[0].remaining.amountMinor, "800000");
+    assert.equal(summary.insights.safeToSpend.byCategory[0].dailyAmount.amountMinor, "66666");
+  });
+
   it("flags only reproducible outliers against three months of confirmed category history", () => {
     const historyTransactions = [100, 110, 120].map((amount, index) =>
       transaction({
@@ -579,6 +605,24 @@ function createMemoryFinanceRepository() {
         reviewStatus: input.reviewStatus,
       });
     },
+    async restoreTransactionFromUndo(input) {
+      const action = actions.find(
+        (candidate) =>
+          candidate.ownerId === input.userId && candidate.receipt.actionId === input.actionId,
+      );
+      if (!action) throw new FinanceOperationError("NOT_FOUND", "The change was not found.");
+      if (action.consumedAt) throw new FinanceOperationError("CONFLICT", "Already undone.");
+      const entry = transactions.find(
+        (candidate) =>
+          candidate.ownerId === input.userId && candidate.value.id === action.receipt.resourceId,
+      );
+      const restored = changed(entry, action.state.expectedUpdatedAt, {
+        ...action.state.values,
+        reviewStatus: action.state.reviewStatus,
+      });
+      action.consumedAt = restored.updatedAt;
+      return restored;
+    },
     async softDeleteTransaction(input) {
       const entry = transactions.find(
         (candidate) =>
@@ -920,6 +964,68 @@ describe("owned notification read and dismissal", () => {
 });
 
 describe("payday budget usage reads across month boundaries", () => {
+  for (const [instant, localDate] of [
+    ["2026-10-18T22:00:00Z", "2026-10-19"],
+    ["2026-10-31T18:00:00Z", "2026-11-01"],
+  ]) {
+    it(`activates today's weekly budget and evaluates thresholds after Jakarta midnight (${localDate})`, async () => {
+      const memory = createMemoryFinanceRepository();
+      const service = createFinanceService(memory.repository, { now: () => new Date(instant) });
+      memory.seedPending(ownerA, {
+        reviewStatus: "confirmed",
+        occurredOn: localDate,
+        money: { amountMinor: "800", currency: "IDR" },
+      });
+      const { budget: created } = await service.createBudget(callerA, {
+        clientRequestId: `synthetic-jakarta-midnight-${localDate}`,
+        categoryId: category.id,
+        name: "This week's food",
+        cadence: "weekly",
+        startsOn: localDate,
+        limit: { amountMinor: "1000", currency: "IDR" },
+      });
+      assert.equal(memory.state.reminders.length, 1, "creation checks the active local day");
+      assert.equal(memory.state.reminders[0].value.periodStartsOn, localDate);
+      const month = localDate.slice(0, 7);
+      const [usage] = await service.listBudgetUsage(callerA, { month });
+      assert.equal(usage.periodStartsOn, localDate);
+      assert.equal(usage.used.amountMinor, "800");
+      const dashboard = await service.getDashboard(callerA, { month });
+      assert.equal(dashboard.insights.asOf, localDate);
+      assert.deepEqual(dashboard.budgetUsage, [usage]);
+      await service.updateBudget(callerA, {
+        budgetId: created.id,
+        expectedUpdatedAt: created.updatedAt,
+        changes: { limit: { amountMinor: "500", currency: "IDR" } },
+      });
+      const editedWarnings = memory.state.reminders.slice(1);
+      assert.ok(
+        editedWarnings.some((entry) => entry.value.thresholdPercent === 100),
+        "editing checks the same local day",
+      );
+      assert.ok(editedWarnings.every((entry) => entry.value.periodStartsOn === localDate));
+    });
+  }
+
+  it("uses the previous three complete local months for suggestions after the month rolls over", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository, {
+      now: () => new Date("2026-10-31T18:00:00Z"),
+    });
+    memory.seedPending(ownerA, {
+      reviewStatus: "confirmed",
+      occurredOn: "2026-10-15",
+      money: { amountMinor: "900", currency: "IDR" },
+    });
+    const suggestion = await service.suggestBudget(callerA, {
+      categoryId: category.id,
+      cadence: "monthly",
+    });
+    assert.equal(suggestion.basedOnStartsOn, "2026-08-01");
+    assert.equal(suggestion.basedOnEndsOn, "2026-10-31");
+    assert.equal(suggestion.proposedLimit.amountMinor, "300");
+  });
+
   it("uses the same future-month cycle and activation date as the dashboard", async () => {
     const memory = createMemoryFinanceRepository();
     const service = createFinanceService(memory.repository, {
@@ -1162,15 +1268,35 @@ describe("ZO6 Review Queue service simulation", () => {
     });
     assert.equal(confirmed.transaction.reviewStatus, "confirmed");
 
-    const rejectedPending = memory.seedPending(ownerA, { merchantName: "Wrong Import" });
+    const rejectedPending = memory.seedPending(ownerA, {
+      merchantName: "Wrong Import",
+      occurredOn: "2026-10-15",
+      categoryId: category.id,
+    });
     const rejected = await service.excludePending(callerA, {
       transactionId: rejectedPending.id,
       expectedUpdatedAt: rejectedPending.updatedAt,
     });
     assert.equal(rejected.transaction.kind, "exclusion");
     assert.equal(rejected.transaction.reviewStatus, "confirmed");
+    assert.equal(rejected.transaction.categoryId, null);
     const queue = await service.listTransactions(callerA, { reviewStatus: "pending" });
     assert.equal(queue.items.length, 0);
+  });
+
+  it("keeps an undated import pending when exclusion cannot be confirmed safely", async () => {
+    const memory = createMemoryFinanceRepository();
+    const service = createFinanceService(memory.repository);
+    const pending = memory.seedPending(ownerA, { occurredOn: null });
+    await assert.rejects(
+      service.excludePending(callerA, {
+        transactionId: pending.id,
+        expectedUpdatedAt: pending.updatedAt,
+      }),
+      (error) => error.issues?.some((issue) => issue.path.includes("occurredOn")),
+    );
+    assert.deepEqual(await memory.repository.findTransaction(ownerA, pending.id), pending);
+    assert.equal(memory.state.actions.length, 0);
   });
 });
 
@@ -1277,6 +1403,49 @@ describe("undo_action", () => {
   const failsWith = (code) => (error) =>
     error instanceof FinanceOperationError && error.code === code;
 
+  it("restores confirm and exclusion receipts through one atomic repository operation", async () => {
+    for (const operation of ["confirmPending", "excludePending"]) {
+      const memory = createMemoryFinanceRepository();
+      const service = createFinanceService(memory.repository, {
+        now: () => new Date("2026-10-15T01:00:30.000Z"),
+      });
+      const previous = memory.seedPending(ownerA, {
+        description: "Original source details",
+        occurredOn: "2026-10-15",
+      });
+      const { clientRequestId: _requestId, ...values } = coffee("confirm-undo");
+      const changed = await service[operation](callerA, {
+        transactionId: previous.id,
+        expectedUpdatedAt: previous.updatedAt,
+        ...(operation === "confirmPending" ? { values } : {}),
+      });
+      const restore = memory.repository.restoreTransactionFromUndo;
+      const restoreCalls = [];
+      memory.repository.restoreTransactionFromUndo = async (input) => {
+        restoreCalls.push(input);
+        return restore(input);
+      };
+      memory.repository.replaceTransaction = async () => {
+        assert.fail("Undo cannot use an ordinary transaction update");
+      };
+      memory.repository.consumeUndoAction = async () => {
+        assert.fail("Atomic restoration already consumed this receipt");
+      };
+      assert.deepEqual(await service.undoAction(callerA, { actionId: changed.action.actionId }), {
+        ok: true,
+      });
+      assert.deepEqual(restoreCalls, [{ userId: ownerA, actionId: changed.action.actionId }]);
+      const restored = await memory.repository.findTransaction(ownerA, previous.id);
+      assert.deepEqual(restored, { ...previous, updatedAt: restored.updatedAt });
+      assert.ok(memory.state.actions[0].consumedAt);
+      await assert.rejects(
+        service.undoAction(callerA, { actionId: changed.action.actionId }),
+        failsWith("CONFLICT"),
+      );
+      assert.equal(restoreCalls.length, 1);
+    }
+  });
+
   it("reverses an add or an edit once, for its own User, before it expires", async () => {
     const memory = createMemoryFinanceRepository();
     let currentTime = new Date("2026-10-15T01:00:30.000Z");
@@ -1326,17 +1495,18 @@ describe("undo_action", () => {
 
   it("restores a Budget's previous limit and removes a Budget it created", async () => {
     const memory = createMemoryFinanceRepository();
+    let currentTime = new Date("2026-10-14T16:00:30.000Z");
     const service = createFinanceService(memory.repository, {
-      now: () => new Date("2026-10-15T01:00:30.000Z"),
+      now: () => currentTime,
     });
     const created = await service.createBudget(callerA, {
       clientRequestId: "undo-budget",
       categoryId: category.id,
       name: "Food",
-      cadence: "monthly",
+      cadence: "weekly",
       limit: { amountMinor: "1500000", currency: "IDR" },
       warningPercent: 80,
-      startsOn: "2026-10-01",
+      startsOn: "2026-10-15",
     });
     const raised = await service.updateBudget(callerA, {
       budgetId: created.budget.id,
@@ -1349,10 +1519,13 @@ describe("undo_action", () => {
       money: { amountMinor: "1300000", currency: "IDR" },
     });
     const remindersBeforeUndo = memory.state.reminderKeys.size;
+    // 01:00 Jakarta on Oct 15 is still Oct 14 in UTC.
+    currentTime = new Date("2026-10-14T18:00:30.000Z");
     await service.undoAction(callerA, { actionId: raised.action.actionId });
     const [budgetAfterUndo] = (await service.listBudgets(callerA, {})).items;
     assert.equal(budgetAfterUndo.limit.amountMinor, "1500000");
     assert.equal(memory.state.reminderKeys.size, remindersBeforeUndo + 1);
+    assert.equal(memory.state.reminders.at(-1).value.periodStartsOn, "2026-10-15");
 
     const other = await service.createBudget(callerA, {
       clientRequestId: "undo-budget-2",
@@ -1424,6 +1597,7 @@ describe("ZO6-ZO8 backend journey simulation", () => {
     const pendingExcluded = memory.seedPending(ownerA, {
       kind: "income",
       merchantName: "Reimbursement",
+      occurredOn: "2026-10-15",
       money: { amountMinor: "500", currency: "IDR" },
       categoryId: null,
       financialAccountId: secondAccount.financialAccount.id,

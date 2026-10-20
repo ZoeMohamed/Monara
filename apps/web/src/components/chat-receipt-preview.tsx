@@ -53,7 +53,10 @@ export function ChatReceiptPreview({
           {available ? (
             <p>Unclear details will need your review.</p>
           ) : (
-            <p>Your photo stays in this chat.</p>
+            <p>
+              Your photo stays on this page. Remove it to send a message, or add the transaction
+              manually.
+            </p>
           )}
         </div>
         <Button

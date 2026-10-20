@@ -159,15 +159,15 @@ values
 
 select is(
   (select count(*)::integer from public.categories where user_id = 'a0000000-0000-4000-8000-000000000001'),
-  31,
-  'new users receive the 31 current default categories'
+  35,
+  'new users receive the 35 current default categories'
 );
 
 select is(
   (select count(*)::integer from public.categories
     where user_id = 'a0000000-0000-4000-8000-000000000001'
       and is_default and not is_archived and icon <> ''),
-  31,
+  35,
   'every current default Category is active and has an icon'
 );
 
@@ -562,33 +562,28 @@ select lives_ok(
   'an exclusion reimbursement remains stored without affecting totals'::text
 );
 
-select lives_ok(
-  $test$do $block$
-    declare inserted_id uuid;
-    begin
-      insert into public.transactions (
-        user_id, client_request_id, financial_account_id,
-        source_type, transaction_type, description, review_status
-      ) values (
-        'a0000000-0000-4000-8000-000000000001', 'incomplete-exclusion',
-        'a1000000-0000-4000-8000-000000000001',
-        'manual_form', null, 'Unusable imported record', 'pending'
-      ) returning id into inserted_id;
-
-      update public.transactions
-      set transaction_type = 'exclusion', review_status = 'confirmed'
-      where id = inserted_id;
-    end;
-  $block$;$test$::text,
-  'an incomplete pending record can become a confirmed exclusion without invented facts'::text
+insert into public.transactions (
+  user_id, client_request_id, financial_account_id, source_type,
+  transaction_type, description, occurred_on, review_status
+) values (
+  'a0000000-0000-4000-8000-000000000001', 'incomplete-exclusion',
+  'a1000000-0000-4000-8000-000000000001', 'manual_form',
+  null, 'Unusable imported record', null, 'pending'
 );
 
-select ok(
-  (select occurred_on is not null
-    from public.transactions
+select throws_ok(
+  $$update public.transactions set transaction_type = 'exclusion', review_status = 'confirmed'
+    where user_id = 'a0000000-0000-4000-8000-000000000001'
+      and client_request_id = 'incomplete-exclusion'$$::text,
+  '23514'::char(5), null::text,
+  'an undated pending record cannot become a confirmed exclusion without its actual date'::text
+);
+select is(
+  (select occurred_on from public.transactions
     where user_id = 'a0000000-0000-4000-8000-000000000001'
       and client_request_id = 'incomplete-exclusion'),
-  'a transaction without a stated date receives a deterministic Jakarta ledger date'
+  null::date,
+  'a transaction without a stated date stays unknown instead of receiving an import date'
 );
 
 select throws_ok(

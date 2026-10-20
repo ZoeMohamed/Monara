@@ -1,0 +1,56 @@
+.page,
+.overlay {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 24px;
+}
+
+.page {
+  background: var(--background);
+}
+
+.overlay {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  background: rgb(25 45 82 / 28%);
+  pointer-events: none;
+}
+
+.indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 100%;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 8px 32px rgb(25 45 82 / 10%);
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

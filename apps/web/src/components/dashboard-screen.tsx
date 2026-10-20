@@ -1,6 +1,6 @@
 "use client";
 
-import type { Budget as BackendBudget, FinancialInsights } from "@monara/contracts";
+import type { FinancialInsights } from "@monara/contracts";
 import type { ReactNode } from "react";
 
 import { MobileOverview } from "@/components/mobile-overview";
@@ -15,7 +15,6 @@ export function DashboardScreen({
   setMonth,
   transactions,
   budgets,
-  weeklyBudgets,
   today = demoToday,
   bills = noBills,
   insights,
@@ -24,19 +23,16 @@ export function DashboardScreen({
   openTransaction,
   openTransactions,
   openReview,
-  openReports,
   openBudgets,
   openChat,
   openAdd,
   openConnectGmail,
-  openAccounts,
 }: {
   setup?: ReactNode;
   month: string;
   setMonth: (month: string) => void;
   transactions: Transaction[];
   budgets: Budget[];
-  weeklyBudgets?: BackendBudget[];
   today?: string;
   bills?: RecurringBill[];
   insights?: FinancialInsights;
@@ -45,21 +41,12 @@ export function DashboardScreen({
   openTransaction: (transaction: Transaction) => void;
   openTransactions?: () => void;
   openReview: () => void;
-  openReports: () => void;
   openBudgets: () => void;
   openChat: (prompt?: string) => void;
   openAdd?: () => void;
   openConnectGmail?: () => void;
-  openAccounts?: () => void;
 }) {
-  const presentationModel = overviewModel(
-    transactions,
-    budgets,
-    bills,
-    month,
-    today,
-    weeklyBudgets,
-  );
+  const presentationModel = overviewModel(transactions, budgets, bills, month, today, insights);
   const safeBasis = insights?.safeToSpend.overall;
   const model = insights
     ? {
@@ -93,8 +80,6 @@ export function DashboardScreen({
       openBudgets={openBudgets}
       openChat={openChat}
       openConnectGmail={openConnectGmail}
-      openAccounts={openAccounts}
-      openReports={openReports}
       openReview={openReview}
       openTransaction={openTransaction}
       openTransactions={openTransactions}

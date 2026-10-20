@@ -19,9 +19,10 @@ KAPSO_WEBHOOK_SECRET=
 LLM_BASE_URL=
 LLM_API_KEY=
 LLM_MODEL=
-# Only for reasoning models (gpt-5.x, o-series): none, minimal, low, medium, or high.
-# Defaults to low when LLM_MODEL starts with gpt-5 or o1-o9; set it if the Azure
-# deployment has another name. Leave empty for non-reasoning models.
+# Only for reasoning models (gpt-5, gpt-6, o-series): none, minimal, low, medium, or high.
+# Gmail defaults to medium when unset. Other clients infer low for reasoning-model
+# names. Set an effort for renamed Azure reasoning deployments; leave explicitly
+# empty for non-reasoning models so Gmail omits the reasoning parameter too.
 LLM_REASONING_EFFORT=
 
 BRAVE_SEARCH_API_KEY=

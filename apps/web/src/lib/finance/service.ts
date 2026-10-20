@@ -1,3 +1,4 @@
+import { forecastResponseSchema } from "@monara/contracts";
 import type { FinanceCaller, FinanceService } from "@monara/core";
 import {
   createFinanceService,
@@ -6,6 +7,7 @@ import {
 } from "@monara/core";
 import { createMonaraServiceRoleClient } from "@monara/db";
 import { requireActiveUser } from "@/lib/auth/user-deletion";
+import { forecastService } from "@/lib/forecast/service";
 import { publicSupabaseConfig } from "@/lib/supabase/config";
 import { scheduleBudgetAlert } from "@/lib/whatsapp/budget-alerts";
 import { reviewBillsWithAgent } from "../bills/review.ts";
@@ -20,6 +22,9 @@ const FINANCE_OPERATIONS = [
   "exclude_pending",
   "delete_transaction",
   "undo_action",
+  "list_custom_banks",
+  "create_custom_bank",
+  "update_custom_bank",
   "list_financial_accounts",
   "create_financial_account",
   "update_financial_account",
@@ -61,6 +66,9 @@ async function cleanUpDeletedGoalImage(remove: () => Promise<{ error: unknown }>
 export type FinanceOperation = (typeof FINANCE_OPERATIONS)[number];
 type AgentFinanceOperation = Exclude<
   FinanceOperation,
+  | "create_custom_bank"
+  | "update_custom_bank"
+  | "list_custom_banks"
   | "create_category"
   | "list_financial_goals"
   | "create_financial_goal"
@@ -82,7 +90,13 @@ const AGENT_CONFIRMATION_OPERATIONS = [
   "add_receipt_transaction",
 ] as const;
 type AgentConfirmationOperation = (typeof AGENT_CONFIRMATION_OPERATIONS)[number];
-export type AgentOperation = AgentFinanceOperation | AgentConfirmationOperation;
+/** Spending forecast (F17): predictions, never records, so the Agent may read and refresh them. */
+const AGENT_FORECAST_OPERATIONS = ["get_spending_forecast", "refresh_spending_forecast"] as const;
+type AgentForecastOperation = (typeof AGENT_FORECAST_OPERATIONS)[number];
+export type AgentOperation =
+  | AgentFinanceOperation
+  | AgentConfirmationOperation
+  | AgentForecastOperation;
 
 function financeBackend() {
   const client = createMonaraServiceRoleClient(
@@ -114,6 +128,9 @@ export function isFinanceOperation(value: string): value is FinanceOperation {
 
 function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinanceOperation {
   return (
+    value !== "create_custom_bank" &&
+    value !== "update_custom_bank" &&
+    value !== "list_custom_banks" &&
     value !== "create_category" &&
     value !== "list_financial_goals" &&
     value !== "create_financial_goal" &&
@@ -133,7 +150,8 @@ function isAgentFinanceOperation(value: FinanceOperation): value is AgentFinance
 export function isAgentOperation(value: string): value is AgentOperation {
   return (
     (isFinanceOperation(value) && isAgentFinanceOperation(value)) ||
-    (AGENT_CONFIRMATION_OPERATIONS as readonly string[]).includes(value)
+    (AGENT_CONFIRMATION_OPERATIONS as readonly string[]).includes(value) ||
+    (AGENT_FORECAST_OPERATIONS as readonly string[]).includes(value)
   );
 }
 
@@ -161,6 +179,12 @@ export async function runFinanceOperation(
       return service.deleteTransaction(caller, input);
     case "undo_action":
       return service.undoAction(caller, input);
+    case "list_custom_banks":
+      return service.listCustomBanks(caller, input);
+    case "create_custom_bank":
+      return service.createCustomBank(caller, input);
+    case "update_custom_bank":
+      return service.updateCustomBank(caller, input);
     case "list_financial_accounts":
       return service.listFinancialAccounts(caller, input);
     case "create_financial_account":
@@ -236,6 +260,14 @@ export async function runAgentOperation(
   }
   if (operation === "add_receipt_transaction") {
     return financeService().addReceiptTransaction(caller, input);
+  }
+  if (operation === "get_spending_forecast") {
+    const forecast = await forecastService().service.get(caller.userId);
+    return forecastResponseSchema.parse({ forecast });
+  }
+  if (operation === "refresh_spending_forecast") {
+    const forecast = await forecastService().service.refresh(caller.userId, "agent");
+    return forecastResponseSchema.parse({ forecast });
   }
   return runFinanceOperation(operation, caller, input);
 }

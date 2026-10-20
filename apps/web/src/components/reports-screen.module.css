@@ -12,6 +12,8 @@
   flex-direction: column;
 }
 
+/* Same 16px outer corner and 46px height as the date selector; the inner corner is the outer one
+   minus the 4px of border and padding, so the selected tab sits evenly inside the track. */
 .periodTabs {
   display: flex;
   min-width: 0;
@@ -20,6 +22,16 @@
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--surface);
+}
+
+.periodTab {
+  min-width: 0;
+  min-height: 38px;
+  flex: 1;
+  padding-inline: 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .rankingCard {
@@ -34,12 +46,23 @@
 }
 
 .rankingHeading {
-  padding: 20px 20px 12px;
+  padding: 14px 16px 6px;
+}
+
+/* The shared title reserves a 44px row; a ranking card only needs its own text height. */
+.rankingHeading > :first-child {
+  min-height: 28px;
+}
+
+.rankingHeading > p {
+  margin-top: 0;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .rankingList {
   margin: 0;
-  padding: 0 8px 8px;
+  padding: 0 8px 6px;
   list-style: none;
 }
 
@@ -54,12 +77,12 @@
   width: 100%;
   min-width: 0;
   height: auto;
-  min-height: 68px;
+  min-height: 56px;
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
-  padding: 14px 12px;
-  border-radius: 16px;
+  padding: 8px 10px;
+  border-radius: 14px;
   text-align: left;
   white-space: normal;
   --button-bg-hover: var(--surface-secondary);
@@ -109,11 +132,6 @@
 }
 
 @media (max-width: 767px) {
-  .header {
-    align-items: flex-start;
-    row-gap: 20px;
-  }
-
   .header h1 {
     font-size: 32px;
     line-height: 1.15;
@@ -123,35 +141,42 @@
     display: contents;
   }
 
+  .header {
+    align-items: center;
+    row-gap: 14px;
+  }
+
   .periodTabs {
-    width: 154px;
+    width: 168px;
     margin-left: auto;
   }
 
-  .periodTabs button {
+  .periodTab {
     padding-inline: 10px;
-    font-size: 12px;
+    font-size: 13px;
   }
 
+  /* The date selector takes its own full row, so the date and its arrows are easy to hit. */
   .controls > fieldset:not(:where(.periodTabs)) {
-    margin-left: auto;
+    flex: 1 1 100%;
   }
 
   .controls > fieldset:not(:where(.periodTabs)) > span {
+    flex: 1;
     padding-inline: 12px;
     font-size: 15px;
   }
 
   .charts {
-    margin-top: 36px;
-    gap: 36px;
+    margin-top: 24px;
+    gap: 24px;
   }
 
   .primaryColumn,
   .secondaryColumn {
     display: flex;
     flex-direction: column;
-    gap: 36px;
+    gap: 24px;
   }
 
   .primaryColumn > *,
@@ -167,11 +192,20 @@
     box-shadow: none;
   }
 
-  .chart h2 {
+  .chart h2,
+  .rankingHeading h2 {
     font-size: 20px;
     line-height: 1.35;
     font-weight: 650;
     letter-spacing: -0.025em;
+  }
+
+  /* Charts with a plot keep a white card on a phone; the calendar and the lists stay open. */
+  .panel > :first-child {
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
   }
 
   /* On a phone the category list already answers what the flow diagram shows. */
@@ -180,7 +214,7 @@
   }
 
   .places {
-    gap: 36px;
-    margin-top: 36px;
+    gap: 24px;
+    margin-top: 24px;
   }
 }

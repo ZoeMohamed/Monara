@@ -90,6 +90,8 @@ test("every read tool is T0 and has a schema the model can be given", () => {
       "list_financial_accounts",
       "list_categories",
       "list_budgets",
+      "get_spending_forecast",
+      "refresh_spending_forecast",
       "list_reminders",
     ],
   );

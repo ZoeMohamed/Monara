@@ -135,6 +135,32 @@ describe("runGmailIngestionOperation", () => {
     assert.deepEqual(confirmed, [{ owner: userId, ids: [transactionId] }]);
   });
 
+  it("passes display normalization alongside unchanged source evidence and rejects oversized labels", async () => {
+    const repository = fakeRepository();
+    const item = {
+      ...extracted,
+      merchantName: "PT MEDIA DOKTER INVESTAMA / HALODOC",
+      counterpartyName: "PT MEDIA DOKTER INVESTAMA / HALODOC",
+      normalizedDisplayName: "Halodoc (PT Media Dokter Investama)",
+    };
+    await runGmailIngestionOperation(repository, "record-extraction", {
+      ...recordInput,
+      items: [item],
+    });
+    const recorded = repository.calls[0].input.items[0];
+    assert.equal(recorded.normalizedDisplayName, item.normalizedDisplayName);
+    assert.equal(recorded.merchantName, item.merchantName);
+    assert.equal(recorded.counterpartyName, item.counterpartyName);
+    await assert.rejects(
+      runGmailIngestionOperation(repository, "record-extraction", {
+        ...recordInput,
+        items: [{ ...item, normalizedDisplayName: "X".repeat(81) }],
+      }),
+      { code: "VALIDATION_FAILED" },
+    );
+    assert.equal(repository.calls.length, 1);
+  });
+
   it("never repeats the follow-up for an already recorded message", async () => {
     const repository = fakeRepository({
       transactionIds: [transactionId],
@@ -262,6 +288,25 @@ describe("runGmailIngestionOperation", () => {
 });
 
 describe("typed Gmail categorization boundary", () => {
+  it("passes an unknown-type category hint and nullable score without confirming it", async () => {
+    const repository = fakeRepository({}, { confirmed: false });
+    const hooks = [];
+    const input = {
+      transactionId,
+      categoryId: "00000000-0000-4000-8000-000000000040",
+      kind: null,
+      confidence: null,
+    };
+    assert.deepEqual(
+      await runGmailIngestionOperation(repository, "set-imported-category", input, {
+        onTransactionsConfirmed: async (...args) => hooks.push(args),
+      }),
+      { applied: true },
+    );
+    assert.deepEqual(repository.calls, [{ name: "setImportedCategory", input }]);
+    assert.deepEqual(hooks, []);
+  });
+
   it("validates the activity guard without loading extraction context", async () => {
     const calls = [];
     const repository = { checkConnectionActive: async (id) => calls.push(id) };

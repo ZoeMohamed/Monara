@@ -4,7 +4,7 @@ import type { GmailMessageContent } from "@monara/integrations";
  * Bank and wallet alerts put the amount, date, and merchant near the top, so the
  * model gets only the start of the body; most of a long email is boilerplate.
  */
-const MAX_BODY_CHARACTERS = 4_000;
+const MAX_BODY_CHARACTERS = 40_000;
 /** A footer marker this early is more likely part of the alert itself, so it is kept. */
 const MIN_BODY_BEFORE_FOOTER = 400;
 /**

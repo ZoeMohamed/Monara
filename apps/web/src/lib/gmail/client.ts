@@ -22,11 +22,15 @@ export type GmailMailbox = {
         state: "running";
         transactions: number;
         emailsRead: number;
+        /** Emails claimed so far; may grow while discovery continues. */
+        totalEmails: number;
         categorizing: number;
         needsReview: number;
       }
     | {
         state: "completed";
+        emailsRead: number;
+        totalEmails: number;
         transactions: number;
         confirmed: number;
         needsReview: number;
@@ -50,11 +54,14 @@ const SYNC_ERROR_MESSAGES: Record<NonNullable<GmailSyncStatus["error"]>, string>
 };
 
 function toMailboxSync(sync: GmailSyncStatus): GmailMailbox["sync"] {
+  const emailsRead = sync.counts.imported + sync.counts.skipped + sync.counts.failed;
+  const totalEmails = emailsRead + sync.counts.inProgress;
   if (sync.state === "completed" && sync.counts.categorizing > 0) {
     return {
       state: "running",
       transactions: sync.counts.importedTransactions,
-      emailsRead: sync.counts.imported + sync.counts.skipped + sync.counts.failed,
+      emailsRead,
+      totalEmails,
       categorizing: sync.counts.categorizing,
       needsReview: sync.counts.needsReview,
     };
@@ -67,13 +74,16 @@ function toMailboxSync(sync: GmailSyncStatus): GmailMailbox["sync"] {
       return {
         state: "running",
         transactions: sync.counts.importedTransactions,
-        emailsRead: sync.counts.imported + sync.counts.skipped + sync.counts.failed,
+        emailsRead,
+        totalEmails,
         categorizing: sync.counts.categorizing,
         needsReview: sync.counts.needsReview,
       };
     case "completed":
       return {
         state: "completed",
+        emailsRead,
+        totalEmails,
         transactions: sync.counts.importedTransactions,
         confirmed: sync.counts.confirmedTransactions,
         needsReview: sync.counts.needsReview,
@@ -250,10 +260,10 @@ function connectionPath(id: string, suffix: string) {
 /** Banks, cards, and wallets found in one of the User's mailboxes. */
 export async function loadGmailDiscovery(
   id: string,
-  options: RequestOptions = {},
+  options: RequestOptions & { refresh?: boolean } = {},
 ): Promise<GmailDiscovery> {
   const response = await request(
-    connectionPath(id, "discovery"),
+    connectionPath(id, "discovery") + (options.refresh === false ? "?refresh=false" : ""),
     "GET",
     options,
     DISCOVERY_TIMEOUT_MS,

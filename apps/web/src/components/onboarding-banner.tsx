@@ -2,6 +2,7 @@
 
 import { Button, ProgressBar } from "@monara/ui";
 
+import { useAppSession } from "@/components/app-session-context";
 import { OnboardingMark } from "@/components/onboarding-avatar";
 import styles from "@/components/onboarding-sheet.module.css";
 import type { ImportProgress } from "@/components/use-onboarding-engine";
@@ -21,25 +22,31 @@ function summary(progress: ImportProgress) {
   }
 }
 
-/** Where a background import stays visible after the sheet is closed. */
-export function OnboardingBanner({
-  progress,
-  onOpen,
-  onFinish,
-  inset,
-}: {
-  progress: ImportProgress;
-  /** Home's content runs edge to edge, so the banner needs its own side margin there. */
-  inset: boolean;
-  onOpen: () => void;
-  onFinish: () => void;
-}) {
-  const finished = progress.state === "completed" || progress.state === "failed";
+function progressValue(progress: ImportProgress): number | null {
   const { transactions, totalTransactions } = progress;
-  const counted = transactions !== null && totalTransactions !== null && totalTransactions > 0;
-  const value = counted ? Math.round((transactions / totalTransactions) * 100) : null;
+  if ((progress.categorizing ?? 0) > 0 || transactions === null || !totalTransactions) return null;
+  return Math.round((transactions / totalTransactions) * 100);
+}
+
+function progressCount(progress: ImportProgress): string | null {
+  if (progress.transactions === null) return null;
+  const categorizing = progress.categorizing ?? 0;
+  if (categorizing > 0)
+    return `${Math.max(0, progress.transactions - categorizing)} / ${progress.transactions} transactions processed`;
+  if (!progress.totalTransactions) return null;
+  return `${progress.transactions} / ${progress.totalTransactions} transactions found`;
+}
+
+/** Background import status, rendered only inside Home's landscape. */
+export function OnboardingBanner() {
+  const { gmailImport } = useAppSession();
+  if (!gmailImport) return null;
+  const { progress, onOpen, onFinish } = gmailImport;
+  const finished = progress.state === "completed" || progress.state === "failed";
+  const value = progressValue(progress);
+  const count = progressCount(progress);
   return (
-    <div className={styles.banner} data-inset={inset} role="status">
+    <div className={styles.banner} role="status">
       <div aria-hidden className={styles.bannerAvatar}>
         <OnboardingMark done={progress.state === "completed"} />
       </div>
@@ -58,11 +65,7 @@ export function OnboardingBanner({
                 <ProgressBar.Fill />
               </ProgressBar.Track>
             </ProgressBar>
-            {counted ? (
-              <p className={styles.bannerCount}>
-                {transactions} / {totalTransactions} processed
-              </p>
-            ) : null}
+            {count ? <p className={styles.bannerCount}>{count}</p> : null}
           </>
         ) : null}
       </div>
