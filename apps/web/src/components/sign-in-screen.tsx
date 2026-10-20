@@ -100,22 +100,6 @@ export function SignInScreen({
         </ul>
 
         <div className={styles.actions}>
-          <Link className={styles.demo} href="/demo">
-            Try the demo
-            <Icon name="arrow" strokeWidth={2.2} />
-          </Link>
-          <form action="/auth/sign-in" method="post">
-            <input name="next" type="hidden" value={next} />
-            <Button
-              className={styles.googleButton}
-              isDisabled={!available}
-              type="submit"
-              variant="outline"
-            >
-              <GoogleMark />
-              Continue with Google
-            </Button>
-          </form>
           <details className={styles.email} open={emailOpen || undefined}>
             <summary className={styles.emailToggle}>
               <Icon name="mail" strokeWidth={2} />
@@ -151,6 +135,22 @@ export function SignInScreen({
               </button>
             </form>
           </details>
+          <form action="/auth/sign-in" method="post">
+            <input name="next" type="hidden" value={next} />
+            <Button
+              className={styles.googleButton}
+              isDisabled={!available}
+              type="submit"
+              variant="outline"
+            >
+              <GoogleMark />
+              Continue with Google
+            </Button>
+          </form>
+          <Link className={styles.demoLink} href="/demo">
+            Try the demo
+            <Icon name="arrow" strokeWidth={2.2} />
+          </Link>
         </div>
 
         {!available ? (
