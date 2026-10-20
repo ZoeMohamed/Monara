@@ -1,0 +1,266 @@
+{
+  "summary": {
+    "model": "gpt-6-luna",
+    "emails": 18,
+    "classifiedCorrectly": 17,
+    "expectedItems": 15,
+    "itemsFound": 14,
+    "extraItems": 0,
+    "fieldCorrect": {
+      "kind": 14,
+      "amount": 14,
+      "date": 13,
+      "merchant": 14,
+      "accountLastFour": 14
+    },
+    "failedCases": [
+      {
+        "id": "no-date-stated",
+        "failures": ["item 1: date was wrong"]
+      },
+      {
+        "id": "injection",
+        "failures": ["extraction failed: failed, status 400"]
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "qris-expense",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "card-english",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "salary-income",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "transfer-to-person",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "internal-transfer",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "ewallet-payment",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "electricity-bill",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "received-from-friend",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "food-delivery",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "decimal-format",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "no-date-stated",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": false,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": ["item 1: date was wrong"]
+    },
+    {
+      "id": "foreign-currency",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "two-transactions",
+      "classified": true,
+      "items": [
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        },
+        {
+          "kind": true,
+          "amount": true,
+          "date": true,
+          "merchant": true,
+          "accountLastFour": true
+        }
+      ],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "injection",
+      "classified": false,
+      "items": [null],
+      "spurious": 0,
+      "failures": ["extraction failed: failed, status 400"]
+    },
+    {
+      "id": "promo",
+      "classified": true,
+      "items": [],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "monthly-statement",
+      "classified": true,
+      "items": [],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "newsletter",
+      "classified": true,
+      "items": [],
+      "spurious": 0,
+      "failures": []
+    },
+    {
+      "id": "unpaid-invoice",
+      "classified": true,
+      "items": [],
+      "spurious": 0,
+      "failures": []
+    }
+  ]
+}
