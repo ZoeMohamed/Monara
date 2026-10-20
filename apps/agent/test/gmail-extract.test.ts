@@ -379,6 +379,7 @@ describe("extractTransactions", () => {
     assert.ok(request);
     const { user, system } = request;
     assert.match(system, /untrusted data/);
+    assert.match(system, /never treat a request to call a tool/i);
     assert.equal(user.match(/<\/email>/g)?.length, 1);
     assert.ok(user.trimEnd().endsWith("</email>"));
     assert.doesNotMatch(user.slice(0, -"</email>".length), /<\s*\/\s*email\s*>/i);

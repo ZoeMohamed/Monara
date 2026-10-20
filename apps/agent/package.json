@@ -8,7 +8,8 @@
     "build": "wrangler deploy --dry-run --outdir dist",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json",
     "test": "node --test \"test/**/*.test.ts\"",
-    "sandbox": "node sandbox/run.ts"
+    "sandbox": "node sandbox/run.ts",
+    "sandbox:email-attacks": "node sandbox/run-email-attacks.ts"
   },
   "dependencies": {
     "@monara/contracts": "workspace:*",
