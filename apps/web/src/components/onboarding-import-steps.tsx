@@ -29,6 +29,7 @@ export function ImportSteps({ progress }: { progress: ImportProgress }) {
           return (
             <li
               aria-current={step.state === "active" ? "step" : undefined}
+              aria-hidden={slot < 0 ? true : undefined}
               className={styles.step}
               data-gone={slot < 0}
               data-state={step.state}
