@@ -4,7 +4,9 @@ import {
   billReviewResponseSchema,
 } from "@monara/contracts";
 
-const REVIEW_TIMEOUT_MS = 25_000;
+// Well under the browser's 20-second operation timeout, leaving time for the database reads,
+// so a slow model still ends in rules-only suggestions instead of none.
+const REVIEW_TIMEOUT_MS = 12_000;
 
 /**
  * Asks the Agent runtime's model whether detected bills are real bills (the AI check).

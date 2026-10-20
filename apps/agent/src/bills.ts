@@ -53,7 +53,8 @@ export async function reviewBillCandidates(
     user: JSON.stringify({ candidates }),
     schemaName: "bill_judgements",
     schema: RESPONSE_SCHEMA,
-    maxOutputTokens: 2_000,
+    // About 100 tokens per judgement, so a full batch of 50 is not cut off.
+    maxOutputTokens: Math.min(8_000, 500 + 120 * candidates.length),
   });
   const parsed = billReviewResponseSchema.safeParse(raw);
   if (!parsed.success) throw new Error("The model's answer did not match the schema.");

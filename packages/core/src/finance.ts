@@ -803,15 +803,41 @@ export function createFinanceService(
     status: RecurringBill["status"],
   ): Promise<RecurringBill> {
     const key = recurringBillKey(proposal.merchantName);
-    const existing = (await repository.listAllRecurringBills(userId)).find(
-      (bill) => recurringBillKey(bill.merchantName) === key,
-    );
+    const decided = async () =>
+      (await repository.listAllRecurringBills(userId)).find(
+        (bill) => recurringBillKey(bill.merchantName) === key,
+      );
     // One decision per merchant: repeating it returns the saved bill, reversing it is refused.
-    if (existing) {
-      if (existing.status === status) return existing;
+    const settle = (bill: RecurringBill) => {
+      if (bill.status === status) return bill;
       throw new FinanceOperationError("CONFLICT", "That bill was already decided.");
+    };
+    const existing = await decided();
+    if (existing) return settle(existing);
+    try {
+      return await repository.createRecurringBill(userId, { clientRequestId, proposal, status });
+    } catch (error) {
+      // The database allows one live bill per merchant, so a concurrent decision lands here.
+      const raced =
+        error instanceof FinanceOperationError && error.code === "CONFLICT"
+          ? await decided()
+          : undefined;
+      if (raced) return settle(raced);
+      throw error;
     }
-    return repository.createRecurringBill(userId, { clientRequestId, proposal, status });
+  }
+
+  async function requireExpenseCategory(userId: string, categoryId: string, requireActive = true) {
+    const category = (await repository.listAllCategories(userId)).find(
+      (item) => item.id === categoryId,
+    );
+    if (!category) throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+    if (category.kind !== "expense" || (requireActive && category.isArchived)) {
+      throw new FinanceOperationError(
+        "VALIDATION_FAILED",
+        "Budgets require an active expense Category.",
+      );
+    }
   }
 
   async function action(input: {
@@ -1077,6 +1103,7 @@ export function createFinanceService(
         values: confirmedTransactionValuesSchema.parse({
           ...transactionValues(previous),
           kind: "exclusion",
+          categoryId: null,
           flowDirection:
             previous.flowDirection ??
             (previous.kind === "expense" ? "out" : previous.kind === "income" ? "in" : null),
@@ -1523,8 +1550,13 @@ export function createFinanceService(
         repository.listAllCategories(verified.userId),
         repository.listTransactionsForDateRange(verified.userId, basedOnStartsOn, basedOnEndsOn),
       ]);
-      if (!categories.some((category) => category.id === values.categoryId)) {
-        throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+      const category = categories.find((item) => item.id === values.categoryId);
+      if (!category) throw new FinanceOperationError("NOT_FOUND", "That Category was not found.");
+      if (category.kind !== "expense" || category.isArchived) {
+        throw new FinanceOperationError(
+          "VALIDATION_FAILED",
+          "Budgets require an active expense Category.",
+        );
       }
 
       let confirmedIncome = 0n;
@@ -1571,10 +1603,9 @@ export function createFinanceService(
 
     async createBudget(operationCaller: FinanceCaller, input: unknown) {
       const verified = caller(operationCaller);
-      const budget = await repository.createBudget(
-        verified.userId,
-        createBudgetInputSchema.parse(input),
-      );
+      const values = createBudgetInputSchema.parse(input);
+      await requireExpenseCategory(verified.userId, values.categoryId);
+      const budget = await repository.createBudget(verified.userId, values);
       const receipt = await action({
         caller: verified,
         toolName: "create_budget",
@@ -1594,6 +1625,12 @@ export function createFinanceService(
       if (!previous || previous.deletedAt) {
         throw new FinanceOperationError("NOT_FOUND", "That Budget was not found.");
       }
+      await requireExpenseCategory(
+        verified.userId,
+        values.changes.categoryId ?? previous.categoryId,
+        values.changes.categoryId !== undefined &&
+          values.changes.categoryId !== previous.categoryId,
+      );
       const budget = await repository.updateBudget(verified.userId, values);
       const receipt = await action({
         caller: verified,

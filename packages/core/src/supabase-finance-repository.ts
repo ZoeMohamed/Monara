@@ -37,6 +37,7 @@ type CategoryRow = Pick<
   | "id"
   | "name"
   | "slug"
+  | "kind"
   | "icon"
   | "color"
   | "is_default"
@@ -71,7 +72,7 @@ const TRANSACTION_COLUMNS =
 const ACCOUNT_COLUMNS =
   "id, name, institution, account_type, currency, last_four, institution_key, gmail_connection_id, is_active, created_at, updated_at";
 const CATEGORY_COLUMNS =
-  "id, name, slug, icon, color, is_default, is_archived, created_at, updated_at";
+  "id, kind, name, slug, icon, color, is_default, is_archived, created_at, updated_at";
 const BUDGET_COLUMNS =
   "id, category_id, name, cadence, limit_amount::text, currency, warning_percent, starts_on, is_active, deleted_at, created_at, updated_at";
 const RECURRING_BILL_COLUMNS =
@@ -203,6 +204,7 @@ function toCategory(row: CategoryRow): Category {
   return categorySchema.parse({
     id: row.id,
     name: row.name,
+    kind: row.kind,
     slug: row.slug,
     icon: row.icon,
     color: row.color,
@@ -789,6 +791,7 @@ export function createSupabaseFinanceRepository(
           id,
           user_id: userId,
           name: input.name,
+          kind: input.kind,
           slug,
           icon: input.icon,
           color: input.color,
@@ -811,6 +814,7 @@ export function createSupabaseFinanceRepository(
       if (!existing.data) fail(inserted.error);
       const category = toCategory(existing.data);
       if (
+        category.kind !== input.kind ||
         category.name !== input.name ||
         category.icon !== input.icon ||
         category.color !== input.color ||

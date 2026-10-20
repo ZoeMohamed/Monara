@@ -47,11 +47,13 @@ function addDays(value: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** The same day next month, or the month's last day when it is shorter (31 Jan -> 28 Feb). */
-function addMonth(value: string): string {
+/** The same day `count` months later, or that month's last day when it is shorter (31 Jan -> 28 Feb). */
+function addMonths(value: string, count: number): string {
   const [year = 0, month = 1, day = 1] = value.split("-").map(Number);
-  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(year, month, Math.min(day, lastDay))).toISOString().slice(0, 10);
+  const lastDay = new Date(Date.UTC(year, month + count, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month - 1 + count, Math.min(day, lastDay)))
+    .toISOString()
+    .slice(0, 10);
 }
 
 function median(values: number[]): number {
@@ -132,11 +134,15 @@ function toCandidate(
   const typicalDays = unit === "month" ? 30 : 7;
   if (daysBetween(latest.occurredOn, today) > typicalDays * (1 + STALE_INTERVALS)) return null;
 
-  // The next due date is the first one after today, so a bill paid last cycle still shows.
-  let nextDueOn = unit === "month" ? addMonth(latest.occurredOn) : addDays(latest.occurredOn, 7);
-  while (nextDueOn < today) {
-    nextDueOn = unit === "month" ? addMonth(nextDueOn) : addDays(nextDueOn, 7);
-  }
+  // The first due date on or after today, each counted from the latest payment so a
+  // bill paid on the 31st returns to the 31st after a short month.
+  const dueAfter = (cycles: number) =>
+    unit === "month"
+      ? addMonths(latest.occurredOn, cycles)
+      : addDays(latest.occurredOn, 7 * cycles);
+  let cycles = 1;
+  while (dueAfter(cycles) < today) cycles += 1;
+  const nextDueOn = dueAfter(cycles);
 
   const accountIds = new Set(run.map((transaction) => transaction.financialAccountId));
   const financialAccountId = accountIds.size === 1 ? (run[0]?.financialAccountId ?? null) : null;

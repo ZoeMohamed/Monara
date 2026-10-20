@@ -40,7 +40,7 @@ The UI package exports HeroUI primitives and the shared light theme; HeroUI v3 u
 - Google sign-in uses Supabase Auth. A Gmail Connection through Composio is separate from login.
 - Gmail imports must run automatically through durable background jobs in the Cloudflare runtime. Provide manual sync for testing and recovery. The worker includes Agent/chat and WhatsApp handlers; automatic Gmail ingestion jobs remain a separate incomplete integration.
 - Deduplicate email imports using the User, Gmail Connection, and source message identity. Enforce uniqueness durably when implementing persistence.
-- Extracted transactions remain pending review until confirmed. Pending transactions do not contribute to confirmed totals. A Gmail expense or income is confirmed on import only when Gmail authenticated its sender, the extractor is confident (`public.gmail_auto_confirm_confidence()`), and it has an amount, a date, and a Financial Account mapped from the sender's institution (`packages/contracts/src/institutions/institution-senders.json`).
+- Categories belong to expense, income, or exclusion and must match Transaction Type; budgets use expense Categories. Gmail imports remain pending until typed classification finishes. Automatic confirmation requires authenticated sender, complete stated facts, a mapped active Financial Account, extraction confidence at `public.gmail_auto_confirm_confidence()`, and classification confidence of at least 0.95. Internal is the only automatic exclusion and requires explicit transfer evidence, cash direction, and the confirmed full name; other exclusions require review. Pending and confirmed exclusions stay out of totals. See the [Gmail categorization design](gmail-categorization-design-2026-10-19.md).
 - The signed-in User explicitly links and verifies their WhatsApp number. Kapso provides transport into the shared agent runtime.
 - Keep PWA installation and a static, privacy-safe offline fallback. App navigation and real data operations require connectivity initially; do not cache application HTML or Next.js chunks.
 
@@ -114,7 +114,7 @@ Database validation runs separately through `pnpm db:check --reset` and the loca
 
 GitHub reads `.git-blame-ignore-revs` automatically; locally run `git config blame.ignoreRevsFile .git-blame-ignore-revs` to skip the Biome formatting commit in `git blame`.
 
-Direct pushes to `main` stay allowed, so the strictness lives in the PR checks and the local hooks; branch protection and required checks are GitHub repository settings and are not configured by the repository. CI runner images are pinned (`ubuntu-24.04`, `windows-2025`) so a GitHub `-latest` migration cannot break the gates; bump them deliberately. Deployment stays outside CI. See [the development harness decision](adr/0002-development-harness.md).
+Direct pushes to `main` stay allowed, so the strictness lives in the PR checks and the local hooks; branch protection and required checks are GitHub repository settings and are not configured by the repository. CI runner images are pinned (`ubuntu-24.04`, `windows-2025`) so a GitHub `-latest` migration cannot break the gates; bump them deliberately. After all main CI gates pass, CI deploys the Cloudflare Worker and verifies its version, schedules, and endpoints. Vercel web deployment and Supabase migration deployment use their separate workflows. See the [team deployment workflow](local-development.md#worker-deployment) and [development harness decision](adr/0002-development-harness.md).
 
 ## Environment configuration
 

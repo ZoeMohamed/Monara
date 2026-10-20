@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createFinanceService } from "./finance.ts";
+import { createFinanceService, FinanceOperationError } from "./finance.ts";
 import { applyBillReview, detectRecurringBillCandidates } from "./recurring-bills.ts";
 
 const ACCOUNT = "10000000-0000-4000-8000-000000000001";
@@ -70,6 +70,11 @@ describe("recurring bill detection", () => {
       "2027-02-01",
     );
     assert.equal(january?.proposal.nextDueOn, "2027-02-28");
+    const [afterFebruary] = detectRecurringBillCandidates(
+      monthly(["2026-11-30", "2026-12-31", "2027-01-31"]),
+      "2027-03-30",
+    );
+    assert.equal(afterFebruary?.proposal.nextDueOn, "2027-03-31");
   });
 
   it("rolls the next due date past today and drops a bill that stopped", () => {
@@ -242,6 +247,31 @@ describe("recurring bill operations", () => {
     assert.deepEqual((await service.suggestRecurringBills(caller, {})).items, []);
     await assert.rejects(
       service.dismissRecurringBillSuggestion(caller, { ...input, clientRequestId: "bill-2" }),
+      /already decided/,
+    );
+  });
+
+  it("settles a decision that lost a race with another request", async () => {
+    const repository = billRepository(history);
+    const service = createFinanceService(repository, { now });
+    const [suggestion] = (await service.suggestRecurringBills(caller, {})).items;
+    assert.ok(suggestion);
+    // Another tab tracks the bill between our read and our insert.
+    repository.createRecurringBill = async (_userId, input) => {
+      repository.bills.push({
+        id: crypto.randomUUID(),
+        ...input.proposal,
+        status: "active",
+        deletedAt: null,
+        createdAt: "2026-09-20T00:00:00.000Z",
+        updatedAt: "2026-09-20T00:00:00.000Z",
+      });
+      throw new FinanceOperationError("CONFLICT", "That change conflicts with an existing record.");
+    };
+    const input = { clientRequestId: "bill-4", proposal: suggestion.proposal };
+    assert.equal((await service.confirmRecurringBill(caller, input)).status, "active");
+    await assert.rejects(
+      service.dismissRecurringBillSuggestion(caller, { ...input, clientRequestId: "bill-5" }),
       /already decided/,
     );
   });

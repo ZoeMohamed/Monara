@@ -7,7 +7,13 @@ const owner = "10000000-0000-4000-8000-000000000001";
 const otherOwner = "10000000-0000-4000-8000-000000000002";
 const requestId = "20000000-0000-4000-8000-00000000000a";
 const timestamp = "2026-10-15T00:00:00.000Z";
-const input = { name: "Hobbies", icon: "palette", color: "#4c2a86", clientRequestId: requestId };
+const input = {
+  kind: "expense",
+  name: "Hobbies",
+  icon: "palette",
+  color: "#4c2a86",
+  clientRequestId: requestId,
+};
 const caller = { userId: owner, channel: "web" };
 const conflict = (error) => error instanceof FinanceOperationError && error.code === "CONFLICT";
 
@@ -57,6 +63,7 @@ function existing(overrides = {}) {
   return {
     id: requestId,
     user_id: owner,
+    kind: input.kind,
     name: input.name,
     slug: `custom-${requestId}`,
     icon: input.icon,
@@ -82,6 +89,7 @@ describe("owned category creation", () => {
       id: requestId,
       user_id: owner,
       name: "Hobbies",
+      kind: "expense",
       slug: `custom-${requestId}`,
       icon: "palette",
       color: "#4c2a86",
@@ -97,6 +105,8 @@ describe("owned category creation", () => {
       { ...input, name: "x".repeat(101) },
       { ...input, icon: " " },
       { ...input, color: "purple" },
+      { ...input, kind: undefined },
+      { ...input, kind: "transfer" },
       { ...input, clientRequestId: "not-a-uuid" },
     ])
       await assert.rejects(service.createCategory(caller, invalid));
@@ -132,6 +142,7 @@ describe("owned category creation", () => {
   it("rejects request reuse after any field changes or the category is archived", async () => {
     for (const changes of [
       { name: "Other name" },
+      { kind: "income" },
       { icon: "house" },
       { color: "#ffffff" },
       { is_archived: true },

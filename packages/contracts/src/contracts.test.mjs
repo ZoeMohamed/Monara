@@ -66,6 +66,34 @@ describe("common value contracts", () => {
 });
 
 describe("transaction contracts", () => {
+  it("preserves stated direction for unknown pending types without permitting confirmation", () => {
+    for (const flowDirection of ["in", "out", null]) {
+      const pending = {
+        id: ids.transaction,
+        ...nullableValues,
+        flowDirection,
+        reviewStatus: "pending",
+        source: "gmail_email",
+        confidence: null,
+        deletedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      assert.equal(transactionSchema.parse(pending).flowDirection, flowDirection);
+      assert.equal(
+        transactionSchema.safeParse({ ...pending, reviewStatus: "confirmed" }).success,
+        false,
+      );
+      if (flowDirection) {
+        const conflictingKind = flowDirection === "in" ? "expense" : "income";
+        assert.equal(
+          transactionSchema.safeParse({ ...pending, kind: conflictingKind }).success,
+          false,
+        );
+      }
+    }
+  });
+
   it("preserves unknown values on pending imports", () => {
     const result = transactionSchema.safeParse({
       id: ids.transaction,

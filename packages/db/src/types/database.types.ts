@@ -85,14 +85,14 @@ isOneToOne: false
                   ]
                 },"categories": {
                   Row: {
-                    "color": string,"created_at": string,"icon": string,"id": string,"is_archived": boolean,"is_default": boolean,"name": string,"slug": string,"updated_at": string,"user_id": string
+                    "color": string,"created_at": string,"icon": string,"id": string,"is_archived": boolean,"is_default": boolean,"kind": string,"name": string,"slug": string,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "color": string,"created_at"?: string,"icon": string,"id"?: string,"is_archived"?: boolean,"is_default"?: boolean,"name": string,"slug": string,"updated_at"?: string,"user_id": string
+                    "color": string,"created_at"?: string,"icon": string,"id"?: string,"is_archived"?: boolean,"is_default"?: boolean,"kind": string,"name": string,"slug": string,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "color"?: string,"created_at"?: string,"icon"?: string,"id"?: string,"is_archived"?: boolean,"is_default"?: boolean,"name"?: string,"slug"?: string,"updated_at"?: string,"user_id"?: string
+                    "color"?: string,"created_at"?: string,"icon"?: string,"id"?: string,"is_archived"?: boolean,"is_default"?: boolean,"kind"?: string,"name"?: string,"slug"?: string,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
 
@@ -167,14 +167,14 @@ isOneToOne: false
                   ]
                 },"gmail_connections": {
                   Row: {
-                    "composio_connected_account_id": string,"composio_trigger_id": string | null,"created_at": string,"discovery_first_completed_at": string | null,"discovery_state": string,"discovery_updated_at": string | null,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"sync_error": string | null,"sync_pending_runs": number,"sync_requested_at": string | null,"sync_state": string,"sync_updated_at": string | null,"updated_at": string,"user_id": string
+                    "composio_connected_account_id": string,"composio_trigger_id": string | null,"created_at": string,"discovery_first_completed_at": string | null,"discovery_state": string,"discovery_updated_at": string | null,"gmail_address": string,"id": string,"last_synced_at": string | null,"status": string,"sync_error": string | null,"sync_pending_runs": number,"sync_requested_at": string | null,"sync_retry_until": string | null,"sync_state": string,"sync_updated_at": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "composio_connected_account_id": string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address": string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_pending_runs"?: number,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id": string
+                    "composio_connected_account_id": string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address": string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_pending_runs"?: number,"sync_requested_at"?: string | null,"sync_retry_until"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "composio_connected_account_id"?: string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address"?: string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_pending_runs"?: number,"sync_requested_at"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "composio_connected_account_id"?: string,"composio_trigger_id"?: string | null,"created_at"?: string,"discovery_first_completed_at"?: string | null,"discovery_state"?: string,"discovery_updated_at"?: string | null,"gmail_address"?: string,"id"?: string,"last_synced_at"?: string | null,"status"?: string,"sync_error"?: string | null,"sync_pending_runs"?: number,"sync_requested_at"?: string | null,"sync_retry_until"?: string | null,"sync_state"?: string,"sync_updated_at"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
 
@@ -329,14 +329,14 @@ isOneToOne: false
                   ]
                 },"transactions": {
                   Row: {
-                    "account_hint": string | null,"ai_confidence": number | null,"amount": number | null,"category_id": string | null,"client_request_id": string | null,"created_at": string,"currency": string | null,"deleted_at": string | null,"description": string | null,"financial_account_id": string | null,"flow_direction": string | null,"gmail_auto_confirm_pending": boolean,"id": string,"location": string | null,"merchant_name": string | null,"occurred_on": string,"occurred_time": string | null,"processed_gmail_message_id": string | null,"recurring_bill_id": string | null,"review_status": string,"source_item_index": number | null,"source_type": string,"transaction_type": string | null,"updated_at": string,"user_id": string
+                    "account_hint": string | null,"ai_confidence": number | null,"amount": number | null,"category_id": string | null,"client_request_id": string | null,"created_at": string,"currency": string | null,"deleted_at": string | null,"description": string | null,"financial_account_id": string | null,"flow_direction": string | null,"gmail_auto_confirm_pending": boolean,"gmail_classification_confidence": number | null,"gmail_classification_status": string | null,"gmail_extraction_evidence": Json | null,"id": string,"location": string | null,"merchant_name": string | null,"occurred_on": string | null,"occurred_time": string | null,"processed_gmail_message_id": string | null,"recurring_bill_id": string | null,"review_status": string,"source_item_index": number | null,"source_type": string,"transaction_type": string | null,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"flow_direction"?: string | null,"gmail_auto_confirm_pending"?: boolean,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status": string,"source_item_index"?: number | null,"source_type": string,"transaction_type"?: string | null,"updated_at"?: string,"user_id": string
+                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"flow_direction"?: string | null,"gmail_auto_confirm_pending"?: boolean,"gmail_classification_confidence"?: number | null,"gmail_classification_status"?: string | null,"gmail_extraction_evidence"?: Json | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status": string,"source_item_index"?: number | null,"source_type": string,"transaction_type"?: string | null,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"flow_direction"?: string | null,"gmail_auto_confirm_pending"?: boolean,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status"?: string,"source_item_index"?: number | null,"source_type"?: string,"transaction_type"?: string | null,"updated_at"?: string,"user_id"?: string
+                    "account_hint"?: string | null,"ai_confidence"?: number | null,"amount"?: number | null,"category_id"?: string | null,"client_request_id"?: string | null,"created_at"?: string,"currency"?: string | null,"deleted_at"?: string | null,"description"?: string | null,"financial_account_id"?: string | null,"flow_direction"?: string | null,"gmail_auto_confirm_pending"?: boolean,"gmail_classification_confidence"?: number | null,"gmail_classification_status"?: string | null,"gmail_extraction_evidence"?: Json | null,"id"?: string,"location"?: string | null,"merchant_name"?: string | null,"occurred_on"?: string | null,"occurred_time"?: string | null,"processed_gmail_message_id"?: string | null,"recurring_bill_id"?: string | null,"review_status"?: string,"source_item_index"?: number | null,"source_type"?: string,"transaction_type"?: string | null,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -458,12 +458,12 @@ isOneToOne: false
                            },
 "gmail_sync_statuses":
 { Args: { "p_user_id": string }; Returns: {
-              "confirmed_transactions": number,"connection_id": string,"error": string,"failed": number,"imported": number,"imported_transactions": number,"in_progress": number,"requested_at": string,"skipped": number,"state": string
+              "categorizing": number,"confirmed_transactions": number,"connection_id": string,"error": string,"failed": number,"imported": number,"imported_transactions": number,"in_progress": number,"needs_review": number,"requested_at": string,"skipped": number,"state": string
             }[]
                            },
 "imported_transaction_for_category":
 { Args: { "p_transaction_id": string }; Returns: {
-              "location": string,"merchant_name": string,"needs_category": boolean,"user_id": string
+              "counterparty_name": string,"counterparty_type": string,"description": string,"flow_direction": string,"holder_name": string,"internal_transfer": boolean,"is_transfer": boolean,"kind": string,"location": string,"merchant_name": string,"needs_category": boolean,"user_id": string
             }[]
                            },
 "join_gmail_sync":
@@ -492,6 +492,9 @@ isOneToOne: false
 "release_merchant_profile":
 { Args: { "p_merchant_key": string }; Returns: undefined
                            },
+"report_gmail_processing_retry":
+{ Args: { "p_connection_id"?: string,"p_delay_seconds": number,"p_transaction_id"?: string }; Returns: undefined
+                           },
 "request_gmail_sync":
 { Args: { "p_connection_id": string,"p_user_id": string }; Returns: string
                            },
@@ -499,6 +502,10 @@ isOneToOne: false
 { Args: { "p_merchant_key": string,"p_summary"?: string }; Returns: undefined
                            },
 "set_imported_category":
+{ Args: { "p_category_id"?: string,"p_confidence"?: number,"p_kind"?: string,"p_transaction_id": string }; Returns: {
+              "applied": boolean,"review_status": string,"user_id": string
+            }[]
+                           } |
 { Args: { "p_category_name": string,"p_transaction_id": string }; Returns: {
               "applied": boolean,"review_status": string,"user_id": string
             }[]
