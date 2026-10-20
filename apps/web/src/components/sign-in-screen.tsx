@@ -12,6 +12,8 @@ import styles from "./sign-in-screen.module.css";
 
 type SignInScreenProps = {
   available?: boolean;
+  /** Open the email form, after a failed password sign-in. */
+  emailOpen?: boolean;
   error?: string;
   next: string;
 };
@@ -45,7 +47,12 @@ function GoogleMark() {
   );
 }
 
-export function SignInScreen({ available = true, error, next }: SignInScreenProps) {
+export function SignInScreen({
+  available = true,
+  emailOpen = false,
+  error,
+  next,
+}: SignInScreenProps) {
   return (
     <main className={styles.page}>
       <section aria-hidden className={styles.scene}>
@@ -109,6 +116,41 @@ export function SignInScreen({ available = true, error, next }: SignInScreenProp
               Continue with Google
             </Button>
           </form>
+          <details className={styles.email} open={emailOpen || undefined}>
+            <summary className={styles.emailToggle}>
+              <Icon name="mail" strokeWidth={2} />
+              Sign in with email
+            </summary>
+            <form action="/auth/password" className={styles.emailForm} method="post">
+              <input name="next" type="hidden" value={next} />
+              <label className={styles.field}>
+                <span>Email</span>
+                <input
+                  autoCapitalize="none"
+                  autoComplete="username"
+                  inputMode="email"
+                  maxLength={256}
+                  name="email"
+                  required
+                  spellCheck={false}
+                  type="email"
+                />
+              </label>
+              <label className={styles.field}>
+                <span>Password</span>
+                <input
+                  autoComplete="current-password"
+                  maxLength={256}
+                  name="password"
+                  required
+                  type="password"
+                />
+              </label>
+              <button className={styles.emailSubmit} type="submit">
+                Sign in
+              </button>
+            </form>
+          </details>
         </div>
 
         {!available ? (

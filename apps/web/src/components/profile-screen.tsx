@@ -304,7 +304,9 @@ export function ProfileScreen({
       {financialAccounts}
       {financialCategories}
       <ProfileConnections demo={demo} />
-      {demo ? null : <ProfileAccount online={online} setupKey={profile.setupKey} />}
+      {demo || profile.demoAccount ? null : (
+        <ProfileAccount online={online} setupKey={profile.setupKey} />
+      )}
       <ProfileReminderSettings onOpenReminders={onOpenReminders} />
       <ProfileAppSettings online={online} onReplayTour={onReplayTour} />
       <ProfileLegal />
