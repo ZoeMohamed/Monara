@@ -43,8 +43,9 @@ describe("checkRateLimit", () => {
     });
   });
 
-  it("keeps chat tighter than the finance routes", () => {
+  it("keeps chat and forecast refreshes tighter than the finance routes", () => {
     assert.ok(RATE_LIMITS.chat.limit < RATE_LIMITS.finance.limit);
+    assert.ok(RATE_LIMITS.forecast.limit < RATE_LIMITS.finance.limit);
   });
 
   it("prunes expired windows only once per interval, not on every request", () => {

@@ -6,7 +6,7 @@ import {
   budgetPeriodForDate,
   exclusionCategoryPresets,
   expenseCategoryPresets,
-  isExclusionCategoryName,
+  incomeCategoryPresets,
 } from "@monara/contracts";
 
 // Presentation models support both explicit demo data and validated owned backend records.
@@ -17,6 +17,7 @@ export type Transaction = {
   merchant: string | null;
   category: string | null;
   categoryIcon?: string;
+  categoryKind?: TransactionKind;
   amount: number | null;
   currency: "IDR" | null;
   date: string | null;
@@ -36,6 +37,7 @@ export type TransactionValues = Pick<
   | "merchant"
   | "category"
   | "categoryIcon"
+  | "categoryKind"
   | "amount"
   | "currency"
   | "date"
@@ -48,8 +50,9 @@ export type TransactionValues = Pick<
 export type TransactionErrors = Partial<Record<keyof TransactionValues, string>>;
 
 export const demoToday = "2026-10-11";
-export const demoMethods = ["BCA", "GoPay", "Jago", "Mandiri", "Cash"];
+export const demoMethods = ["BCA", "ShopeePay", "Jago", "Mandiri", "Cash"];
 export const demoCategoryNames = expenseCategoryPresets.map((category) => category.name);
+export const demoIncomeNames = incomeCategoryPresets.map((category) => category.name);
 export const demoExclusionNames = exclusionCategoryPresets.map((category) => category.name);
 
 export function isCalendarDate(value: string | null): boolean {
@@ -63,7 +66,7 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
   if (!values.kind || !["expense", "income", "exclusion"].includes(values.kind)) {
     errors.kind = "Choose the transaction type.";
   }
-  // Exclusions may omit an amount or date; anything that is entered must still be valid.
+  // Exclusions may omit an amount; every confirmed record still needs its actual date.
   const isExclusion = values.kind === "exclusion";
   if (
     (!isExclusion || values.amount !== null) &&
@@ -74,11 +77,10 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
   if (!isExclusion && values.currency !== "IDR") {
     errors.currency = "Choose IDR. Monara supports rupiah only.";
   }
-  if ((!isExclusion || values.date) && !isCalendarDate(values.date)) {
+  if (!isCalendarDate(values.date)) {
     errors.date = "Enter a valid transaction date.";
   }
-  // An exclusion may keep the category it was imported with; only reasons are kept off spending.
-  if (!isExclusion && isExclusionCategoryName(values.category))
+  if (values.kind && values.category && values.categoryKind && values.categoryKind !== values.kind)
     errors.category = "Choose a category for this transaction type.";
   return errors;
 }
@@ -111,21 +113,20 @@ export function updateConfirmedTransaction(
   ) {
     return transactions;
   }
-  const { merchant, category, amount, currency, date, time, method, kind } = values;
   const corrected: Transaction = {
     ...existing,
-    merchant,
-    category,
-    amount,
-    currency,
-    date,
-    time,
-    method,
-    kind,
-    ...(values.categoryIcon === undefined ? {} : { categoryIcon: values.categoryIcon }),
-    ...(values.financialAccountId === undefined
-      ? {}
-      : { financialAccountId: values.financialAccountId }),
+    merchant: values.merchant,
+    category: values.category,
+    categoryIcon: values.categoryIcon,
+    categoryKind: values.categoryKind,
+    amount: values.amount,
+    currency: values.currency,
+    date: values.date,
+    time: values.time,
+    method: values.method,
+    kind: values.kind,
+    categoryId: values.categoryId,
+    financialAccountId: values.financialAccountId,
   };
   return transactions.map((transaction) => (transaction === existing ? corrected : transaction));
 }
@@ -179,9 +180,20 @@ export function undoTransactionDeletion(
 }
 
 export function excludePendingTransaction(transactions: Transaction[], id: string): Transaction[] {
+  const pending = transactions.find((item) => item.id === id && item.status === "pending");
+  if (!pending || Object.keys(transactionErrors({ ...pending, kind: "exclusion" })).length > 0)
+    return transactions;
   return transactions.map((transaction) =>
     transaction.id === id && transaction.status === "pending"
-      ? { ...transaction, kind: "exclusion", status: "confirmed" }
+      ? {
+          ...transaction,
+          kind: "exclusion",
+          status: "confirmed",
+          category: null,
+          categoryId: null,
+          categoryKind: undefined,
+          categoryIcon: undefined,
+        }
       : transaction,
   );
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   calendarDateSchema,
+  categoryIdSchema,
   gmailConnectionIdSchema,
   isoDateTimeSchema,
   localTimeSchema,
@@ -8,7 +9,7 @@ import {
   transactionIdSchema,
   userIdSchema,
 } from "./common.ts";
-import { institutionKeySchema } from "./institutions.ts";
+import { institutionKeySchema, resolvedInstitutionSchema } from "./institutions.ts";
 import { transactionFlowDirectionSchema, transactionKindSchema } from "./transactions.ts";
 
 export const gmailMessageIdSchema = z.string().trim().min(1).max(500);
@@ -23,11 +24,19 @@ const lastFourSchema = z.string().regex(/^[0-9]{4}$/);
  * extractor; accountLastFour only tells apart several accounts of that sender's
  * institution. The Category is set later, by categorization.
  */
+export const counterpartyTypeSchema = z.enum(["business", "person", "unknown"]);
+
 export const extractedTransactionSchema = z
   .object({
     kind: transactionKindSchema.nullable(),
     flowDirection: transactionFlowDirectionSchema.nullable().default(null),
     merchantName: z.string().trim().min(1).max(200).nullable(),
+    /** Display-only normalization. Original names remain evidence for identity matching. */
+    normalizedDisplayName: z.string().trim().min(1).max(80).nullable().default(null),
+    counterpartyName: z.string().trim().min(1).max(200).nullable().default(null),
+    counterpartyType: counterpartyTypeSchema.default("unknown"),
+    isTransfer: z.boolean().default(false),
+    internalTransfer: z.boolean().default(false),
     money: positiveMoneySchema.nullable(),
     occurredOn: calendarDateSchema.nullable(),
     occurredTime: localTimeSchema.nullable(),
@@ -129,12 +138,16 @@ export const merchantCategorizeJobSchema = z.union([
     .object({
       kind: z.literal("merchant.categorize"),
       transactionIds: z.array(transactionIdSchema).min(1).max(MERCHANT_JOB_MAX_TRANSACTIONS),
+      // Preserve retries when an old delivery is split. Five previous attempts
+      // already exhaust the merchant consumer's configured retry budget.
+      priorAttempts: z.number().int().min(0).max(5).optional(),
     })
     .strict(),
   z
     .object({
       kind: z.literal("merchant.categorize"),
       transactionId: transactionIdSchema,
+      priorAttempts: z.number().int().min(0).max(5).optional(),
     })
     .strict(),
 ]);
@@ -205,12 +218,13 @@ export const resolvedGmailConnectionSchema = z
      * The owner's name, to tell transfers between their own accounts apart: the
      * profile's full name, else the Google account name. Null when neither is known.
      */
-    holderName: z.string().trim().min(1).max(100).nullable().default(null),
+    holderName: z.string().trim().min(1).max(150).nullable().default(null),
     /**
      * Registry entries the owner has as active Financial Accounts. Sync reads mail
      * only from these entries' senders.
      */
     institutionKeys: z.array(institutionKeySchema).max(100),
+    customInstitutions: z.array(resolvedInstitutionSchema).max(100).optional(),
   })
   .strict();
 
@@ -271,6 +285,20 @@ export const reportGmailSyncFailureInputSchema = z
   })
   .strict();
 
+/** Records a bounded provider wait without exposing caller-supplied User identity. */
+export const reportGmailProcessingRetryInputSchema = z.union([
+  z
+    .object({
+      connectionId: gmailConnectionIdSchema,
+      delaySeconds: z.number().int().min(0).max(900),
+    })
+    .strict(),
+  z
+    .object({ transactionId: transactionIdSchema, delaySeconds: z.number().int().min(0).max(900) })
+    .strict(),
+]);
+export type ReportGmailProcessingRetryInput = z.input<typeof reportGmailProcessingRetryInputSchema>;
+
 export const reportGmailSyncFailureResultSchema = z.object({}).strict();
 
 export const claimGmailMessageInputSchema = z
@@ -298,7 +326,7 @@ export const recordGmailExtractionInputSchema = z
     items: z.array(extractedTransactionSchema).max(50),
     /** The registry entry of the email's sender; null when the sender is not listed. */
     institutionKey: institutionKeySchema.nullable(),
-    /** Gmail authenticated the sender's domain with DKIM or SPF. Required for auto-confirm. */
+    /** Whether Gmail authenticated the sender's domain with DKIM or SPF; retained as evidence. */
     senderVerified: z.boolean(),
   })
   .strict()
@@ -444,6 +472,28 @@ export const resolvedImportedTransactionSchema = z
     /** False once the transaction has a Category or the User edited or deleted it. */
     needsCategory: z.boolean(),
     categoryNames: z.array(categoryNameSchema).max(200),
+    kind: transactionKindSchema.nullable().default(null),
+    flowDirection: transactionFlowDirectionSchema.nullable().default(null),
+    description: z.string().max(1_000).nullable().default(null),
+    counterpartyName: z.string().max(200).nullable().default(null),
+    counterpartyType: counterpartyTypeSchema.default("unknown"),
+    isTransfer: z.boolean().default(false),
+    internalTransfer: z.boolean().default(false),
+    holderName: z.string().max(150).nullable().default(null),
+    categories: z
+      .array(
+        z
+          .object({
+            id: categoryIdSchema,
+            name: categoryNameSchema,
+            kind: transactionKindSchema,
+            slug: z.string().min(1).max(100),
+            isDefault: z.boolean(),
+          })
+          .strict(),
+      )
+      .max(200)
+      .default([]),
   })
   .strict();
 
@@ -473,12 +523,29 @@ export const releaseMerchantProfileInputSchema = z
   .object({ merchantName: merchantNameSchema })
   .strict();
 
-export const setImportedCategoryInputSchema = z
-  .object({
-    transactionId: transactionIdSchema,
-    categoryName: categoryNameSchema,
-  })
-  .strict();
+export const setImportedCategoryInputSchema = z.union([
+  z
+    .object({
+      transactionId: transactionIdSchema,
+      categoryId: categoryIdSchema.nullable(),
+      kind: transactionKindSchema.nullable(),
+      confidence: z.number().min(0).max(1).nullable(),
+    })
+    .strict()
+    .superRefine((value, context) => {
+      // Legacy hints may omit the type. The backend resolves a typed Misc
+      // fallback from stated cash direction and verifies category ownership.
+      if (value.categoryId === null && value.kind !== null) {
+        context.addIssue({
+          code: "custom",
+          path: ["categoryId"],
+          message: "A financial type requires a compatible category.",
+        });
+      }
+    }),
+  // Calls already in flight before typed categorization are resolved without confidence.
+  z.object({ transactionId: transactionIdSchema, categoryName: categoryNameSchema }).strict(),
+]);
 
 /** applied is false when the transaction already had a Category or the User changed it. */
 export const setImportedCategoryResultSchema = z.object({ applied: z.boolean() }).strict();

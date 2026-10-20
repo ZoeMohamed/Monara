@@ -17,11 +17,23 @@ export type GmailMailbox = {
   /** Banks found after the first scan with no account yet. */
   newAccounts: number;
   sync:
-    | { state: "idle" | "queued" | "running" }
+    | { state: "idle" | "queued" }
+    | {
+        state: "running";
+        transactions: number;
+        emailsRead: number;
+        /** Emails claimed so far; may grow while discovery continues. */
+        totalEmails: number;
+        categorizing: number;
+        needsReview: number;
+      }
     | {
         state: "completed";
+        emailsRead: number;
+        totalEmails: number;
         transactions: number;
         confirmed: number;
+        needsReview: number;
         skipped: number;
         failed: number;
       }
@@ -42,16 +54,39 @@ const SYNC_ERROR_MESSAGES: Record<NonNullable<GmailSyncStatus["error"]>, string>
 };
 
 function toMailboxSync(sync: GmailSyncStatus): GmailMailbox["sync"] {
+  const emailsRead = sync.counts.imported + sync.counts.skipped + sync.counts.failed;
+  const totalEmails = emailsRead + sync.counts.inProgress;
+  if (sync.state === "completed" && sync.counts.categorizing > 0) {
+    return {
+      state: "running",
+      transactions: sync.counts.importedTransactions,
+      emailsRead,
+      totalEmails,
+      categorizing: sync.counts.categorizing,
+      needsReview: sync.counts.needsReview,
+    };
+  }
   switch (sync.state) {
     case "idle":
     case "queued":
-    case "running":
       return { state: sync.state };
+    case "running":
+      return {
+        state: "running",
+        transactions: sync.counts.importedTransactions,
+        emailsRead,
+        totalEmails,
+        categorizing: sync.counts.categorizing,
+        needsReview: sync.counts.needsReview,
+      };
     case "completed":
       return {
         state: "completed",
+        emailsRead,
+        totalEmails,
         transactions: sync.counts.importedTransactions,
         confirmed: sync.counts.confirmedTransactions,
+        needsReview: sync.counts.needsReview,
         skipped: sync.counts.skipped,
         failed: sync.counts.failed,
       };
@@ -225,10 +260,10 @@ function connectionPath(id: string, suffix: string) {
 /** Banks, cards, and wallets found in one of the User's mailboxes. */
 export async function loadGmailDiscovery(
   id: string,
-  options: RequestOptions = {},
+  options: RequestOptions & { refresh?: boolean } = {},
 ): Promise<GmailDiscovery> {
   const response = await request(
-    connectionPath(id, "discovery"),
+    connectionPath(id, "discovery") + (options.refresh === false ? "?refresh=false" : ""),
     "GET",
     options,
     DISCOVERY_TIMEOUT_MS,

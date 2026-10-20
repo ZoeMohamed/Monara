@@ -4,16 +4,17 @@ import { Alert, Button } from "@monara/ui";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AppSessionContext } from "@/components/app-session-context";
+import { BudgetDraftSessionProvider } from "@/components/budget-draft-session-context";
 import { FinanceRecovery } from "@/components/budget-manager";
 import { ChatSessionProvider } from "@/components/chat-session-context";
 import { DemoIndicator } from "@/components/demo-indicator";
+import { GoalDraftSessionProvider } from "@/components/goal-draft-session-context";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
 import { ModalDialog } from "@/components/modal-dialog";
 import styles from "@/components/monara-app.module.css";
 import { MonaraMascot } from "@/components/monara-mascot";
 import { OnboardingSheets } from "@/components/onboarding";
-import { OnboardingBanner } from "@/components/onboarding-banner";
 import { ProductTour } from "@/components/product-tour";
 import { RemindersCenter } from "@/components/reminders-center";
 import { SessionToast } from "@/components/session-toast";
@@ -328,15 +329,19 @@ export function MonaraApp({
   const workspace = useMonaraSession(profile, initialFinance);
   return (
     <AppSessionContext value={workspace.session}>
-      <ChatSessionProvider>
-        <AppChrome workspace={workspace}>{children}</AppChrome>
-      </ChatSessionProvider>
+      <BudgetDraftSessionProvider>
+        <GoalDraftSessionProvider>
+          <ChatSessionProvider persistent={Boolean(initialFinance)}>
+            <AppChrome workspace={workspace}>{children}</AppChrome>
+          </ChatSessionProvider>
+        </GoalDraftSessionProvider>
+      </BudgetDraftSessionProvider>
     </AppSessionContext>
   );
 }
 
 function AppChrome({ workspace, children }: { workspace: Workspace; children: ReactNode }) {
-  const { session, live, view, mainRef, notice, setNotice, undo, sync, onboarding } = workspace;
+  const { session, live, view, mainRef, notice, setNotice, undo, sync } = workspace;
   const { profile, navigation, today, currentMonth, reminderCount, online, amountsHidden } =
     session;
   return (
@@ -406,17 +411,6 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
                 ) : null}
               </div>
             ) : null}
-            {onboarding.bannerOpen ? (
-              <OnboardingBanner
-                inset={view.screen === "home"}
-                onFinish={onboarding.finish}
-                onOpen={() => {
-                  navigation.navigate({ screen: "home" });
-                  onboarding.reopenImport();
-                }}
-                progress={onboarding.engine.progress}
-              />
-            ) : null}
             {children}
           </main>
         </div>
@@ -427,6 +421,11 @@ function AppChrome({ workspace, children }: { workspace: Workspace; children: Re
         onUndo={undo}
         onDismiss={() => setNotice(null)}
         onRecover={async (action) => {
+          if (action === "budgets") {
+            navigation.navigate({ screen: "budgets" });
+            setNotice(null);
+            return;
+          }
           if (action === "history") {
             navigation.navigate({ screen: "transactions", reviewOpen: false, kindFilter: "all" });
             setNotice(null);

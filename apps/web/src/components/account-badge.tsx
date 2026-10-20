@@ -5,7 +5,7 @@ import styles from "@/components/account-badge.module.css";
 import { BrandMark } from "@/components/brand-mark";
 import { Icon } from "@/components/icon";
 import { useInstitutionLogo } from "@/components/use-brand-logo";
-import { brands } from "@/data/brand-identity";
+import { brandLogoFromChoice, brands } from "@/data/brand-identity";
 
 function initials(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -15,18 +15,25 @@ function initials(name: string) {
     .join("");
 }
 
-type BadgeAccount = Pick<FinancialAccount, "name" | "institution" | "accountType">;
+type BadgeAccount = Pick<
+  FinancialAccount,
+  "name" | "institution" | "accountType" | "institutionLogo"
+>;
 
 function useAccountVisual(name: string | null, account?: BadgeAccount) {
   const label = (account?.institution ?? name)?.trim();
-  const candidate = useInstitutionLogo(account ? account.institution : name);
+  const local = useInstitutionLogo(account ? account.institution : name);
+  const candidate =
+    account?.institutionLogo === undefined ? local : brandLogoFromChoice(account.institutionLogo);
   // A registered bank never decorates a wallet (or the reverse); picked catalog logos follow the user.
   const registered =
     candidate && !candidate.startsWith("si:")
       ? brands[candidate as keyof typeof brands]
       : undefined;
   const brand =
-    !account || !registered || account.accountType === registered.kind ? candidate : undefined;
+    account?.institutionLogo || !account || !registered || account.accountType === registered.kind
+      ? candidate
+      : undefined;
   const kind = account?.accountType ?? (/^(cash|tunai)$/i.test(label ?? "") ? "cash" : undefined);
   return { label, brand, kind };
 }

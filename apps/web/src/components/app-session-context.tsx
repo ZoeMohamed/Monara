@@ -1,10 +1,19 @@
 "use client";
 
-import type { Category, CreateFinancialAccountInput, FinancialAccount } from "@monara/contracts";
+import type {
+  Category,
+  CreateCustomBankInput,
+  CreateFinancialAccountInput,
+  CustomBank,
+  FinancialAccount,
+  UpdateCustomBankInput,
+} from "@monara/contracts";
 import { createContext, useContext } from "react";
 import type { DemoBudgetChanges } from "@/components/demo-budget-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
 import type { MutationOptions } from "@/components/use-finance-sync";
+import type { SaveNotice } from "@/components/use-monara-session";
+import type { ImportProgress } from "@/components/use-onboarding-engine";
 import { amountDisplay } from "@/data/amount-display";
 import type { Budget, RecurringBill, Reminder, Transaction } from "@/data/demo-ledger";
 import type { FinancialAttention } from "@/data/financial-attention";
@@ -14,15 +23,23 @@ import type { FinanceSnapshot } from "@/lib/finance/presentation";
 import { transactionAccount } from "@/lib/finance/transaction-account";
 
 export type AppSession = {
+  gmailImport: {
+    progress: ImportProgress;
+    onOpen: () => void;
+    onFinish: () => void;
+  } | null;
   profile: AuthenticatedProfile;
   navigation: AppNavigation;
   transactions: Transaction[];
   budgets: Budget[];
   financialAccounts: FinancialAccount[];
+  customBanks: CustomBank[];
+  createDemoCustomBank: (input: CreateCustomBankInput) => void;
+  updateDemoCustomBank: (input: UpdateCustomBankInput) => void;
   categories: Category[];
-  createDemoCategory: (input: { name: string; icon: string }) => void;
-  updateDemoCategory: (original: string, changes: { name: string; icon: string }) => void;
-  archiveDemoCategory: (name: string) => void;
+  createDemoCategory: (input: { name: string; icon: string; kind: Category["kind"] }) => void;
+  updateDemoCategory: (categoryId: string, changes: { name: string; icon: string }) => void;
+  archiveDemoCategory: (categoryId: string) => void;
   createDemoAccount: (input: Omit<CreateFinancialAccountInput, "clientRequestId">) => void;
   updateDemoAccount: (
     accountId: string,
@@ -38,6 +55,7 @@ export type AppSession = {
   }) => void;
   today: string;
   currentMonth: string;
+  notify: (notice: SaveNotice) => void;
   dataMode: "live" | "demo";
   financeSnapshot?: FinanceSnapshot;
   refreshFinance: () => Promise<void>;

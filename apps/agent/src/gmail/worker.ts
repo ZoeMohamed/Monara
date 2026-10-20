@@ -14,19 +14,25 @@ import {
   GmailReadError,
 } from "@monara/integrations";
 import type { Env } from "../env.ts";
-import { createMerchantPipeline, MerchantBusyError } from "../merchant/pipeline.ts";
+import {
+  createMerchantPipeline,
+  MERCHANT_PROCESSING_BATCH_SIZE,
+  MerchantBusyError,
+} from "../merchant/pipeline.ts";
 import { BackendOperationError, createGmailBackend } from "./backend.ts";
 import { createLlmClient, isTemporaryLlmError, LlmError } from "./llm.ts";
 import { createGmailPipeline } from "./pipeline.ts";
 
 /** Matches max_retries for the Gmail queue consumer in wrangler.jsonc. */
 const GMAIL_QUEUE_MAX_RETRIES = 3;
+/** Matches merchant consumer max_retries in wrangler.jsonc. */
+const MERCHANT_QUEUE_MAX_RETRIES = 5;
 /** A busy merchant is usually searched within seconds by the job that claimed it. */
 const MERCHANT_BUSY_RETRY_SECONDS = 15;
 const QUEUE_SEND_BATCH_LIMIT = 100;
 const MANUAL_FALLBACK_MESSAGE_LIMIT = 5;
-// Five emails leave room for activity checks before each read and model call.
-const SAFE_PARSE_BATCH_SIZE = 5;
+// Three emails fit the 15-minute wall limit even with one lane and 120-second model calls.
+const SAFE_PARSE_BATCH_SIZE = 3;
 
 /** Logs ids and outcomes only; never email content, financial values, or credentials. */
 function logEvent(level: "info" | "error", fields: Record<string, unknown>): void {
@@ -52,6 +58,18 @@ function retryDelaySeconds(attempts: number): number {
   return Math.min(30 * 2 ** (attempts - 1), 600);
 }
 
+/** Splitting transports work without granting it a new provider retry budget. */
+function merchantJobForRequeue(
+  job: MerchantCategorizeJob,
+  attempts: number,
+): MerchantCategorizeJob {
+  const priorAttempts = Math.min(
+    (job.priorAttempts ?? 0) + attempts - 1,
+    MERCHANT_QUEUE_MAX_RETRIES,
+  );
+  return priorAttempts > 0 ? { ...job, priorAttempts } : job;
+}
+
 function requireQueue(env: Env): Queue<GmailJob> {
   if (!env.GMAIL_JOBS) throw new Error("Missing required binding: GMAIL_JOBS.");
   return env.GMAIL_JOBS;
@@ -75,7 +93,9 @@ function createLlm(env: Env) {
     baseUrl: env.LLM_BASE_URL ?? "",
     apiKey: env.LLM_API_KEY ?? "",
     model: env.LLM_MODEL ?? "",
-    reasoningEffort: env.LLM_REASONING_EFFORT,
+    // Import-specific settings do not change WhatsApp or conversation defaults.
+    reasoningEffort: env.LLM_REASONING_EFFORT?.trim() ?? "medium",
+    requestTimeoutMs: 120_000,
   });
 }
 
@@ -121,6 +141,9 @@ function createPipeline(env: Env) {
       SAFE_PARSE_BATCH_SIZE,
     ),
     parseConcurrency: smallCount(env.GMAIL_PARSE_CONCURRENCY),
+    observe: (metric) => logEvent("info", { event: "gmail.stage", ...metric }),
+    onRetryReportError: (error) =>
+      logEvent("error", { event: "gmail.retry_deadline_failed", ...failureFields(error) }),
   });
 }
 
@@ -288,7 +311,16 @@ export async function consumeGmailJobs(batch: MessageBatch<unknown>, env: Env): 
         message.ack();
       } catch (error) {
         logEvent("error", { event: "gmail.job_failed", ...ids, ...failureFields(error) });
-        message.retry({ delaySeconds: retryDelaySeconds(message.attempts) });
+        const delaySeconds = retryDelaySeconds(message.attempts);
+        await createBackend(env)
+          .reportProcessingRetry({ connectionId: job.data.connectionId, delaySeconds })
+          .catch((reportError: unknown) =>
+            logEvent("error", {
+              event: "gmail.retry_deadline_failed",
+              ...failureFields(reportError),
+            }),
+          );
+        message.retry({ delaySeconds });
       }
     }),
   );
@@ -299,10 +331,26 @@ export async function consumeGmailJobs(batch: MessageBatch<unknown>, env: Env): 
  * another job is searching, or a rate-limited search, is retried after a short wait.
  */
 export async function consumeMerchantJobs(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+  // A delivery already in flight can still use the previous five-message
+  // consumer setting. Requeue it before provider work so each job gets its own
+  // invocation budget under the current one-message consumer configuration.
+  if (batch.messages.length > 1) {
+    const jobs: MerchantCategorizeJob[] = [];
+    for (const message of batch.messages) {
+      const job = merchantCategorizeJobSchema.safeParse(message.body);
+      if (job.success) jobs.push(merchantJobForRequeue(job.data, message.attempts));
+      else logEvent("error", { event: "merchant.job_invalid" });
+    }
+    if (jobs.length) await sendInBatches(requireMerchantQueue(env), jobs);
+    for (const message of batch.messages) message.ack();
+    return;
+  }
+  const backend = createBackend(env);
   const pipeline = createMerchantPipeline({
-    backend: createBackend(env),
+    backend,
     llm: createLlm(env),
     search: createBraveSearchClient({ apiKey: env.BRAVE_SEARCH_API_KEY ?? "" }),
+    observe: (metric) => logEvent("info", { event: "merchant.stage", ...metric }),
   });
   await Promise.all(
     batch.messages.map(async (message) => {
@@ -312,25 +360,66 @@ export async function consumeMerchantJobs(batch: MessageBatch<unknown>, env: Env
         message.ack();
         return;
       }
-      const ids = { kind: job.data.kind, attempt: message.attempts };
+      // Previously queued jobs can be larger than the invocation's network
+      // budget. Preserve every row, but split before reading any transaction.
+      if (
+        "transactionIds" in job.data &&
+        job.data.transactionIds.length > MERCHANT_PROCESSING_BATCH_SIZE
+      ) {
+        const smaller: MerchantCategorizeJob[] = [];
+        for (
+          let index = 0;
+          index < job.data.transactionIds.length;
+          index += MERCHANT_PROCESSING_BATCH_SIZE
+        ) {
+          smaller.push({
+            ...merchantJobForRequeue(job.data, message.attempts),
+            transactionIds: job.data.transactionIds.slice(
+              index,
+              index + MERCHANT_PROCESSING_BATCH_SIZE,
+            ),
+          });
+        }
+        await sendInBatches(requireMerchantQueue(env), smaller);
+        message.ack();
+        return;
+      }
+      const attempts = (job.data.priorAttempts ?? 0) + message.attempts;
+      const ids = { kind: job.data.kind, attempt: attempts };
       try {
-        const outcome = await pipeline.runJob(job.data);
+        const outcome = await pipeline.runJob(job.data, {
+          isFinalAttempt: attempts > MERCHANT_QUEUE_MAX_RETRIES,
+        });
         logEvent("info", { event: "merchant.job_done", ...ids, outcome });
         message.ack();
       } catch (error) {
         logEvent("error", { event: "merchant.job_failed", ...ids, ...failureFields(error) });
-        message.retry({
-          delaySeconds:
-            error instanceof MerchantBusyError
-              ? MERCHANT_BUSY_RETRY_SECONDS
-              : Math.max(
-                  retryDelaySeconds(message.attempts),
-                  // A busy model said how long to wait; asking sooner only fails again.
-                  isTemporaryLlmError(error) && error.retryAfterMs !== null
-                    ? Math.min(Math.ceil(error.retryAfterMs / 1000), 900)
-                    : 0,
-                ),
-        });
+        const delaySeconds =
+          error instanceof MerchantBusyError
+            ? MERCHANT_BUSY_RETRY_SECONDS
+            : Math.max(
+                retryDelaySeconds(attempts),
+                // A busy model said how long to wait; asking sooner only fails again.
+                (isTemporaryLlmError(error) || error instanceof BraveSearchError) &&
+                  error.retryAfterMs !== null
+                  ? Math.min(Math.ceil(error.retryAfterMs / 1000), 900)
+                  : 0,
+              );
+        const transactionIds =
+          "transactionIds" in job.data ? job.data.transactionIds : [job.data.transactionId];
+        await Promise.all(
+          transactionIds.map((transactionId) =>
+            backend
+              .reportProcessingRetry({ transactionId, delaySeconds })
+              .catch((reportError: unknown) =>
+                logEvent("error", {
+                  event: "merchant.retry_deadline_failed",
+                  ...failureFields(reportError),
+                }),
+              ),
+          ),
+        );
+        message.retry({ delaySeconds });
       }
     }),
   );

@@ -2,7 +2,6 @@
 
 import {
   type Category,
-  isExclusionCategoryName,
   type UpdateCategoryInput,
   updateCategoryInputSchema,
 } from "@monara/contracts";
@@ -13,6 +12,7 @@ import styles from "@/components/budget-manager.module.css";
 import { CategoryCreator } from "@/components/category-creator";
 import { CategoryDelete } from "@/components/category-delete";
 import { CategoryIconPicker } from "@/components/category-icon-picker";
+import { CategoryKindField } from "@/components/category-kind-field";
 import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
@@ -211,6 +211,9 @@ function CategoryRename(props: RenameProps) {
             <Icon name="close" />
           </Button>
         </div>
+        <p className="text-sm capitalize text-muted">
+          {props.category.kind} category · Type cannot be changed
+        </p>
         {editor.reconciled ? (
           <>
             <p className="text-sm leading-6" role="status">
@@ -272,9 +275,7 @@ function CategoryManagementSelect({
                 size={28}
               />
               {category.name}
-              {isExclusionCategoryName(category.name) ? (
-                <span className="ml-auto text-xs text-muted">Exclusion</span>
-              ) : null}
+              <span className="ml-auto text-xs capitalize text-muted">{category.kind}</span>
               <ListBox.ItemIndicator />
             </ListBox.Item>
           ))}
@@ -298,13 +299,6 @@ function CategoryActions({
   onDelete: () => void;
 }) {
   if (!selected) return null;
-  if (isExclusionCategoryName(selected.name)) {
-    return (
-      <p className="mt-3 text-xs leading-5 text-muted">
-        Exclusion reasons stay available in History and do not count toward totals.
-      </p>
-    );
-  }
   return (
     <div className="mt-3 flex flex-wrap justify-end gap-2">
       <Button
@@ -386,9 +380,9 @@ export function CategoryManager(props: FinanceManagerProps) {
 
 type DemoCategoryManagerProps = {
   categories: Category[];
-  onEdit: (original: string, changes: { name: string; icon: string }) => void;
-  onDelete: (name: string) => void;
-  onCreate: (input: { name: string; icon: string }) => void;
+  onEdit: (categoryId: string, changes: { name: string; icon: string }) => void;
+  onDelete: (categoryId: string) => void;
+  onCreate: (input: { name: string; icon: string; kind: Category["kind"] }) => void;
 };
 
 function DemoCategoryForm({
@@ -399,11 +393,12 @@ function DemoCategoryForm({
 }: {
   category?: Category;
   categories: Category[];
-  onSave: (input: { name: string; icon: string }) => void;
+  onSave: (input: { name: string; icon: string; kind: Category["kind"] }) => void;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState({
     name: category?.name ?? "",
+    kind: category?.kind ?? ("expense" as Category["kind"]),
     icon: category?.icon ?? (null as string | null),
   });
   const [error, setError] = useState<string | null>(null);
@@ -416,14 +411,21 @@ function DemoCategoryForm({
     }
     if (
       categories.some(
-        (item) => item.id !== category?.id && item.name.toLowerCase() === name.toLowerCase(),
+        (item) =>
+          item.id !== category?.id &&
+          item.kind === draft.kind &&
+          item.name.toLowerCase() === name.toLowerCase(),
       )
     ) {
-      setError("A category with this name already exists.");
+      setError("A category with this name already exists for this type.");
       return;
     }
-    onSave({ name, icon: categoryIconChoice(name, draft.icon) });
-    onClose();
+    try {
+      onSave({ name, kind: draft.kind, icon: categoryIconChoice(name, draft.icon) });
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't save this category. Try again.");
+    }
   };
   return (
     <ModalDialog labelledBy="demo-category-title" onClose={onClose}>
@@ -451,6 +453,12 @@ function DemoCategoryForm({
           />
           <FieldError>{error}</FieldError>
         </TextField>
+        <CategoryKindField
+          value={draft.kind}
+          disabled={Boolean(category)}
+          onChange={(kind) => setDraft((previous) => ({ ...previous, kind }))}
+        />
+        <p className={styles.meta}>The category type stays fixed after creation.</p>
         <CategoryIconPicker
           name={draft.name}
           onChange={(icon) => setDraft((previous) => ({ ...previous, icon }))}
@@ -476,7 +484,7 @@ function DemoCategoryDelete({
   onClose,
 }: {
   category: Category;
-  onDelete: (name: string) => void;
+  onDelete: (categoryId: string) => void;
   onClose: () => void;
 }) {
   return (
@@ -496,7 +504,7 @@ function DemoCategoryDelete({
           <Button
             className="min-h-11"
             onPress={() => {
-              onDelete(category.name);
+              onDelete(category.id);
               onClose();
             }}
             variant="danger"
@@ -537,7 +545,7 @@ export function DemoCategoryManager(props: DemoCategoryManagerProps) {
           category={selected}
           categories={props.categories}
           key={selected.id}
-          onSave={(changes) => props.onEdit(selected.name, changes)}
+          onSave={(changes) => props.onEdit(selected.id, changes)}
           onClose={close}
         />
       )}

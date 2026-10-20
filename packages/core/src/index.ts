@@ -16,6 +16,13 @@ export {
   createChatHistoryService,
 } from "./chat-history.ts";
 export * from "./finance.ts";
+export {
+  createForecastService,
+  type ForecastRepository,
+  type ForecastService,
+  jakartaDate,
+  type RefineForecast,
+} from "./forecast-service.ts";
 export { createSupabaseGmailConnectionRepository } from "./gmail-connection-repository.ts";
 export {
   createGmailConnectionService,
@@ -41,7 +48,12 @@ export { createProfileService, type ProfileRepository, type ProfileService } fro
 export { createSupabaseBudgetAlertRepository } from "./supabase-budget-alert-repository.ts";
 export { createSupabaseChatHistoryRepository } from "./supabase-chat-history-repository.ts";
 export { createSupabaseFinanceRepository } from "./supabase-finance-repository.ts";
+export { createSupabaseForecastRepository } from "./supabase-forecast-repository.ts";
 export { createSupabaseGmailIngestionRepository } from "./supabase-gmail-ingestion-repository.ts";
+export {
+  createSupabaseGoalImageUploadRepository,
+  type GoalImageUploadRepository,
+} from "./supabase-goal-image-upload-repository.ts";
 export { createSupabaseProfileRepository } from "./supabase-profile-repository.ts";
 export { createSupabaseUserDeletionRepository } from "./supabase-user-deletion-repository.ts";
 export { createSupabaseWhatsAppLinkRepository } from "./supabase-whatsapp-link-repository.ts";

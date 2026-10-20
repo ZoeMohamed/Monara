@@ -1,4 +1,6 @@
 import type {
+  Category,
+  CategoryPage,
   FinancialAccount,
   FinancialAccountPage,
   Transaction,
@@ -19,6 +21,9 @@ export type GmailImportFeedItem = {
   amount: number;
   date: string;
   kind: TransactionKind;
+  category?: string | null;
+  categoryIcon?: string | null;
+  needsReview?: boolean;
 };
 
 type FeedCandidate = {
@@ -30,6 +35,7 @@ type FeedCandidate = {
 function feedItem(
   transaction: Transaction,
   accounts: Map<string, FinancialAccount>,
+  categories: Map<string, Category>,
 ): GmailImportFeedItem | null {
   const account = transaction.financialAccountId
     ? accounts.get(transaction.financialAccountId)
@@ -46,6 +52,8 @@ function feedItem(
   }
   const amount = Number(transaction.money.amountMinor);
   if (!Number.isSafeInteger(amount)) return null;
+  const category = transaction.categoryId ? categories.get(transaction.categoryId) : undefined;
+  const matchingCategory = category?.kind === transaction.kind ? category : undefined;
   return {
     id: transaction.id,
     provider: account.institution ?? account.name,
@@ -54,6 +62,9 @@ function feedItem(
     amount,
     date: transaction.occurredOn,
     kind: transaction.kind,
+    category: matchingCategory?.name ?? null,
+    categoryIcon: matchingCategory?.icon ?? null,
+    needsReview: transaction.reviewStatus === "pending",
   };
 }
 
@@ -94,6 +105,24 @@ export async function loadImportFeed(
   } while (accountCursor !== null);
   if (owned.size === 0) return [];
 
+  // Read the User's current category labels and symbols instead of guessing from merchants.
+  const categories = new Map<string, Category>();
+  const categoryCursors = new Set<string>();
+  let categoryCursor: string | null = null;
+  do {
+    const page: CategoryPage = await callFinanceOperation(
+      "list_categories",
+      { limit: 100, cursor: categoryCursor },
+      fetcher,
+    );
+    for (const category of page.items) categories.set(category.id, category);
+    if (page.nextCursor !== null && categoryCursors.has(page.nextCursor)) {
+      throw new Error("The category list did not finish loading.");
+    }
+    if (page.nextCursor !== null) categoryCursors.add(page.nextCursor);
+    categoryCursor = page.nextCursor;
+  } while (categoryCursor !== null);
+
   const accountIds = [...owned.keys()];
   const candidates: FeedCandidate[] = [];
   for (let start = 0; start < accountIds.length; start += ACCOUNT_FILTER_LIMIT) {
@@ -108,7 +137,7 @@ export async function loadImportFeed(
         fetcher,
       );
       for (const transaction of page.items) {
-        const item = feedItem(transaction, owned);
+        const item = feedItem(transaction, owned, categories);
         if (item) candidates.push({ item, transaction });
         if (item) eligible += 1;
       }

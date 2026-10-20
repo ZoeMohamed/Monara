@@ -19,7 +19,7 @@ export interface Env {
   LLM_BASE_URL?: string;
   LLM_API_KEY?: string;
   LLM_MODEL?: string;
-  /** none, minimal, low, medium, or high; defaults to low for gpt-5 and o-series names. */
+  /** Gmail defaults to medium when unset; other clients infer low for reasoning models. */
   LLM_REASONING_EFFORT?: string;
   /** Web search for merchant categorization. Only merchant names are sent. */
   BRAVE_SEARCH_API_KEY?: string;

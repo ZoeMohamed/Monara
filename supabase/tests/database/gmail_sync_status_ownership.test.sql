@@ -191,7 +191,7 @@ select public.record_gmail_extraction(
       "money": {"amountMinor": "25000", "currency": "IDR"}, "occurredOn": "2026-10-13",
       "occurredTime": null, "description": null, "location": null,
       "accountHint": "Demo Bank ****4242", "accountLastFour": "4242",
-      "categoryName": null, "confidence": 0.89}]$$::jsonb,
+      "categoryName": null, "confidence": 0.49}]$$::jsonb,
   p_sender_verified => true,
   p_institution_key => 'BCA_CC'
 );
@@ -253,7 +253,8 @@ select public.set_imported_category(
     from public.transactions as item
     join public.processed_gmail_messages as source on source.id = item.processed_gmail_message_id
     where source.gmail_message_id = 'sync-001'),
-  'Resto & Cafe'
+  (select id from public.categories where user_id='10000000-0000-4000-8000-000000000001' and slug='resto-cafe'),
+  'expense',0.99
 );
 
 select is(
@@ -262,7 +263,7 @@ select is(
     from public.gmail_sync_statuses('10000000-0000-4000-8000-000000000001')
     where connection_id = '12000000-0000-4000-8000-000000000001'
   ),
-  row('running', 3::bigint, 4::bigint, 1::bigint, 1::bigint)::text,
+  row('running', 3::bigint, 4::bigint, 2::bigint, 1::bigint)::text,
   'counts cover this sync and separate confirmed transactions'
 );
 
@@ -274,6 +275,13 @@ select public.record_gmail_extraction(
   p_institution_key => null
 );
 
+-- All classification outcomes, including no confident choice, must settle before completion.
+select public.set_imported_category(item.id,null::uuid,null::text,null::numeric)
+  from public.transactions as item join public.processed_gmail_messages as source
+    on source.id=item.processed_gmail_message_id
+  where source.gmail_connection_id='12000000-0000-4000-8000-000000000001'
+    and item.gmail_classification_status='pending';
+
 select is(
   (
     select row(state, error, skipped, in_progress)::text
@@ -281,7 +289,7 @@ select is(
     where connection_id = '12000000-0000-4000-8000-000000000001'
   ),
   row('completed', null::text, 1::bigint, 0::bigint)::text,
-  'a listed sync with nothing left to extract is completed'
+  'a listed sync with extraction and classification settled is completed'
 );
 
 select is(

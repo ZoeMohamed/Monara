@@ -4,9 +4,12 @@ import { Button, ProgressBar } from "@monara/ui";
 import { type CSSProperties, type KeyboardEvent, useId, useRef, useState } from "react";
 
 import { useAmountDisplay } from "@/components/app-session-context";
+import { CategoryAvatar } from "@/components/category-symbol";
+import { Icon, type IconName } from "@/components/icon";
 import { OnboardingAvatar } from "@/components/onboarding-avatar";
 import { BankBadge } from "@/components/onboarding-bank-badge";
 import styles from "@/components/onboarding-import.module.css";
+import { ImportSteps } from "@/components/onboarding-import-steps";
 import { ButtonIcon, onboardingTitleId, StepFrame } from "@/components/onboarding-sheet";
 import type {
   ImportedKind,
@@ -14,24 +17,27 @@ import type {
   ImportProgress,
 } from "@/components/use-onboarding-engine";
 import { formatDay } from "@/data/demo-ledger";
+import { importPercent } from "@/lib/onboarding/import-steps";
 
 const badgeSize = 28;
 
-const kinds: { kind: ImportedKind; label: string }[] = [
-  { kind: "expense", label: "Expense" },
-  { kind: "income", label: "Income" },
-  { kind: "exclusion", label: "Exclusion" },
+type ImportTab = ImportedKind | "review";
+
+const kinds: { kind: ImportTab; label: string; icon: IconName }[] = [
+  { kind: "expense", label: "Expense", icon: "trend-up" },
+  { kind: "income", label: "Income", icon: "income" },
+  { kind: "exclusion", label: "Exclusion", icon: "eye-off" },
+  { kind: "review", label: "To review", icon: "inbox" },
 ];
 
-const copy: Record<ImportProgress["state"], { title: string; text: string }> = {
-  waiting: {
-    title: "Getting ready",
-    text: "Lining up your bank emails.",
-  },
-  running: {
-    title: "Importing your transactions",
-    text: "Reading the last 30 days of email.",
-  },
+function matchesTab(item: ImportedTransaction, tab: ImportTab) {
+  return tab === "review" ? item.needsReview === true : !item.needsReview && item.kind === tab;
+}
+
+/** Waiting and running have no text: the steps below the title say what is happening. */
+const copy: Record<ImportProgress["state"], { title: string; text?: string }> = {
+  waiting: { title: "Getting ready" },
+  running: { title: "Importing your transactions" },
   completed: {
     title: "All caught up",
     text: "From the last 30 days of email.",
@@ -42,24 +48,27 @@ const copy: Record<ImportProgress["state"], { title: string; text: string }> = {
   },
 };
 
-function percent(progress: ImportProgress): number | null {
-  if (progress.state === "completed") return 100;
-  if (progress.emailsRead === null || !progress.totalEmails) return null;
-  return Math.min(100, Math.round((progress.emailsRead / progress.totalEmails) * 100));
+const avatarScene = {
+  waiting: "import",
+  running: "import",
+  completed: "done",
+  failed: "empty",
+} as const;
+
+function summaryText(progress: ImportProgress): string | undefined {
+  if (progress.state === "failed" && progress.message) return progress.message;
+  return copy[progress.state].text;
 }
 
-function hasCounts(progress: ImportProgress) {
-  return progress.emailsRead !== null && progress.transactions !== null;
-}
-
-function countsLine(progress: ImportProgress) {
-  const of = progress.totalEmails ? ` of ${progress.totalEmails}` : "";
-  return `${progress.emailsRead}${of} emails · ${progress.transactions} found`;
+function summaryCounts(progress: ImportProgress): string | null {
+  if (progress.state === "completed" && progress.transactions !== null)
+    return `${progress.transactions} transactions imported`;
+  return null;
 }
 
 function Stats({ progress }: { progress: ImportProgress }) {
   if (progress.state === "failed") return null;
-  const value = percent(progress);
+  const value = importPercent(progress);
   return (
     <div className={styles.meter}>
       <ProgressBar
@@ -82,6 +91,7 @@ const staggeredRows = 8;
 function ImportRow({ item, index }: { item: ImportedTransaction; index: number }) {
   const { formatRupiah } = useAmountDisplay();
   const sign = item.kind === "income" ? "+" : item.kind === "expense" ? "−" : "";
+  const category = item.category ?? "Misc";
   const style = { "--row-index": Math.min(index, staggeredRows) } as CSSProperties;
   return (
     <li className={styles.row} data-kind={item.kind} style={style}>
@@ -97,26 +107,39 @@ function ImportRow({ item, index }: { item: ImportedTransaction; index: number }
         <span className={styles.rowName} title={item.merchant}>
           {item.merchant}
         </span>
-        <span className={styles.rowDate}>{formatDay(item.date)}</span>
+        <span className={styles.rowCategory}>
+          <CategoryAvatar
+            className={styles.categoryIcon}
+            iconClassName={styles.categoryIcon}
+            icon={item.categoryIcon}
+            name={category}
+            size={12}
+          />
+          <span className={styles.categoryName}>{category}</span>
+        </span>
       </span>
-      <span className={styles.rowAmount}>
-        {sign}
-        {formatRupiah(item.amount)}
+      <span className={styles.rowValue}>
+        <span className={styles.rowAmount}>
+          {sign}
+          {formatRupiah(item.amount)}
+        </span>
+        <span className={styles.rowDate}>{formatDay(item.date)}</span>
       </span>
     </li>
   );
 }
 
-function emptyText(progress: ImportProgress, kind: ImportedKind) {
+function emptyText(progress: ImportProgress, kind: ImportTab) {
+  if (kind === "review") return "No transactions to review yet.";
   if (progress.state === "completed") return `No ${kind} transactions found.`;
   return "Transactions appear here as they are found.";
 }
 
 function ImportTable({ progress }: { progress: ImportProgress }) {
   const id = useId();
-  const [selected, setSelected] = useState<ImportedKind>("expense");
-  const tabRefs = useRef<Partial<Record<ImportedKind, HTMLButtonElement | null>>>({});
-  const items = progress.feed.filter((item) => item.kind === selected);
+  const [selected, setSelected] = useState<ImportTab>("expense");
+  const tabRefs = useRef<Partial<Record<ImportTab, HTMLButtonElement | null>>>({});
+  const items = progress.feed.filter((item) => matchesTab(item, selected));
 
   const move = (event: KeyboardEvent, index: number) => {
     const next =
@@ -133,13 +156,15 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
     if (!target) return;
     event.preventDefault();
     setSelected(target.kind);
-    tabRefs.current[target.kind]?.focus();
+    const tab = tabRefs.current[target.kind];
+    tab?.focus();
+    tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
   };
 
   return (
     <>
       <div aria-label="Imported transactions" className={styles.tabs} role="tablist">
-        {kinds.map(({ kind, label }, index) => (
+        {kinds.map(({ kind, label, icon }, index) => (
           <button
             aria-controls={`${id}-panel`}
             aria-selected={selected === kind}
@@ -155,9 +180,10 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
             tabIndex={selected === kind ? 0 : -1}
             type="button"
           >
+            <Icon className={styles.tabIcon} name={icon} />
             {label}
             <span className={styles.count}>
-              {progress.feed.filter((item) => item.kind === kind).length}
+              {progress.feed.filter((item) => matchesTab(item, kind)).length}
             </span>
           </button>
         ))}
@@ -185,11 +211,34 @@ function ImportTable({ progress }: { progress: ImportProgress }) {
   );
 }
 
+function ImportSummary({ progress }: { progress: ImportProgress }) {
+  const { title } = copy[progress.state];
+  const counts = summaryCounts(progress);
+  const text = summaryText(progress);
+  return (
+    <div className={styles.top}>
+      <div>
+        <h2 className={styles.title} id={onboardingTitleId}>
+          {title}
+        </h2>
+        {text ? (
+          <p aria-live="polite" className={styles.sub}>
+            {text}
+          </p>
+        ) : null}
+        {counts ? <p className={styles.counts}>{counts}</p> : null}
+      </div>
+      <div aria-hidden className={styles.avatar}>
+        <OnboardingAvatar scene={avatarScene[progress.state]} tight />
+      </div>
+    </div>
+  );
+}
+
 /** No button while the import runs; closing the sheet leaves it running behind a banner. */
 export function ImportStep({ progress, onNext }: { progress: ImportProgress; onNext: () => void }) {
   const done = progress.state === "completed";
   const failed = progress.state === "failed";
-  const { title, text } = copy[progress.state];
   return (
     <StepFrame
       actions={
@@ -203,22 +252,10 @@ export function ImportStep({ progress, onNext }: { progress: ImportProgress; onN
       step={3}
     >
       <div className={styles.import}>
-        <div className={styles.top}>
-          <div>
-            <h2 className={styles.title} id={onboardingTitleId}>
-              {title}
-            </h2>
-            <p aria-live="polite" className={styles.sub}>
-              {failed && progress.message ? progress.message : text}
-            </p>
-            {!failed && hasCounts(progress) ? (
-              <p className={styles.counts}>{countsLine(progress)}</p>
-            ) : null}
-          </div>
-          <div aria-hidden className={styles.avatar}>
-            <OnboardingAvatar scene={done ? "done" : failed ? "empty" : "import"} tight />
-          </div>
-        </div>
+        <ImportSummary progress={progress} />
+        {progress.state === "waiting" || progress.state === "running" ? (
+          <ImportSteps progress={progress} />
+        ) : null}
         <Stats progress={progress} />
         <ImportTable progress={progress} />
       </div>

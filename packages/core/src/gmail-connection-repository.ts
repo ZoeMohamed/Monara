@@ -27,6 +27,8 @@ const IDLE_SYNC: GmailSyncStatus = {
     inProgress: 0,
     importedTransactions: 0,
     confirmedTransactions: 0,
+    categorizing: 0,
+    needsReview: 0,
   },
 };
 
@@ -43,6 +45,8 @@ function toSyncStatus(row: SyncStatusRow | undefined): GmailSyncStatus {
       inProgress: row.in_progress,
       importedTransactions: row.imported_transactions,
       confirmedTransactions: row.confirmed_transactions,
+      categorizing: row.categorizing,
+      needsReview: row.needs_review,
     },
   };
 }

@@ -3,6 +3,7 @@
 // a sender maps to a Financial Account). The list lives in institution-senders.json
 // and is validated once when this module loads.
 import { z } from "zod";
+import { brands } from "./brand-registry.ts";
 import registryFile from "./institutions/institution-senders.json" with { type: "json" };
 
 export const institutionPlatformSchema = z.enum(["BANKING_APP", "CREDIT_CARD", "E_WALLET"]);
@@ -111,7 +112,44 @@ const institutionsBySender = new Map(
 
 export const institutionKeySchema = z
   .string()
-  .refine((key) => institutionsByKey.has(key), { message: "Unknown institution." });
+  .refine((key) => institutionsByKey.has(key) || /^custom_[a-f0-9]{32}$/.test(key), {
+    message: "Unknown institution.",
+  });
+
+/** Syntax only. The backend and database must also enforce ownership. */
+export const customInstitutionKeySchema = z.string().regex(/^custom_[a-f0-9]{32}$/);
+
+export function customBankKey(id: string): string {
+  return `custom_${z.uuid().parse(id).replaceAll("-", "").toLowerCase()}`;
+}
+
+export function customBankIdForKey(key: string | null | undefined): string | null {
+  if (!key || !customInstitutionKeySchema.safeParse(key).success) return null;
+  const id = key.slice(7);
+  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
+}
+
+/** Persisted choices survive catalog removals, while new choices require a current brand. */
+export const storedBankLogoSchema = z.string().regex(/^(brand:[a-z0-9-]{1,60}|si:[a-z0-9]{1,60})$/);
+
+export const bankLogoSchema = storedBankLogoSchema.refine(
+  (value) => value.startsWith("si:") || Object.hasOwn(brands, value.slice(6)),
+  { message: "Choose a logo from the search results." },
+);
+
+/** Current, owner-resolved source configuration supplied to the Worker. */
+export const resolvedInstitutionSchema = registryEntrySchema.extend({ key: institutionKeySchema });
+
+export function institutionSources(
+  keys: readonly string[],
+  resolved: readonly Institution[] = [],
+): Institution[] {
+  const owned = new Map(resolved.map((entry) => [entry.key, entry]));
+  return [...new Set(keys)].flatMap((key) => {
+    const entry = owned.get(key) ?? findInstitution(key);
+    return entry ? [entry] : [];
+  });
+}
 
 export type InstitutionKey = z.infer<typeof institutionKeySchema>;
 

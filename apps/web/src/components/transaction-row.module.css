@@ -21,7 +21,8 @@
 }
 
 .row[data-kind="exclusion"] {
-  opacity: 0.82;
+  --foreground: var(--muted);
+  background: var(--surface-secondary);
 }
 
 @media (hover: hover) {
@@ -36,7 +37,7 @@
   outline-offset: -2px;
 }
 
-/* A pending import: a light tint. The "Needs review" label carries the meaning. */
+/* Pending imports stay compact; their tint and accessible name identify the review state. */
 .row[data-status="pending"],
 .item[data-status="pending"] {
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
@@ -55,10 +56,10 @@
   background: transparent;
 }
 
-/* Green tab on the item's far edge: the row's full height (54px) at 3 wide to 4 tall (40px), flush with the card. */
+/* Keep the confirm target comfortable to tap without increasing the compact row. */
 .confirm {
-  width: 40px;
-  min-width: 40px;
+  width: 44px;
+  min-width: 44px;
   height: auto;
   min-height: 0;
   align-self: stretch;

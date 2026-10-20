@@ -1,5 +1,9 @@
 # Gmail ingestion v2 implementation plan (2026-10-17)
 
+> Historical implementation plan. Main `8778e3f` and the accepted [typed categorization design](gmail-categorization-design-2026-10-19.md) supersede its name matching, category policy and execution details. Preserve structured evidence, exact normalized confirmed-name matching for Internal, typed owned Category IDs, canonical public-brand-only search, classification confidence and terminal needs-review status. Every sync uses the rolling thirty-day window with existing durable message/source-index deduplication. The reduced v1 defers extraction leases, outboxes, broad replay and higher concurrency; the recovery integration removes its older unpublished lease machinery. The [source-date safety change](../supabase/migrations/20261020044252_source_transaction_dates.sql) keeps receipt/manual dates unknown while preserving Gmail’s source-email arrival-day fallback. Use the [current meeting handoff](ui-meeting-handoff-2026-10-17.md) for source and acceptance boundaries.
+
+> Permanent-deletion activity checks remain required around provider/model retries. Parse jobs are bounded by current main and older larger jobs split safely; the historical ten-email plan below does not supersede that fence. Current combined verification is recorded in the [integration handoff](ui-backend-handoff.md#current-integration-verification).
+
 Design: https://claude.ai/artifact/SECpfvDUu6n5oP5DYMzMUn (version 4). Branch `feat/email-ingestion-improvement-2`.
 
 Goal: a Gmail import that finishes while the user is still on the onboarding screen. Every flow (onboarding, manual account add, Composio trigger, daily cron) runs through the same three stages on the agent worker: discover, ingest, parse.

@@ -1,5 +1,6 @@
 "use client";
 
+import type { CreateCustomBankInput } from "@monara/contracts";
 import { useCallback, useEffect, useState } from "react";
 
 import type {
@@ -11,6 +12,7 @@ import { waitingProgress } from "@/components/use-onboarding-engine";
 import { demoImportFeed } from "@/data/demo-import-feed";
 import { choiceFromSuggestion } from "@/lib/onboarding/banks";
 import type { OnboardingPhase } from "@/lib/onboarding/flow";
+import { withReachedStep } from "@/lib/onboarding/import-steps";
 
 const sampleBanks = [
   {
@@ -42,6 +44,7 @@ function wait(ms: number) {
 export function useDemoOnboarding(
   enabled: boolean,
   phase: OnboardingPhase | null,
+  onCreateBank?: (input: CreateCustomBankInput) => void,
 ): OnboardingEngine {
   const [detected, setDetected] = useState(false);
   const [progress, setProgress] = useState<ImportProgress>(waitingProgress);
@@ -57,19 +60,35 @@ export function useDemoOnboarding(
 
   useEffect(() => {
     if (!importing || finished) return;
+    // Finding, reading, then categorizing, the way the live import reports them.
+    let found = 0;
     let emails = 0;
+    let categorized = 0;
     const timer = window.setInterval(() => {
-      emails = Math.min(sampleEmails, emails + 3 + Math.floor(Math.random() * 3));
-      const found = Math.round((emails / sampleEmails) * demoImportFeed.length);
-      setProgress({
-        state: emails >= sampleEmails ? "completed" : "running",
-        emailsRead: emails,
-        totalEmails: sampleEmails,
-        transactions: found,
-        totalTransactions: demoImportFeed.length,
-        feed: demoImportFeed.slice(0, found),
-      });
-      if (emails >= sampleEmails) window.clearInterval(timer);
+      if (found < sampleEmails) found = Math.min(sampleEmails, found + 20);
+      else emails = Math.min(sampleEmails, emails + 3 + Math.floor(Math.random() * 3));
+      const transactions = Math.round((emails / sampleEmails) * demoImportFeed.length);
+      categorized =
+        emails >= sampleEmails
+          ? Math.min(transactions, categorized + 3)
+          : Math.floor(transactions / 2);
+      const completed = emails >= sampleEmails && categorized >= transactions;
+      setProgress((current) =>
+        withReachedStep(
+          {
+            state: completed ? "completed" : "running",
+            emailsRead: emails,
+            totalEmails: found,
+            totalEmailsFinal: true,
+            transactions,
+            totalTransactions: demoImportFeed.length,
+            categorizing: transactions - categorized,
+            feed: demoImportFeed.slice(0, transactions),
+          },
+          current,
+        ),
+      );
+      if (completed) window.clearInterval(timer);
     }, 650);
     return () => window.clearInterval(timer);
   }, [importing, finished]);
@@ -78,7 +97,14 @@ export function useDemoOnboarding(
     await wait(1_200);
     onConnected();
   }, []);
-  const saveBanks = useCallback(() => wait(500), []);
+  const saveBanks = useCallback(
+    async (choices: Parameters<OnboardingEngine["saveBanks"]>[0]) => {
+      for (const choice of choices)
+        if (choice.customInput && !choice.linked) onCreateBank?.(choice.customInput);
+      await wait(500);
+    },
+    [onCreateBank],
+  );
   const saveName = useCallback(() => wait(500), []);
   const retryDetection = useCallback(() => {
     setDetected(false);

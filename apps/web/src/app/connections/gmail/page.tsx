@@ -21,9 +21,8 @@ export default async function GmailConnectionsPage({
 
   const params = await searchParams;
   return (
-    <>
-      <UserSessionGuard setupKey={setupKeyForUser(identity.id)} />
+    <UserSessionGuard setupKey={setupKeyForUser(identity.id)}>
       <GmailConnectionsClient callbackError={gmailCallbackError(params.result)} />
-    </>
+    </UserSessionGuard>
   );
 }

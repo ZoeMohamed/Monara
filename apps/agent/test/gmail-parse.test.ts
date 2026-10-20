@@ -14,7 +14,10 @@ import {
 const receivedAt = "2026-10-12T03:15:00.000Z";
 const bca = findInstitution("BCA_MyBCA") as Institution;
 
-function email(subject: string | null, body = "Transfer Rp 500.000"): EmailForExtraction {
+function email(
+  subject: string | null,
+  body = "Transfer Rp 500.000 kepada ADLYN FAKHREYZ",
+): EmailForExtraction {
   return { receivedAt, from: "BCA <bca@bca.co.id>", subject, body };
 }
 
@@ -24,9 +27,9 @@ describe("isHolderName", () => {
     ["ADLYN FAKHREYZ PRATAMA", true],
     ["Bpk. Adlyn Fakhreyz Pratama", true],
     ["adlyn  fakhreyz pratama s.kom", true],
-    // Banks cut long names short.
+    // Two substantive name words can omit extras or contain a one-letter typo.
     ["ADLYN FAKHREY", true],
-    ["ADLYN FAKHREYZ PRA", true],
+    ["ADLYN FAKHREYZ PRA", false],
     // One-letter prefixes are too ambiguous to identify the same person.
     ["ADLYN F", false],
     // A shared family name alone is someone else.
@@ -46,25 +49,36 @@ describe("isHolderName", () => {
     assert.equal(isHolderName("Sukarno Putra", "Sukarno"), false);
   });
 
-  it("accepts an exact short final word in a truncated holder name", () => {
-    assert.equal(isHolderName("MUHAMMAD AL", "Muhammad Al Farisi"), true);
+  it("rejects truncated holder names", () => {
+    assert.equal(isHolderName("MUHAMMAD AL", "Muhammad Al Farisi"), false);
   });
 });
 
 describe("applyHolderRules", () => {
   const items = [
-    { kind: "expense", flowDirection: "out" as const, counterpartyName: "ADLYN FAKHREYZ" },
-    { kind: "income", flowDirection: "in" as const, counterpartyName: "Adlyn Fakhreyz" },
+    {
+      kind: "expense",
+      flowDirection: "out" as const,
+      counterpartyName: "ADLYN FAKHREYZ",
+      isTransfer: true,
+      counterpartyType: "person" as const,
+    },
+    {
+      kind: "income",
+      flowDirection: "in" as const,
+      counterpartyName: "Adlyn Fakhreyz",
+      isTransfer: true,
+    },
     { kind: "expense", flowDirection: "out" as const, counterpartyName: "Kopi Contoh" },
     { kind: "exclusion", flowDirection: "in" as const, counterpartyName: "Kopi Contoh" },
-    { kind: null, flowDirection: null, counterpartyName: "Adlyn Fakhreyz" },
+    { kind: null, flowDirection: null, counterpartyName: "Adlyn Fakhreyz", isTransfer: true },
   ];
 
   it("turns only expenses and incomes with the holder as counterparty into exclusions", () => {
     const result = applyHolderRules(items, "Adlyn Fakhreyz");
     assert.deepEqual(
       result.map((item) => item.kind),
-      ["exclusion", "exclusion", "expense", "exclusion", null],
+      ["exclusion", "exclusion", "expense", "exclusion", "exclusion"],
     );
     assert.deepEqual(
       result.map((item) => item.flowDirection),
@@ -73,7 +87,10 @@ describe("applyHolderRules", () => {
   });
 
   it("changes nothing without a holder name", () => {
-    assert.deepEqual(applyHolderRules(items, null), items);
+    assert.deepEqual(
+      applyHolderRules(items, null).map((item) => item.kind),
+      items.map((item) => item.kind),
+    );
   });
 });
 
@@ -115,6 +132,8 @@ describe("parseEmail", () => {
       {
         kind: "expense",
         counterpartyName: "ADLYN FAKHREYZ",
+        isTransfer: true,
+        counterpartyType: "person" as const,
         amountText: "Rp 500.000",
         currency: "IDR",
         occurredOn: "2026-10-12",
@@ -141,7 +160,25 @@ describe("parseEmail", () => {
       first.requests[0]?.user ?? "",
       /^<holder>Adlyn Fakhreyz<\/holder>\nInstitution: MyBCA \(BCA\)\n/,
     );
-    assert.match(first.requests[0]?.system ?? "", /Internal transfer/);
+    assert.match(first.requests[0]?.system ?? "", /Internal:/);
+  });
+
+  it("preserves a valid 150-character confirmed full name in the prompt and exact comparison", async () => {
+    const holderName = `Adlyn ${"F".repeat(136)} Pratama`;
+    assert.equal(holderName.length, 150);
+    const llm = fakeLlm({
+      ...transfer,
+      items: [{ ...transfer.items[0], counterpartyName: holderName }],
+    });
+    const result = await parseEmail(
+      llm,
+      email("Transfer Berhasil", `Transfer Rp 500.000 kepada ${holderName}`),
+      { holderName, institution: bca },
+    );
+    assert.ok(llm.requests[0]?.user.startsWith(`<holder>${holderName}</holder>`));
+    assert.equal(result.items[0]?.counterpartyName, holderName);
+    assert.equal(result.items[0]?.internalTransfer, true);
+    assert.equal(result.items[0]?.kind, "exclusion");
   });
 
   it("keeps a hostile holder name from closing its tag or adding lines", async () => {

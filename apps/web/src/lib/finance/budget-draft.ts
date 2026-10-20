@@ -1,4 +1,4 @@
-import { type Budget, type Category, isExclusionCategoryName } from "@monara/contracts";
+import type { Budget, Category } from "@monara/contracts";
 
 export type BudgetDraft = {
   name: string;
@@ -10,11 +10,15 @@ export type BudgetDraft = {
   isActive: boolean;
 };
 
-export function budgetDraftOf(budget: Budget | undefined, today: string): BudgetDraft {
+export function budgetDraftOf(
+  budget: Budget | undefined,
+  today: string,
+  initialCadence: Budget["cadence"] = "monthly",
+): BudgetDraft {
   return {
     name: budget?.name ?? "",
     categoryId: budget?.categoryId ?? "",
-    cadence: budget?.cadence ?? "monthly",
+    cadence: budget?.cadence ?? initialCadence,
     amount: budget?.limit.amountMinor ?? "",
     startsOn: budget?.startsOn ?? today,
     warningPercent: String(budget?.warningPercent ?? 80),
@@ -46,7 +50,7 @@ export function budgetCategoryError(categories: Category[], categoryId: string):
   const category = categories.find((item) => item.id === categoryId);
   if (!category) return "Choose an available expense category.";
   if (category.isArchived) return "This category is archived. Choose another expense category.";
-  if (isExclusionCategoryName(category.name))
-    return "Choose an expense category. Exclusions do not count toward budgets.";
+  if (category.kind !== "expense")
+    return "Choose an expense category. Income and exclusions do not count toward budgets.";
   return null;
 }

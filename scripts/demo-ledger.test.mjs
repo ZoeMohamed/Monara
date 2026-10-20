@@ -152,7 +152,7 @@ test("an imported transaction can be reviewed before an Account is assigned", ()
   }
 });
 
-test("an exclusion can close an incomplete import without inventing financial facts", () => {
+test("an undated import stays pending when excluded without inventing a date", () => {
   const incomplete = syntheticTransaction({
     amount: null,
     currency: null,
@@ -160,15 +160,16 @@ test("an exclusion can close an incomplete import without inventing financial fa
     method: null,
   });
   const [excluded] = excludePendingTransaction([incomplete], incomplete.id);
-  assert.equal(excluded.kind, "exclusion");
-  assert.equal(excluded.status, "confirmed");
-  assert.deepEqual(transactionErrors(excluded), {});
+  assert.equal(excluded.kind, incomplete.kind);
+  assert.equal(excluded.status, "pending");
+  assert.ok(transactionErrors({ ...excluded, kind: "exclusion" }).date);
+  assert.equal(excluded.date, null);
   assert.equal(demoSummary([excluded]).spending, 0n);
 });
 
-test("exclusion reasons are optional and an excluded import may keep its category", () => {
+test("exclusion categories are optional and display names do not determine their type", () => {
   for (const category of [null, "Groceries", ...exclusionCategoryPresets.map(({ name }) => name)]) {
-    const item = syntheticTransaction({ kind: "exclusion", category });
+    const item = syntheticTransaction({ kind: "exclusion", category, categoryKind: "exclusion" });
     assert.deepEqual(transactionErrors(item), {});
     const confirmed = updatePendingTransaction([item], item.id, valuesOf(item), "confirm");
     assert.equal(confirmed[0].amount, item.amount);
@@ -178,10 +179,38 @@ test("exclusion reasons are optional and an excluded import may keep its categor
   }
 });
 
-test("expense and income cannot use an exclusion reason", () => {
+test("unknown pending types retain category hints without guessing financial treatment", () => {
+  const pending = syntheticTransaction({ kind: null, category: "Salary", categoryKind: "income" });
+  assert.equal(transactionErrors(pending).category, undefined);
+  assert.equal(transactionErrors(pending).kind, "Choose the transaction type.");
+  const edited = updatePendingTransaction(
+    [pending],
+    pending.id,
+    { ...pending, merchant: "Corrected evidence" },
+    "edit",
+  );
+  assert.equal(edited[0].kind, null);
+  assert.equal(edited[0].category, "Salary");
+  assert.equal(edited[0].categoryKind, "income");
+  assert.equal(edited[0].status, "pending");
+  assert.equal(demoSummary(edited).income, 0n);
+  assert.equal(demoSummary(edited).spending, 0n);
+  assert.ok(transactionErrors({ ...edited[0], kind: "expense" }).category);
+});
+
+test("expense and income cannot use a category typed as exclusion", () => {
   for (const kind of ["expense", "income"]) {
-    assert.ok(transactionErrors(syntheticTransaction({ kind, category: "Internal" })).category);
+    assert.ok(
+      transactionErrors(
+        syntheticTransaction({ kind, category: "Internal", categoryKind: "exclusion" }),
+      ).category,
+    );
   }
+  assert.equal(
+    transactionErrors(syntheticTransaction({ category: "Internal", categoryKind: "expense" }))
+      .category,
+    undefined,
+  );
 });
 
 test("the removed transfer direction cannot be edited or confirmed", () => {
@@ -255,7 +284,15 @@ test("exclusion retains the record as confirmed and cannot be reviewed twice", (
   const original = Object.freeze([pending]);
   const rejected = excludePendingTransaction(original, pending.id);
   assert.equal(rejected.length, 1);
-  assert.deepEqual(rejected[0], { ...pending, kind: "exclusion", status: "confirmed" });
+  assert.deepEqual(rejected[0], {
+    ...pending,
+    kind: "exclusion",
+    status: "confirmed",
+    category: null,
+    categoryId: null,
+    categoryKind: undefined,
+    categoryIcon: undefined,
+  });
   assert.equal(pending.status, "pending");
   assert.equal(demoSummary(rejected).confirmed.length, 0);
   assert.equal(demoSummary(rejected).spending, 0n);
@@ -285,7 +322,14 @@ test("a correction updates exact totals once while preserving identity and unrel
   assert.equal(demoSummary(original).spending, 95000n);
   assert.equal(demoSummary(corrected).spending, 98000n);
   assert.equal(corrected.length, original.length);
-  assert.deepEqual(corrected[0], { ...confirmed, ...correctedValues });
+  assert.deepEqual(corrected[0], {
+    ...confirmed,
+    ...correctedValues,
+    categoryIcon: undefined,
+    categoryKind: undefined,
+    categoryId: undefined,
+    financialAccountId: undefined,
+  });
   assert.equal(corrected[1], other);
   assert.equal(confirmed.amount, 28000);
   const repeated = updateConfirmedTransaction(corrected, confirmed.id, correctedValues);
@@ -326,6 +370,29 @@ test("correcting an expense to income recomputes totals", () => {
   assert.equal(demoSummary(income).spending, 0n);
   assert.equal(demoSummary(income).income, 28000n);
   assert.equal(demoSummary(income).confirmed.length, 1);
+});
+
+test("a confirmed correction saves the selected category identity and matching type", () => {
+  const confirmed = syntheticTransaction({
+    status: "confirmed",
+    category: "Food & Drinks",
+    categoryKind: "expense",
+    categoryId: "expense-category",
+  });
+  const corrected = updateConfirmedTransaction([confirmed], confirmed.id, {
+    ...valuesOf(confirmed),
+    category: "Salary",
+    categoryKind: "income",
+    categoryId: "income-category",
+    categoryIcon: "income",
+    kind: "income",
+  });
+  assert.equal(corrected[0].category, "Salary");
+  assert.equal(corrected[0].categoryKind, "income");
+  assert.equal(corrected[0].categoryId, "income-category");
+  assert.equal(corrected[0].categoryIcon, "income");
+  assert.deepEqual(transactionErrors(corrected[0]), {});
+  assert.equal(demoSummary(corrected).income, 28000n);
 });
 
 test("invalid corrections, unconfirmed records, and unknown identifiers leave the ledger unchanged", () => {

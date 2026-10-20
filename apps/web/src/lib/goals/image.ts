@@ -4,6 +4,18 @@ const MAX_GOAL_IMAGE_REQUEST_BYTES = MAX_GOAL_IMAGE_BYTES + 100_000;
 
 type GoalImageKind = { extension: "jpg" | "png" | "webp"; contentType: string };
 
+/** Timeouts and server/gateway errors can precede a late commit. */
+export function goalUploadResponseCompleted(error: unknown): boolean {
+  return (
+    error === null ||
+    (error instanceof Error &&
+      error.name === "StorageApiError" &&
+      "status" in error &&
+      typeof error.status === "number" &&
+      [400, 401, 403, 404, 409, 413, 415, 422].includes(error.status))
+  );
+}
+
 export function validGoalImageContentLength(value: string | null): boolean {
   if (value === null) return false;
   const length = Number(value);

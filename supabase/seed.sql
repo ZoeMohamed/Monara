@@ -209,7 +209,7 @@ values (
   '10000000-0000-4000-8000-000000000001',
   (select id from public.categories where user_id = '10000000-0000-4000-8000-000000000001' and slug = 'resto-cafe'),
   'seed-food-budget',
-  'Food & Drinks',
+  'Resto & Cafe',
   'monthly',
   1000000,
   '2026-10-01'

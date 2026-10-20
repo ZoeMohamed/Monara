@@ -11,9 +11,12 @@ import {
   createBudgetInputSchema,
   createCategoryInputSchema,
   createCategoryResultSchema,
+  createCustomBankInputSchema,
+  createCustomBankResultSchema,
   createFinancialAccountInputSchema,
   createFinancialGoalInputSchema,
   createTransactionInputSchema,
+  customBankListSchema,
   dashboardSummarySchema,
   deleteBudgetInputSchema,
   deleteFinancialGoalInputSchema,
@@ -27,6 +30,7 @@ import {
   getDashboardInputSchema,
   listBudgetsInputSchema,
   listCategoriesInputSchema,
+  listCustomBanksInputSchema,
   listFinancialAccountsInputSchema,
   listFinancialGoalsInputSchema,
   listRemindersInputSchema,
@@ -43,6 +47,8 @@ import {
   undoActionResultSchema,
   updateBudgetInputSchema,
   updateCategoryInputSchema,
+  updateCustomBankInputSchema,
+  updateCustomBankResultSchema,
   updateFinancialAccountInputSchema,
   updateFinancialGoalInputSchema,
   updatePendingTransactionInputSchema,
@@ -50,6 +56,9 @@ import {
 } from "@monara/contracts";
 
 const operations = {
+  list_custom_banks: { input: listCustomBanksInputSchema, output: customBankListSchema },
+  create_custom_bank: { input: createCustomBankInputSchema, output: createCustomBankResultSchema },
+  update_custom_bank: { input: updateCustomBankInputSchema, output: updateCustomBankResultSchema },
   list_transactions: { input: listTransactionsInputSchema, output: transactionPageSchema },
   list_financial_accounts: {
     input: listFinancialAccountsInputSchema,

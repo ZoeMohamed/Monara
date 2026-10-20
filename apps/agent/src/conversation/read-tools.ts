@@ -6,6 +6,7 @@ import {
   categoryPageSchema,
   dashboardSummarySchema,
   financialAccountPageSchema,
+  forecastResponseSchema,
   getDashboardInputSchema,
   listBudgetsInputSchema,
   listCategoriesInputSchema,
@@ -166,6 +167,20 @@ export const readTools = [
     description: `Lists the User's Budgets with their limit and cadence (weekly or monthly). ${PAGING}`,
     input: listBudgetsInputSchema,
     output: budgetPageSchema,
+  }),
+  readTool({
+    name: "get_spending_forecast",
+    description:
+      "The User's latest spending forecast for the rest of this month: the payments they are expected to make (bills on a day of the month, habits on days of the week) with a confidence for each, plus the amount expected this week and this month. These are predictions, not records, so say they are expected. forecast is null when none has been made yet.",
+    input: z.object({}).strict(),
+    output: forecastResponseSchema,
+  }),
+  readTool({
+    name: "refresh_spending_forecast",
+    description:
+      "Makes a fresh spending forecast from the User's confirmed expenses and returns it. Use it when the User asks for a new forecast or none exists. It never changes the User's records.",
+    input: z.object({}).strict(),
+    output: forecastResponseSchema,
   }),
   readTool({
     name: "list_reminders",

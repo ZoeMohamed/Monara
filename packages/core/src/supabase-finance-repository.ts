@@ -14,6 +14,11 @@ import {
 } from "@monara/contracts";
 import type { Database, MonaraServiceRoleClient } from "@monara/db";
 import { FinanceOperationError, type FinanceRepository } from "./finance.ts";
+import {
+  insertCustomBankAccount,
+  loadCustomBanks,
+  replaceCustomBank,
+} from "./supabase-custom-banks.ts";
 
 type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];
 type AccountRow = Pick<
@@ -30,11 +35,13 @@ type AccountRow = Pick<
   | "created_at"
   | "updated_at"
 >;
+type JoinedAccountRow = AccountRow & { custom_bank?: { name: string; logo: string | null } | null };
 type CategoryRow = Pick<
   Database["public"]["Tables"]["categories"]["Row"],
   | "id"
   | "name"
   | "slug"
+  | "kind"
   | "icon"
   | "color"
   | "is_default"
@@ -66,9 +73,9 @@ type ReminderRow = Pick<
 const TRANSACTION_COLUMNS =
   "id, financial_account_id, category_id, source_type, transaction_type, flow_direction, merchant_name, amount::text, currency, occurred_on, occurred_time, description, location, account_hint, ai_confidence, review_status, deleted_at, created_at, updated_at";
 const ACCOUNT_COLUMNS =
-  "id, name, institution, account_type, currency, last_four, institution_key, gmail_connection_id, is_active, created_at, updated_at";
+  "id, name, institution, account_type, currency, last_four, institution_key, gmail_connection_id, is_active, created_at, updated_at, custom_bank:custom_banks(name, logo)";
 const CATEGORY_COLUMNS =
-  "id, name, slug, icon, color, is_default, is_archived, created_at, updated_at";
+  "id, kind, name, slug, icon, color, is_default, is_archived, created_at, updated_at";
 const BUDGET_COLUMNS =
   "id, category_id, name, cadence, limit_amount::text, currency, warning_percent, starts_on, is_active, deleted_at, created_at, updated_at";
 const FINANCIAL_GOAL_COLUMNS =
@@ -84,6 +91,15 @@ type ExactFinancialGoalRow = Omit<FinancialGoalRow, "target_amount" | "saved_amo
 };
 
 function fail(error: { code?: string }): never {
+  if (error.code === "P0002") {
+    throw new FinanceOperationError("NOT_FOUND", "That record was not found.");
+  }
+  if (error.code === "55000") {
+    throw new FinanceOperationError(
+      "CONFLICT",
+      "That change can no longer be undone. Refresh your records.",
+    );
+  }
   if (error.code === "23505") {
     throw new FinanceOperationError("CONFLICT", "That change conflicts with an existing record.");
   }
@@ -174,11 +190,12 @@ function toTransaction(row: ExactTransactionRow): Transaction {
   });
 }
 
-function toAccount(row: AccountRow): FinancialAccount {
+function toAccount(row: JoinedAccountRow): FinancialAccount {
   return financialAccountSchema.parse({
     id: row.id,
     name: row.name,
-    institution: row.institution,
+    institution: row.custom_bank?.name ?? row.institution,
+    ...(row.custom_bank ? { institutionLogo: row.custom_bank.logo } : {}),
     accountType: row.account_type,
     currency: row.currency,
     lastFour: row.last_four,
@@ -194,6 +211,7 @@ function toCategory(row: CategoryRow): Category {
   return categorySchema.parse({
     id: row.id,
     name: row.name,
+    kind: row.kind,
     slug: row.slug,
     icon: row.icon,
     color: row.color,
@@ -278,9 +296,8 @@ const transactionUpdate = (
   merchant_name: values.merchantName,
   amount: values.money ? databaseNumeric(values.money.amountMinor) : null,
   currency: values.money?.currency ?? null,
-  // Pending captures may omit a stated date. Inserts use the database's Jakarta
-  // fallback; updates leave the already-normalized date intact.
-  occurred_on: values.occurredOn ?? undefined,
+  // Unknown source dates stay null, including when correcting an earlier date.
+  occurred_on: values.occurredOn,
   occurred_time: values.occurredTime,
   description: values.description,
   location: values.location,
@@ -457,6 +474,7 @@ export function createSupabaseFinanceRepository(
       const actual = JSON.stringify(
         transactionUpdate({
           kind: transaction.kind,
+          flowDirection: transaction.flowDirection,
           merchantName: transaction.merchantName,
           money: transaction.money,
           occurredOn: transaction.occurredOn,
@@ -491,6 +509,18 @@ export function createSupabaseFinanceRepository(
       return toTransaction(result.data as unknown as ExactTransactionRow);
     },
 
+    async restoreTransactionFromUndo(input) {
+      const result = await client
+        .rpc("restore_transaction_from_undo", {
+          p_user_id: input.userId,
+          p_action_id: input.actionId,
+        })
+        .select(TRANSACTION_COLUMNS)
+        .single();
+      if (result.error) fail(result.error);
+      return toTransaction(result.data as unknown as ExactTransactionRow);
+    },
+
     async softDeleteTransaction(input) {
       const result = await client
         .from("transactions")
@@ -522,6 +552,32 @@ export function createSupabaseFinanceRepository(
       const result = await query;
       if (result.error) fail(result.error);
       return page(result.data.map(toAccount), offset, limit);
+    },
+
+    async listCustomBanks(userId) {
+      return loadCustomBanks(client, userId);
+    },
+
+    async createCustomBank(userId, input) {
+      const accountId = await insertCustomBankAccount(client, userId, input);
+      const [banks, account] = await Promise.all([
+        loadCustomBanks(client, userId),
+        client
+          .from("financial_accounts")
+          .select(ACCOUNT_COLUMNS)
+          .eq("id", accountId)
+          .eq("user_id", userId)
+          .single(),
+      ]);
+      if (account.error) fail(account.error);
+      const customBank = banks.find((bank) => bank.id === input.bankId);
+      if (!customBank)
+        throw new FinanceOperationError("NOT_FOUND", "That custom bank was not found.");
+      return { customBank, financialAccount: toAccount(account.data) };
+    },
+
+    async updateCustomBank(userId, input) {
+      return replaceCustomBank(client, userId, input);
     },
 
     async createFinancialAccount(userId, input) {
@@ -762,6 +818,7 @@ export function createSupabaseFinanceRepository(
           id,
           user_id: userId,
           name: input.name,
+          kind: input.kind,
           slug,
           icon: input.icon,
           color: input.color,
@@ -784,6 +841,7 @@ export function createSupabaseFinanceRepository(
       if (!existing.data) fail(inserted.error);
       const category = toCategory(existing.data);
       if (
+        category.kind !== input.kind ||
         category.name !== input.name ||
         category.icon !== input.icon ||
         category.color !== input.color ||

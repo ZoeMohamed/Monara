@@ -23,6 +23,7 @@ import {
   releaseMerchantProfileInputSchema,
   reportGmailConnectionErrorInputSchema,
   reportGmailDiscoveryFailureInputSchema,
+  reportGmailProcessingRetryInputSchema,
   reportGmailSyncFailureInputSchema,
   resolveGmailConnectionInputSchema,
   resolveImportedTransactionInputSchema,
@@ -66,6 +67,8 @@ type ConfirmedTransactionsHook = (
 /** Every method that names a connection throws NOT_FOUND unless it is active. */
 export interface GmailIngestionRepository {
   listActiveConnections(): Promise<ListActiveGmailConnectionsResult>;
+  reportProcessingRetry(input: Parsed<typeof reportGmailProcessingRetryInputSchema>): Promise<void>;
+  checkConnectionActive(connectionId: GmailConnectionId): Promise<void>;
   resolveConnection(connectionId: GmailConnectionId): Promise<ResolvedGmailConnection>;
   claimMessage(
     input: Parsed<typeof claimGmailMessageInputSchema>,
@@ -136,6 +139,8 @@ export interface GmailIngestionRepository {
 const GMAIL_INGESTION_OPERATIONS = [
   "list-active-connections",
   "resolve-connection",
+  "check-connection-active",
+  "report-processing-retry",
   "claim-message",
   "record-extraction",
   "record-extractions",
@@ -202,6 +207,14 @@ export async function runGmailIngestionOperation(
       return repository.resolveConnection(
         parse(resolveGmailConnectionInputSchema, input).connectionId,
       );
+    case "report-processing-retry":
+      await repository.reportProcessingRetry(parse(reportGmailProcessingRetryInputSchema, input));
+      return {};
+    case "check-connection-active":
+      await repository.checkConnectionActive(
+        parse(resolveGmailConnectionInputSchema, input).connectionId,
+      );
+      return {};
     case "claim-message":
       return repository.claimMessage(parse(claimGmailMessageInputSchema, input));
     case "record-extraction":
