@@ -103,10 +103,17 @@ Reuse the current mutation protections: server identity, same-origin checks for 
 
 - `pnpm check` passes, covering lint, TypeScript, workspace consistency, boundary tests, documentation, and migration validation. React Doctor reports 100 with no findings for both web and UI packages.
 - `pnpm build` passes for the Next.js production build and the Worker dry-run bundle.
-- All 428 database assertions across 14 test files pass, including 34 Custom Bank assertions for ownership, RLS, atomic creation/retries, sender uniqueness, optimistic edits, account types, deletion fencing, and preserved account/transaction references. Local database lint reports no schema errors, and generated types match the schema.
+- All 559 database assertions across 19 test files pass against the integrated main branch, including 34 Custom Bank assertions for ownership, RLS, atomic creation/retries, sender uniqueness, optimistic edits, account types, deletion fencing, and preserved account/transaction references. Local database lint reports no schema errors, and generated types match the schema.
 - Mobile browser checks pass at 390 by 844 CSS pixels for demo onboarding and Profile creation, built-in sender rejection, multiple senders, logo selection, editing, and reusing the bank for another account. The edit form also fits a 320-pixel viewport without horizontal overflow.
 - A signed-in local browser flow creates and edits persisted bank data and an account nickname. A fresh browser context loads the saved logo from the backend. Its synthetic identity and records are removed after verification.
 
 The local migration has been applied only to this worktree's isolated stack. Tests use synthetic identities and demo/browser state. Live Google authorization, Gmail provider acceptance, remote schema changes, and deployment remain unverified.
+
+### Onboarding entry point
+
+From the detected-bank results, choose **Edit**, then **Add**. The **Create custom bank** button stays pinned at the bottom right of the bank picker. If detection finds no banks, **Add a bank** opens that picker directly.
+
+![Detected-bank editor with Add action](evidence/custom-banks/onboarding-add.png)
+![Bank picker with the Create custom bank action](evidence/custom-banks/onboarding-create.png)
 
 For a later deployment, apply the migration and deploy the Worker before exposing the new web UI. The Worker accepts omitted custom metadata for built-in-only callers, so it remains compatible with the older backend during that order.
