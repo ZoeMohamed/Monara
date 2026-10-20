@@ -1,0 +1,36 @@
+{
+  "id": "SEC-08",
+  "title": "Per-User rate limit on finance requests",
+  "risk": "Risk 4: request flooding",
+  "environment": "local",
+  "shows": "A fresh User sending finance requests in a burst is refused with HTTP 429 and Retry-After once the 120-per-minute window is used up.",
+  "limits": "Counters live in one server's memory. On serverless hosting the limit is per instance, not global, and there is no per-IP limit.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:31 UTC",
+  "screenshots": [],
+  "checks": [
+    {
+      "label": "Requests within the limit succeed",
+      "detail": "requests 1 to 120 → 200",
+      "kind": "pass"
+    },
+    {
+      "label": "Request 121 is refused",
+      "detail": "request 121 → 429 RATE_LIMITED",
+      "kind": "pass"
+    },
+    {
+      "label": "Refusals tell the client when to retry",
+      "detail": "Retry-After: 56 s",
+      "kind": "pass"
+    },
+    {
+      "label": "Every later request in the window is refused",
+      "detail": "requests 121 to 125 → 429",
+      "kind": "pass"
+    }
+  ],
+  "requests": []
+}

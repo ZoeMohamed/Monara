@@ -1,0 +1,87 @@
+{
+  "id": "SEC-01",
+  "title": "Signed-out visitors reach nothing private",
+  "risk": "Risks 2 and 3: identity boundary",
+  "environment": "local",
+  "shows": "Without a session, private pages redirect to sign-in and every private API refuses with 401.",
+  "limits": "Covers the routes listed; it does not attempt session forgery.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:31 UTC",
+  "screenshots": [
+    {
+      "caption": "Signed-out visit to /transactions lands on Sign in",
+      "file": "screens/SEC-01-1-signin.png"
+    }
+  ],
+  "checks": [
+    {
+      "label": "Private page redirects",
+      "detail": "GET /transactions → /sign-in",
+      "kind": "pass"
+    },
+    {
+      "label": "Ledger API refuses",
+      "detail": "POST /api/finance/operations/list_transactions → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Chat API refuses",
+      "detail": "POST /api/chat → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Chat history API refuses",
+      "detail": "GET /api/chat/conversations → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Forecast API refuses",
+      "detail": "GET /api/forecast → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "WhatsApp link API refuses",
+      "detail": "GET /api/whatsapp/link → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Session status reveals no identity",
+      "detail": "GET /api/profile/status → setupKey null",
+      "kind": "pass"
+    }
+  ],
+  "requests": [
+    {
+      "step": "Ledger API",
+      "method": "POST",
+      "path": "/api/finance/operations/list_transactions",
+      "status": 401
+    },
+    {
+      "step": "Chat API",
+      "method": "POST",
+      "path": "/api/chat",
+      "status": 401
+    },
+    {
+      "step": "Chat history API",
+      "method": "GET",
+      "path": "/api/chat/conversations",
+      "status": 401
+    },
+    {
+      "step": "Forecast API",
+      "method": "GET",
+      "path": "/api/forecast",
+      "status": 401
+    },
+    {
+      "step": "WhatsApp link API",
+      "method": "GET",
+      "path": "/api/whatsapp/link",
+      "status": 401
+    }
+  ]
+}

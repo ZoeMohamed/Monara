@@ -1,0 +1,65 @@
+{
+  "id": "SEC-12",
+  "title": "Account deletion is deliberate and complete",
+  "risk": "Risk 14: permanent User deletion",
+  "environment": "local",
+  "shows": "Deletion needs the exact phrase and an acknowledgement. Afterwards the old session is dead, C's data is gone and A's data is untouched.",
+  "limits": "Local stack. Composio is a local mock reporting no connections, as in the deletion design evidence. Provider-held copies and backups are outside this test.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:34 UTC",
+  "screenshots": [
+    {
+      "caption": "Deletion needs the exact phrase and the acknowledgement",
+      "file": "screens/SEC-12-1-confirm.png"
+    },
+    {
+      "caption": "Deletion accepted",
+      "file": "screens/SEC-12-2-accepted.png"
+    }
+  ],
+  "checks": [
+    {
+      "label": "Wrong phrase keeps the button disabled",
+      "detail": "typed \"delete my account\" + checkbox → enabled: false",
+      "kind": "pass"
+    },
+    {
+      "label": "Exact phrase + acknowledgement enables it",
+      "detail": "typed \"DELETE MY ACCOUNT\" → enabled: true",
+      "kind": "pass"
+    },
+    {
+      "label": "C's old session no longer identifies C",
+      "detail": "GET /api/profile/status with C's old cookies → setupKey null",
+      "kind": "pass"
+    },
+    {
+      "label": "C's old session cannot read the ledger",
+      "detail": "list_transactions → 401 UNAUTHENTICATED",
+      "kind": "pass"
+    },
+    {
+      "label": "Cleanup waits a two-minute drain window by design",
+      "detail": "completed after ~130 s and 8 scheduled processor runs (the schedule is simulated locally)",
+      "kind": "note"
+    },
+    {
+      "label": "C's identity is removed",
+      "detail": "auth user exists after cleanup: false",
+      "kind": "pass"
+    },
+    {
+      "label": "C's transactions are removed",
+      "detail": "rows left for C: 0",
+      "kind": "pass"
+    },
+    {
+      "label": "A's data is untouched",
+      "detail": "A's transactions before 2, after 2",
+      "kind": "pass"
+    }
+  ],
+  "requests": []
+}

@@ -1,0 +1,40 @@
+{
+  "id": "SEC-10",
+  "title": "Offline mode never shows cached financial data",
+  "risk": "Data protection: service-worker cache",
+  "environment": "local",
+  "shows": "After a signed-in visit, the browser cache holds only public assets, and going offline shows a generic page, before and after sign-out.",
+  "limits": "Chrome on a production build; other browsers and a physical phone were not tested.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:31 UTC",
+  "screenshots": [
+    {
+      "caption": "Online: A's History shows Kopi Tuku",
+      "file": "screens/SEC-10-1-online.png"
+    },
+    {
+      "caption": "Offline: generic page, no ledger data",
+      "file": "screens/SEC-10-2-offline.png"
+    }
+  ],
+  "checks": [
+    {
+      "label": "Cache holds only public assets",
+      "detail": "9 cached paths (/offline.html, /manifest.webmanifest, /icons/icon-192.png, /icons/icon-maskable-512.png, ...); private: 0",
+      "kind": "pass"
+    },
+    {
+      "label": "Offline visit shows the generic page",
+      "detail": "offline /transactions mentions Kopi Tuku: false",
+      "kind": "pass"
+    },
+    {
+      "label": "After sign-out, offline still shows no data",
+      "detail": "offline / after sign-out mentions Kopi Tuku: false",
+      "kind": "pass"
+    }
+  ],
+  "requests": []
+}

@@ -1,0 +1,41 @@
+{
+  "id": "SEC-04",
+  "title": "Cross-site requests are refused",
+  "risk": "Identity: same-origin mutation check",
+  "environment": "local",
+  "shows": "A signed-in User's cookies alone cannot drive a write from another website; only Monara's own origin is accepted.",
+  "limits": "Requests are sent directly with forged headers, not from a real third-party page.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:31 UTC",
+  "screenshots": [],
+  "checks": [
+    {
+      "label": "Origin from another site: refused",
+      "detail": "add_transaction with A's cookies, Origin: https://evil.example → 403 FORBIDDEN",
+      "kind": "pass"
+    },
+    {
+      "label": "Browser marks it cross-site: refused",
+      "detail": "add_transaction with A's cookies, Sec-Fetch-Site: cross-site → 403 FORBIDDEN",
+      "kind": "pass"
+    },
+    {
+      "label": "No Origin at all: refused",
+      "detail": "add_transaction with A's cookies, Origin: (empty) → 403 FORBIDDEN",
+      "kind": "pass"
+    },
+    {
+      "label": "Control: Monara's own origin works",
+      "detail": "list_categories from http://localhost:3020 → 200",
+      "kind": "pass"
+    },
+    {
+      "label": "No CSRF record was written",
+      "detail": "A's ledger contains \"CSRF attempt\": false",
+      "kind": "pass"
+    }
+  ],
+  "requests": []
+}

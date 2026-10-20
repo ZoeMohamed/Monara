@@ -36,12 +36,18 @@
     "worktree:prune": "node scripts/worktree.mjs prune",
     "worktree:status": "node scripts/worktree.mjs status",
     "docs:check": "node scripts/docs-check.mjs",
-    "docs:pdf": "node scripts/build-submission-pdfs.mjs"
+    "docs:pdf": "node scripts/build-submission-pdfs.mjs",
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "e2e:terminal": "node e2e/terminal/setup.ts && node e2e/terminal/run.ts",
+    "e2e:pdf": "node e2e/build-evidence-pdf.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@commitlint/cli": "21.2.3",
     "@commitlint/config-conventional": "21.2.3",
+    "@monara/db": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@types/node": "20.19.43",
     "husky": "9.1.7",
     "knip": "6.41.0",
     "playwright-core": "1.63.0",

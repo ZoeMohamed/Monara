@@ -1,0 +1,51 @@
+{
+  "id": "SEC-02",
+  "title": "User A cannot read User B's data",
+  "risk": "Risk 2: cross-User access",
+  "environment": "local",
+  "shows": "With B's real record IDs, A's app, APIs and even direct database queries return only A's own data.",
+  "limits": "Two synthetic Users on a local stack; deployed isolation is not tested here.",
+  "environmentLabel": "Local synthetic stack (not production)",
+  "verdict": "PASS",
+  "commit": "aed7b4a",
+  "recordedAt": "2026-10-20 06:31 UTC",
+  "screenshots": [
+    {
+      "caption": "A opens a direct link to B's transaction: Monara answers Transaction unavailable",
+      "file": "screens/SEC-02-1-a-opens-b-link.png"
+    }
+  ],
+  "checks": [
+    {
+      "label": "Ledger lists only A's records",
+      "detail": "list_transactions → 200; contains Kopi Tuku: true, B's clinic: false",
+      "kind": "pass"
+    },
+    {
+      "label": "B's chat reads as empty for A",
+      "detail": "GET /api/chat/conversations/<B's id> → 200, 0 messages",
+      "kind": "pass"
+    },
+    {
+      "label": "Control: B still sees B's chat",
+      "detail": "same request as B → 2 messages",
+      "kind": "pass"
+    },
+    {
+      "label": "B's goal image is not served to A",
+      "detail": "GET /api/goals/<B's goal>/image → 404 NOT_FOUND",
+      "kind": "pass"
+    },
+    {
+      "label": "Database RLS hides B's rows from A's own token",
+      "detail": "PostgREST transactions?user_id=eq.<B> → 200, 0 rows",
+      "kind": "pass"
+    },
+    {
+      "label": "Opening B's record link shows nothing of B",
+      "detail": "A opens /transactions?transaction=<B's id>; page mentions B's clinic: false, Rp 987.000: false",
+      "kind": "pass"
+    }
+  ],
+  "requests": []
+}
