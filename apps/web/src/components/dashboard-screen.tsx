@@ -46,7 +46,7 @@ export function DashboardScreen({
   openAdd?: () => void;
   openConnectGmail?: () => void;
 }) {
-  const presentationModel = overviewModel(transactions, budgets, bills, month, today);
+  const presentationModel = overviewModel(transactions, budgets, bills, month, today, insights);
   const safeBasis = insights?.safeToSpend.overall;
   const model = insights
     ? {

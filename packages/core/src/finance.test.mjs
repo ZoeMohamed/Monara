@@ -227,6 +227,30 @@ describe("dashboard aggregates", () => {
 });
 
 describe("financial insights", () => {
+  it("keeps overall affordability conservative without consuming an unrelated category allowance", () => {
+    const cafeBudget = { ...budget, limit: { amountMinor: "1000000", currency: "IDR" } };
+    const summary = calculateDashboard({
+      month: "2026-10",
+      today: "2026-10-20",
+      categories: [category],
+      budgets: [cafeBudget],
+      reminders: [],
+      transactions: [
+        transaction({ money: { amountMinor: "200000", currency: "IDR" } }),
+        transaction({
+          id: crypto.randomUUID(),
+          categoryId: null,
+          money: { amountMinor: "1200000", currency: "IDR" },
+        }),
+      ],
+    });
+    assert.equal(summary.spending.amountMinor, "1400000");
+    assert.equal(summary.insights.safeToSpend.overall.dailyAmount.amountMinor, "0");
+    assert.equal(summary.insights.safeToSpend.overall.shortfall.amountMinor, "400000");
+    assert.equal(summary.insights.safeToSpend.byCategory[0].remaining.amountMinor, "800000");
+    assert.equal(summary.insights.safeToSpend.byCategory[0].dailyAmount.amountMinor, "66666");
+  });
+
   it("flags only reproducible outliers against three months of confirmed category history", () => {
     const historyTransactions = [100, 110, 120].map((amount, index) =>
       transaction({

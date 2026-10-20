@@ -1,3 +1,5 @@
+import type { FinancialInsights } from "@monara/contracts";
+
 import {
   type Budget,
   budgetUsage,
@@ -126,12 +128,30 @@ function monthFacts(transactions: Transaction[], month: string, today: string, s
   };
 }
 
+// A category allowance describes the budgets the User chose, not overall affordability.
+function dailyBudgetGuide(usage: { limit: bigint; used: bigint }[], daysLeft: number) {
+  const limit = usage.reduce((total, item) => total + item.limit, BigInt(0));
+  const spending = usage.reduce((total, item) => total + item.used, BigInt(0));
+  const rawRemaining = limit - spending;
+  const remaining = rawRemaining > BigInt(0) ? rawRemaining : BigInt(0);
+  return {
+    limit,
+    spending,
+    percent: limit > BigInt(0) ? Number((spending * BigInt(100)) / limit) : 0,
+    remaining,
+    shortfall: rawRemaining < BigInt(0) ? -rawRemaining : BigInt(0),
+    daysLeft,
+    perDay: remaining / BigInt(daysLeft),
+  };
+}
+
 export function overviewModel(
   transactions: Transaction[],
   budgets: Budget[],
   bills: RecurringBill[],
   month: string,
   today = demoToday,
+  insights?: FinancialInsights,
 ) {
   const currentMonth = today.slice(0, 7);
   const summary = demoSummary(transactions, month);
@@ -174,6 +194,23 @@ export function overviewModel(
   );
   const dailyGuide =
     month === currentMonth ? safeToSpendToday(transactions, monthlyBudgets, today) : null;
+  const guideTransactions = transactions.filter((item) => item.date !== null && item.date <= today);
+  const guideUsage = insights
+    ? usage.flatMap((item) => {
+        const matching = insights.safeToSpend.byCategory.filter(
+          (guide) =>
+            item.budget.id === guide.budgetId &&
+            guide.periodStartsOn === `${month}-01` &&
+            guide.periodEndsOn === `${month}-${String(daysInMonth(month)).padStart(2, "0")}`,
+        );
+        const guide = matching.length === 1 ? matching[0] : undefined;
+        return guide
+          ? [{ limit: BigInt(guide.limit.amountMinor), used: BigInt(guide.spending.amountMinor) }]
+          : [];
+      })
+    : usage.map((item) =>
+        budgetUsage(guideTransactions, { ...item.budget, usage: undefined }, month, today),
+      );
 
   return {
     summary,
@@ -183,6 +220,12 @@ export function overviewModel(
     elapsedPercent,
     // Safe-to-spend only applies to the month that is still running.
     safeToSpend: dailyGuide?.dailyGuideAvailable ? dailyGuide : null,
+    budgetGuide:
+      dailyGuide?.dailyGuideAvailable &&
+      (!insights || insights.asOf === today) &&
+      guideUsage.length === usage.length
+        ? dailyBudgetGuide(guideUsage, dailyGuide.daysLeft)
+        : null,
     calendarBudgetPeriods,
     savingsRate:
       summary.income > BigInt(0)

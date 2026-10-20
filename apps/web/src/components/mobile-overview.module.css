@@ -1278,6 +1278,16 @@
    each card an edge that a tint alone could not, and the daily guide is the one solid blue
    card, because it answers the first question Home is asked. Desktop keeps its own cards. */
 @media (max-width: 1023.98px) {
+  /* Let shortcuts scroll to the screen edges while keeping either end comfortably inset. */
+  .prompts {
+    margin-inline: calc(0px - max(20px, env(safe-area-inset-left, 0px)))
+      calc(0px - max(20px, env(safe-area-inset-right, 0px)));
+    padding: 6px max(20px, env(safe-area-inset-right, 0px)) 6px
+      max(20px, env(safe-area-inset-left, 0px));
+    scroll-padding-inline: max(20px, env(safe-area-inset-left, 0px))
+      max(20px, env(safe-area-inset-right, 0px));
+  }
+
   /* The sheet owns the space behind the floating nav, so its blue runs to the end of the page. */
   .sheet {
     padding-top: 16px;
