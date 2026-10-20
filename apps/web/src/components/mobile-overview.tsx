@@ -272,7 +272,15 @@ function CategoryItem({
         <CategoryAvatar className={styles.categoryIcon} icon={icon} name={name} size={44} />
         <span className={styles.categoryBody}>
           <span className={styles.categoryLabel}>
-            <strong>{name}</strong>
+            <span className={styles.categoryName}>
+              <strong>{name}</strong>
+              {budgetLimit !== null ? (
+                <span className={styles.budgetCaption}>
+                  {over ? "Over · " : "of "}
+                  <span data-amount>{compactAmount(budgetLimit)}</span>
+                </span>
+              ) : null}
+            </span>
             <strong data-amount data-over={over}>
               {compactAmount(amount)}
             </strong>
@@ -283,12 +291,6 @@ function CategoryItem({
               style={{ width: `${Math.min(chartRatio(amount, scale) * 100, 100)}%` }}
             />
           </span>
-          {budgetLimit !== null ? (
-            <span className={styles.budgetCaption}>
-              {over ? "Over · " : "of "}
-              <span data-amount>{compactAmount(budgetLimit)}</span>
-            </span>
-          ) : null}
         </span>
       </Button>
       {open ? (

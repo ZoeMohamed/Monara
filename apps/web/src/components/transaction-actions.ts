@@ -320,10 +320,10 @@ export function useTransactionActions(context: ActionContext) {
         return next;
       });
       setNotice({
-        message: "Transaction added. You can edit its details anytime.",
+        message: "Transaction added.",
         undo: { kind: "backend", receipt: result.action },
       });
-      navigation.navigate({ adding: false, transactionId: result.transaction.id }, "replace");
+      navigation.navigate({ adding: false }, "replace");
       return;
     }
     const record: Transaction = {
@@ -340,10 +340,10 @@ export function useTransactionActions(context: ActionContext) {
       return next;
     });
     setNotice({
-      message: "Transaction added. You can edit its details anytime.",
+      message: "Transaction added.",
       undo: { kind: "create", transaction: record },
     });
-    navigation.navigate({ adding: false, transactionId: record.id }, "replace");
+    navigation.navigate({ adding: false }, "replace");
   };
 
   const undo = async () => {

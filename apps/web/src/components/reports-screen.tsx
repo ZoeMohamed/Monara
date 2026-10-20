@@ -186,6 +186,7 @@ function YearSelector({
         <Icon name="chevron-left" />
       </Button>
       <span aria-live="polite" className={`${periodStyles.label} min-w-16`}>
+        <Icon aria-hidden className={periodStyles.labelIcon} name="calendar" />
         {year}
       </span>
       <Button
@@ -214,7 +215,7 @@ function ReportPeriodSelector({
       {(["monthly", "yearly"] as const).map((value) => (
         <Button
           aria-pressed={period === value}
-          className="min-h-11 min-w-0 flex-1 rounded-xl px-4 text-sm"
+          className={styles.periodTab}
           key={value}
           onPress={() => onChange(value)}
           variant={period === value ? "secondary" : "ghost"}
@@ -242,7 +243,7 @@ function MonthlyCharts({ transactions, month, today, openTransaction }: ReportDa
       >
         <div className={`${styles.primaryColumn} min-w-0 space-y-4`}>
           {expenses && (
-            <div className={styles.chart}>
+            <div className={`${styles.chart} ${styles.panel}`}>
               <SpendingTrend month={month} today={today} transactions={transactions} />
             </div>
           )}
@@ -257,7 +258,7 @@ function MonthlyCharts({ transactions, month, today, openTransaction }: ReportDa
         </div>
         <div className={`${styles.secondaryColumn} min-w-0 space-y-4`}>
           {expenses && (
-            <div className={styles.chart}>
+            <div className={`${styles.chart} ${styles.panel}`}>
               <CategoryBreakdown
                 month={month}
                 today={today}
@@ -266,7 +267,7 @@ function MonthlyCharts({ transactions, month, today, openTransaction }: ReportDa
               />
             </div>
           )}
-          <div className={styles.chart}>
+          <div className={`${styles.chart} ${styles.panel}`}>
             <CashFlowChart month={month} today={today} transactions={transactions} />
           </div>
         </div>
@@ -295,11 +296,11 @@ function YearlyCharts({
     <div
       className={`${styles.charts} mt-6 grid items-start gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]`}
     >
-      <div className={styles.chart}>
+      <div className={`${styles.chart} ${styles.panel}`}>
         <CashFlowChart key={year} year={year} today={today} transactions={transactions} />
       </div>
       {expenses && (
-        <div className={styles.chart}>
+        <div className={`${styles.chart} ${styles.panel}`}>
           <CategoryBreakdown
             key={year}
             year={year}

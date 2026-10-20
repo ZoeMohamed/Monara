@@ -372,7 +372,9 @@ describe("transaction action recovery", () => {
     assert.equal(physicalWrites, 1);
     assert.equal(actions.render().lockedCreate, false);
     assert.equal(actions.state.drafts[editorKey], undefined);
-    assert.equal(actions.state.view.transactionId, transactionId);
+    // The toast confirms the add and offers Undo, so the sheet closes instead of opening the record.
+    assert.equal(actions.state.view.adding, false);
+    assert.equal(actions.state.view.transactionId, null);
     assert.deepEqual(actions.state.notice.undo, { kind: "backend", receipt });
   });
 
