@@ -21,22 +21,23 @@ const percent = (confidence: number) => `${Math.round(confidence * 100)}%`;
 const rupiah = (money: { amountMinor: string }) => BigInt(money.amountMinor);
 
 function Totals({ totals }: { totals: ForecastSummary["totals"] }) {
-  const { formatRupiah } = useAmountDisplay();
+  const { formatRupiah, compactAmount } = useAmountDisplay();
+  const figures = [
+    { label: "This week", money: totals.weekRemaining },
+    { label: "This month", money: totals.monthRemaining },
+    { label: "Month end", money: totals.projectedMonthEnd },
+  ];
   return (
     <>
       <dl className={styles.totals}>
-        <div>
-          <dt>This week</dt>
-          <dd data-amount>{formatRupiah(rupiah(totals.weekRemaining))}</dd>
-        </div>
-        <div>
-          <dt>This month</dt>
-          <dd data-amount>{formatRupiah(rupiah(totals.monthRemaining))}</dd>
-        </div>
-        <div>
-          <dt>Month end</dt>
-          <dd data-amount>{formatRupiah(rupiah(totals.projectedMonthEnd))}</dd>
-        </div>
+        {figures.map(({ label, money }) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd data-amount title={formatRupiah(rupiah(money))}>
+              {compactAmount(rupiah(money))}
+            </dd>
+          </div>
+        ))}
       </dl>
       <p className={styles.note}>
         Month end is what you have confirmed so far plus what is still expected.

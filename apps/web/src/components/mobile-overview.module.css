@@ -380,7 +380,7 @@
 .monthPicker {
   position: relative;
   display: inline-flex;
-  min-height: 44px;
+  min-height: 40px;
   align-items: center;
   border-radius: 999px;
   background: var(--surface-secondary);
@@ -388,9 +388,9 @@
 
 .monthTrigger {
   min-width: 0;
-  min-height: 44px;
+  min-height: 40px;
   align-items: center;
-  padding: 0 34px 0 16px;
+  padding: 0 32px 0 14px;
   border: 0;
   border-radius: inherit;
   background: transparent;
@@ -400,7 +400,7 @@
 }
 
 .monthValue {
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .monthIndicator {
@@ -414,18 +414,18 @@
 
 .categoryList {
   /* Rows bleed past the column so their hover shape spans the whole block. */
-  margin: 8px -12px 0;
+  margin: 6px -12px 0;
 }
 
 .category {
   display: flex;
   width: 100%;
   min-width: 0;
-  min-height: 80px;
+  min-height: 52px;
   align-items: center;
-  gap: 14px;
-  padding: 14px 12px;
-  border-radius: 20px;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 16px;
   text-align: left;
   --button-bg-hover: var(--surface-secondary);
   --button-bg-pressed: var(--surface-tertiary);
@@ -433,18 +433,18 @@
 
 .categoryIcon {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   place-items: center;
-  border-radius: 14px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--category-color) 12%, var(--surface));
   color: var(--category-color);
 }
 
 .categoryIcon svg {
-  width: 21px;
-  height: 21px;
+  width: 18px;
+  height: 18px;
 }
 
 .categoryBody {
@@ -457,18 +457,26 @@
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  font-size: 16px;
+  font-size: 14px;
+  line-height: 1.3;
 }
 
 .categoryLabel strong {
   font-weight: 700;
 }
 
-.categoryLabel strong:first-child {
+.categoryName {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.categoryName strong {
   overflow-wrap: anywhere;
 }
 
-.categoryLabel strong:last-child {
+.categoryLabel > strong {
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
@@ -479,9 +487,9 @@
 
 .track {
   display: block;
-  height: 6px;
+  height: 5px;
   overflow: hidden;
-  margin-top: 8px;
+  margin-top: 6px;
   border-radius: 999px;
   background: var(--surface-tertiary);
 }
@@ -500,10 +508,11 @@
 }
 
 .budgetCaption {
-  display: block;
-  margin-top: 4px;
+  flex-shrink: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .category[aria-expanded="true"] .categoryIcon {
@@ -512,7 +521,7 @@
 }
 
 .payments {
-  margin: 0 12px 8px 70px;
+  margin: 0 12px 8px 60px;
   padding: 4px 12px;
   border-radius: 18px;
   background: var(--surface-secondary);
@@ -1269,9 +1278,10 @@
    each card an edge that a tint alone could not, and the daily guide is the one solid blue
    card, because it answers the first question Home is asked. Desktop keeps its own cards. */
 @media (max-width: 1023.98px) {
+  /* The sheet owns the space behind the floating nav, so its blue runs to the end of the page. */
   .sheet {
     padding-top: 16px;
-    padding-bottom: 8px;
+    padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
     background: var(--surface-tertiary);
   }
 
