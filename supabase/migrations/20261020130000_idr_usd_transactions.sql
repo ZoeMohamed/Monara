@@ -95,6 +95,25 @@ revoke all on function private.value_transaction_currency() from public,anon,aut
 create trigger transactions_aaa_value_currency before insert or update on public.transactions
 for each row execute function private.value_transaction_currency();
 
+-- A lease only changes retry bookkeeping. Financial edits and successful conversion
+-- still advance the version used by editors, Undo receipts, and stale-job checks.
+create function private.set_transaction_updated_at() returns trigger
+language plpgsql security invoker set search_path='' as $$
+begin
+  if current_setting('monara.fx_recovery_id',true)=old.id::text
+    and (to_jsonb(new)-array['updated_at','fx_retry_count','fx_retry_after','original_money'])
+      is not distinct from (to_jsonb(old)-array['updated_at','fx_retry_count','fx_retry_after','original_money']) then
+    new.updated_at:=old.updated_at;
+  else
+    new.updated_at:=statement_timestamp();
+  end if;
+  return new;
+end; $$;
+revoke all on function private.set_transaction_updated_at() from public,anon,authenticated;
+drop trigger transactions_set_updated_at on public.transactions;
+create trigger transactions_set_updated_at before update on public.transactions
+for each row execute function private.set_transaction_updated_at();
+
 create index transactions_pending_fx_idx on public.transactions(fx_retry_after,id)
 where currency='USD' and idr_amount is null and deleted_at is null and fx_retry_count<5;
 
@@ -381,7 +400,7 @@ begin
   v_confidence_qualified:=coalesce(
     least(v_extraction_confidence,p_confidence)>=public.gmail_auto_confirm_confidence(),false);
   v_financial_facts_valid:=v_kind in ('expense','income','exclusion')
-    and v_item.amount is not null and v_item.idr_amount is not null
+    and v_item.amount is not null and (v_item.currency='IDR' or v_item.idr_amount is not null)
     and v_item.currency in ('IDR','USD')
     and coalesce((v_item.gmail_extraction_evidence->>'currencyInferred')::boolean,false)=false
     and v_item.occurred_on is not null and v_item.flow_direction in ('in','out');

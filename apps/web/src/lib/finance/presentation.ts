@@ -69,7 +69,7 @@ export function parseDraftAmount(
   const trimmed = value.trim();
   if (trimmed === "") return null;
   if (currency === "USD") {
-    if (!/^\d+(?:\.\d{1,2})?$/.test(trimmed))
+    if (!/^\d+(?:\.\d{0,2})?$/.test(trimmed))
       throw new FinancePresentationError("Enter a USD amount with at most two decimal places.");
     const [whole, fraction = ""] = trimmed.split(".");
     return safePresentationAmount(

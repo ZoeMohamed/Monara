@@ -15,6 +15,7 @@ import {
   type Budget,
   deleteConfirmedTransaction,
   excludePendingTransaction,
+  isConversionPending,
   type RecurringBill,
   type TransactionValues,
   transactionErrors,
@@ -203,7 +204,10 @@ export function useTransactionActions(context: ActionContext) {
     const expected = next.find((transaction) => transaction.id === id);
     setTransactions(next);
     setNotice({
-      message: confirmationMessage(item),
+      message:
+        expected && isConversionPending(expected)
+          ? "Saved in USD. Conversion is pending; it is not included in totals."
+          : confirmationMessage(item),
       ...(expected ? { undo: { kind: "update" as const, before: item, expected } } : {}),
     });
     if (view.transactionId) navigation.closePopup();
@@ -273,8 +277,9 @@ export function useTransactionActions(context: ActionContext) {
     });
     if (expected)
       setNotice({
-        message:
-          action === "confirm"
+        message: isConversionPending(expected)
+          ? "Saved in USD. Conversion is pending; it is not included in totals."
+          : action === "confirm"
             ? confirmationMessage(values)
             : action === "edit"
               ? "Changes saved. Still waiting for your review."
@@ -349,7 +354,7 @@ export function useTransactionActions(context: ActionContext) {
       id: crypto.randomUUID(),
       emoji: "✦",
       confidence: null,
-      status: values.currency === "USD" ? "pending" : "confirmed",
+      status: values.currency === "USD" && values.kind !== "exclusion" ? "pending" : "confirmed",
     };
     setTransactions((items) => [record, ...items]);
     setDrafts((items) => {

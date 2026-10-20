@@ -148,7 +148,7 @@ export const readTools = [
   }),
   readTool({
     name: "list_transactions",
-    description: `Lists the User's transactions, newest first. Filter by month (YYYY-MM), kind (expense, income, or exclusion), or reviewStatus (pending or confirmed). Pending and exclusion records do not count towards totals. ${PAGING}`,
+    description: `Lists the User's transactions, newest first. money is the original amount: IDR uses whole rupiah and USD uses cents. idrMoney is the saved IDR reporting value; absent conversion leaves USD pending and excluded from totals. Filter by month (YYYY-MM), kind (expense, income, or exclusion), or reviewStatus (pending or confirmed). Pending and exclusion records do not count towards totals. ${PAGING}`,
     input: listTransactionsInputSchema,
     output: transactionPageSchema,
   }),

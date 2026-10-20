@@ -92,10 +92,11 @@ No product decisions remain open in this design. Internal storage shape and retr
 
 - `pnpm check` passes, including package tests, typechecking, lint, dependency checks, documentation checks, and migration validation. React Doctor reports 100 for both the web app and shared UI, with no findings.
 - `pnpm build` passes the production web build and the agent's Wrangler dry-run build.
-- The local database replays all migrations, passes SQL lint for `public` and `private`, and passes 600 pgTAP assertions across 20 files. Generated database types match the local schema.
+- The local database replays all migrations, passes SQL lint for `public` and `private`, and passes 607 pgTAP assertions across 20 files. Generated database types match the local schema.
 - `pnpm db:check --reset` refuses to proceed because the machine's stack registry contains an unrelated stale worktree path. After verifying that the selected Docker stack belongs to this worktree, the equivalent local reset, lint, test, and generated-type checks pass. The unrelated registry entry was left untouched.
 - A public Frankfurter request for 2024-05-15 returned the ECB reference rate within the two-second deadline; a second read reused the stored snapshot. This sample is not an availability guarantee.
 - A synthetic transaction through the real local backend and database preserved USD cents, calculated IDR reporting values, recalculated on an amount edit, and restored the exact prior amount and FX Snapshot through Undo.
 - Synthetic onboarding, transaction, detail, and editor components were checked at 390 by 844 CSS pixels. The USD editor also passed a 320-pixel-wide check, including decimal entry and horizontal overflow inspection.
+- Review regressions cover FX retry leases preserving Undo versions, classification of in-flight IDR imports, chat tool currency units, pending USD demo confirmation, and trailing-decimal input. A mobile demo transaction entered as `19.` saves as US$19.00 and stays in review after confirmation while conversion is unavailable.
 
 No real Gmail inbox import, cloud migration, deployment, or production provider configuration has been verified. Mobile screenshots are recorded in [the currency UI evidence](evidence/transaction-currencies/README.md).

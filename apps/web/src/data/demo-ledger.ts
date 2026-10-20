@@ -104,6 +104,31 @@ export function transactionErrors(values: TransactionValues): TransactionErrors 
   return errors;
 }
 
+export function isConversionPending(
+  transaction: Pick<Transaction, "kind" | "currency" | "reportingAmount">,
+): boolean {
+  return (
+    transaction.kind !== "exclusion" &&
+    transaction.currency === "USD" &&
+    transaction.reportingAmount == null
+  );
+}
+
+function reportingMoneyAfterEdit(
+  transaction: Transaction,
+  values: TransactionValues,
+): Pick<Transaction, "reportingAmount"> {
+  if (values.currency !== "USD" && transaction.reportingAmount === undefined) return {};
+  return {
+    reportingAmount:
+      transaction.currency === values.currency &&
+      transaction.amount === values.amount &&
+      transaction.date === values.date
+        ? (transaction.reportingAmount ?? null)
+        : null,
+  };
+}
+
 export function updatePendingTransaction(
   transactions: Transaction[],
   id: string,
@@ -112,11 +137,14 @@ export function updatePendingTransaction(
 ): Transaction[] {
   if (action === "confirm" && Object.keys(transactionErrors(values)).length > 0)
     return transactions;
-  return transactions.map((transaction) =>
-    transaction.id === id && transaction.status === "pending"
-      ? { ...transaction, ...values, status: action === "confirm" ? "confirmed" : "pending" }
-      : transaction,
-  );
+  return transactions.map((transaction): Transaction => {
+    if (transaction.id !== id || transaction.status !== "pending") return transaction;
+    const next = { ...transaction, ...values, ...reportingMoneyAfterEdit(transaction, values) };
+    return {
+      ...next,
+      status: action === "confirm" && !isConversionPending(next) ? "confirmed" : "pending",
+    };
+  });
 }
 
 export function updateConfirmedTransaction(
@@ -146,7 +174,9 @@ export function updateConfirmedTransaction(
     kind: values.kind,
     categoryId: values.categoryId,
     financialAccountId: values.financialAccountId,
+    ...reportingMoneyAfterEdit(existing, values),
   };
+  if (isConversionPending(corrected)) corrected.status = "pending";
   return transactions.map((transaction) => (transaction === existing ? corrected : transaction));
 }
 

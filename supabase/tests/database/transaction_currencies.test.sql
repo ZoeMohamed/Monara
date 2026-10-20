@@ -1,7 +1,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path=public,extensions;
-select plan(41);
+select plan(48);
 set local role service_role;
 
 insert into public.fx_reference_rates(requested_on,rate_date,rate)
@@ -62,6 +62,13 @@ select 'cf100000-0000-4000-8000-000000000001',item.user_id,'undo',jsonb_build_ob
     'occurredTime',item.occurred_time,'description',item.description,'location',item.location,'accountHint',item.account_hint,
     'categoryId',item.category_id,'financialAccountId',item.financial_account_id)),now()+interval '10 minutes'
 from original_fx item join public.transactions current_item on current_item.id=item.id;
+create temporary table undo_fx_claim on commit drop as
+  select * from public.claim_transaction_fx_jobs(10)
+  where transaction_id='cf000000-0000-4000-8000-000000000001';
+select is((select count(*) from undo_fx_claim),1::bigint,'an edited USD transaction is leased before an unavailable lookup');
+select is((select updated_at from public.transactions where id='cf000000-0000-4000-8000-000000000001'),
+  (select (operation_state->>'expectedUpdatedAt')::timestamptz from public.agent_action_states where action_id='cf100000-0000-4000-8000-000000000001'),
+  'retry bookkeeping leaves the financial Undo version unchanged');
 select public.restore_transaction_from_undo('10000000-0000-4000-8000-000000000001','cf100000-0000-4000-8000-000000000001');
 select is((select amount from public.transactions where id='cf000000-0000-4000-8000-000000000001'),1999::numeric,'undo restores original USD cents');
 select is((select idr_amount from public.transactions where id='cf000000-0000-4000-8000-000000000001'),329837::numeric,'undo restores the previous IDR reporting amount');
@@ -109,6 +116,36 @@ select is((select review_status from public.transactions where id='cf000000-0000
 select is((select idr_amount from public.transactions where id='cf000000-0000-4000-8000-000000000005'),null::numeric,'an out-of-range conversion never corrupts reporting money');
 update public.transactions set fx_retry_count=5 where id='cf000000-0000-4000-8000-000000000005';
 select is((select count(*) from public.claim_transaction_fx_jobs(10)),0::bigint,'five attempts is a durable limit, with no endless recovery loop');
+
+select ok(not has_table_privilege('authenticated','public.transactions','INSERT,UPDATE'),'financial writes remain backend-only, despite superseded initial-schema grants');
+select ok(not has_table_privilege('authenticated','public.fx_reference_rates','SELECT'),'browser callers cannot read the private FX cache');
+
+-- Recreate an untouched IDR row inserted before the currency migration existed.
+create temporary table legacy_idr_message on commit drop as select * from public.claim_gmail_message(
+  '12000000-0000-4000-8000-000000000001','synthetic-idr-before-fx-migration','2026-10-12T06:00:00Z');
+set local role postgres;
+set constraints all immediate;
+alter table public.transactions disable trigger transactions_aaa_value_currency;
+insert into public.transactions(id,user_id,source_type,review_status,transaction_type,flow_direction,merchant_name,amount,currency,
+  occurred_on,financial_account_id,processed_gmail_message_id,gmail_classification_status,gmail_extraction_evidence)
+select 'cf000000-0000-4000-8000-000000000006','10000000-0000-4000-8000-000000000001','gmail_email','pending','expense','out',
+  'Synthetic in-flight IDR import',330000,'IDR','2026-10-12','11000000-0000-4000-8000-000000000001',processed_message_id,'pending','{"confidence":0.99}'::jsonb
+from legacy_idr_message;
+alter table public.transactions enable trigger transactions_aaa_value_currency;
+set local role service_role;
+select is((select idr_amount from public.transactions where id='cf000000-0000-4000-8000-000000000006'),null::numeric,'legacy fixture has no derived IDR amount');
+select public.set_imported_category('cf000000-0000-4000-8000-000000000006',
+  (select id from public.categories where user_id='10000000-0000-4000-8000-000000000001' and slug='resto-cafe'),'expense',0.99);
+select is((select review_status from public.transactions where id='cf000000-0000-4000-8000-000000000006'),'confirmed','queued legacy IDR imports retain normal automatic confirmation');
+
+create temporary table revision_before on commit drop as
+  select updated_at from public.transactions where id='cf000000-0000-4000-8000-000000000003';
+select set_config('monara.fx_recovery_id','cf000000-0000-4000-8000-000000000003',true);
+update public.transactions set merchant_name='Synthetic genuine edit during recovery'
+  where id='cf000000-0000-4000-8000-000000000003';
+select ok((select updated_at from public.transactions where id='cf000000-0000-4000-8000-000000000003')
+  > (select updated_at from revision_before),'recovery context cannot hide a genuine transaction edit');
+select set_config('monara.fx_recovery_id','',true);
 
 select * from finish();
 rollback;

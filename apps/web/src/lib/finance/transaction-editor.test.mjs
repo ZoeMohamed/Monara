@@ -537,6 +537,17 @@ describe("live exclusion editor", () => {
 });
 
 describe("USD amount editing", () => {
+  it("saves a trailing decimal as whole dollars without losing the currency", async () => {
+    const editor = mountEditor({
+      transaction: { ...transaction(), currency: "USD", amount: 1999 },
+    });
+    editor.render().changeDraft({ amount: "19." });
+    await editor.render().submit(submitEvent());
+    assert.equal(editor.saved.length, 1);
+    assert.equal(editor.saved[0][0].amount, 1900);
+    assert.equal(editor.saved[0][0].currency, "USD");
+  });
+
   it("preserves fractional dollar entry and grouping in the shared amount field", () => {
     assert.equal(amountInput("19.99", "USD"), "19.99");
     assert.equal(amountInput("1,234.50", "USD"), "1234.50");
