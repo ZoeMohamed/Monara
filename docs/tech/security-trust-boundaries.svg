@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="690" viewBox="0 0 1200 690" role="img" aria-labelledby="title description">
+  <title id="title">Monara security trust boundaries</title>
+  <description id="description">Untrusted channels pass through identity and provider verification before the agent. The agent has no database credentials. Only the backend can authorize financial operations and reach the user-owned database.</description>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#2f6df3"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#17315e" flood-opacity="0.10"/></filter>
+    <style>.title{font:700 26px 'Nunito Sans',Arial,sans-serif;fill:#142a55}.label{font:700 15px 'Nunito Sans',Arial,sans-serif;fill:#2f6df3;letter-spacing:1.2px}.body{font:400 16px 'Nunito Sans',Arial,sans-serif;fill:#50698c}.small{font:400 14px 'Nunito Sans',Arial,sans-serif;fill:#50698c}.box{fill:#fff;stroke:#c9dcf2;stroke-width:2}.authority{fill:#eef5ff;stroke:#2f6df3;stroke-width:3}.danger{fill:#fff7e8;stroke:#e9b95f;stroke-width:2}.line{stroke:#2f6df3;stroke-width:3;fill:none;marker-end:url(#arrow)}</style>
+  </defs>
+  <rect width="1200" height="690" rx="28" fill="#f4faff"/>
+  <text x="55" y="54" class="label">SECURITY MODEL</text><text x="55" y="91" class="title">AI can propose. Deterministic code grants authority.</text>
+  <rect x="50" y="135" width="220" height="390" rx="24" class="danger" filter="url(#shadow)"/>
+  <text x="78" y="172" class="label">UNTRUSTED INPUT</text><text x="78" y="218" class="title">Browser</text><text x="78" y="246" class="body">User actions and chat</text><text x="78" y="300" class="title">Gmail</text><text x="78" y="328" class="body">Email content</text><text x="78" y="382" class="title">WhatsApp</text><text x="78" y="410" class="body">Messages and receipts</text><text x="78" y="464" class="title">Model output</text><text x="78" y="492" class="body">Untrusted suggestions</text>
+  <rect x="335" y="135" width="225" height="390" rx="24" class="box" filter="url(#shadow)"/>
+  <text x="365" y="172" class="label">PROOF + VALIDATION</text><text x="365" y="220" class="title">Web session</text><text x="365" y="248" class="body">Verified identity</text><text x="365" y="302" class="title">Provider events</text><text x="365" y="330" class="body">Signed webhooks</text><text x="365" y="384" class="title">Phone link</text><text x="365" y="412" class="body">Explicit verification</text><text x="365" y="466" class="title">Contracts</text><text x="365" y="494" class="body">Strict schemas</text>
+  <rect x="625" y="135" width="220" height="390" rx="24" class="box" filter="url(#shadow)"/>
+  <text x="655" y="172" class="label">AI RUNTIME</text><text x="655" y="222" class="title">Agent</text><text x="655" y="257" class="body">No database keys</text><text x="655" y="290" class="body">No arbitrary SQL</text><text x="655" y="323" class="body">Bounded tool registry</text><text x="655" y="356" class="body">Schema-checked output</text><text x="655" y="420" class="title">Permission tiers</text><text x="655" y="454" class="body">Read / derived</text><text x="655" y="484" class="body">Reversible / confirmed</text>
+  <rect x="910" y="135" width="240" height="205" rx="24" class="authority" filter="url(#shadow)"/>
+  <text x="940" y="172" class="label">AUTHORITY</text><text x="940" y="220" class="title">Backend</text><text x="940" y="254" class="body">Exact operation allowlist</text><text x="940" y="284" class="body">Ownership checks</text><text x="940" y="314" class="body">Confirmation state</text>
+  <rect x="910" y="380" width="240" height="145" rx="24" class="authority" filter="url(#shadow)"/>
+  <text x="940" y="417" class="label">DATA BOUNDARY</text><text x="940" y="463" class="title">Auth + database</text><text x="940" y="496" class="body">RLS and owned relations</text>
+  <path d="M270 330 H325" class="line"/><path d="M560 330 H615" class="line"/><path d="M845 238 H900" class="line"/><path d="M1030 340 V370" class="line"/>
+  <rect x="50" y="570" width="1100" height="72" rx="18" fill="#dfeaff"/>
+  <text x="78" y="600" class="title">Invariant</text><text x="210" y="600" class="body">Identity is verified before context is created. The model never becomes the authorization boundary.</text><text x="210" y="627" class="small">Every financial write must pass deterministic validation, ownership checks and its permission-tier rule.</text>
+</svg>

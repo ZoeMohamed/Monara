@@ -1,6 +1,6 @@
 # Submission PDF template
 
-Build all three PDFs with `pnpm docs:pdf`, or one with `pnpm docs:pdf technical`, `security`, or `evidence`. Output is written to the ignored `docs/tech/build/` directory. The build requires Pandoc, Typst and Mermaid CLI on PATH.
+Build all three PDFs with `pnpm docs:pdf`, or one with `pnpm docs:pdf technical`, `security`, or `evidence`. Output is written to the ignored `docs/tech/build/` directory. The build requires Pandoc and Typst. Mermaid CLI is required only when a selected source contains a Mermaid diagram.
 
 The approved design uses blue covers with the original Monara mascot, white A4 interiors, compact geometric page-edge artwork, branded headers, and page-number/progress footers. `page-frame.svg` supplies the interior edge decoration; `cover-background.svg` supplies the cover artwork. Both are vector assets. The temporary header/footer alternatives and picker were removed after selection.
 

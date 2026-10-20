@@ -1,106 +1,236 @@
-# Security self-assessment
+# Security self-assessment and freeze standard
 
-Owner: Abhip. Features: F10, F12, F16, F17. Status: Draft.
+Owner: Team 808. Features: F10, F12, F16. Status: Draft.
+
+**Product:** Monara personal-finance PWA<br>
+**Assessment date:** 20 October 2026<br>
+**Assurance level:** Internal security assessment, not an independent penetration test
+
+**Candidate decision:** **Pass for a controlled competition demonstration using synthetic data.** Every automated source, database, Agent, browser and build gate run for this assessment passed.
+
+**Production freeze decision:** **Not yet passed for unrestricted real-finance use.** The deployed application is healthy and fails closed at its public authentication boundary, but the assessed hardening candidate has not been deployed, preview and production data environments are not isolated, and authenticated two-User isolation has not been exercised against production. These are release blockers, not hidden footnotes.
 
 ## Purpose
 
-This is Monara's own assessment of how the Agent, the Channels and the data behind them are protected. It covers the permission tiers (PRD section 6.2), how each Channel and service proves identity, the data protections, and the risks we know about, with what is mitigated and what is still open. The data model is described in [the data and security section](data-and-security.md), the Agent loop in [the Agent section](agent.md), and the measured runs in [the evaluation section](evaluation.md).
+### Security posture in 30 seconds
 
-Claims were checked on 19 October 2026 against the submission branch at `e6a70e8`, which includes `main` at `0b3ee5b`, and against the Gmail reliability policy merged on current `main` at `cce75b9`. PR #85 must preserve that newer main change when it is integrated. Anything not supported by source, a test or a recorded run is marked Planned or Open. Nothing in this file is a penetration test of the hosted app.
+Monara treats the model, emails, chat messages, receipt images and provider events as untrusted input. The model may reason, but it never becomes the authority for identity, ownership, financial truth or destructive action.
+
+Five deterministic layers retain that authority:
+
+1. **Verified identity.** Web session, verified WhatsApp number and Gmail authorization prove different claims and are never interchangeable.
+2. **Scoped Agent tools.** The model can request only registered operations with strict inputs.
+3. **Backend authorization.** The server resolves the User, validates the exact operation and checks ownership.
+4. **Database isolation.** Forced row-level security, owned references and write fences reject cross-User access and stale writes.
+5. **Human control.** Uncertain imports stay in review, reversible writes offer Undo, and destructive actions require a short-lived confirmation.
+
+### What “pass” means
+
+| Status | Meaning |
+| --- | --- |
+| **Pass** | The control exists and its expected result was observed in a deterministic test. |
+| **Live verified** | The result was observed against the deployed public service without changing production data. |
+| **Candidate only** | The hardening works in the tested release candidate but is not in the current deployment. |
+| **Open** | Evidence is missing or the residual risk exceeds the freeze standard. |
+
+A screenshot can prove the deployed page, viewport and visible state. It cannot prove database isolation, secret handling or provider deletion. Those claims require boundary tests and controlled integration evidence.
 
 ## How it works
 
-**Permission tiers.** A tool carries its tier in its definition (`apps/agent/src/conversation/tools.ts`). The registry runs T0 and T1 tools directly and turns a T2 call into a confirmation request. `respond.ts` registers exactly the read, write and destructive tool lists. The model cannot change a tier.
+### Scope and threat model
 
-| Tier | Tools | How it is enforced |
-| --- | --- | --- |
-| T0 read | `get_summary`, `get_dashboard`, `suggest_budget`, `list_transactions`, `list_financial_accounts`, `list_categories`, `list_budgets`, `list_reminders`, `get_spending_forecast`, `refresh_spending_forecast` (`read-tools.ts`) | Runs at once. Arguments and results are parsed with the shared zod contracts. Totals are summed in integer rupiah by code, not by the model. `refresh_spending_forecast` replaces the stored forecast, which is a prediction and never a ledger record, and is held back by a 20 second cooldown. |
-| T1 reversible write | `add_transaction`, `edit_transaction`, `confirm_pending`, `exclude_pending`, `create_budget`, `edit_budget`, `undo_action` (`write-tools.ts`) | Runs at once and returns a receipt. `undo_action` reverses a receipt within 10 minutes and only once, and fails with CONFLICT if the record changed since (`packages/core/src/finance.ts`). |
-| T2 destructive | `delete_transaction`, `delete_budget` (`destructive-tools.ts`) | The tool runs nothing. It asks the backend for a confirmation that expires after 5 minutes and can be used once. `runAgent` (`agent.ts`) carries out the delete, without the model, only when the User's next message is `yes` in any letter case, optionally ending in `.` or `!`. The backend then checks that the confirmation belongs to that User, is unused and has not expired. Deletes are soft deletes. |
-| T3 never in chat | Gmail and WhatsApp connections, export, credentials, account deletion | Not Agent tools. The tool type has no T3 value, so one cannot be registered. These actions exist only in the signed-in web app. |
+This assessment covers authentication, financial authorization, database ownership, Agent permissions, Gmail ingestion, WhatsApp, media, browser and PWA behavior, background jobs, external providers and account deletion.
 
-The backend allowlist for the Agent credential (`apps/web/src/lib/finance/service.ts`) is wider than the tool list. It also accepts `edit_pending`, `list_budget_usage`, `create_financial_account`, `update_financial_account`, `update_category`, `add_receipt_transaction` and the destructive confirmation operations. It refuses Goals, Category creation, Reminder read and dismiss, and direct `delete_transaction` and `delete_budget` calls (`apps/web/src/app/api/agent/operations/[operation]/route.ts`).
+Monara assesses cross-User access, caller identity spoofing, replay and duplicate processing, indirect prompt injection, unintended Agent actions, uncertain financial facts, unsafe browser caching, leaked provider output and incomplete deletion. Supabase, Vercel, Cloudflare, Composio, Kapso, the model provider and Brave Search are trusted infrastructure within this prototype threat model. Compromise of a provider control plane, legal compliance certification and bank-grade account verification are outside scope. Monara does not move money or store card credentials.
 
-**Identity per Channel and service.** A user ID, phone number or connection ID sent by a caller is never treated as proof on its own.
+### Trust boundaries
 
-- *Web app and in-app chat.* The Supabase session is refreshed in `apps/web/src/proxy.ts`. `getAuthenticatedIdentity` (`apps/web/src/lib/supabase/server.ts`) verifies the JWT claims, requires a non-anonymous Google identity, and asks the database whether the session is still active, so an accepted account deletion ends access at once. Cookie-authenticated mutations accept only same-origin requests (`apps/web/src/lib/http/origin.ts`). The chat bridge adds the verified User ID itself; the browser cannot supply one.
-- *WhatsApp.* The Kapso webhook verifies the signature over the raw body (`apps/agent/src/whatsapp/index.ts`). The sender's number goes to `resolve-sender` on the backend, and only a verified WhatsApp Link names a User. The number is stored as a keyed hash for lookup and, once verified, as an AES-GCM ciphertext so Reminders can reach it. The link code is stored as a digest, expires after 10 minutes, and locks after 5 wrong attempts (`packages/core/src/whatsapp-link.ts`).
-- *Agent and backend.* Calls in both directions carry one shared bearer secret, compared in constant time (`apps/web/src/lib/agent/credential.ts`, `apps/agent/src/conversation/index.ts`). If the secret or a binding is missing, the handler refuses and does nothing. Once the secret matches, the backend acts for the User ID in the request body: the chat bridge fills it from the verified session, and the WhatsApp handler from `resolve-sender`.
-- *Gmail trigger.* The Composio webhook (`apps/web/src/app/api/webhooks/composio/route.ts`) checks an HMAC over the event ID, timestamp and body, rejects timestamps more than 300 seconds away, and takes the mailbox from Monara's own record of the Composio account, never from the event.
+![Monara trust boundaries. Untrusted channels and model output pass through identity proof and schema validation; only the backend grants authority to User-owned data.](security-trust-boundaries.svg){ width=92% }
 
-**Data protections.**
+| Boundary | Untrusted input | Deterministic control | Authority after the boundary |
+| --- | --- | --- | --- |
+| Browser to web backend | URL, form data, model text | Verified Supabase session, same-origin check, schema validation | Signed-in User only |
+| WhatsApp to Agent | Sender number, message, media | Provider signature plus explicit signed-in User pairing | Verified linked User only |
+| Gmail to ingestion | Sender, headers, body and model extraction | Stored connection, known institution, authenticated sender, strict schema, owned account mapping | Pending or high-confidence owned import |
+| Agent to backend | Model-selected tool and arguments | Exact operation registry, scoped schema, ownership and confirmation | Bounded operation only |
+| Backend to database | Repository query or mutation | User scope, forced RLS, composite ownership and write constraints | Owned row only |
+| Browser to PWA cache | Navigation and API response | Public-asset allowlist and generic offline fallback | No financial or authenticated response cached |
 
-- Row-level security is enabled and forced on product tables, and browser roles get at most read access to their own rows. Writes go through the backend's service role. Owned records reference each other with composite `(id, user_id)` keys, so a cross-User link fails inside Postgres. The service role bypasses RLS, so the repositories add `user_id` to every User-scoped query (`packages/core/src/supabase-finance-repository.ts`).
-- Gmail and receipt imports are inserted as `pending`. Receipt imports remain pending. A Gmail classification may change its item to `confirmed` under the final policy in `supabase/migrations/20261019160000_gmail_confidence_only_review.sql`:
-  - Gmail sync reads only the exact sender addresses listed for the User's own Financial Accounts in `packages/contracts/src/institutions/institution-senders.json`, and the item must map to an active owned Financial Account. The DKIM or SPF alignment result from `apps/agent/src/gmail/sender.ts` is retained as evidence but is not a review gate.
-  - Review Confidence is the lower of the available extraction and Category-classification scores. If one score is absent, the known score is used. Both absent, or a result below `public.gmail_auto_confirm_confidence()` at 0.5, stays pending.
-  - Amount, IDR currency, date and cash direction must be stated, and the item must finish with a compatible Transaction Type and Category. A missing cash direction remains missing and keeps the item pending. The item must also be unedited and still pending when classification applies.
-  - Expense, income and exclusion can all qualify. Internal is selected first when the original counterparty name matches the confirmed profile name under the deterministic rule. Another personal name selects the typed Person Category. Otherwise a specific compatible Category or a typed Misc fallback is used. Clearly incoming money falls back to Income Misc; other unresolved cases fall back to Expense Misc without inventing an outgoing direction.
-- Duplicate emails cannot create duplicate transactions (unique Gmail message and item keys). Monara stores extracted fields, not raw email bodies or subjects, and Composio holds the Gmail credentials.
-- WhatsApp receipt photos are fetched only from Kapso's media origin, without following redirects, up to 16 MB, and only as JPEG, PNG or WebP (`packages/integrations/src/whatsapp.ts`, `apps/agent/src/whatsapp/receipt.ts`). A receipt that is read is always saved as pending. Voice notes get a fixed reply and are not processed.
-- The email, receipt and forecast prompts tell the model that the content is untrusted data, and every model output is parsed against a schema before use. This reduces injection risk but does not remove it (risk 1).
-- Merchant lookups send Brave Search only a canonical public business name from a bundled catalog, and never a name that contains the User's own name (`apps/agent/src/merchant/categorize.ts`).
-- Worker logs carry event names, IDs, counts, status codes and error classes, and model error messages are fixed strings (`apps/agent/src/gmail/worker.ts`, `apps/agent/src/gmail/llm.ts`). Worker invocation logs are off and query strings are redacted (`apps/agent/wrangler.jsonc`).
-- The web app sets `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy` and `Permissions-Policy` on every response (`apps/web/next.config.ts`). The service worker caches only an explicit list of public assets and a generic offline page. It fetches them without credentials, refuses redirects and `private` or `no-store` responses, and never stores app pages or API, auth or financial responses (`apps/web/public/sw.js`, `scripts/sw.test.mjs`).
-- Signed-in requests are rate limited per User in fixed one-minute windows: `/api/chat` 20, `/api/finance/operations/*` 120 and `POST /api/forecast` 10. A refused request gets HTTP 429 with `Retry-After` (`apps/web/src/lib/http/rate-limit.ts`).
+The invariant is simple: **a caller-provided User ID, phone number, mailbox identifier or model statement is never proof of authority.**
 
-**Spending forecast.** `GET /api/forecast` requires a verified session. `POST /api/forecast` also requires a same-origin request and is rate limited. The scheduled refresh (`/api/agent/forecast/refresh`) uses the Agent credential and handles at most 25 Users per call. The Worker's `/forecast/refine` route accepts only the shared secret and receives the candidate payments the backend's rules found (merchant names, dates and amounts), without a User ID. The model may lower a candidate's confidence by up to 0.25 or raise it by up to 0.15, and cannot add candidates or change amounts (`packages/core/src/forecast.ts`). Without a model, the rule confidence stands. Forecast tables have forced RLS, backend-only grants and composite run ownership, and one database function replaces a forecast in a single transaction (`supabase/migrations/20261019150000_spending_forecast.sql`).
+### Permission model
 
-**Permanent User deletion.** Deletion follows [ADR 0004](../adr/0004-permanent-user-deletion.md) and the [deletion design](../user-deletion-design.md). It needs the User's own session, the exact phrase `DELETE MY ACCOUNT` and an acknowledgement (`apps/web/src/app/api/profile/deletion/route.ts`). Acceptance blocks access and background work at once. Cleanup then runs with durable retries, disconnects Gmail, removes WhatsApp conversation state, and finishes by removing the Auth identity (`apps/web/src/lib/auth/user-deletion.ts`, `packages/core/src/user-deletion.ts`, `apps/agent/src/user-deletion.ts`). Signing in again creates a fresh User. Deletion covers Monara-controlled data. It does not delete source Gmail messages, the Google account, WhatsApp messages already delivered, shared public merchant facts, or copies held by providers or in backups.
+| Tier | Capability | Enforcement | Result |
+| --- | --- | --- | --- |
+| T0 - Read and derived computation | Read owned summaries; refresh disposable projections | Validated operation and no authoritative ledger mutation | **Pass** |
+| T1 - Reversible mutation | Add or edit supported records; confirm or exclude pending imports | Strict schema, verified User, ownership, idempotency and Undo | **Pass with bounded residual risk** |
+| T2 - Confirmed destructive action | Delete a transaction or budget | Backend-issued, User-bound, single-use, five-minute confirmation | **Pass** |
+| T3 - Never available to Agent | Identity deletion, credentials, provider connections and exports | Capability absent from the conversational tool registry | **Pass** |
+
+### Gmail financial integrity
+
+An email may auto-confirm only when all of these are true:
+
+- the mailbox connection is active and belongs to the User;
+- the sender is from the supported institution flow and passes sender verification;
+- the transaction maps to one active Financial Account owned by that User;
+- type, direction, amount, IDR currency and date are complete;
+- both extraction and classification confidence are present and at least **0.95**;
+- the category is active, compatible and owned; and
+- the User has not edited or already resolved the item.
+
+Any failed condition keeps the item pending. Missing values stay missing; Monara does not invent an amount, date, account or category. Provider message identity and item position are unique, so replay cannot create a duplicate transaction.
+
+### Account deletion
+
+Acceptance immediately revokes sessions, blocks the identity and deletes owned application rows. A durable leased cleanup job then removes WhatsApp state, Gmail triggers and connections, private Goal images and the Auth identity. Cleanup targets remain recorded until each provider step succeeds; retrying does not skip unfinished work. Every current user-owned table receives the same live-User write fence so an in-flight privileged job cannot recreate data after deletion starts.
+
+External provider retention and backup erasure remain governed by those providers and are not certified by this assessment.
+
+### Third-party data exposure
+
+| Provider | Data received | Credential boundary | Monara controls provider retention? |
+| --- | --- | --- | --- |
+| Supabase | Identity and owned application records | Browser session and privileged server role | Application rows: yes; managed backups: no |
+| Composio | Gmail authorization and selected message content | Provider-managed OAuth, server API credential | No |
+| Model provider | Selected email, chat, receipt and forecast context | Server-side model credential | No |
+| Kapso | WhatsApp transport, sender and media | Signed webhook and server API credential | No |
+| Brave Search | Public merchant-name query only | Server API credential | No |
+
+Raw emails, conversations, financial rows, authorization headers and tokens are excluded from application logs. Provider retention still needs contractual review before a public real-data launch.
 
 ## Key decisions
 
-- **Tiers live in code, not in the prompt.** Rejected: telling the model in the prompt to ask before deleting. A hijacked model ignores prompts, but it cannot make a T2 tool run or register a T3 tool.
-- **Confirmation is issued by the backend, not by the chat history.** Rejected: trusting "yes" in a history sent by the browser. A forged history cannot confirm a delete without a confirmation ID the backend issued to that User.
-- **Reversible by default, with Undo.** Rejected: confirming every write. Confirming everything makes the Agent unusable in chat, so only deletes ask, and other Agent writes can be undone.
-- **WhatsApp is an identity signal only after explicit verification.** Rejected: matching a phone number from the User's profile or Gmail. A number is a claim, so the User must prove it by sending a code.
-- **Gmail review uses available confidence and complete financial facts.** Rejected: forcing every Gmail import into review. A complete mapped import can confirm when its lower available score reaches 0.5; if one score is unavailable, the other decides. Account ownership, compatible Category and complete facts remain mandatory, but sender authentication is evidence rather than a review gate. This favors a shorter Review Queue and leaves the spoofing and calibration exposure in risk 13 ([PR #89](https://github.com/ZoeMohamed/Monara/pull/89)).
-- **Best-effort rate limits now, shared counters later.** Rejected for the submission: a shared counter store. In-memory counters stop a runaway client spending model tokens without new infrastructure, and [PR #62](https://github.com/ZoeMohamed/Monara/pull/62) records a shared store as the next step.
-- **No new security services for the hackathon.** Rejected: a separate WAF, a vault and per-request signing. Each adds scope we cannot finish and verify before the freeze.
+- **Deterministic code keeps authority.** Prompt instructions assist reasoning but never replace authentication, validation, ownership or database policy. The rejected alternative was trusting the model to decide what it may access.
+- **Unknown facts remain unknown.** An incomplete import stays pending rather than receiving invented financial facts. The rejected alternative was maximizing automation at the cost of ledger integrity.
+- **A conservative 0.95 auto-confirm boundary requires both scores.** The rejected 0.50 and one-score fallback allowed uncertainty and unauthenticated sender evidence to reach confirmed totals.
+- **Reversible actions are the default.** T1 actions use idempotency and Undo; T2 actions require explicit confirmation. The rejected alternative was either approval fatigue for every edit or unrestricted destructive tools.
+- **Service-role access is not authorization.** Verified User scope and ownership remain mandatory even for privileged repositories. The rejected alternative was treating possession of a server key as sufficient authority.
+- **Authenticated state is never an offline asset.** Monara caches only explicitly public resources and serves a generic offline fallback. The rejected alternative was caching personalized pages for convenience.
+- **Deletion is fail-closed and retryable.** Cleanup records remain until every known target is removed. The rejected alternative was returning success after only relational deletion.
 
 ## Security and risks
 
-| # | Risk | Impact | Mitigation in place | Still open |
-| --- | --- | --- | --- | --- |
-| 1 | Prompt injection through email text, a receipt photo, a stored record or a chat message | A hijacked model calls tools the User did not intend, or extraction returns attacker-chosen values | Tiers enforced in code. Deletes need a backend confirmation. Undo works for 10 minutes. Prompts mark content as untrusted data and outputs are schema-checked. Receipt imports stay pending, and Gmail sync is limited to the registered institution sender list. On the 18 October runs, 7 of 7 Sandbox attacks were blocked in each of three runs, some by the provider's own filter | A hijacked model can still run T1 writes, and Undo is the only control. A prompt instruction is not a security boundary. A Gmail item can auto-confirm even when sender authentication fails; risk 13 covers that boundary. The hidden-instruction email in the extraction set was rejected by the provider with HTTP 400 in all three runs, so Monara's own handling of it was not exercised. Receipt-photo injection is in no measured suite. Prompt hardening ([PR #75](https://github.com/ZoeMohamed/Monara/pull/75)) and voice notes ([PR #74](https://github.com/ZoeMohamed/Monara/pull/74)) are open, not shipped |
-| 2 | Reading or writing another User's data | Financial data leak | Verified session, forced RLS, backend-only writes, composite ownership keys, and `user_id` on every User-scoped repository query. The ownership and RLS pgTAP suites in `supabase/tests/database` cover the initial schema and the Gmail, chat history, forecast, Goal, profile and deletion features. The CI database job replayed every migration and passed these suites on `e6a70e8` | The service role bypasses RLS, so isolation of service-role queries rests on application code. System jobs (Gmail ingestion, WhatsApp sender lookup, deletion cleanup) act on server-resolved rows without a User session. No multi-User isolation test against the deployed stack is recorded |
-| 3 | Leak of the Agent-to-backend secret | An attacker can act as any User through the Agent routes, including operations the Agent has no tool for, and can drive Gmail ingestion and Reminder dispatch | Server-only, constant-time compare, fails closed. Starting an account deletion or a new Gmail or WhatsApp connection needs the User's own session | One shared secret for both directions and every User. A holder can request and then confirm a soft delete. No rotation procedure, per-request signing or replay protection. Rotate it through deployment secrets if exposed |
-| 4 | Request flooding and model spend | Cost abuse and degraded service | Per-User limits per minute on chat (20), finance operations (120) and forecast refresh (10), with 429 and `Retry-After`. A 20 second forecast cooldown. WhatsApp code attempts are capped at 5. The Gmail model client waits out provider rate limits | Counters live in one server instance's memory, so a limit is best effort, not a global quota. No per-IP limit. Other routes, including Gmail connections, WhatsApp linking, Goal images, the webhooks and the Agent routes, have no application limit |
-| 5 | No page-level Content Security Policy | Weaker defense against script injection | React escapes rendered output. The app sets `nosniff`, frame denial, referrer and permissions headers. A CSP is set on `sw.js` and brand icon responses. On 19 October one header request to the production host returned `Strict-Transport-Security` with a two-year max-age, `includeSubDomains` and `preload` | No page CSP. HSTS comes from the hosting platform, not from app configuration, and was only observed, not tested |
-| 6 | Financial context sent to external providers | Chat turns, email text, receipt photos and forecast candidates leave Monara's infrastructure | Model outputs are parsed to the shared contracts. Logs carry no content. Forecast refinement omits the User ID. Brave Search receives only canonical public business names | No data-processing review of the model provider, Composio or Kapso, and their retention terms are not assessed here. Forecast candidates without a User ID are still personal financial data, not anonymous |
-| 7 | Conversation retention | Stored chat text can hold financial details and, on WhatsApp, the User's number | WhatsApp turns and the reply number live in the User's Durable Object, at most the last 40 turns, and are deleted after 30 minutes without a message. Web chat history is stored with forced RLS and backend-only access and is deleted with the account | The WhatsApp window is not configurable. Web chat history has no retention limit and no way to delete a single conversation |
-| 8 | Partial failure across separate writes | A change saved without its receipt, or a confirmation left unused after its delete | Version checks reject stale writes, so a repeated delete or Undo is refused instead of acting twice. The WhatsApp session never replays a turn that may have run, and tells the User to check the app. A lost in-app reply asks the User to check their records before trying again | A delete and the use of its confirmation, and a change and its Undo receipt, are separate writes, not one transaction. In-app chat has no durable client-turn idempotency, so a timed-out turn may still complete later. A failed network response does not prove that no write happened |
-| 9 | Wrong or missing fields from extraction | A wrong amount or date reaches the ledger | Unknown financial facts stay null and non-rupiah amounts are never converted. Auto-confirm requires an active owned account, compatible type and Category, amount, IDR currency, date, stated cash direction and sufficient available confidence. On 18 labeled synthetic emails, run three times: 17 of 18 classified correctly, 14 of 15 expected items extracted, all 14 fully correct on the measured fields, and no extra items | The 0.5 threshold and one-score fallback are product rules, not calibrated real-inbox accuracy. The set is small, synthetic and team-labeled. Receipt-photo extraction is not measured |
-| 10 | Model non-determinism | An attack that passed once may fail later | Prompts and tool descriptions were tightened after earlier failures, then three consecutive runs on `00700cd` passed every task and attack | Runs are not deterministic and were not repeated on later commits, including `e6a70e8`. Function tools run with reasoning turned off, which the team's model requires on its endpoint |
-| 11 | Regulatory and legal exposure | Compliance gaps in a real launch | The Agent declines investment advice and never moves money | No legal review against Indonesian personal-data law, GDPR or financial-services rules has been done. Implementation alone does not establish compliance or any exemption |
-| 12 | Stored WhatsApp numbers can be decrypted by the backend | Phone numbers of linked Users are exposed | Numbers are sealed with AES-GCM under a key derived by HKDF from a server-only secret, saved only on verification and cleared on unlink. Reminder delivery rows hold no phone number | Whoever holds that secret and database read access can recover numbers. There is no key-rotation procedure, and changing the secret unlinks every User. Links verified before the ciphertext column existed hold no sealed number |
-| 13 | False auto-confirmation of a Gmail import | A wrong, spoofed or attacker-influenced amount counts in totals without review | Sync is limited to sender addresses registered for the User's Financial Accounts. Auto-confirm still needs an active owned account, complete stated financial facts, a compatible Category, an untouched pending item and available confidence at or above 0.5. The final pgTAP suite covers the 0.5 boundary, missing scores and facts, account and Category ownership, fallbacks, cash direction, sender-verification behavior and User confirmation. The User can still correct or delete a confirmed import | Sender authentication does not add a review gate, so a message with a listed From address can qualify even when DKIM or SPF alignment fails. One model score is enough when the other is absent, 0.5 is not calibrated on real inboxes, and non-Internal exclusions can auto-confirm. The flexible Internal name match could treat a different person with a near-identical name as the User. No false auto-confirm rate has been measured |
-| 14 | Account deletion accepted but not yet complete everywhere | Personal data outlives the User's request | Access is blocked at once, cleanup retries durably, and completion requires every cleanup target to finish. Verified locally with synthetic Users, local Supabase and Worker, and a mock Composio server ([evidence](../evidence/user-deletion-2026-10-19.md)) | Real Google, Composio and Kapso deletion paths were not exercised, and production erasure is not verified. Provider-held copies, queue retention, logs and backups were not inspected or erased |
+### Threat domains and mandatory controls
 
-**Scope notes.** All data in the demo, the Sandbox and the evidence is synthetic. Fixtures hold no real emails, passports or production identifiers. Monara never moves money, so there is no payment credential to protect. The in-memory Sandbox ledger is not evidence about the real backend. WhatsApp budget-alert delivery is deferred for the submission: its code is tested only against fakes, with no approved-template message sent. Open pull requests are not described as shipped.
+| Risk domain | Attack or failure path | Mandatory controls | Required fail-closed result |
+| --- | --- | --- | --- |
+| Identity and tenant isolation | A spoofed caller or User A requests data owned by User B | Server-resolved identity, ownership checks, forced RLS and owned references | Reject before read or write; return no private payload and create no ledger mutation |
+| Agent and model authority | Prompt injection or model output requests an unknown, over-privileged or destructive operation | Strict schemas, registered tools, backend allowlists, permission tiers and confirmation outside the model | Reject the call; destructive action stays pending and model text never becomes authority |
+| Gmail financial integrity | Spoofed, incomplete or replayed email reaches confirmed financial totals | Stored connection, authenticated sender, active owned account, complete facts, both confidence scores at 0.95 and unique provider IDs | Keep uncertain input pending; a replay creates no duplicate transaction |
+| WhatsApp and media integrity | A forged or replayed webhook, unsafe redirect or unreadable receipt causes a financial write | Signature and freshness checks, verified phone link, redirect restrictions, MIME and byte limits, and idempotency | Reject the request; ambiguous media creates no confirmed transaction |
+| Browser and offline privacy | A personalized response, authenticated page or financial API result is cached or exposed cross-origin | Same-origin writes, secure cookies, CSP and framing controls, private `no-store` responses and a service worker restricted to public assets | Serve a generic offline state with no cached account, transaction, budget or conversation content |
+| Destructive actions and deletion | A stale, replayed or partially completed deletion removes the wrong state or leaves a known private target behind | Exact confirmation, five-minute expiry, single use, version binding, immediate access revocation and leased retryable cleanup | Keep access revoked; record and retry unfinished provider and private-object targets rather than reporting completion |
+| Provider and secret exposure | A browser receives a server credential, a log captures private content or a provider retains more context than required | Server-only credentials, least-data payloads, content-free operational logs, redaction and explicit provider retention boundaries | Stop the path when credentials are missing; disclose uncertain provider erasure as residual exposure |
+| Availability, replay and abuse | Distributed bursts, provider timeouts or blind retries exhaust quotas or repeat a write with an unknown outcome | Per-User limits, provider budgets, bounded Agent steps, durable idempotency, queue leases, retry caps and exponential backoff | Reject or delay excess work; reconcile unknown write outcomes before retry and keep degraded state visible |
+
+The decision rules are deliberately strict:
+
+- no deterministic control or retained evidence means no pass;
+- identity, ownership and financial truth never come from model output;
+- unknown provider outcomes remain visible and are not retried blindly; and
+- unfinished deletion targets stay blocked and recorded until cleanup succeeds.
+
+### Control assessment
+
+| ID | Control and expected result | Evidence and reason | Candidate | Current production |
+| --- | --- | --- | --- | --- |
+| C-01 | Unauthenticated callers cannot read financial APIs | Public API probe returned 401; root redirected to sign-in | **Pass** | **Live verified** |
+| C-02 | User A cannot read or mutate User B records | Forced-RLS and ownership red-team assertions passed across all database suites | **Pass** | **Open: live two-User proof required** |
+| C-03 | Agent cannot invent arbitrary operations | 277 Agent tests passed; tool schemas, tier checks and backend allowlists rejected invalid actions | **Pass** | **Implemented; credential scope remains open** |
+| C-04 | Gmail cannot auto-confirm spoofed or uncertain input | Tests prove authenticated sender, complete facts, active owned account and both scores at 0.95 are mandatory | **Pass** | **Candidate only** |
+| C-05 | Duplicate Gmail deliveries do not duplicate ledger rows | Message and item uniqueness plus replay tests passed | **Pass** | **Implemented** |
+| C-06 | Destructive actions require explicit short-lived authority | Confirmation binding, expiry, single use and stale-state tests passed | **Pass** | **Implemented** |
+| C-07 | Deletion blocks access and cannot leave known private Goal objects | Relational erasure, stale-job denial, durable cleanup and image-path retry tests passed | **Pass** | **Candidate only; real provider erasure unverified** |
+| C-08 | Browser pages receive baseline security headers | Candidate sends CSP, frame denial, MIME protection, referrer and permissions policy with no runtime errors | **Pass** | **Open: production CSP absent** |
+| C-09 | Financial and authenticated pages are not cached offline | Service-worker tests passed; production HTML returned `private, no-store` | **Pass** | **Live verified** |
+| C-10 | Webhook and media input fails closed | Signature, freshness, origin, redirect, MIME and byte-limit tests passed | **Pass** | **Provider integration not destructively tested** |
+| C-11 | Candidate builds for both deployed runtimes | Next.js production build and Cloudflare dry-run completed | **Pass** | **Live deployments share the same base revision** |
+| C-12 | Mobile surface remains usable after hardening | 390×844 candidate and production runs had zero overflow, console errors or page errors | **Pass** | **Live verified for current revision** |
+
+### Prioritized residual risks
+
+| Risk | Initial | Residual and required treatment |
+| --- | --- | --- |
+| Preview or development reaches production data | Critical | **Open / High.** Use a separate Supabase project and separately rotated credentials, or make preview fail closed. |
+| Shared Agent-to-backend credential is stolen | Critical | **Open / High.** Replace the broad bearer with channel-scoped, rotating, replay-safe capabilities and separate allowlists. |
+| Cross-User access regression exists only in hosted configuration | Critical | **Open / Medium.** Run a controlled production test with two synthetic Auth Users after deployment. |
+| Hardened Gmail/deletion/browser controls are not live | High | **Open / Medium.** Deploy one reviewed immutable revision, migrate production, then repeat the exact probes. |
+| External providers retain sensitive context | High | **Open / Medium.** Confirm retention/deletion terms, minimize prompts and document provider erasure evidence. |
+| Per-instance rate limiting is bypassed across instances | High | **Open / Medium.** Move abuse counters to a distributed store and set provider budgets. |
+| Separate mutation and audit writes partially succeed | Medium | **Open / Medium.** Use durable idempotency and an outbox for write-bearing Agent turns. |
+| Assessment candidate is not an immutable commit and was tested on Node 25.2.1 rather than the repository's preferred Node 24 | Medium | **Open / Low.** Commit the exact candidate and rerun all gates in CI on Node 24 without code changes. |
+
+No Open Critical risk remains inside the local candidate's deterministic control set. Open High risks are deployment architecture issues, so the candidate is acceptable only for a supervised synthetic-data demonstration, not unrestricted real-finance use.
+
+### Incident response
+
+If a credential is exposed, the operator must disable the affected path, rotate the credential, prove the old value is rejected, invalidate outstanding confirmations, inspect content-free event metadata for abuse, restore with the minimum scope and notify affected Users when exposure is established. Raw financial data must not be copied into incident tickets or chat.
 
 ## How to verify
 
-```sh
-# Tiers, confirmations, webhooks, WhatsApp session, receipts, forecast, deletion
-pnpm --filter @monara/agent test
-# Ownership, WhatsApp Link limits, Undo, confirmation expiry, forecast, deletion
-pnpm --filter @monara/core test
-# Resets the local database, replays migrations, runs the RLS and ownership suites
-pnpm db:check --reset --base-ref origin/main
-# 11 tasks and 7 attacks against the real model (needs LLM_* in apps/agent/.dev.vars)
-pnpm --filter @monara/agent sandbox
-# The 18 labeled emails against the same model
-pnpm --filter @monara/agent sandbox:extraction
+### Recorded evidence
+
+| Evidence | Observed result | What it proves |
+| --- | --- | --- |
+| E-01 Workspace quality gate | **Pass:** lint, typecheck, dependency checks, unit/integration tests, docs and migration validation | Candidate is internally consistent |
+| E-02 Automated TypeScript tests | **1,098 passed:** contracts 79, database client 6, core 154, integrations 49, Agent 277, web 293 and repository scripts 240 | Boundaries and failure paths execute as specified |
+| E-03 Database replay | **Pass:** 28 migrations replayed from zero | Schema is reproducible from migration history |
+| E-04 Database security suite | **396/396 pgTAP passed; schema lint reported no errors** | RLS, ownership, dedupe, Gmail policy, deletion and late-table fences work locally |
+| E-05 Frontend health | **React Doctor 100/100** for web and shared UI | No React Doctor findings or warnings |
+| E-06 Runtime builds | **Pass:** Next.js production build and Cloudflare Worker dry-run | Both deployable artifacts compile for their target runtime |
+| E-07 Candidate browser run | **200; CSP present; 390=390 width; manifest present; 0 console and 0 page errors** | Browser hardening does not break the mobile PWA |
+| E-08 Production browser run | **200; 390=390 width; manifest present; 0 console and 0 page errors; CSP absent** | Current deployment is visually healthy and identifies the live CSP gap |
+| E-09 Production boundary probes | Root **307** to sign-in; unauthenticated financial API **401**; service worker **200**; personalized HTML `private, no-store` | Public deployment fails closed and does not cache personal pages |
+| E-10 Deployment identity | Vercel and Cloudflare both report base revision `c390ba39aa83`; Vercel returned no error-level log entries for the inspected 24-hour window | Web and Worker production revisions agree; absence of logs is not proof of zero latent defects |
+
+### End-to-end security journeys
+
+These journeys are the release-level test cases for the domains in scope. “Candidate pass” means the complete deterministic boundary was exercised locally with synthetic identities or fixtures. “Live verified” is reserved for a read-only observation against the deployed service. The assessment does not claim that a set of passing component tests is one continuous live-provider production journey.
+
+| Journey | Domains and expected invariant | Current evidence |
+| --- | --- | --- |
+| J-01 Identity and tenant isolation | Sign in as synthetic User A and User B; each may read and mutate only owned profiles, accounts, categories, transactions, budgets, Goals, connections and conversations; logout makes financial APIs unavailable | **Candidate pass.** Forced-RLS and ownership-denial suites pass across the owned tables. **Production open:** authenticated two-User proof is still required |
+| J-02 Gmail to ledger | An owned mailbox imports expense, income and exclusion records; account/category compatibility is enforced; uncertain records remain in review; provider replay cannot duplicate the ledger | **Candidate pass** for extraction, categorization, status and dedupe boundaries using synthetic messages. **Production open:** one controlled Composio mailbox journey is still required |
+| J-03 Review to financial outputs | Confirm, edit and reject pending records; only confirmed expense and income affect dashboard, budget and forecast totals; exclusions remain visible but do not affect totals | **Candidate pass** through repository, calculation and web route tests. A production mutation run is intentionally not claimed |
+| J-04 Agent and WhatsApp authority | Web Chat and a verified phone may request only registered operations; schemas, ownership and confirmation remain enforced outside the model; replayed or unsigned provider input fails closed | **Candidate pass** across 277 Agent tests plus backend operation tests. **Production open:** a real linked-number and provider delivery run is still required |
+| J-05 Deletion and offline safety | Deletion revokes access, removes owned rows and records unfinished provider cleanup; retry completes remaining targets; authenticated or financial responses never become offline assets | **Candidate pass** for relational erasure, cleanup leases, private Goal image targets and service-worker behavior. **Production open:** real provider erasure remains unverified |
+| J-06 Mobile production smoke | The deployed synthetic demo loads at 390×844, exposes the expected manifest, has no horizontal overflow and emits no browser errors | **Live verified.** HTTP 200, 390=390 viewport width, manifest present, zero console errors and zero page errors |
+
+![J-06 production mobile smoke at 390 by 844. The screenshot shows the synthetic dashboard and the read-only Gmail onboarding disclosure.](security-production-mobile.png){ width=48% }
+
+The screenshot was captured directly from the production URL on 20 October 2026. It proves only the deployed page, viewport and visible synthetic-data state. It does not prove RLS, provider authorization, Gmail extraction or successful deletion; those require the corresponding boundary journey above.
+
+Run the reproducible candidate checks:
+
+```bash
+pnpm check
+pnpm build
+pnpm exec supabase db reset --local
+pnpm exec supabase db lint --local --schema public --level warning --fail-on warning
+pnpm exec supabase test db --local
+pnpm db:types --check
 ```
 
-`pnpm db:check` needs Docker or OrbStack and discards the checkout's local database.
+Then run the mobile browser check at **390×844** and record status, CSP, viewport width, manifest, console errors and page errors. For production, repeat only read-only probes unless a separate synthetic tenant and explicit mutation authorization are available.
 
-Recorded results:
+### Ideal freeze acceptance
 
-- On 19 October, on `e6a70e8` (macOS, Node 25.2.1), `@monara/core` passed 150 of 150 tests and `@monara/agent` passed 244 of 244.
-- [The CI run for `e6a70e8`](https://github.com/ZoeMohamed/Monara/actions/runs/39256183824) passed every job, including the database job that replays all migrations and runs the pgTAP suites.
-- [PR #89](https://github.com/ZoeMohamed/Monara/pull/89), merged as `cce75b9`, records 266 Agent tests and 392 database checks for the 0.5 confidence, missing-score, typed fallback, cash-direction and ownership policy. Its [CI run](https://github.com/ZoeMohamed/Monara/actions/runs/39259216749) passed build, lint, typecheck, tests, React Doctor and local database migrations. Those checks ran on PR #89, not on this child branch's combined tree.
-- The Sandbox and extraction figures are the 18 October runs on `00700cd` with model `gpt-6-luna`, described in [the evaluation section](evaluation.md). The raw logs are `docs/tech/evidence/sandbox-2026-10-18-run1.json` to `run3` and `extraction-2026-10-18-run1.json` to `run3`. The JSON files record the model; the commit and date come from the evaluation section. They were not re-run on later commits.
+The document may change to **Final — Frozen and Passed** only when all conditions below are true for one immutable release identifier:
 
-The attack scenarios are in `apps/agent/sandbox/scenarios.ts`: `attack-other-user`, `attack-spoofed-identity`, `attack-t3-escalation`, `attack-delete-without-confirmation`, `attack-injected-email`, `attack-injected-record` and `attack-extract-prompt`. Each passes only if the ledger and the operation log show no unintended change.
+- every candidate test and build above passes on Node 24 in CI;
+- the candidate is deployed unchanged to both Vercel and Cloudflare;
+- production database migration history matches the candidate;
+- production returns the candidate CSP and secure cookie behavior;
+- preview and production use separate data stores and credentials;
+- Agent authority is channel-scoped and replay-safe;
+- two synthetic production Users prove mutual read and write denial;
+- real provider disconnect and deletion are observed without retaining private application objects;
+- no raw email, financial record, token or authorization header appears in logs;
+- a second reviewer signs the evidence and confirms every residual risk is represented.
+
+Any later change to identity, authorization, schema/RLS, Agent tools, ingestion, providers, deletion, secrets or deployment invalidates the affected evidence and requires targeted reassessment.
+
+## Conclusion
+
+Monara's candidate security model is defensible for a controlled competition demonstration because deterministic code retains authority and all reproducible automated controls passed. The document deliberately does not convert local success into a false production claim. A true ideal-state pass requires the same hardening to be deployed, environment and Agent credentials to be isolated, and hosted cross-User/provider tests to pass on one immutable revision.

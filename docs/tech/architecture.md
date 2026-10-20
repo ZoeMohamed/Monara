@@ -1,103 +1,55 @@
 # System architecture
 
-Owner: Abhip. Features: F1 to F16. Status: Draft.
+Owner: Abhip. Features: F1 to F16; forecast extension F17. Status: Draft.
 
 ## Purpose
 
-Monara is a personal-finance PWA with an Agent that the User can talk to in the app or on WhatsApp. It finds payment and income emails in the User's Gmail, turns them into transactions, keeps uncertain ones for review, and manages Budgets and spending insights from the confirmed ledger. This document shows how the pieces fit together: the runtimes, the data flows, the trust boundaries, and where the PRD features run. It describes the source on `main` at commit `00700cd` (18 October 2026). The decisions behind the boundaries are in [ADR 0001](../adr/0001-initial-runtime-boundaries.md).
+Monara combines an owned financial ledger with Gmail capture and a conversational Agent. Confirmed expenses and income feed Budgets and insights; uncertain imports await review, and confirmed exclusions remain outside totals. This section describes `origin/main` at `c9e5ea04df43f536a2ab0a67cb8875da2e47b91f`, reconciled on 20 October 2026 after reviewing the repository's documentation branches. The [source baseline and review state](README.md) apply to every section.
 
 ## How it works
 
-### Runtimes and packages
+**Runtime boundaries.** [ADR 0001](../adr/0001-initial-runtime-boundaries.md) and [repository structure](../repository-structure.md) define two deployables. `apps/web` is the Next.js PWA and backend on Vercel; its services own financial writes. `apps/agent` is a Cloudflare Worker for conversations, Gmail jobs and scheduled orchestration. Supabase provides Google Auth, Postgres, private Storage and RLS. Composio holds Gmail authorization; Kapso transports WhatsApp messages. Model calls run server-side.
 
-| Part | Runtime | Responsibility |
-| --- | --- | --- |
-| `apps/web` | Next.js PWA and API routes on Vercel | UI, Google sign-in, and the backend operations that are the only writers of financial data. Also the Gmail connection routes, the Composio webhook, and the WhatsApp Link routes |
-| `apps/agent` | TypeScript Cloudflare Worker | The Agent core (`/chat`), the Kapso WhatsApp webhook, a conversation Durable Object per User, the Gmail and merchant job queues, and two crons (daily Gmail catch-up and a 15-minute Reminder dispatch) |
-| `packages/core` | Shared TypeScript | Financial services, Budgets and threshold notifications, insight calculations, Gmail ingestion rules, and WhatsApp Link logic |
-| `packages/contracts` | Shared TypeScript (zod) | Validated types shared by the UI, backend and Agent, including the institution sender list |
-| `packages/db` | Shared TypeScript | Supabase client helpers and generated database types |
-| `packages/integrations` | Shared TypeScript | Composio (Gmail read and new-mail trigger), Kapso (WhatsApp) and Brave Search adapters |
-| `packages/ui` | React | HeroUI components and theme |
-| `supabase/` | Postgres | Schema migrations, row-level security, database functions and synthetic seed data |
-| `playground/llm` | Local only | Experiments, never imported by production code |
-
-External services: Supabase (Auth and Postgres), Composio (Gmail OAuth, retrieval and the new-mail trigger), Kapso (WhatsApp Cloud API), an LLM provider, and Brave Search (merchant lookup for categorization).
+Shared `packages/contracts` validates transport data; `packages/core` implements services and repositories; `packages/db` supplies clients and generated types; `packages/integrations` adapts providers; `packages/ui` supplies HeroUI and the theme. Apps never import another app. Production code never imports `playground/llm` experiments.
 
 ```mermaid
 flowchart TB
-  User((User)) --> UI["PWA UI (apps/web, Vercel)"]
-  User --> WA[WhatsApp]
-  WA --> Kapso
-  UI --> Auth[Supabase Auth]
-  UI --> API["API routes (apps/web, Vercel)"]
-  API --> DB[("Supabase Postgres with RLS")]
-  UI -- "in-app chat" --> Agent["Agent core (apps/agent, Cloudflare)"]
-  Kapso -- "signed webhook" --> Agent
-  Agent -- "backend operations" --> API
-  Agent --> LLM[LLM provider]
-  Gmail --> Composio
-  Composio -- "signed new-mail webhook" --> API
-  API -- "ingest request" --> Jobs["Gmail and merchant queues, daily cron (apps/agent)"]
-  Jobs -- "ingestion operations" --> API
-  Jobs -- "reads messages" --> Composio
-  Jobs --> LLM
-  Jobs --> Brave[Brave Search]
+  UI[Browser PWA] -->|session cookie| API[Next.js authenticated backend]
+  API -->|owned services| DB[(Supabase data and RLS)]
+  API -->|verified identity and server secret| Agent[Cloudflare Agent and jobs]
+  Agent -->|allowlisted backend operations| API
+  Kapso[Kapso signed webhook] --> Agent
+  Agent -->|resolve verified WhatsApp Link| API
+  Composio[Composio Gmail] -->|signed webhook| API
+  Agent -->|read permitted mail| Composio
+  Agent --> Models[Model provider]
+  Agent -->|catalog public brands only| Brave[Brave Search]
 ```
 
-### Data flows
+**Email to ledger (F2-F4).** Authenticated connection routes discover institutions, let the User associate built-in or private Custom Banks with Financial Accounts, and maintain a sender-limited new-mail trigger. The [Composio webhook](../../apps/web/src/app/api/webhooks/composio/route.ts) verifies the signed event and resolves the stored connection. [Gmail queues](../../apps/agent/src/gmail) read permitted mail, extract stated facts and request backend ingestion. Typed categorization follows as a separate job. Durable message and item identities prevent duplicate ledger inserts. Automatic confirmation requires complete original facts, an active mapped account, a compatible type and Category, and available extraction/classification confidence at or above the SQL helper's **0.5**. DKIM/SPF alignment is retained as evidence but is not a review gate. Internal is selected first by deterministic owner-name matching; compatible expense, income and exclusion fallbacks can also confirm. See [extraction](extraction.md) for exact guards, source-date handling and terminal review outcomes. Earlier merchant classifications are not reused as authority.
 
-1. **Email to ledger (F2 to F4).** The User connects Gmail through Composio, which is separate from sign-in. The web backend discovers which supported institutions the mailbox has mail from (`packages/contracts/src/institutions/institution-senders.json`) and creates a Composio new-mail trigger limited to those senders. When mail arrives, Composio calls `/api/webhooks/composio`, which verifies the signature, finds the connection from its own record, and asks the Worker to ingest that message. A daily cron (01:00 UTC) and a manual sync cover anything the trigger missed. The Worker's queue consumers (`apps/agent/src/gmail`) read the message, check the sender and Gmail's own DKIM or SPF result, extract fields with the LLM, and call the Gmail ingestion operations on the backend. A merchant job looks up a Category from history or Brave Search. Each Gmail message is claimed once and each item has a stable index, so retries do not create duplicates. Items start pending. The database confirms one only when Gmail authenticated the sender, the model confidence is at least 0.9, it has an amount, a date and a mapped Financial Account, and it is an expense or income. Everything else waits in the Review Queue.
-2. **Chat to action (F10 to F12).** The [web Chat bridge](../../apps/web/src/app/api/chat/route.ts) verifies the session and same origin, injects identity and forwards the message to the [Worker](../../apps/agent/src/conversation/index.ts). Registered tools call the [authenticated operation route](../../apps/web/src/app/api/agent/operations/[operation]/route.ts), which runs the [financial services](../../apps/web/src/lib/finance/service.ts) with owned-resource checks. On WhatsApp the Worker verifies the Kapso signature and asks the backend who the sender is (`api/agent/whatsapp/resolve-sender`). Only a verified WhatsApp Link names a User. The User creates the link from Profile (`api/whatsapp/link`). A receipt photo becomes one pending transaction (`apps/agent/src/whatsapp/receipt.ts`). Voice notes get a fixed reply because they are not read yet. Both Channels end in the same Agent function, described in [the Agent section](agent.md).
-3. **Notifications and Reminders (F13).** [Financial services](../../packages/core/src/finance.ts) create deduplicated Budget-threshold Reminders when confirmed spending crosses a Budget's warning percent or 100%. The dashboard shows them, and owned list, read and archive operations store read receipts. For a User with a verified WhatsApp Link the backend can also send the `budget_alert` template through Kapso, holding alerts between 22:00 and 07:00 Jakarta time and allowing three a day, with the Worker's 15-minute cron sending held alerts. That WhatsApp delivery is **deferred for the submission** and was not tested against a real number. Details are in [the Reminders section](reminders.md). **Planned:** bill-due Reminders. User-created Reminders in the UI live in browser memory only.
+**Chat to action (F10-F12, photo part of F14).** The [web Chat bridge](../../apps/web/src/app/api/chat/route.ts) verifies the Google session and origin, injects identity, then calls the Worker with a server secret. The browser never directly supplies trusted identity to the Worker. Kapso messages resolve a verified WhatsApp Link through the backend. Both Channels use the [conversation runtime](../../apps/agent/src/conversation); its tools call authenticated backend operations. WhatsApp photos have a separate pending-receipt path; voice remains Planned. Web exchanges are stored after the verified response. When only history persistence fails, the app can retry a signed, owner-bound save receipt for 24 hours without invoking the Agent or repeating the financial action. [Agent documentation](agent.md) covers permissions, Undo and the remaining lost-reply risk.
 
-### Identity and trust boundaries
+**Derived data and background work (F7-F9, F13, forecast extension).** Confirmed spending drives Budget calculations and deduplicated in-app threshold Reminders. Forecasts persist derived estimates separately from ledger transactions; Goals record manual progress without moving money. The [Worker entry point](../../apps/agent/src/index.ts) and [Wrangler configuration](../../apps/agent/wrangler.jsonc) define Gmail and merchant queues, one WhatsApp Durable Object per User, and four schedules: deletion cleanup every minute, Reminder dispatch every 15 minutes, Gmail catch-up daily at 01:00 UTC, and forecast refresh daily at 17:00 UTC (midnight in Jakarta). The production Worker inspected for this reconciliation reported the same schedules and baseline commit. Budget-alert dispatch is implemented, but no successful real-template delivery was exercised; bill-due production remains Planned. See [Reminders](reminders.md) and [forecast](forecast.md).
 
-- Sign-in uses Supabase Auth with Google. The Gmail Connection is separate, and Composio holds the Gmail credentials, so Monara never stores Gmail OAuth tokens or raw email bodies.
-- A WhatsApp number must be linked and verified by the signed-in User before it can reach any data.
-- The Agent and the Gmail jobs never write to Supabase directly. They call backend operations with a shared server-side secret plus verified User context. System jobs take ownership from the stored connection, not from the request.
-- Incoming webhooks are signed: Kapso for WhatsApp and Composio for new mail, each checked before the body is read.
-- Row-level security is the last line of defense, not the only one.
-- Provider keys stay server-side. Only the public Supabase URL and publishable key reach the browser.
-
-### Implementation status (source on `main` at `00700cd`, 18 October 2026)
-
-| Area | Source status | Remaining acceptance |
-| --- | --- | --- |
-| Workspace boundaries, gates and worktree isolation | Implemented | Clean-clone check |
-| PWA screens, first-run onboarding and unified ledger and review views | Implemented | Physical-phone installation, touch and keyboard |
-| Google Auth, schema, migrations, RLS and owned financial services | Implemented | Configured OAuth and live-session isolation |
-| Gmail connection, institution discovery, trigger, queues, extraction and auto-confirm | Implemented | A run against a real mailbox on the deployed stack |
-| Agent loop, web bridge, tiered tools and destructive confirmation | Implemented | Live provider scenarios and durable turn recovery |
-| WhatsApp webhook, sender resolution, Link routes and receipt photos | Implemented | A linked number end to end on the deployed stack. Voice notes are not read |
-| Budget-threshold Reminders, WhatsApp budget alerts and owned read and archive receipts | Implemented. WhatsApp delivery is deferred | In-app Reminders are accepted as is. A WhatsApp send was not tested against a real number. Bill-due Reminders are Planned |
-| Sandbox and red-team scenarios | Synthetic runs recorded in [the Agent section](agent.md) | A final run recorded in [the evaluation section](evaluation.md) |
-
-This table separates source code from deployed configuration. A passing local build does not show that the hosted services are configured.
+**Permanent deletion (F1 extension).** [ADR 0004](../adr/0004-permanent-user-deletion.md) requires the exact phrase and acknowledgement in Profile, with no Undo or recovery period. Acceptance blocks access immediately. Durable cleanup covers provider connections, conversations, private goal images and Auth identity. Upload intents fence uncertain Storage outcomes so Auth deletion does not complete while an object may still need reconciliation. Live provider copies, delivery history and backups remain outside what local source inspection can prove. Acceptance and reported cleanup completion are separate states.
 
 ## Key decisions
 
-- **The backend owns financial writes, and the Agent calls it.** The alternative was letting the Agent write to Supabase directly. We rejected it so validation, ownership checks and audit logging live in one place (ADR 0001).
-- **Two deployables, web on Vercel and the Agent on Cloudflare.** A single Next.js app was the alternative. Email import needs durable queues, a daily cron and per-User conversation state, which fit a Worker with Durable Objects, so the Agent ships separately.
-- **A new-mail trigger plus a daily catch-up, not polling alone.** The trigger imports a new bank email within seconds. We kept the daily cron because a missed or failed webhook would otherwise leave a gap.
-- **Auto-confirm only for authenticated, high-confidence imports.** The alternative was confirming every import by hand. That makes the ledger lag behind, so a message with a passing DKIM or SPF result, confidence of at least 0.9 and a mapped account is confirmed on import. Anything uncertain stays pending, and the rule is enforced in the database, not only in code.
-- **Transfers and non-personal records are an `exclusion` type, not a separate transfer table.** They stay visible for audit and deduplication and never count toward income or spending.
-- **Shared packages with a one-way dependency direction.** Apps never import apps, and UI stays presentation only (see `docs/repository-structure.md`).
-- **One channel-agnostic Agent.** In-app chat and WhatsApp use the same core, so demos and evaluations do not depend on a phone link.
-- **Composio for Gmail OAuth.** It keeps tokens out of our database.
+- Backend-owned writes replace direct Agent database access, keeping validation and resource ownership in one place (ADR 0001).
+- Two deployables replace a single request runtime because queues, schedules and per-User WhatsApp state need durable execution.
+- Separate Gmail consent replaces reusing Google sign-in as mailbox authority. A verified WhatsApp Link similarly replaces trusting a phone number.
+- Typed Categories and exclusions replace name-based financial treatment; [ADR 0005](../adr/0005-typed-transaction-categories.md) keeps Category identity compatible with Transaction Type.
+- Public-only offline fallback replaces cached private app pages. Forecast estimates remain separate from confirmed money and never create transactions.
 
 ## Security and risks
 
-- The Agent's tools are tiered: read, reversible write, destructive with confirmation, and never in chat. The tiers, identity checks and the known-risk list are in the [Security Self-Assessment](security-self-assessment.md).
-- Email, receipt and voice content is treated as data in the prompt. Prompt instructions alone do not prove safety, so the Sandbox includes injected-email and injected-record attacks.
-- Webhooks are signed, and the Composio check also rejects events more than five minutes old. Missing secrets make a route fail closed, and unsupported operations fail with an explicit error.
-- External services can fail or be slow. Queue jobs retry a limited number of times, and the daily cron recovers imports a trigger missed.
-- Open risks: there is no application-level rate limit on the web and chat routes, and no page-level Content Security Policy. Both are recorded in the self-assessment.
+Session identity, stored connection ownership, webhook signatures and backend authorization protect different boundaries; a shared secret or service-role key alone cannot authorize a User's resources. Provider credentials stay server-side. External text and model output remain untrusted and pass validation before writes. Brave lookup accepts only canonical public catalog brands, without personal names or financial/email content.
+
+The source has instance-local request limits, not a global quota, and lacks a page-wide CSP. Provider configuration, model accuracy, queue recovery, deletion races and real cross-channel acceptance need separate evidence. A lost Agent response can still leave the User unsure whether a financial write completed; save-only Chat recovery covers history persistence, not turn execution. See the separate [Security Self-Assessment](security-self-assessment.md) for the risk inventory.
 
 ## How to verify
 
-- Run `pnpm install`, `pnpm check` and `pnpm build` on Node 24 from a clean clone. Source gates and a dry-run Worker bundle do not prove deployment.
-- `pnpm dev` serves the web app, and `pnpm dev:agent` serves the Agent. `GET /health` on the Agent returns `{"service":"monara-agent","status":"ok"}`.
-- For Gmail, run `pnpm dev`, `pnpm dev:tunnel` and `pnpm dev:agent` in separate terminals and connect a test mailbox through the dev Composio project (see `AGENTS.md`).
-- Replay the migrations and run the ownership suite with `pnpm db:check --reset --base-ref origin/main`.
-- The measured scenario results are in [the Agent section](agent.md) and [the evaluation section](evaluation.md).
+Run `pnpm docs:check`, `pnpm check` and `pnpm build` on Node 24. The build compiles Next.js and bundles Wrangler locally; it does not deploy. The [development harness](../adr/0002-development-harness.md) and [worktree decision](../adr/0003-worktree-environments.md) describe local isolation. The latest inspected GitHub CI run for this baseline passed all jobs, including React Doctor and database checks; the latest inspected Supabase workflow validated and deployed the migration history. Those checks prove automation consistency, not provider acceptance.
+
+Use the section-specific service, route, Worker and SQL tests linked in [extraction](extraction.md), [Agent](agent.md), [Reminders](reminders.md), [forecast](forecast.md) and [data/security](data-and-security.md) for ownership and behavior. Schema replay requires a disposable local stack. Verify signed and invalid webhooks, duplicate imports, unknown identities, terminal review, queue retries and deletion cleanup before provider acceptance. Use [evaluation](evaluation.md) for dated synthetic model results and [deletion evidence](../evidence/user-deletion-2026-10-19.md) for its recorded local test layer. Neither is a current live-provider run.

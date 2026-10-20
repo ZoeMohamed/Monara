@@ -3,34 +3,41 @@
 Owner: Adlyn. Features: F2, F3, F8, F14. Status: Draft.
 
 ## Purpose
-The pipeline turns supported, authenticated institution emails into expense, income, or exclusion records. It preserves uncertain data for User review instead of inventing values. Receipt, voice-note, and WhatsApp ingestion remain separate work.
+
+Monara turns institution emails into reviewable financial records and supports a separate WhatsApp receipt-photo path. This section describes `origin/main` at `c9e5ea0`, including the final Gmail confidence/fallback and source-date policies. F8 recurring-bill detection and the voice part of F14 remain Planned; the [spending forecast](forecast.md) predicts spending but does not create confirmed Recurring Bills.
 
 ## How it works
-Composio authorizes Gmail separately from Supabase sign-in. The agent discovers supported institution senders, retrieves messages for the import window, verifies Gmail authentication results, and sends bounded email text to the structured extractor. Deterministic guards then validate the IDR amount, date, location, account hint, and schema before the Next.js-owned backend records anything.
 
-Each Gmail message is claimed once and each extracted item has a stable source index, so retries do not duplicate transactions. New items are either auto-confirmed by the policy below or remain pending in the Review Queue. Exclusions preserve reimbursements, internal transfers, duplicates, and non-personal activity for audit and deduplication, but never affect totals.
+Google sign-in and Composio Gmail authorization are separate. The backend resolves an active connection to its owner and Financial Accounts. `apps/agent/src/gmail/pipeline.ts` lists only exact senders registered for those accounts, including sender lists from the User's owned private bank definitions. Initial import covers 30 days; later syncs overlap the previous cursor by one day, bounded by that same window. A daily job and provider triggers use the same import boundary.
 
-```mermaid
-flowchart LR
-  Gmail --> Composio --> Verify[Sender and message verification]
-  Verify --> Extract[Structured LLM extraction]
-  Extract --> Guard[Deterministic field guards]
-  Guard --> Map[Owned account mapping]
-  Map -->|all auto-confirm gates pass| Confirmed
-  Map -->|any gate fails| Review[Pending review]
-```
+`packages/core/src/gmail-connections.ts` enforces up to three active Gmail connections, verifies the completing provider session belongs to the signed-in User, and revokes provider access before marking a disconnect successful. Connection status and sync counts are exposed through backend APIs; inactive connections stop queued imports while retained message identifiers prevent reimport duplicates.
+
+Messages are claimed before extraction. A unique connection/message pair and unique processed-message/item-index pair make replay idempotent. The pipeline rechecks connection activity around provider calls, skips known non-transaction subjects, parses batches, and queues categorization separately. Retry recovery also requeues persisted items whose categorization has not finished.
+
+`apps/agent/src/gmail/email-text.ts` removes HTML and boilerplate and bounds the body to 4,000 characters. The structured extractor in `apps/agent/src/gmail/parse/extract.ts` has no tools. It treats email text as untrusted data and returns at most 20 items. Code parses whole IDR amounts, requires copied amounts and locations to appear in the text, and rejects implausible dates. A guarded field caps extraction confidence at 0.5. These checks constrain model assertions; they do not independently prove every semantic interpretation. If Gmail contains no usable stated date, ingestion records the email's arrival day in Jakarta as a source-derived fallback; receipt and manual sources do not receive that fallback.
+
+The backend persists each Gmail item pending with extraction evidence. Categorization first applies deterministic Internal matching; otherwise a model selects a compatible owned Category and transaction type for that individual item. Public merchant lookup may use a canonical name from the bundled catalog, but previous model classifications or the User's corrections are not reused as authority. A User edit stops automatic application to that item.
+
+Import progress waits for extraction and categorization. A null choice or exhausted classification retry becomes terminal `needs_review`; a pending financial record does not keep sync active. A qualifying item can move from pending to confirmed only when its original facts, account mapping, Category compatibility and confidence satisfy the database policy.
+
+For receipt photos, `apps/agent/src/whatsapp/receipt.ts` reads JPG, PNG or WebP media from a verified linked sender. Bytes remain in memory; `add_receipt_transaction` always creates a pending record keyed by the WhatsApp message ID. Account matching requires a single active last-four match or account-name hint. Unreadable amounts save nothing, and an absent date remains null for the User to supply during review.
 
 ## Key decisions
-The auto-confirm boundary is `0.95`. A score at or above that value is necessary but not sufficient. The sender must also pass Gmail authentication, the transaction must be an expense or income, amount and date must be present, currency must be IDR, merchant or description must be present, and the institution must resolve to exactly one active Financial Account owned by the User. A sole account for that institution may resolve without a last-four hint; when several accounts match the institution, the last four digits must identify exactly one. Missing or ambiguous fields, unverified senders, exclusions, and scores below `0.95` stay pending.
 
-This conservative boundary is appropriate while confidence is model-reported rather than calibrated against a labeled production dataset. `0.90` would reduce review work but carries more silent-ledger risk. Requiring every item to be reviewed is safer but removes the product's main automation benefit. The threshold should only be lowered after measuring field-level precision and false-confirm rates on synthetic and consented labeled emails.
-
-Category is not an auto-confirm gate. A category can be filled from the User's confirmed merchant history or later enrichment without changing the transaction amount or whether it contributes to totals. Missing values remain null. The retired three-argument ingestion function was removed because it could not carry sender-verification evidence.
+- Use available Review Confidence instead of requiring two scores. [The authoritative migration](../../supabase/migrations/20261019160000_gmail_confidence_only_review.sql) takes the lower score when extraction and classification are both present, uses the one present score otherwise, and keeps both-absent or below-0.5 results pending. Compatible classification and complete facts remain mandatory.
+- Require stated IDR facts, merchant or description, and a mapped active owned account. `apps/agent/src/gmail/sender.ts` records aligned DKIM or SPF from Gmail's trusted authentication result, but authentication is evidence rather than a review gate. One account for the institution/mailbox may resolve without last four; multiple candidates need a unique last-four match.
+- Select Internal first through deterministic owner-name matching. Another personal name selects Person; remaining compatible items use a specific Category or typed Misc fallback. Expense, income and exclusion may qualify for auto-confirmation, and every confirmed exclusion stays outside totals.
+- Search a bundled public brand instead of trusting a model's business label. `businessSearchName` permits an exact catalog label or alias and sends only its canonical name to Brave; personal names, identifiers, email content, amounts and descriptions do not enter that query.
+- Keep receipt writes pending instead of using the confirmed chat-write path. Receipt confidence cannot bypass User review. Voice remains Planned and receives a fixed unsupported reply.
 
 ## Security and risks
-Email content is untrusted data, is bounded, and is kept inside prompt delimiters. Extracted amounts and locations must appear in the source, implausible dates are removed, and any guarded value caps confidence below the auto-confirm threshold. Provider credentials and raw email content are not written to transaction records or logs. The backend derives ownership from the claimed Gmail connection; callers cannot assert a User ID or Financial Account belonging to another User.
 
-The remaining risk is score calibration: a high model confidence is not a statistical guarantee. Sender verification and deterministic completeness checks reduce that risk, while the Review Queue remains the fallback. Production monitoring should track confirmed corrections before any threshold change.
+Confidence is model-reported, not calibrated accuracy. Prompt delimiters, explicit untrusted-data instructions, strict schemas, source checks, owned IDs and backend validation reduce risk but cannot establish injection immunity. A listed sender can still qualify when DKIM/SPF alignment fails, one score can decide when the other is absent, and 0.5 is a product threshold rather than a measured real-inbox boundary.
+
+Gmail's source-arrival fallback is deliberately source-specific; receipt and manual transactions remain undated until review. Historical rows backfilled under earlier rules need a source audit before their dates can be claimed as stated facts. The recorded attack/extraction suite is historical and synthetic and did not measure receipt-photo injection or current-main model behavior. Live Composio authorization, queue recovery, provider retention and end-to-end receipt delivery require environment-specific evidence.
 
 ## How to verify
-Run `pnpm db:check --reset` in a disposable Docker worktree to replay every migration, lint SQL, run pgTAP ownership tests, and compare generated database types. The tests cover `0.949` pending, `0.950` confirmed, unverified senders, incomplete data, exclusions, unknown and ambiguous accounts, cross-User ownership, retries, and deduplication. Run `pnpm --filter @monara/agent test` for the extractor's amount, currency, date, location, prompt-injection, and schema guards. No accuracy percentage is claimed until a labeled evaluation set has been measured.
+
+Run `pnpm --filter @monara/agent test` and `pnpm --filter @monara/core test` for fake-backed extraction, sender, categorization, persistence and receipt boundaries. Relevant tests include `apps/agent/test/gmail-extract.test.ts`, `merchant-pipeline.test.ts`, and `receipt.test.ts`.
+
+On a disposable local database, run `pnpm db:check --reset --base-ref origin/main`. Inspect the Gmail categorization, confidence, Custom Banks and source-date pgTAP files: qualifying classifications confirm, incompatible Categories or missing direction fail, Internal requires owner evidence, retries deduplicate, edits survive, and terminal review completes progress. The latest baseline CI passed the database suite, but no new model run or real-inbox accuracy percentage is claimed here. Historical labeled-email measurements and their limits belong in [evaluation](evaluation.md).

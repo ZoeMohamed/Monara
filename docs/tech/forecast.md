@@ -4,7 +4,7 @@ Owner: Abhip. Features: F17. Status: Draft.
 
 ## Purpose
 
-The forecast tells a User what they are likely to spend for the rest of the month, before they spend it. It lists the payments they are expected to make, such as Spotify on the 25th or chicken rice every Monday, Wednesday and Friday, each with a confidence, and it totals what is expected this week and this month. It runs weekly and on demand, so a demo can trigger it by hand. A forecast is a prediction. It is always labelled as expected, and it never counts toward confirmed spending, income or Budget usage.
+The forecast tells a User what they are likely to spend for the rest of the month, before they spend it. It lists the payments they are expected to make, such as Spotify on the 25th or chicken rice every Monday, Wednesday and Friday, each with a confidence, and it totals what is expected this week and this month. It runs nightly at 00:00 Jakarta time and on demand, so a demo can trigger it by hand. A forecast is a prediction. It is always labelled as expected, and it never counts toward confirmed spending, income or Budget usage. This section describes `origin/main` at `c9e5ea0` and retains the separately dated synthetic backtest below.
 
 ## How it works
 
