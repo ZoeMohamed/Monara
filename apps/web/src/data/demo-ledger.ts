@@ -113,21 +113,20 @@ export function updateConfirmedTransaction(
   ) {
     return transactions;
   }
-  const { merchant, category, amount, currency, date, time, method, kind } = values;
   const corrected: Transaction = {
     ...existing,
-    merchant,
-    category,
-    amount,
-    currency,
-    date,
-    time,
-    method,
-    kind,
-    ...(values.categoryIcon === undefined ? {} : { categoryIcon: values.categoryIcon }),
-    ...(values.financialAccountId === undefined
-      ? {}
-      : { financialAccountId: values.financialAccountId }),
+    merchant: values.merchant,
+    category: values.category,
+    categoryIcon: values.categoryIcon,
+    categoryKind: values.categoryKind,
+    amount: values.amount,
+    currency: values.currency,
+    date: values.date,
+    time: values.time,
+    method: values.method,
+    kind: values.kind,
+    categoryId: values.categoryId,
+    financialAccountId: values.financialAccountId,
   };
   return transactions.map((transaction) => (transaction === existing ? corrected : transaction));
 }

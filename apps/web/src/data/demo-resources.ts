@@ -26,7 +26,7 @@ export function initialDemoAccounts(): FinancialAccount[] {
   }));
 }
 
-// Demo category IDs are editor choices only; the synthetic ledger groups by name.
+// Demo categories use the same stable identity as the signed-in ledger.
 export function demoEditorCategories(budgets: Budget[]): Category[] {
   const presets = [
     ...expenseCategoryPresets.map((preset) => ({ ...preset, kind: "expense" as const })),
@@ -76,6 +76,7 @@ export function demoTransactionSelection(
   const category = resources.categories.find((item) => item.id === draft.category);
   return {
     category: category?.name ?? null,
+    categoryId: category?.id ?? null,
     categoryIcon: category?.icon,
     categoryKind: category?.kind,
     method: payment?.name ?? null,

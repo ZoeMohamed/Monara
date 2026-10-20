@@ -38,8 +38,8 @@ export type AppSession = {
   updateDemoCustomBank: (input: UpdateCustomBankInput) => void;
   categories: Category[];
   createDemoCategory: (input: { name: string; icon: string; kind: Category["kind"] }) => void;
-  updateDemoCategory: (original: string, changes: { name: string; icon: string }) => void;
-  archiveDemoCategory: (name: string) => void;
+  updateDemoCategory: (categoryId: string, changes: { name: string; icon: string }) => void;
+  archiveDemoCategory: (categoryId: string) => void;
   createDemoAccount: (input: Omit<CreateFinancialAccountInput, "clientRequestId">) => void;
   updateDemoAccount: (
     accountId: string,
