@@ -297,18 +297,22 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
         `This category already has a ${changes.cadence} budget. Keep its current period or edit the other budget.`,
       );
     const expected = { ...before, ...changes };
-    const categoryIcon = demoCategories.find((category) => category.name === before.category)?.icon;
+    const categoryIcon = demoCategories.find(
+      (category) => category.kind === "expense" && category.name === before.category,
+    )?.icon;
     setBudgets((items) => items.map((budget) => (budget.id === budgetId ? expected : budget)));
     if (changes.icon) {
       setDemoCategories((categories) =>
         categories.map((category) =>
-          category.name === before.category
+          category.kind === "expense" && category.name === before.category
             ? { ...category, icon: changes.icon ?? category.icon }
             : category,
         ),
       );
       setTransactions((items) =>
         items.map((transaction) =>
+          transaction.kind === "expense" &&
+          (transaction.categoryKind ?? transaction.kind) === "expense" &&
           transaction.category === before.category
             ? { ...transaction, categoryIcon: changes.icon ?? transaction.categoryIcon }
             : transaction,
@@ -354,12 +358,19 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       if (categoryIcon) {
         setDemoCategories((categories) =>
           categories.map((category) =>
-            category.name === before.category ? { ...category, icon: categoryIcon } : category,
+            category.kind === "expense" &&
+            (category.id === before.categoryId ||
+              (!before.categoryId && category.name === before.category))
+              ? { ...category, icon: categoryIcon }
+              : category,
           ),
         );
         setTransactions((items) =>
           items.map((transaction) =>
-            transaction.category === before.category
+            transaction.kind === "expense" &&
+            (transaction.categoryKind ?? transaction.kind) === "expense" &&
+            (transaction.categoryId === before.categoryId ||
+              (!before.categoryId && transaction.category === before.category))
               ? { ...transaction, categoryIcon }
               : transaction,
           ),
@@ -409,9 +420,12 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       if (
         !name ||
         name.length > 100 ||
-        demoCategories.some((category) => category.name.toLowerCase() === name.toLowerCase())
+        demoCategories.some(
+          (category) =>
+            category.kind === input.kind && category.name.toLowerCase() === name.toLowerCase(),
+        )
       )
-        throw new Error("Choose a new category name, up to 100 characters.");
+        throw new Error("Choose a new name for this category type, up to 100 characters.");
       const id = crypto.randomUUID();
       const timestamp = new Date().toISOString();
       setDemoCategories((categories) => [
@@ -431,42 +445,53 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       ]);
       setNotice({ message: "Category added for this demo visit." });
     },
-    updateDemoCategory: (original, changes) => {
+    updateDemoCategory: (categoryId, changes) => {
       if (live) return;
+      const original = demoCategories.find((category) => category.id === categoryId);
+      if (!original || original.isArchived)
+        throw new Error("That category is no longer available.");
       const name = changes.name.trim();
       if (
         !name ||
         name.length > 100 ||
         demoCategories.some(
           (category) =>
-            category.name !== original && category.name.toLowerCase() === name.toLowerCase(),
+            category.id !== categoryId &&
+            category.kind === original.kind &&
+            category.name.toLowerCase() === name.toLowerCase(),
         )
       )
-        throw new Error("Choose a different category name, up to 100 characters.");
+        throw new Error("Choose a different name for this category type.");
       setDemoCategories((categories) =>
         categories.map((category) =>
-          category.name === original ? { ...category, name, icon: changes.icon } : category,
+          category.id === categoryId ? { ...category, name, icon: changes.icon } : category,
         ),
       );
       setBudgets((budgets) =>
         budgets.map((budget) =>
-          budget.category === original ? { ...budget, category: name, icon: changes.icon } : budget,
+          budget.categoryId === categoryId ||
+          (!budget.categoryId && budget.category === original.name && original.kind === "expense")
+            ? { ...budget, category: name, icon: changes.icon }
+            : budget,
         ),
       );
       setTransactions((transactions) =>
         transactions.map((transaction) =>
-          transaction.category === original
+          transaction.categoryId === categoryId ||
+          (!transaction.categoryId &&
+            transaction.category === original.name &&
+            (transaction.categoryKind ?? transaction.kind) === original.kind)
             ? { ...transaction, category: name, categoryIcon: changes.icon }
             : transaction,
         ),
       );
       setNotice({ message: "Category updated for this demo visit." });
     },
-    archiveDemoCategory: (name) => {
+    archiveDemoCategory: (categoryId) => {
       if (live) return;
       setDemoCategories((categories) =>
         categories.map((category) =>
-          category.name === name ? { ...category, isArchived: true } : category,
+          category.id === categoryId ? { ...category, isArchived: true } : category,
         ),
       );
       setNotice({ message: "Category removed from new payments and budgets for this demo visit." });

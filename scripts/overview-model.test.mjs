@@ -79,6 +79,122 @@ test("overview figures and recent records only include valid confirmed transacti
   );
 });
 
+test("the category daily allowance remains useful when unrelated spending exhausts the overall estimate", () => {
+  const model = overviewModel(
+    [
+      record({ category: "Resto & Cafe", amount: 200000 }),
+      record({ category: "Transport", amount: 1200000 }),
+      record({ category: null, amount: 300000 }),
+    ],
+    [budget("Resto & Cafe", 1000000)],
+    [],
+    "2026-10",
+    "2026-10-20",
+  );
+  assert.equal(model.summary.spending, 1700000n);
+  assert.equal(model.safeToSpend.perDay, 0n);
+  assert.equal(model.safeToSpend.shortfall, 700000n);
+  assert.deepEqual(model.budgetGuide, {
+    limit: 1000000n,
+    spending: 200000n,
+    percent: 20,
+    remaining: 800000n,
+    shortfall: 0n,
+    daysLeft: 12,
+    perDay: 66666n,
+  });
+});
+
+test("the daily category guide combines overspending before clamping and counts the final day", () => {
+  const model = overviewModel(
+    [
+      record({ category: "Resto & Cafe", amount: 1100000 }),
+      record({ category: "Transport", amount: 100000 }),
+    ],
+    [budget("Resto & Cafe", 1000000), budget("Transport", 500000)],
+    [],
+    "2026-10",
+    "2026-10-31",
+  );
+  assert.equal(model.budgetGuide.remaining, 300000n);
+  assert.equal(model.budgetGuide.perDay, 300000n);
+  assert.equal(model.budgetGuide.shortfall, 0n);
+  const exhausted = overviewModel(
+    [record({ category: "Resto & Cafe", amount: 1100000 })],
+    [budget("Resto & Cafe", 1000000)],
+    [],
+    "2026-10",
+    "2026-10-20",
+  );
+  assert.equal(exhausted.budgetGuide.perDay, 0n);
+  assert.equal(exhausted.budgetGuide.shortfall, 100000n);
+});
+
+test("demo category guidance excludes future payments without changing the full-month totals", () => {
+  const model = overviewModel(
+    [
+      record({ amount: 200000, date: "2026-10-10" }),
+      record({ amount: 400000, date: "2026-10-30" }),
+    ],
+    [budget("Food & Drinks", 1000000)],
+    [],
+    "2026-10",
+    "2026-10-20",
+  );
+  assert.equal(model.summary.spending, 600000n);
+  assert.equal(model.budgetUsed, 600000n);
+  assert.equal(model.budgetGuide.spending, 200000n);
+  assert.equal(model.budgetGuide.remaining, 800000n);
+  assert.equal(model.budgetGuide.percent, 20);
+});
+
+test("signed-in category guidance uses matching monthly backend periods rather than local month totals", () => {
+  const monthly = { ...budget("Resto & Cafe", 1000000), id: "monthly-food" };
+  const guide = (budgetId, periodStartsOn, periodEndsOn, limit, spending) => ({
+    budgetId,
+    periodStartsOn,
+    periodEndsOn,
+    limit: { amountMinor: String(limit) },
+    spending: { amountMinor: String(spending) },
+  });
+  const insights = {
+    asOf: "2026-10-20",
+    safeToSpend: {
+      byCategory: [
+        guide("monthly-food", "2026-10-01", "2026-10-31", 1000000, 200000),
+        guide("weekly-food", "2026-10-19", "2026-10-25", 100000, 90000),
+        guide("another-budget", "2026-10-01", "2026-10-31", 9000000, 0),
+      ],
+    },
+  };
+  const model = overviewModel(
+    [record({ category: "Resto & Cafe", amount: 400000, date: "2026-10-30" })],
+    [monthly, { ...budget("Resto & Cafe", 100000), id: "weekly-food", cadence: "weekly" }],
+    [],
+    "2026-10",
+    "2026-10-20",
+    insights,
+  );
+  assert.equal(model.budgetUsed, 400000n);
+  assert.equal(model.budgetGuide.remaining, 800000n);
+  assert.equal(model.budgetGuide.perDay, 66666n);
+  assert.equal(model.budgetGuide.percent, 20);
+  const unavailable = overviewModel([], [monthly], [], "2026-10", "2026-10-20", {
+    asOf: "2026-10-20",
+    safeToSpend: { byCategory: [] },
+  });
+  assert.equal(unavailable.budgetGuide, null);
+  const stale = overviewModel([], [monthly], [], "2026-10", "2026-10-21", insights);
+  assert.equal(stale.budgetGuide, null);
+  const duplicated = overviewModel([], [monthly], [], "2026-10", "2026-10-20", {
+    ...insights,
+    safeToSpend: {
+      byCategory: [insights.safeToSpend.byCategory[0], insights.safeToSpend.byCategory[0]],
+    },
+  });
+  assert.equal(duplicated.budgetGuide, null);
+});
+
 test("budget attention prioritizes exact overspending over at-limit and warning states", () => {
   const model = overviewModel(
     [
@@ -155,6 +271,7 @@ test("empty and exclusion-only months have actionable empty state without invent
   assert.equal(empty.emptyTitle, "Start tracking");
   assert.equal(empty.hasFinancialActivity, false);
   assert.equal(empty.percent, 0);
+  assert.equal(empty.budgetGuide, null);
   assert.equal(empty.comparison.state, "no-baseline");
   const excludedOnly = overviewModel(
     [record({ kind: "exclusion" }), record({ status: "pending" })],
@@ -281,6 +398,7 @@ test("payday budgets show actual period headroom without a calendar daily guide"
   );
   assert.equal(model.calendarBudgetPeriods, false);
   assert.equal(model.safeToSpend, null);
+  assert.equal(model.budgetGuide, null);
   assert.equal(model.budgetUsed, 50n);
   assert.equal(model.remaining, 50n);
   assert.equal(model.usage[0].periodStartsOn, "2026-09-25");
