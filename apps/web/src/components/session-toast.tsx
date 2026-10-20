@@ -10,6 +10,7 @@ import type { SaveNotice } from "@/components/use-monara-session";
 // An Undo needs time to be noticed and used, so it stays up longer than a plain confirmation.
 const messageMs = 5_000;
 const undoMs = 9_000;
+const recoveryLabels = { refresh: "Refresh", history: "History", budgets: "Budgets" } as const;
 
 function subscribeToDialogs(callback: () => void) {
   const observer = new MutationObserver(callback);
@@ -35,7 +36,7 @@ function ToastCard({
   notice: SaveNotice;
   onUndo: () => void | Promise<void>;
   onDismiss: () => void;
-  onRecover: (action: "refresh" | "history") => void | Promise<void>;
+  onRecover: (action: "refresh" | "history" | "budgets") => void | Promise<void>;
 }) {
   const [held, setHeld] = useState({ pointer: false, focus: false });
   const [working, setWorking] = useState(false);
@@ -119,10 +120,12 @@ function ToastCard({
         <Button
           className={styles.undo}
           isDisabled={working}
-          onPress={() => void act(() => onRecover(notice.recovery as "refresh" | "history"))}
+          onPress={() =>
+            void act(() => onRecover(notice.recovery as "refresh" | "history" | "budgets"))
+          }
           variant="ghost"
         >
-          {working ? "Checking…" : notice.recovery === "refresh" ? "Refresh" : "History"}
+          {working ? "Checking…" : recoveryLabels[notice.recovery]}
         </Button>
       ) : null}
       <Button
@@ -149,7 +152,7 @@ export function SessionToast({
   notice: SaveNotice | null;
   onUndo: () => void | Promise<void>;
   onDismiss: () => void;
-  onRecover: (action: "refresh" | "history") => void | Promise<void>;
+  onRecover: (action: "refresh" | "history" | "budgets") => void | Promise<void>;
 }) {
   // Modal focus containment makes outside actions unreachable. Start the toast's
   // display and Undo window when the modal closes, keeping the result available.

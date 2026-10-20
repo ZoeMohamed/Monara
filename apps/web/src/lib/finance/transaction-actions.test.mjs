@@ -76,6 +76,15 @@ const receipt = {
   changedAt: latestVersion,
   undoExpiresAt: "2099-10-17T10:30:00Z",
 };
+const budgetBefore = {
+  id: "budget-demo",
+  category: "Ride-hail",
+  cadence: "weekly",
+  startsOn: "2026-10-12",
+  limit: 200000,
+  warningPercent: 80,
+  icon: "car",
+};
 
 function backendTransaction() {
   return {
@@ -105,8 +114,17 @@ function mountActions(respond, categoryKind = "expense", categoryArchived = fals
   const requests = [];
   const navigations = [];
   const state = {
+    live: true,
     transactions: [],
+    budgets: [],
+    restoredBudgets: [],
+    notices: [],
     editing: undefined,
+    rejecting: undefined,
+    resources: {
+      financialAccounts: [{ id: accountId }],
+      categories: [{ id: categoryId, kind: categoryKind, isArchived: categoryArchived }],
+    },
     notice: null,
     drafts: { [editorKey]: structuredClone(draft) },
     view: { adding: true, transactionId: null },
@@ -115,6 +133,7 @@ function mountActions(respond, categoryKind = "expense", categoryArchived = fals
   };
   const setter = (field) => (next) => {
     state[field] = typeof next === "function" ? next(state[field]) : next;
+    if (field === "notice") state.notices.push(state[field]);
   };
   const runtime = {
     useState(initial) {
@@ -143,14 +162,16 @@ function mountActions(respond, categoryKind = "expense", categoryArchived = fals
     cursor = 0;
     globalThis[runtimeKey] = runtime;
     return useTransactionActions({
-      live: true,
-      resources: {
-        financialAccounts: [{ id: accountId }],
-        categories: [{ id: categoryId, kind: categoryKind, isArchived: categoryArchived }],
+      live: state.live,
+      budgets: state.budgets,
+      restoreDemoBudget(before, categoryIcon) {
+        state.restoredBudgets.push({ before, categoryIcon });
+        state.budgets = state.budgets.map((budget) => (budget.id === before.id ? before : budget));
       },
+      resources: state.resources,
       transactions: state.transactions,
       editing: state.editing,
-      rejecting: undefined,
+      rejecting: state.rejecting,
       editorKey,
       async mutate(operation) {
         state.mutationCalls += 1;
@@ -161,6 +182,9 @@ function mountActions(respond, categoryKind = "expense", categoryArchived = fals
         navigate(patch, mode) {
           navigations.push({ patch, mode });
           state.view = { ...state.view, ...patch };
+        },
+        openEdit(id) {
+          state.openedEdit = id;
         },
         closePopup() {
           state.closed += 1;
@@ -461,5 +485,229 @@ describe("transaction action recovery", () => {
     assert.equal(actions.state.notice.tone, "warning");
     assert.equal(actions.state.notice.recovery, "history");
     assert.equal(actions.state.notice.undo, undefined);
+  });
+});
+
+describe("shared budget toast Undo", () => {
+  it("restores a demo budget and its category icon with one shared completion notice", async () => {
+    const actions = mountActions(() => assert.fail("Demo Undo must not call the backend"));
+    const expected = { ...budgetBefore, limit: 300000, icon: "wallet" };
+    actions.state.live = false;
+    actions.state.budgets = [expected];
+    actions.state.notice = {
+      message: "Budget updated.",
+      undo: { kind: "budget", before: budgetBefore, expected, categoryIcon: "car" },
+    };
+    await actions.render().undo();
+    assert.equal(actions.state.budgets[0], budgetBefore);
+    assert.deepEqual(actions.state.restoredBudgets, [
+      { before: budgetBefore, categoryIcon: "car" },
+    ]);
+    assert.deepEqual(actions.state.notices, [{ message: "Budget change undone." }]);
+    assert.equal(actions.state.notice.undo, undefined);
+    await actions.render().undo();
+    assert.equal(actions.state.restoredBudgets.length, 1);
+  });
+
+  it("never overwrites a newer or removed demo budget, or creates a duplicate period", async () => {
+    const expected = { ...budgetBefore, cadence: "monthly", limit: 300000 };
+    for (const budgets of [
+      [{ ...expected, limit: 350000 }],
+      [],
+      [expected, { ...budgetBefore, id: "another-weekly-budget" }],
+    ]) {
+      const actions = mountActions(() => assert.fail("Demo Undo must not call the backend"));
+      actions.state.live = false;
+      actions.state.budgets = budgets;
+      actions.state.notice = {
+        message: "Budget updated.",
+        undo: { kind: "budget", before: budgetBefore, expected },
+      };
+      await actions.render().undo();
+      assert.equal(actions.state.budgets, budgets);
+      assert.equal(actions.state.restoredBudgets.length, 0);
+      assert.equal(actions.state.notice.recovery, "budgets");
+      assert.equal(actions.state.notice.undo, undefined);
+    }
+  });
+
+  it("keeps a signed-in budget's receipt and routes expired Undo back to Budgets", async () => {
+    const actions = mountActions(() => assert.fail("Expired Undo must not reach the backend"));
+    actions.state.notice = {
+      message: "Budget saved.",
+      undo: {
+        kind: "backend",
+        receipt: { ...receipt, resourceType: "budget", undoExpiresAt: "2000-01-01T00:00:00Z" },
+      },
+    };
+    await actions.render().undo();
+    assert.equal(actions.requests.length, 0);
+    assert.equal(actions.state.notice.recovery, "budgets");
+    assert.equal(actions.state.notice.undo, undefined);
+  });
+});
+
+describe("live exclusion actions", () => {
+  const exclusionCategoryId = "00000000-0000-4000-8000-000000000202";
+  const exclusionValues = {
+    ...values,
+    kind: "exclusion",
+    category: "Internal",
+    categoryId: exclusionCategoryId,
+  };
+  const exclusionResponse = () =>
+    Response.json({
+      transaction: { ...backendTransaction(), kind: "exclusion", categoryId: exclusionCategoryId },
+      action: receipt,
+    });
+  const withReason = (actions) => {
+    actions.state.resources.categories.push({
+      id: exclusionCategoryId,
+      name: "My own accounts",
+      kind: "exclusion",
+    });
+    return actions;
+  };
+
+  it("creates a live exclusion with its owned reason UUID and offers Undo", async () => {
+    const actions = withReason(mountActions(exclusionResponse));
+    await actions.render().add(exclusionValues);
+    assert.equal(actions.requests[0].path, "/api/finance/operations/add_transaction");
+    assert.equal(actions.requests[0].input.kind, "exclusion");
+    assert.equal(actions.requests[0].input.categoryId, exclusionCategoryId);
+    assert.deepEqual(actions.state.notice.undo, { kind: "backend", receipt });
+    assert.match(actions.state.notice.message, /totals unchanged/);
+  });
+
+  it("edits an exclusion or converts spending to an exclusion through the saved ledger", async () => {
+    for (const existingKind of ["expense", "exclusion"]) {
+      const actions = withReason(mountActions(exclusionResponse));
+      actions.state.editing = {
+        ...values,
+        id: transactionId,
+        kind: existingKind,
+        status: "confirmed",
+        backend: { ...backendTransaction(), kind: existingKind },
+      };
+      await actions.render().save(exclusionValues, "correct", reviewedVersion);
+      assert.equal(actions.requests[0].path, "/api/finance/operations/edit_transaction");
+      assert.equal(actions.requests[0].input.changes.kind, "exclusion");
+      assert.equal(actions.requests[0].input.changes.categoryId, exclusionCategoryId);
+      assert.equal(actions.requests[0].input.expectedUpdatedAt, reviewedVersion);
+      assert.deepEqual(actions.state.notice.undo, { kind: "backend", receipt });
+    }
+  });
+
+  it("confirms a pending exclusion with its source date without inventing an amount or account", async () => {
+    const actions = mountActions(() =>
+      Response.json({
+        transaction: {
+          ...backendTransaction(),
+          kind: "exclusion",
+          money: null,
+          occurredOn: "2026-10-17",
+          financialAccountId: null,
+          categoryId: null,
+        },
+        action: receipt,
+      }),
+    );
+    actions.state.transactions = [
+      {
+        ...values,
+        id: transactionId,
+        kind: "exclusion",
+        amount: null,
+        date: "2026-10-17",
+        method: null,
+        status: "pending",
+        backend: {
+          ...backendTransaction(),
+          kind: "exclusion",
+          money: null,
+          occurredOn: "2026-10-17",
+          financialAccountId: null,
+          categoryId: null,
+          reviewStatus: "pending",
+        },
+      },
+    ];
+    await actions.render().confirm(transactionId);
+    assert.equal(actions.requests[0].path, "/api/finance/operations/confirm_pending");
+    assert.equal(actions.requests[0].input.values.money, null);
+    assert.equal(actions.requests[0].input.values.occurredOn, "2026-10-17");
+    assert.equal(actions.requests[0].input.values.financialAccountId, null);
+    assert.match(actions.state.notice.message, /totals unchanged/);
+  });
+
+  it("keeps undated imports pending and routes confirmation to Edit without a write", async () => {
+    const actions = mountActions(exclusionResponse);
+    const item = {
+      ...values,
+      id: transactionId,
+      kind: "exclusion",
+      status: "pending",
+      date: null,
+      backend: {
+        ...backendTransaction(),
+        kind: "exclusion",
+        reviewStatus: "pending",
+        occurredOn: null,
+      },
+    };
+    actions.state.transactions = [item];
+    await actions.render().confirm(transactionId);
+    assert.equal(actions.requests.length, 0);
+    assert.equal(actions.state.openedEdit, transactionId);
+    actions.state.rejecting = item;
+    await actions.render().rejectSelected();
+    assert.equal(actions.requests.length, 0);
+    assert.match(actions.state.rejectError, /actual transaction date/);
+    assert.equal(actions.state.closed, 0);
+  });
+
+  it("prevents a manual exclusion without an account or amount before sending", async () => {
+    const actions = withReason(mountActions(exclusionResponse));
+    for (const missing of [{ method: null, financialAccountId: null }, { amount: null }]) {
+      await assert.rejects(
+        actions.render().add({ ...exclusionValues, ...missing }),
+        /Check the transaction details/,
+      );
+    }
+    assert.equal(actions.requests.length, 0);
+  });
+
+  it("prevents unknown, archived, and spending category IDs from becoming exclusion reasons", async () => {
+    for (const category of [
+      undefined,
+      { id: exclusionCategoryId, kind: "exclusion", isArchived: true },
+      { id: exclusionCategoryId, kind: "expense", name: "Internal" },
+    ]) {
+      const actions = mountActions(exclusionResponse);
+      if (category) actions.state.resources.categories.push(category);
+      await assert.rejects(
+        actions.render().add(exclusionValues),
+        (error) => error.code === "VALIDATION_FAILED",
+      );
+      assert.equal(actions.requests.length, 0);
+    }
+  });
+
+  it("retains the live exclusion receipt and can reverse it", async () => {
+    const actions = mountActions((path) =>
+      path.endsWith("undo_action") ? Response.json({ ok: true }) : exclusionResponse(),
+    );
+    actions.state.rejecting = {
+      ...values,
+      id: transactionId,
+      status: "pending",
+      backend: backendTransaction(),
+    };
+    await actions.render().rejectSelected();
+    assert.equal(actions.requests[0].path, "/api/finance/operations/exclude_pending");
+    assert.deepEqual(actions.state.notice.undo, { kind: "backend", receipt });
+    await actions.render().undo();
+    assert.equal(actions.requests[1].path, "/api/finance/operations/undo_action");
+    assert.match(actions.state.notice.message, /Change undone/);
   });
 });

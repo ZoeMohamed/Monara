@@ -1,4 +1,4 @@
-import { jakartaDate } from "@monara/core";
+import { financialCalendarDate } from "@monara/contracts";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
@@ -27,7 +27,7 @@ export default function FinanceLayout({ children }: { children: React.ReactNode 
 async function AuthenticatedFinance({ children }: { children: React.ReactNode }) {
   const identity = await getAuthenticatedIdentity();
   if (!identity) redirect("/sign-in?next=/");
-  const today = jakartaDate(new Date());
+  const today = financialCalendarDate();
   let initialFinance: FinanceSnapshot;
   try {
     initialFinance = await loadFinanceSnapshot(
@@ -48,14 +48,13 @@ async function AuthenticatedFinance({ children }: { children: React.ReactNode })
     );
   }
   return (
-    <>
-      <UserSessionGuard setupKey={setupKeyForUser(identity.id)} />
+    <UserSessionGuard setupKey={setupKeyForUser(identity.id)}>
       <MonaraApp
         initialFinance={initialFinance}
         profile={{ ...profileFromIdentity(identity), setupKey: setupKeyForUser(identity.id) }}
       >
         {children}
       </MonaraApp>
-    </>
+    </UserSessionGuard>
   );
 }

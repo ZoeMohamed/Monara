@@ -10,11 +10,15 @@ export type BudgetDraft = {
   isActive: boolean;
 };
 
-export function budgetDraftOf(budget: Budget | undefined, today: string): BudgetDraft {
+export function budgetDraftOf(
+  budget: Budget | undefined,
+  today: string,
+  initialCadence: Budget["cadence"] = "monthly",
+): BudgetDraft {
   return {
     name: budget?.name ?? "",
     categoryId: budget?.categoryId ?? "",
-    cadence: budget?.cadence ?? "monthly",
+    cadence: budget?.cadence ?? initialCadence,
     amount: budget?.limit.amountMinor ?? "",
     startsOn: budget?.startsOn ?? today,
     warningPercent: String(budget?.warningPercent ?? 80),

@@ -1,10 +1,18 @@
 "use client";
 
-import type { Category, CreateFinancialAccountInput, FinancialAccount } from "@monara/contracts";
+import type {
+  Category,
+  CreateCustomBankInput,
+  CreateFinancialAccountInput,
+  CustomBank,
+  FinancialAccount,
+  UpdateCustomBankInput,
+} from "@monara/contracts";
 import { createContext, useContext } from "react";
 import type { DemoBudgetChanges } from "@/components/demo-budget-editor";
 import type { AppNavigation } from "@/components/use-app-navigation";
 import type { MutationOptions } from "@/components/use-finance-sync";
+import type { SaveNotice } from "@/components/use-monara-session";
 import type { ImportProgress } from "@/components/use-onboarding-engine";
 import { amountDisplay } from "@/data/amount-display";
 import type { Budget, RecurringBill, Reminder, Transaction } from "@/data/demo-ledger";
@@ -25,6 +33,9 @@ export type AppSession = {
   transactions: Transaction[];
   budgets: Budget[];
   financialAccounts: FinancialAccount[];
+  customBanks: CustomBank[];
+  createDemoCustomBank: (input: CreateCustomBankInput) => void;
+  updateDemoCustomBank: (input: UpdateCustomBankInput) => void;
   categories: Category[];
   createDemoCategory: (input: { name: string; icon: string; kind: Category["kind"] }) => void;
   updateDemoCategory: (original: string, changes: { name: string; icon: string }) => void;
@@ -44,6 +55,7 @@ export type AppSession = {
   }) => void;
   today: string;
   currentMonth: string;
+  notify: (notice: SaveNotice) => void;
   dataMode: "live" | "demo";
   financeSnapshot?: FinanceSnapshot;
   refreshFinance: () => Promise<void>;

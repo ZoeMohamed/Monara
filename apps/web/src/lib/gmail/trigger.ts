@@ -1,4 +1,4 @@
-import { findInstitution } from "@monara/contracts";
+import { institutionSources } from "@monara/contracts";
 import { GmailIngestionError } from "@monara/core";
 import { createComposioGmailTriggers } from "@monara/integrations";
 import { after } from "next/server";
@@ -32,7 +32,9 @@ async function syncMailboxTrigger(connectionId: string): Promise<void> {
   try {
     const connection = await repository.resolveConnection(connectionId);
     connectedAccountId = connection.composioConnectedAccountId;
-    senders = connection.institutionKeys.flatMap((key) => findInstitution(key)?.senderEmails ?? []);
+    senders = institutionSources(connection.institutionKeys, connection.customInstitutions).flatMap(
+      (entry) => entry.senderEmails,
+    );
   } catch (error) {
     if (!(error instanceof GmailIngestionError && error.code === "NOT_FOUND")) throw error;
   }

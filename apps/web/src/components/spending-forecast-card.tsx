@@ -18,7 +18,6 @@ import styles from "./spending-forecast-card.module.css";
 /** How many predictions show before the User asks for the rest. */
 const PREVIEW_ITEMS = 4;
 
-const percent = (confidence: number) => `${Math.round(confidence * 100)}%`;
 const rupiah = (money: { amountMinor: string }) => BigInt(money.amountMinor);
 
 function Totals({ totals }: { totals: ForecastSummary["totals"] }) {
@@ -58,9 +57,7 @@ function Row({ item }: { item: ForecastItem }) {
       </span>
       <span className={styles.amount}>
         <span data-amount>{formatRupiah(rupiah(item.amount))}</span>
-        <span className={styles.chip} data-tone={item.confidence >= 0.85 ? "high" : "medium"}>
-          {percent(item.confidence)} sure
-        </span>
+        <span className={styles.chip}>Expected</span>
       </span>
     </li>
   );

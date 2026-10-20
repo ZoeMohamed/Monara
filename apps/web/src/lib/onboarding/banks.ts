@@ -1,4 +1,5 @@
 import {
+  type CreateCustomBankInput,
   type CreateFinancialAccountInput,
   emailInstitutions,
   type GmailAccountSuggestion,
@@ -18,6 +19,9 @@ export type BankChoice = {
   /** The User already has a Financial Account for this one, so nothing is created. */
   linked: boolean;
   manual: boolean;
+  customInput?: CreateCustomBankInput;
+  accountName?: string;
+  logo?: string | null;
 };
 
 export function choiceFromSuggestion(suggestion: GmailAccountSuggestion): BankChoice {
@@ -61,10 +65,14 @@ export function removeChoice(choices: BankChoice[], institutionKey: string): Ban
 }
 
 /** Registry banks Gmail can read that are not listed yet, matching a search. */
-export function institutionsToAdd(choices: readonly BankChoice[], query: string): Institution[] {
+export function institutionsToAdd(
+  choices: readonly BankChoice[],
+  query: string,
+  custom: readonly Institution[] = [],
+): Institution[] {
   const taken = new Set(choices.map((choice) => choice.institutionKey));
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  return emailInstitutions
+  return [...emailInstitutions, ...custom]
     .filter((entry) => {
       if (taken.has(entry.key)) return false;
       const haystack = `${entry.provider} ${entry.name}`.toLowerCase();
@@ -84,7 +92,7 @@ export function accountInputFor(
   gmailConnectionId: string | null = null,
 ): CreateFinancialAccountInput {
   return {
-    name: choice.name,
+    name: choice.accountName ?? choice.name,
     institution: choice.provider,
     accountType: choice.platform === "E_WALLET" ? "wallet" : "bank",
     currency: "IDR",

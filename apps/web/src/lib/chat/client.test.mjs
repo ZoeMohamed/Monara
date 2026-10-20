@@ -10,7 +10,12 @@ import {
 } from "./client.ts";
 
 const chat = "11111111-1111-4111-8111-111111111111";
-const response = { reply: "October so far: Rp 397,490.", actions: [], confirmation: null };
+const response = {
+  reply: "October so far: Rp 397,490.",
+  actions: [],
+  confirmation: null,
+  historySave: { status: "saved", exchangeId: "11111111-1111-4111-8111-111111111112" },
+};
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -29,7 +34,12 @@ describe("in-app chat client", () => {
     assert.deepEqual(result, response);
     assert.equal(sent.url, "/api/chat");
     assert.equal(sent.credentials, "same-origin");
-    assert.deepEqual(sent.body, { text: "Where did it go?", history: [], conversationId: chat });
+    assert.deepEqual(sent.body, {
+      text: "Where did it go?",
+      history: [],
+      conversationId: chat,
+      historyRecovery: true,
+    });
   });
 
   it("surfaces the server's own error message and rejects unverifiable answers", async () => {
@@ -109,6 +119,22 @@ describe("in-app chat client", () => {
         assert.doesNotMatch(error.message, /Nothing was changed/);
         return true;
       });
+    }
+  });
+
+  it("requires checking records for oversized valid-shape replies instead of dropping their content", async () => {
+    for (const reply of ["x".repeat(12_001), "\u0001".repeat(12_000)]) {
+      await assert.rejects(
+        sendChatMessage("log coffee 25k", [], chat, async () =>
+          jsonResponse({ ...response, reply }),
+        ),
+        (error) => {
+          assert.ok(error instanceof ChatClientError);
+          assert.equal(error.actionMayHaveCompleted, true);
+          assert.match(error.message, /Check your records before trying again/);
+          return true;
+        },
+      );
     }
   });
 

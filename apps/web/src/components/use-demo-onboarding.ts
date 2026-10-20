@@ -1,5 +1,6 @@
 "use client";
 
+import type { CreateCustomBankInput } from "@monara/contracts";
 import { useCallback, useEffect, useState } from "react";
 
 import type {
@@ -43,6 +44,7 @@ function wait(ms: number) {
 export function useDemoOnboarding(
   enabled: boolean,
   phase: OnboardingPhase | null,
+  onCreateBank?: (input: CreateCustomBankInput) => void,
 ): OnboardingEngine {
   const [detected, setDetected] = useState(false);
   const [progress, setProgress] = useState<ImportProgress>(waitingProgress);
@@ -95,7 +97,14 @@ export function useDemoOnboarding(
     await wait(1_200);
     onConnected();
   }, []);
-  const saveBanks = useCallback(() => wait(500), []);
+  const saveBanks = useCallback(
+    async (choices: Parameters<OnboardingEngine["saveBanks"]>[0]) => {
+      for (const choice of choices)
+        if (choice.customInput && !choice.linked) onCreateBank?.(choice.customInput);
+      await wait(500);
+    },
+    [onCreateBank],
+  );
   const saveName = useCallback(() => wait(500), []);
   const retryDetection = useCallback(() => {
     setDetected(false);

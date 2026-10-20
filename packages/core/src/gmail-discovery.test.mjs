@@ -29,7 +29,13 @@ class ReadError extends Error {
   }
 }
 
-function setup({ page, readStatus, usable = true, inactive = false } = {}) {
+function setup({
+  page,
+  readStatus,
+  usable = true,
+  inactive = false,
+  customInstitutions = [],
+} = {}) {
   const calls = { listed: [], started: [], recorded: [], failed: [], errored: [] };
   const repository = {
     async resolveConnection(id) {
@@ -40,6 +46,7 @@ function setup({ page, readStatus, usable = true, inactive = false } = {}) {
         composioConnectedAccountId: "ca_1",
         categoryNames: [],
         institutionKeys: [],
+        customInstitutions,
       };
     },
     async startDiscovery(id) {
@@ -205,5 +212,28 @@ describe("isNewFinding", () => {
     assert.equal(isNewFinding(finding, firstScan, new Set(["BCA_CC"])), false);
     assert.equal(isNewFinding({ ...finding, dismissedAt: firstScan }, firstScan, new Set()), false);
     assert.equal(isNewFinding(finding, null, new Set()), false);
+  });
+});
+
+describe("private custom bank discovery", () => {
+  const bank = {
+    key: "custom_d7000000000040008000000000000001",
+    name: "Local Bank",
+    provider: "Local Bank",
+    platform: "BANKING_APP",
+    senderEmails: ["alerts@localbank.example"],
+  };
+  it("discovers only a custom source resolved for this owner", async () => {
+    const page = {
+      messages: [summary("custom-one", { senderAddress: "ALERTS@LOCALBANK.EXAMPLE" })],
+      nextPageToken: null,
+    };
+    const owned = setup({ customInstitutions: [bank], page });
+    const findings = await runGmailDiscovery(owned.deps, connectionId);
+    assert.equal(findings[0]?.institutionKey, bank.key);
+    assert.match(owned.calls.listed[0].query, /alerts@localbank.example/);
+    const foreign = setup({ page });
+    assert.deepEqual(await runGmailDiscovery(foreign.deps, connectionId), []);
+    assert.equal(foreign.calls.listed[0].query.includes("alerts@localbank.example"), false);
   });
 });

@@ -18,7 +18,6 @@ import { FinanceClientError } from "@/lib/finance/client";
 
 const typeLabels = { expense: "Expense", income: "Income", exclusion: "Exclusion" } as const;
 const statusLabels = { pending: "Needs review", confirmed: "Confirmed" };
-const statusColors = { pending: "warning", confirmed: "success" } as const;
 const sources: Record<TransactionSource, { icon: IconName; label: string }> = {
   manual_form: { icon: "compose", label: "Added by you" },
   gmail_email: { icon: "mail", label: "Imported from Gmail" },
@@ -102,9 +101,13 @@ function detailsOf(
             : "Currency missing",
     help:
       missing.length === 0
-        ? "Not included in totals until confirmed."
+        ? transaction.kind === "exclusion"
+          ? "Confirm to finish reviewing. This exclusion will stay out of your totals."
+          : "Not included in totals until confirmed."
         : pending
-          ? `Add the ${listOf(missing)} to confirm, or exclude it if it isn’t a real transaction.`
+          ? missing.includes("date")
+            ? `Open Edit to add the ${listOf(missing)}. The actual date is needed before you can confirm or exclude this record.`
+            : `Open Edit to add the ${listOf(missing)} before confirming, or exclude it to keep it out of your totals.`
           : `Add the ${listOf(missing)} to include it in your totals.`,
   };
 }
@@ -377,15 +380,12 @@ function TransactionInformation({
   return (
     <>
       <div className={styles.top}>
-        {transaction.status === "confirmed" && transaction.kind !== "exclusion" ? (
-          <span />
-        ) : (
-          <Chip
-            color={transaction.kind === "exclusion" ? "default" : statusColors[transaction.status]}
-            variant="soft"
-          >
-            {transaction.kind === "exclusion" ? "Excluded" : statusLabels[transaction.status]}
+        {transaction.kind === "exclusion" ? (
+          <Chip color="default" variant="soft">
+            Excluded
           </Chip>
+        ) : (
+          <span />
         )}
         <Button
           aria-label="Close transaction details"
@@ -411,13 +411,7 @@ function TransactionInformation({
       <p className={styles.source}>
         <Icon name={source.icon} />
         {source.label}
-        {transaction.backend ? " · your private ledger" : ""}
       </p>
-      {source.kind === "gmail_email" && details.editable ? (
-        <p className={styles.sourceHelp}>
-          You can edit this record. Its Gmail source stays unchanged.
-        </p>
-      ) : null}
       <details className={styles.more}>
         <summary>More details</summary>
         <dl>
@@ -428,6 +422,9 @@ function TransactionInformation({
             </div>
           ))}
         </dl>
+        {source.kind === "gmail_email" && details.editable ? (
+          <p className={styles.sourceHelp}>Edits won’t change the original email.</p>
+        ) : null}
       </details>
       {transaction.kind === "exclusion" ? (
         <p className="mt-3 text-sm text-muted">

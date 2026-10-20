@@ -1,6 +1,7 @@
 "use client";
 
 import { AppLoading } from "@/components/app-loading";
+import { useAppSession } from "@/components/app-session-context";
 import { DetectStep } from "@/components/onboarding-detect";
 import { ImportStep } from "@/components/onboarding-import";
 import { NameStep } from "@/components/onboarding-name";
@@ -11,6 +12,7 @@ import { stepIndex } from "@/lib/onboarding/flow";
 /** The first-run sheet: connect Gmail, confirm the name, confirm the banks found, then watch the import. */
 export function OnboardingSheets({ onboarding }: { onboarding: Onboarding }) {
   const { phase, sheetOpen, engine, pending, error } = onboarding;
+  const session = useAppSession();
   if (onboarding.preparing) return <AppLoading overlay />;
   if (!sheetOpen || phase === null) return null;
   return (
@@ -21,6 +23,8 @@ export function OnboardingSheets({ onboarding }: { onboarding: Onboarding }) {
       {phase === "detect" ? (
         <DetectStep
           detection={engine.detection}
+          customBanks={session.customBanks}
+          financialAccounts={session.financialAccounts}
           error={error}
           onRetry={engine.retryDetection}
           onSave={(choices) => void onboarding.saveBanks(choices)}

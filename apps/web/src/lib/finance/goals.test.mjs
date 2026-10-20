@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { detectGoalImage, validGoalImageContentLength } from "../goals/image.ts";
+import {
+  detectGoalImage,
+  goalUploadResponseCompleted,
+  validGoalImageContentLength,
+} from "../goals/image.ts";
 import { buildGoalPlan } from "../goals/plan.ts";
 
 const timestamp = "2026-10-18T00:00:00Z";
@@ -144,6 +148,23 @@ describe("goal projection", () => {
 });
 
 describe("goal image detection", () => {
+  it("settles successful uploads and definite rejections while preserving timeout and gateway uncertainty", () => {
+    const storageError = (status) =>
+      Object.assign(new Error("Synthetic Storage response"), {
+        name: "StorageApiError",
+        status,
+      });
+    assert.equal(goalUploadResponseCompleted(null), true);
+    assert.equal(goalUploadResponseCompleted(storageError(403)), true);
+    assert.equal(goalUploadResponseCompleted(storageError(413)), true);
+    for (const status of [408, 429, 500, 502, 503, 504])
+      assert.equal(goalUploadResponseCompleted(storageError(status)), false);
+    assert.equal(
+      goalUploadResponseCompleted(new TypeError("Synthetic network interruption")),
+      false,
+    );
+    assert.equal(goalUploadResponseCompleted({ status: 403 }), false);
+  });
   it("accepts supported signatures and rejects unrelated bytes", () => {
     assert.equal(detectGoalImage(Uint8Array.from([0xff, 0xd8, 0xff]))?.extension, "jpg");
     assert.equal(

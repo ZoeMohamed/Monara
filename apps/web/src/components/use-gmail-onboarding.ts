@@ -261,10 +261,18 @@ export function useGmailOnboarding(
           const requestId = requestIds.current.get(choice.institutionKey) ?? crypto.randomUUID();
           requestIds.current.set(choice.institutionKey, requestId);
           // Each account is fed by the mailbox it was found in.
-          await callFinanceOperation(
-            "create_financial_account",
-            accountInputFor(choice, requestId, mailboxId ?? null),
-          );
+          if (choice.customInput) {
+            await callFinanceOperation("create_custom_bank", {
+              ...choice.customInput,
+              clientRequestId: requestId,
+              gmailConnectionId: mailboxId ?? null,
+            });
+          } else {
+            await callFinanceOperation(
+              "create_financial_account",
+              accountInputFor(choice, requestId, mailboxId ?? null),
+            );
+          }
           created.current.add(choice.institutionKey);
         }),
       );
