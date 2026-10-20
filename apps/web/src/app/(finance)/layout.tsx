@@ -2,6 +2,7 @@ import { financialCalendarDate } from "@monara/contracts";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
+import { AppLoading } from "@/components/app-loading";
 import { FinanceUnavailable } from "@/components/finance-unavailable";
 import { MonaraApp } from "@/components/monara-app";
 import { UserSessionGuard } from "@/components/user-session-guard";
@@ -15,7 +16,15 @@ import {
 import { runFinanceOperation } from "@/lib/finance/service";
 import { getAuthenticatedIdentity } from "@/lib/supabase/server";
 
-export default async function FinanceLayout({ children }: { children: React.ReactNode }) {
+export default function FinanceLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<AppLoading />}>
+      <AuthenticatedFinance>{children}</AuthenticatedFinance>
+    </Suspense>
+  );
+}
+
+async function AuthenticatedFinance({ children }: { children: React.ReactNode }) {
   const identity = await getAuthenticatedIdentity();
   if (!identity) redirect("/sign-in?next=/");
   const today = financialCalendarDate();
@@ -39,21 +48,13 @@ export default async function FinanceLayout({ children }: { children: React.Reac
     );
   }
   return (
-    <Suspense
-      fallback={
-        <main aria-busy="true" className="min-h-dvh bg-background p-6 text-muted">
-          <p role="status">Opening Monara…</p>
-        </main>
-      }
-    >
-      <UserSessionGuard setupKey={setupKeyForUser(identity.id)}>
-        <MonaraApp
-          initialFinance={initialFinance}
-          profile={{ ...profileFromIdentity(identity), setupKey: setupKeyForUser(identity.id) }}
-        >
-          {children}
-        </MonaraApp>
-      </UserSessionGuard>
-    </Suspense>
+    <UserSessionGuard setupKey={setupKeyForUser(identity.id)}>
+      <MonaraApp
+        initialFinance={initialFinance}
+        profile={{ ...profileFromIdentity(identity), setupKey: setupKeyForUser(identity.id) }}
+      >
+        {children}
+      </MonaraApp>
+    </UserSessionGuard>
   );
 }

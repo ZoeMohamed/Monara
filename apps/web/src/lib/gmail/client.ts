@@ -260,10 +260,10 @@ function connectionPath(id: string, suffix: string) {
 /** Banks, cards, and wallets found in one of the User's mailboxes. */
 export async function loadGmailDiscovery(
   id: string,
-  options: RequestOptions = {},
+  options: RequestOptions & { refresh?: boolean } = {},
 ): Promise<GmailDiscovery> {
   const response = await request(
-    connectionPath(id, "discovery"),
+    connectionPath(id, "discovery") + (options.refresh === false ? "?refresh=false" : ""),
     "GET",
     options,
     DISCOVERY_TIMEOUT_MS,

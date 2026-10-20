@@ -1,5 +1,6 @@
 "use client";
 
+import { AppLoading } from "@/components/app-loading";
 import { useAppSession } from "@/components/app-session-context";
 import { DetectStep } from "@/components/onboarding-detect";
 import { ImportStep } from "@/components/onboarding-import";
@@ -12,6 +13,7 @@ import { stepIndex } from "@/lib/onboarding/flow";
 export function OnboardingSheets({ onboarding }: { onboarding: Onboarding }) {
   const { phase, sheetOpen, engine, pending, error } = onboarding;
   const session = useAppSession();
+  if (onboarding.preparing) return <AppLoading overlay />;
   if (!sheetOpen || phase === null) return null;
   return (
     <OnboardingSheet onDismiss={onboarding.dismiss} step={stepIndex(phase)}>

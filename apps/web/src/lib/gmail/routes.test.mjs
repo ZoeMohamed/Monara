@@ -268,6 +268,38 @@ describe("Gmail account discovery in the web backend", () => {
     }
   });
 
+  it("only reads saved discovery during background prefetch, even when recovery is needed", async () => {
+    for (const current of ["idle", "failed", "running", "completed"]) {
+      state.discoveryState = current;
+      state.inlineDiscoveries = [];
+      const response = await discoveryRoute.GET(
+        new Request("http://localhost/x?refresh=false"),
+        context,
+      );
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.equal((await response.json()).state, current);
+      assert.deepEqual(state.inlineDiscoveries, []);
+    }
+  });
+
+  it("keeps authentication and ownership checks on status-only reads", async () => {
+    state.inlineDiscoveries = [];
+    const request = new Request("http://localhost/x?refresh=false");
+    const other = {
+      params: Promise.resolve({ connectionId: "00000000-0000-4000-8000-000000000099" }),
+    };
+    assert.notEqual((await discoveryRoute.GET(request, other)).status, 200);
+    const signedIn = state.user;
+    state.user = null;
+    try {
+      assert.equal((await discoveryRoute.GET(request, context)).status, 401);
+    } finally {
+      state.user = signedIn;
+    }
+    assert.deepEqual(state.inlineDiscoveries, []);
+  });
+
   it("searches only the signed-in User's own connection", async () => {
     state.discoveryState = "idle";
     state.inlineDiscoveries = [];
