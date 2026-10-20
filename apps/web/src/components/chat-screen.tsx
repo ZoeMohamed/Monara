@@ -25,7 +25,7 @@ import {
 } from "@/lib/chat/session";
 
 const suggestions = [
-  { label: "kopi 25rb", prompt: "kopi 25rb" },
+  { label: "coffee 25k", prompt: "coffee 25k" },
   { label: "Weekly summary", prompt: "Summarize my spending this week" },
   { label: "Spending chart", prompt: "Visualize my spending" },
   { label: "Can I afford 300k?", prompt: "Can I afford a 300k dinner?" },
