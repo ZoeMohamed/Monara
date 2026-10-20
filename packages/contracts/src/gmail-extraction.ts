@@ -9,7 +9,7 @@ import {
   transactionIdSchema,
   userIdSchema,
 } from "./common.ts";
-import { institutionKeySchema } from "./institutions.ts";
+import { institutionKeySchema, resolvedInstitutionSchema } from "./institutions.ts";
 import { transactionFlowDirectionSchema, transactionKindSchema } from "./transactions.ts";
 
 export const gmailMessageIdSchema = z.string().trim().min(1).max(500);
@@ -31,6 +31,8 @@ export const extractedTransactionSchema = z
     kind: transactionKindSchema.nullable(),
     flowDirection: transactionFlowDirectionSchema.nullable().default(null),
     merchantName: z.string().trim().min(1).max(200).nullable(),
+    /** Display-only normalization. Original names remain evidence for identity matching. */
+    normalizedDisplayName: z.string().trim().min(1).max(80).nullable().default(null),
     counterpartyName: z.string().trim().min(1).max(200).nullable().default(null),
     counterpartyType: counterpartyTypeSchema.default("unknown"),
     isTransfer: z.boolean().default(false),
@@ -136,12 +138,16 @@ export const merchantCategorizeJobSchema = z.union([
     .object({
       kind: z.literal("merchant.categorize"),
       transactionIds: z.array(transactionIdSchema).min(1).max(MERCHANT_JOB_MAX_TRANSACTIONS),
+      // Preserve retries when an old delivery is split. Five previous attempts
+      // already exhaust the merchant consumer's configured retry budget.
+      priorAttempts: z.number().int().min(0).max(5).optional(),
     })
     .strict(),
   z
     .object({
       kind: z.literal("merchant.categorize"),
       transactionId: transactionIdSchema,
+      priorAttempts: z.number().int().min(0).max(5).optional(),
     })
     .strict(),
 ]);
@@ -218,6 +224,7 @@ export const resolvedGmailConnectionSchema = z
      * only from these entries' senders.
      */
     institutionKeys: z.array(institutionKeySchema).max(100),
+    customInstitutions: z.array(resolvedInstitutionSchema).max(100).optional(),
   })
   .strict();
 
@@ -319,7 +326,7 @@ export const recordGmailExtractionInputSchema = z
     items: z.array(extractedTransactionSchema).max(50),
     /** The registry entry of the email's sender; null when the sender is not listed. */
     institutionKey: institutionKeySchema.nullable(),
-    /** Gmail authenticated the sender's domain with DKIM or SPF. Required for auto-confirm. */
+    /** Whether Gmail authenticated the sender's domain with DKIM or SPF; retained as evidence. */
     senderVerified: z.boolean(),
   })
   .strict()
@@ -526,11 +533,13 @@ export const setImportedCategoryInputSchema = z.union([
     })
     .strict()
     .superRefine((value, context) => {
-      if ((value.categoryId === null) !== (value.kind === null)) {
+      // Legacy hints may omit the type. The backend resolves a typed Misc
+      // fallback from stated cash direction and verifies category ownership.
+      if (value.categoryId === null && value.kind !== null) {
         context.addIssue({
           code: "custom",
           path: ["categoryId"],
-          message: "A category and compatible type must be selected together.",
+          message: "A financial type requires a compatible category.",
         });
       }
     }),

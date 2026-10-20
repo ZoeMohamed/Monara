@@ -64,4 +64,6 @@ export function trackedRateLimitWindows(): number {
 export const RATE_LIMITS = {
   chat: { limit: 20, windowMs: 60_000 },
   finance: { limit: 120, windowMs: 60_000 },
+  /** A refresh can call the model, so it is limited like chat. */
+  forecast: { limit: 10, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimit>;

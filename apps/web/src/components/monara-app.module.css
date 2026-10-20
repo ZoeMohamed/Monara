@@ -160,6 +160,11 @@
     padding-inline: 0;
   }
 
+  /* Home's sheet reserves the nav clearance itself, so the page ground never shows below it. */
+  .shell[data-screen="home"] .main {
+    padding-bottom: 0;
+  }
+
   /* Only Home carries the floating header; other screens lead with their own title. */
   .shell:not(:is([data-screen="home"], [data-screen="onboarding"])) .mobileHeader {
     display: none;

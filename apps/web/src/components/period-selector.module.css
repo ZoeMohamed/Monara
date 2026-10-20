@@ -40,14 +40,23 @@
 }
 
 .label {
-  display: grid;
+  display: flex;
   min-width: 0;
   align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding-inline: 4px;
   font-size: 12px;
   font-weight: 700;
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+.labelIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--accent);
 }
 
 @media (min-width: 640px) {

@@ -5,7 +5,7 @@ import { createRespond } from "./respond.ts";
 const encoder = new TextEncoder();
 
 /** Compares two secrets without leaking where they differ. */
-async function secretsMatch(received: string, expected: string): Promise<boolean> {
+export async function secretsMatch(received: string, expected: string): Promise<boolean> {
   const [a, b] = await Promise.all(
     [received, expected].map(async (value) => {
       return new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(value)));

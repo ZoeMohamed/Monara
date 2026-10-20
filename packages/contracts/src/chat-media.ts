@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { agentChatResponseSchema } from "./channels.ts";
+import {
+  chatHistoryMaxBytes,
+  chatReplyMaxActions,
+  chatReplyMaxCharacters,
+  chatStorageByteLength,
+} from "./chat-limits.ts";
 import { isoDateTimeSchema } from "./common.ts";
 
 export const chatReceiptMaxBytes = 10 * 1024 * 1024;
@@ -45,9 +51,26 @@ export const chatVisualAttachmentSchema = z
   .strict();
 
 /** Optional response extension; no storage or generation capability is implied by this shape. */
-export const webChatResponseSchema = agentChatResponseSchema.extend({
-  visuals: z.array(chatVisualAttachmentSchema).max(4).optional(),
-});
+export const webChatResponseSchema = agentChatResponseSchema
+  .extend({
+    reply: z.string().trim().min(1).max(chatReplyMaxCharacters),
+    actions: agentChatResponseSchema.shape.actions.max(chatReplyMaxActions),
+    visuals: z.array(chatVisualAttachmentSchema).max(4).optional(),
+  })
+  .refine(
+    (response) =>
+      chatStorageByteLength({
+        text: response.reply,
+        result: {
+          reply: response.reply,
+          actions: response.actions,
+          confirmation: null,
+          visuals: response.visuals,
+        },
+      }) <=
+      chatHistoryMaxBytes - 4_096,
+    "This reply is too large to retain safely in chat history.",
+  );
 
 export type ChatReceiptAttachment = z.infer<typeof chatReceiptAttachmentSchema>;
 export type ChatReceiptRequest = z.infer<typeof chatReceiptRequestSchema>;

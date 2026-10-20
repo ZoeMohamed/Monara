@@ -1,4 +1,8 @@
-import { financialAccountMutationResultSchema } from "@monara/contracts";
+import {
+  createCustomBankResultSchema,
+  financialAccountMutationResultSchema,
+  updateCustomBankResultSchema,
+} from "@monara/contracts";
 import { FinanceOperationError } from "@monara/core";
 import { after } from "next/server";
 
@@ -8,7 +12,7 @@ import {
   isFinanceOperation,
   runFinanceOperation,
 } from "@/lib/finance/service";
-import { importAfterAccountLinked } from "@/lib/gmail/import";
+import { importAfterAccountLinked, importAfterCustomBankEdited } from "@/lib/gmail/import";
 import { syncUserTriggers } from "@/lib/gmail/trigger";
 import { isSameOriginRequest } from "@/lib/http/origin";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/http/rate-limit";
@@ -67,6 +71,25 @@ export async function POST(
     if (operation === "create_financial_account" || operation === "update_financial_account") {
       // Each mailbox's new-mail trigger follows the senders of the accounts it feeds.
       after(() => syncUserTriggers(identity.id).catch(() => undefined));
+    }
+    if (operation === "create_custom_bank") {
+      const created = createCustomBankResultSchema.parse(result);
+      after(async () => {
+        await syncUserTriggers(identity.id).catch(() => undefined);
+        await importAfterAccountLinked(
+          identity.id,
+          created.financialAccount,
+          "account_added",
+        ).catch(() => undefined);
+      });
+    }
+    if (operation === "update_custom_bank") {
+      const { customBank: bank, sendersChanged } = updateCustomBankResultSchema.parse(result);
+      if (sendersChanged)
+        after(async () => {
+          await syncUserTriggers(identity.id).catch(() => undefined);
+          await importAfterCustomBankEdited(identity.id, bank.key).catch(() => undefined);
+        });
     }
     const reason = linkReason(operation, input);
     if (reason) {

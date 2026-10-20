@@ -5,7 +5,7 @@ set search_path = public, extensions;
 
 grant usage on schema extensions to anon, authenticated;
 
-select plan(18);
+select plan(19);
 
 -- Seeded synthetic data: User 1 owns active connection 12000000-...-0001.
 
@@ -127,6 +127,17 @@ select is(
   ),
   null,
   'an unknown category name leaves the category empty'
+);
+
+select is(
+  (
+    select occurred_on
+    from public.transactions
+    where processed_gmail_message_id = (select processed_message_id from claimed)
+      and source_item_index = 1
+  ),
+  date '2026-10-13',
+  'an item without a date takes the day its email arrived in Jakarta'
 );
 
 select is(

@@ -181,3 +181,31 @@ a418fa09f591afaee288cf37e6c11a145ee54a87af13954147c8f89378c92298  watsons.png
 ```
 
 Sushi Tei was left unresolved because its published image endpoint returned a server error during verification. Keep the generic fallback until an official asset can be fetched and checked.
+
+## Institution coverage (19 October 2026)
+
+Added official artwork for every named provider previously missing from the institution registry. Located with Brave Search and Firecrawl, then downloaded from official sites. Panin was downloaded through the browser because direct requests were blocked. Files retain the published bytes. BTPN resolves to the current SMBC Indonesia mark, as confirmed by its [company history](https://www.smbci.com/en/tentang-kami); Jenius retains its separate existing brand. CASH is a generic payment method and keeps the generic fallback.
+
+| File | Owner/source page | Published asset | Selection |
+| --- | --- | --- | --- |
+| [superbank.webp](superbank.webp) | [Official site](https://www.superbank.id/) | [Original download](https://superbank.id/content/img/logo_dark.webp) | Official header logo, unchanged. |
+| [cimb.svg](cimb.svg) | [Official site](https://www.cimbniaga.co.id/id/personal/homepage) | [Original download](https://www.cimbniaga.co.id/content/dam/cimb/revamp/cimb-logo/logo-cimb-personal.svg) | Official header logo, unchanged; displayed on the site's published burgundy background (`#860913`) for white-letter contrast. |
+| [uob.svg](uob.svg) | [Official site](https://www.uob.co.id/personal/index.page) | [Original download](https://www.uob.co.id/assets/web-resources/business/images/BrandAssets/UOB_Logo.svg) | Official header logo, unchanged. |
+| [mayapada.png](mayapada.png) | [Official site](https://www.bankmayapada.com/en/) | [Original download](https://www.bankmayapada.com/images/Logo/LogoBMIEN.png) | Official header logo, unchanged. |
+| [smbc.png](smbc.png) | [Official site](https://www.smbci.com/en) | [Original download](https://www.smbci.com/SMBCI/logo/image-thumb__23694__footer-sub-icon-img/logo-footer.png) | Official footer logo, unchanged. |
+| [panin.svg](panin.svg) | [Official site](https://www.panin.co.id/en) | [Original download](https://www.panin.co.id/sites/default/files/static/img/logo/panin-default.svg) | Official header logo, unchanged. |
+| [krom.png](krom.png) | [Official site](https://krom.id/) | [Original download](https://krom.id/wp-content/uploads/2022/08/ic_krom_logo.png) | Official header logo, unchanged. |
+| [bnc.png](bnc.png) | [Official site](https://www.bankneocommerce.co.id/en/home) | [Original download](https://www-cms.bankneo.co.id/storage/photos/1/logo/logo_bnc.png) | Official header logo, unchanged. |
+| [hsbc.svg](hsbc.svg) | [Official site](https://www.hsbc.co.id/en-id/) | [Original download](https://www.hsbc.co.id/content/dam/hsbc/dpws/hsbc-logo.svg) | Official header logo, unchanged. |
+
+```text
+81ed5711ef13d8bd42457e16c654e5cef1abe24b6bb82595e716f1df652e78c7  superbank.webp
+4f2de4736a4a0316630525ecbcf76f3c22e9161f1a460133a3fd2225d96ca6a7  cimb.svg
+139bed79c5409437b22b737603686cebc1fd627796f09cb02208f4b2bec8da39  uob.svg
+46f2e813b1246e323edd1a376e98dd22a9ddb97a1e47e696ad5318ec30672644  mayapada.png
+cff8453613482d6cafb082476d215300046f7d196d5416a51d910f91a29c352b  smbc.png
+5dacf0c6088d2897e9a4c7a8cc0403f34b98b18660d7385fd4f1c2173a26dca0  panin.svg
+1aeda39957b9769950fa35d8497f74e101c1c6b66b926108bf31e0e129d1dfe3  krom.png
+f4542d2e02f75edf6e37df96cb87bb16934b6f785c4d7b04408dc3d9bdd7b7c3  bnc.png
+3751c8a8ac90be30a4d809fc8e2d08a132e057f4fc4f4b929b4c47905f1b3790  hsbc.svg
+```

@@ -8,6 +8,7 @@ import { FinanceRecovery } from "@/components/budget-manager";
 import { CategoryAvatar } from "@/components/category-symbol";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
+import { type QuickAddChoice, QuickAddFields } from "@/components/quick-add-fields";
 import {
   demoCategoryNames,
   demoExclusionNames,
@@ -20,6 +21,7 @@ import {
   transactionErrors,
 } from "@/data/demo-ledger";
 import { demoTransactionSelection } from "@/data/demo-resources";
+import { protectUnsavedChanges } from "@/lib/auth/local-user-state";
 import { FinanceClientError } from "@/lib/finance/client";
 import { FinancePresentationError, parseDraftAmount } from "@/lib/finance/presentation";
 
@@ -129,13 +131,20 @@ function draftOf(
       : (transaction?.merchant ?? ""),
     amount: transaction?.amount?.toString() ?? "",
     date: transaction ? (transaction.date ?? "") : today,
-    time: transaction?.time ?? "",
+    // Time is not edited here; retain source seconds through unrelated corrections.
+    time: transaction?.backend
+      ? (transaction.backend.occurredTime ?? "")
+      : (transaction?.time ?? ""),
     kind: transaction?.kind ?? null,
     currency: transaction ? transaction.currency : "IDR",
     category: resources
       ? (transaction?.backend?.categoryId ??
         (resources.demo
-          ? resources.categories.find((category) => category.name === transaction?.category)?.id
+          ? resources.categories.find(
+              (category) =>
+                category.name === transaction?.category &&
+                category.kind === (transaction?.categoryKind ?? transaction?.kind),
+            )?.id
           : null) ??
         null)
       : (transaction?.category ?? null),
@@ -152,6 +161,51 @@ function draftOf(
 
 const typeLabels = { expense: "Expense", income: "Income", exclusion: "Exclusion" } as const;
 const kinds = ["Expense", "Income", "Exclusion"];
+
+/** The account used for the last transaction added in this tab, so the next one starts there. */
+let lastAccountId: string | null = null;
+
+/** A new transaction starts on the account used last, or the first active one. */
+function defaultAccountId(resources: TransactionEditorResources | undefined) {
+  const active = resources?.financialAccounts.filter((account) => account.isActive) ?? [];
+  return (active.find((account) => account.id === lastAccountId) ?? active[0])?.id ?? null;
+}
+
+function withDefaultAccount(
+  draft: TransactionDraft,
+  resources: TransactionEditorResources | undefined,
+): TransactionDraft {
+  return draft.method === null ? { ...draft, method: defaultAccountId(resources) } : draft;
+}
+
+function quickAccountChoices(resources?: TransactionEditorResources): QuickAddChoice[] {
+  if (!resources) return demoMethods.map((name) => ({ id: name, label: name }));
+  return resources.financialAccounts
+    .filter((account) => account.isActive)
+    .map((account) => ({
+      id: account.id,
+      label: `${account.name}${account.lastFour ? ` · ${account.lastFour}` : ""}`,
+      account,
+    }));
+}
+
+function quickCategoryChoices(
+  draft: TransactionDraft,
+  resources?: TransactionEditorResources,
+): QuickAddChoice[] {
+  if (resources) {
+    return resources.categories
+      .filter((category) => !category.isArchived && category.kind === draft.kind)
+      .map((category) => ({ id: category.id, label: category.name, icon: category.icon }));
+  }
+  const names =
+    draft.kind === "exclusion"
+      ? demoExclusionNames
+      : draft.kind === "income"
+        ? demoIncomeNames
+        : demoCategoryNames;
+  return names.map((name) => ({ id: name, label: name }));
+}
 
 function ChoiceField({
   name,
@@ -233,7 +287,7 @@ function TransactionFields({
   const party =
     draft.kind === "income"
       ? { label: "Income source", placeholder: "e.g. Monthly salary" }
-      : { label: "Merchant", placeholder: "e.g. Kopi Kenangan" };
+      : { label: "Merchant", placeholder: "e.g. Starbucks" };
   return (
     <>
       <TextField
@@ -325,7 +379,8 @@ function validateDraft(
     throw error;
   }
   const validation = transactionErrors(values);
-  if (action !== "edit" && values.kind !== "exclusion" && !values.method)
+  // Confirming an exclusion needs no account; creating any transaction still does (below).
+  if (action !== "edit" && !values.method && values.kind !== "exclusion")
     validation.method = "Choose the account used for this transaction.";
   if (action === "edit") {
     for (const field of ["kind", "amount", "currency", "date", "method"] as const) {
@@ -340,8 +395,8 @@ function validateDraft(
       validation.merchant =
         values.kind === "income" ? "Enter an income source." : "Enter a merchant.";
     }
-    if ((values.kind !== "exclusion" || (resources && !resources.demo)) && !values.method)
-      validation.method = "Choose an account.";
+    if (!values.method) validation.method = "Choose an account.";
+    if (values.amount === null) validation.amount = "Enter the transaction amount.";
   }
   if (
     resources &&
@@ -353,17 +408,13 @@ function validateDraft(
     action === "edit" &&
     transaction?.status === "pending" &&
     draft.category === draftOf(transaction, resources).category;
-  if (
-    resources &&
-    draft.category &&
-    !resources.categories.some(
-      (category) =>
-        category.id === draft.category &&
-        (!category.isArchived || unchangedPendingCategory) &&
-        (draft.kind === null || category.kind === draft.kind),
-    )
-  )
-    validation.category = "Choose an available category matching this transaction type.";
+  if (resources && draft.category) {
+    const category = resources.categories.find((item) => item.id === draft.category);
+    if (!category || (category.isArchived && !unchangedPendingCategory))
+      validation.category = "Choose an available category. This category was archived or removed.";
+    else if (draft.kind !== null && category.kind !== draft.kind)
+      validation.category = "Choose an available category matching this transaction type.";
+  }
   return validation;
 }
 
@@ -574,7 +625,9 @@ function useTransactionEditorState({
     editorReducer,
     null,
     (): EditorState => ({
-      draft: initialDraft ?? draftOf(transaction, resources, today),
+      draft: transaction
+        ? (initialDraft ?? draftOf(transaction, resources, today))
+        : withDefaultAccount(initialDraft ?? draftOf(transaction, resources, today), resources),
       errors: {},
       phase: "editing",
       saveError: null,
@@ -590,7 +643,9 @@ function useTransactionEditorState({
   } | null>(null);
   const [reviewed, setReviewed] = useState(() => ({
     version: initialDraft?.reviewedUpdatedAt ?? transaction?.backend?.updatedAt,
-    draft: pristineDraft ?? draftOf(transaction, resources, today),
+    draft: transaction
+      ? (pristineDraft ?? draftOf(transaction, resources, today))
+      : withDefaultAccount(pristineDraft ?? draftOf(transaction, resources, today), resources),
   }));
   const changedElsewhere =
     transaction?.backend !== undefined && transaction.backend.updatedAt !== reviewed.version;
@@ -604,7 +659,7 @@ function useTransactionEditorState({
   useEffect(() => {
     if (!dirty && !state.uncertain && state.phase !== "saving") return;
     const protectDraft = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
+      protectUnsavedChanges(event);
     };
     window.addEventListener("beforeunload", protectDraft);
     return () => window.removeEventListener("beforeunload", protectDraft);
@@ -639,6 +694,7 @@ function useTransactionEditorState({
       return;
     }
     saving.current = true;
+    if (!transaction && draft.method) lastAccountId = draft.method;
     submitted.current ??= {
       values: valuesOf(draft, resources),
       action,
@@ -708,13 +764,105 @@ function useTransactionEditorState({
   };
 }
 
+function EditorHeader({
+  title,
+  private: privateLedger,
+  disabled,
+  onClose,
+}: {
+  title: string;
+  private: boolean;
+  disabled: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <h2 id="transaction-editor-title" className="text-xl font-bold">
+          {title}
+        </h2>
+        {privateLedger ? <p className="mt-1 text-sm text-muted">Your private ledger</p> : null}
+      </div>
+      <Button
+        className="-mt-1 -mr-2"
+        isIconOnly
+        variant="ghost"
+        aria-label="Close transaction form"
+        onPress={onClose}
+        isDisabled={disabled}
+      >
+        <Icon name="close" />
+      </Button>
+    </div>
+  );
+}
+
+type EditorFieldsProps = TransactionChoiceProps & {
+  props: TransactionEditorProps;
+  requestClose: () => void;
+  saving: boolean;
+  changedElsewhere: boolean;
+  reviewLatest: (useCurrent: boolean) => void;
+};
+
+/** Adding is a short sheet; reviewing or editing an existing record keeps the full form. */
+function EditorFields({
+  props,
+  draft,
+  errors,
+  disabled,
+  onChange,
+  requestClose,
+  saving,
+  changedElsewhere,
+  reviewLatest,
+}: EditorFieldsProps) {
+  const { transaction, resources } = props;
+  if (!transaction) {
+    return (
+      <QuickAddFields
+        accounts={quickAccountChoices(resources)}
+        categories={quickCategoryChoices(draft, resources)}
+        disabled={disabled}
+        draft={draft}
+        errors={errors}
+        onChange={onChange}
+        closeDisabled={saving}
+        onClose={requestClose}
+        onKind={(label) => onChange(kindChange(draft, label, resources))}
+        today={props.today ?? demoToday}
+      />
+    );
+  }
+  return (
+    <>
+      <TransactionFields draft={draft} errors={errors} disabled={disabled} onChange={onChange} />
+      {changedElsewhere ? (
+        <LatestTransaction
+          transaction={transaction}
+          onUseLatest={() => reviewLatest(true)}
+          onKeepDraft={() => reviewLatest(false)}
+          disabled={Boolean(props.refreshRequired)}
+        />
+      ) : null}
+      <TransactionChoices
+        draft={draft}
+        errors={errors}
+        disabled={disabled}
+        onChange={onChange}
+        resources={resources}
+      />
+    </>
+  );
+}
+
 export function TransactionEditor(props: TransactionEditorProps) {
   const { state, changeDraft, requestClose, submit, keepEditing, changedElsewhere, reviewLatest } =
     useTransactionEditorState(props);
-  const { draft, errors } = state;
   const isSaving = state.phase === "saving";
   const locked = isSaving || state.uncertain || changedElsewhere || Boolean(props.refreshRequired);
   const labels = editorLabels(props.transaction, isSaving);
+  const quick = !props.transaction;
 
   return (
     <ModalDialog labelledBy="transaction-editor-title" onClose={requestClose}>
@@ -722,50 +870,35 @@ export function TransactionEditor(props: TransactionEditorProps) {
         <DiscardChanges onKeep={keepEditing} onDiscard={() => props.onClose()} />
       ) : (
         <Form
-          className="space-y-4 p-4 sm:p-6"
+          className={quick ? "space-y-4 p-4 sm:p-5" : "space-y-4 p-4 sm:p-6"}
           onSubmit={submit}
           validationBehavior="aria"
           aria-busy={isSaving}
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 id="transaction-editor-title" className="text-xl font-bold">
-                {labels.title}
-              </h2>
-              {props.resources && !props.resources.demo ? (
-                <p className="mt-1 text-sm text-muted">Your private ledger</p>
-              ) : null}
-            </div>
-            <Button
-              isIconOnly
-              variant="ghost"
-              aria-label="Close transaction form"
-              onPress={requestClose}
-              isDisabled={isSaving}
-            >
-              <Icon name="close" />
-            </Button>
-          </div>
-          <TransactionFields
-            draft={draft}
-            errors={errors}
-            disabled={locked}
-            onChange={changeDraft}
-          />
-          {changedElsewhere && props.transaction ? (
-            <LatestTransaction
-              transaction={props.transaction}
-              onUseLatest={() => reviewLatest(true)}
-              onKeepDraft={() => reviewLatest(false)}
-              disabled={Boolean(props.refreshRequired)}
+          {quick ? (
+            // The quick-add sheet is self-explanatory, so its title is for screen readers only.
+            <h2 id="transaction-editor-title" className="sr-only">
+              {labels.title}
+            </h2>
+          ) : (
+            <EditorHeader
+              disabled={isSaving}
+              onClose={requestClose}
+              private={Boolean(props.resources && !props.resources.demo)}
+              title={labels.title}
             />
-          ) : null}
-          <TransactionChoices
-            draft={draft}
-            errors={errors}
+          )}
+          <EditorFields
+            changedElsewhere={changedElsewhere}
             disabled={locked}
+            draft={state.draft}
+            errors={state.errors}
             onChange={changeDraft}
+            props={props}
+            requestClose={requestClose}
             resources={props.resources}
+            reviewLatest={reviewLatest}
+            saving={isSaving}
           />
           <EditorFeedback
             state={state}
@@ -774,6 +907,7 @@ export function TransactionEditor(props: TransactionEditorProps) {
             onRefreshRecords={props.onRefreshRecords}
           />
           <EditorFooter
+            compact={quick}
             labels={labels}
             state={state}
             onClose={requestClose}
@@ -787,12 +921,14 @@ export function TransactionEditor(props: TransactionEditorProps) {
 }
 
 function EditorFooter({
+  compact,
   labels,
   state,
   onClose,
   locked,
   reviewRequired,
 }: {
+  compact: boolean;
   labels: ReturnType<typeof editorLabels>;
   state: EditorState;
   onClose: () => void;
@@ -800,6 +936,21 @@ function EditorFooter({
   reviewRequired: boolean;
 }) {
   const isSaving = state.phase === "saving";
+  if (compact) {
+    // Closing is the X or the backdrop; the sheet's only job past the fields is Save.
+    return (
+      // Pinned to the bottom edge, so Save stays in reach when a long category list scrolls.
+      <div className="sticky bottom-0 -mx-4 -mb-4 bg-surface px-4 pt-2 pb-4 sm:-mx-5 sm:-mb-5 sm:px-5 sm:pb-5">
+        <Button
+          className="min-h-12 w-full text-base"
+          type="submit"
+          isDisabled={isSaving || reviewRequired}
+        >
+          {state.uncertain && !isSaving ? "Retry same change" : labels.save}
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-5">
       <Button className="min-h-11" variant="secondary" onPress={onClose} isDisabled={isSaving}>

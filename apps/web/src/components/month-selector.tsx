@@ -29,6 +29,7 @@ export function MonthSelector({
         <Icon name="chevron-left" />
       </Button>
       <span aria-live="polite" className={styles.label}>
+        <Icon aria-hidden className={styles.labelIcon} name="calendar" />
         {formatMonth(month)}
       </span>
       <Button

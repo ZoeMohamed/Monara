@@ -1,23 +1,29 @@
 "use client";
 
 import {
+  type CreateCustomBankInput,
   type CreateFinancialAccountInput,
+  type CustomBank,
   createFinancialAccountInputSchema,
+  customBankIdForKey,
+  customBankInstitution,
   type FinancialAccount,
   findInstitution,
   type Institution,
   institutions,
+  type UpdateCustomBankInput,
   type UpdateFinancialAccountInput,
   updateFinancialAccountInputSchema,
 } from "@monara/contracts";
 import { Button, Input, Label, TextField } from "@monara/ui";
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
-
+import { type FormEvent, useContext, useEffect, useId, useRef, useState } from "react";
 import { AccountBadge } from "@/components/account-badge";
+import { AppSessionContext } from "@/components/app-session-context";
 import { BrandLogoField } from "@/components/brand-logo-field";
 import { BrandMark } from "@/components/brand-mark";
 import { type FinanceManagerProps, FinanceRecovery } from "@/components/budget-manager";
 import styles from "@/components/budget-manager.module.css";
+import { CustomBankDialog } from "@/components/custom-bank-form";
 import { Icon } from "@/components/icon";
 import { ModalDialog } from "@/components/modal-dialog";
 import { type BrandIdentity, brands } from "@/data/brand-identity";
@@ -64,7 +70,8 @@ function useActiveMailboxes(enabled: boolean): MailboxOption[] {
 function sendsEmail(draft: AccountDraft): boolean {
   return (
     draft.accountType !== "cash" &&
-    (findInstitution(draft.institutionKey)?.senderEmails.length ?? 0) > 0
+    (Boolean(customBankIdForKey(draft.institutionKey)) ||
+      (findInstitution(draft.institutionKey)?.senderEmails.length ?? 0) > 0)
   );
 }
 
@@ -159,9 +166,12 @@ function accountMatchesChanges(
 }
 
 /** Registry entries that fit an account type: banks and cards, or wallets. */
-function notificationChoices(accountType: AccountDraft["accountType"]): Institution[] {
+function notificationChoices(
+  accountType: AccountDraft["accountType"],
+  customBanks: readonly CustomBank[],
+): Institution[] {
   if (accountType === "cash") return [];
-  return institutions
+  return [...institutions, ...customBanks.map(customBankInstitution)]
     .filter((entry) =>
       accountType === "wallet" ? entry.platform === "E_WALLET" : entry.platform !== "E_WALLET",
     )
@@ -189,6 +199,105 @@ const institutionChoices = {
   cash: [],
 } as const satisfies Record<AccountDraft["accountType"], readonly BrandIdentity[]>;
 
+type AccountInstitutionProps = {
+  prefix: string;
+  draft: AccountDraft;
+  errors: AccountErrors;
+  disabled: boolean;
+  onChange: (patch: Partial<AccountDraft>) => void;
+};
+function AccountInstitutionField({
+  prefix,
+  draft,
+  errors,
+  disabled,
+  onChange,
+}: AccountInstitutionProps) {
+  const customBanks = useContext(AppSessionContext)?.customBanks ?? [];
+  const selectedCustomBank = customBanks.find((bank) => bank.key === draft.institutionKey);
+  const chooseInstitution = (institution: string) =>
+    onChange({
+      institution,
+      ...(selectedCustomBank ? { institutionKey: "" } : {}),
+      ...(draft.name.trim() ? {} : { name: institution }),
+    });
+  return (
+    <>
+      {draft.accountType !== "cash" && (
+        <div className={styles.field}>
+          <TextField
+            className={styles.field}
+            isDisabled={disabled}
+            isInvalid={Boolean(errors.institution)}
+            isReadOnly={Boolean(selectedCustomBank)}
+            name="institution"
+            onChange={(institution) => onChange({ institution })}
+            value={draft.institution}
+          >
+            <Label className={styles.label} htmlFor={`${prefix}-institution`}>
+              Institution <span className="font-normal text-muted">(optional)</span>
+            </Label>
+            <Input
+              aria-describedby={errors.institution ? `${prefix}-institution-error` : undefined}
+              className={styles.input}
+              id={`${prefix}-institution`}
+              maxLength={150}
+            />
+          </TextField>
+          <fieldset className="mt-2 flex flex-wrap gap-2">
+            <legend className="sr-only">Common institutions</legend>
+            {institutionChoices[draft.accountType].map((brand) => {
+              const institution = brands[brand].name;
+              return (
+                <Button
+                  aria-pressed={draft.institution === institution}
+                  className="h-auto min-h-11 rounded-xl px-2.5 py-1.5 text-xs"
+                  isDisabled={disabled}
+                  key={brand}
+                  onPress={() => chooseInstitution(institution)}
+                  variant={draft.institution === institution ? "secondary" : "ghost"}
+                >
+                  <BrandMark brand={brand} size={28} />
+                  {institution}
+                </Button>
+              );
+            })}
+          </fieldset>
+          <div className="mt-2">
+            {selectedCustomBank ? (
+              <div className="flex items-center gap-3">
+                <AccountBadge
+                  account={{
+                    name: draft.name,
+                    institution: selectedCustomBank.name,
+                    institutionLogo: selectedCustomBank.logo,
+                    accountType: draft.accountType,
+                  }}
+                  name={selectedCustomBank.name}
+                />
+                <p className={styles.meta}>Name and logo are saved with this custom bank.</p>
+              </div>
+            ) : (
+              <BrandLogoField
+                disabled={disabled}
+                kinds={[draft.accountType]}
+                label={draft.institution}
+                onUseName={chooseInstitution}
+                scope="institution"
+              />
+            )}
+          </div>
+          {errors.institution && (
+            <p className={styles.error} id={`${prefix}-institution-error`}>
+              {errors.institution}
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 function AccountFields({
   draft,
   errors,
@@ -207,8 +316,8 @@ function AccountFields({
   preferOnlyMailbox?: boolean;
 }) {
   const prefix = useId();
-  const chooseInstitution = (institution: string) =>
-    onChange({ institution, ...(draft.name.trim() ? {} : { name: institution }) });
+  const customBanks = useContext(AppSessionContext)?.customBanks ?? [];
+  const selectedCustomBank = customBanks.find((bank) => bank.key === draft.institutionKey);
   return (
     <>
       <TextField
@@ -247,7 +356,14 @@ function AccountFields({
               className="min-h-11 min-w-0 flex-1 rounded-full px-3"
               isDisabled={disabled}
               key={type}
-              onPress={() => onChange({ accountType: type })}
+              onPress={() =>
+                onChange({
+                  accountType: type,
+                  ...(selectedCustomBank && type !== draft.accountType
+                    ? { institutionKey: "" }
+                    : {}),
+                })
+              }
               variant={draft.accountType === type ? "primary" : "secondary"}
             >
               {type === "bank" ? "Bank" : type === "wallet" ? "Wallet" : "Cash"}
@@ -255,61 +371,13 @@ function AccountFields({
           ))}
         </div>
       </fieldset>
-      {draft.accountType !== "cash" && (
-        <div className={styles.field}>
-          <TextField
-            className={styles.field}
-            isDisabled={disabled}
-            isInvalid={Boolean(errors.institution)}
-            name="institution"
-            onChange={(institution) => onChange({ institution })}
-            value={draft.institution}
-          >
-            <Label className={styles.label} htmlFor={`${prefix}-institution`}>
-              Institution <span className="font-normal text-muted">(optional)</span>
-            </Label>
-            <Input
-              aria-describedby={errors.institution ? `${prefix}-institution-error` : undefined}
-              className={styles.input}
-              id={`${prefix}-institution`}
-              maxLength={150}
-            />
-          </TextField>
-          <fieldset className="mt-2 flex flex-wrap gap-2">
-            <legend className="sr-only">Common institutions</legend>
-            {institutionChoices[draft.accountType].map((brand) => {
-              const institution = brands[brand].name;
-              return (
-                <Button
-                  aria-pressed={draft.institution === institution}
-                  className="h-auto min-h-11 rounded-xl px-2.5 py-1.5 text-xs"
-                  isDisabled={disabled}
-                  key={brand}
-                  onPress={() => chooseInstitution(institution)}
-                  variant={draft.institution === institution ? "secondary" : "ghost"}
-                >
-                  <BrandMark brand={brand} size={28} />
-                  {institution}
-                </Button>
-              );
-            })}
-          </fieldset>
-          <div className="mt-2">
-            <BrandLogoField
-              disabled={disabled}
-              kinds={[draft.accountType]}
-              label={draft.institution}
-              onUseName={chooseInstitution}
-              scope="institution"
-            />
-          </div>
-          {errors.institution && (
-            <p className={styles.error} id={`${prefix}-institution-error`}>
-              {errors.institution}
-            </p>
-          )}
-        </div>
-      )}
+      <AccountInstitutionField
+        prefix={prefix}
+        draft={draft}
+        errors={errors}
+        disabled={disabled}
+        onChange={onChange}
+      />
       {draft.accountType !== "cash" && (
         <div className={styles.field}>
           <label className={styles.label} htmlFor={`${prefix}-notifications`}>
@@ -320,12 +388,21 @@ function AccountFields({
             disabled={disabled}
             id={`${prefix}-notifications`}
             name="institutionKey"
-            onChange={(event) => onChange({ institutionKey: event.target.value })}
+            onChange={(event) => {
+              const institutionKey = event.target.value;
+              const bank = customBanks.find((item) => item.key === institutionKey);
+              onChange({
+                institutionKey,
+                ...(bank
+                  ? { institution: bank.name, ...(!draft.name.trim() ? { name: bank.name } : {}) }
+                  : {}),
+              });
+            }}
             value={draft.institutionKey}
             aria-describedby={`${prefix}-notifications-hint`}
           >
             <option value="">None</option>
-            {notificationChoices(draft.accountType).map((entry) => (
+            {notificationChoices(draft.accountType, customBanks).map((entry) => (
               <option key={entry.key} value={entry.key}>
                 {entry.name === entry.provider ? entry.name : `${entry.provider} · ${entry.name}`}
                 {entry.senderEmails.length === 0 ? " (no email alerts yet)" : ""}
@@ -408,7 +485,11 @@ function AccountFields({
   );
 }
 
-function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () => void }) {
+function AccountForm({
+  onClose,
+  onCreateCustom,
+  ...props
+}: FinanceManagerProps & { onClose: () => void; onCreateCustom: () => void }) {
   const [state, setState] = useState({
     draft: draftOf(),
     errors: {} as AccountErrors,
@@ -512,6 +593,14 @@ function AccountForm({ onClose, ...props }: FinanceManagerProps & { onClose: () 
           </>
         ) : (
           <>
+            <Button
+              className="min-h-11 justify-self-start rounded-full"
+              isDisabled={locked}
+              onPress={onCreateCustom}
+              variant="secondary"
+            >
+              Bank not listed? Create custom bank
+            </Button>
             <AccountFields
               disabled={locked}
               draft={state.draft}
@@ -865,9 +954,13 @@ export function FinancialAccountSetup({
   ...props
 }: FinanceManagerProps & { allowAdditional?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [customMode, setCustomMode] = useState<string | null>(null);
+  const mailboxes = useActiveMailboxes(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const titleId = useId();
   const accounts = props.snapshot.financialAccounts;
+  const customBanks = props.snapshot.customBanks;
+  const customBank = customBanks.find((bank) => bank.id === customMode);
   const selected = accounts.find((account) => account.id === selectedId);
   if (!allowAdditional && accounts.some((account) => account.isActive)) return null;
   return (
@@ -891,6 +984,16 @@ export function FinancialAccountSetup({
                   {account.institution ? ` · ${account.institution}` : ""} · {account.currency}
                   {!account.isActive ? " · Inactive" : ""}
                 </p>
+                {customBankIdForKey(account.institutionKey) && (
+                  <Button
+                    className="min-h-11 justify-start px-0 text-xs"
+                    isDisabled={Boolean(props.refreshRequired)}
+                    onPress={() => setCustomMode(customBankIdForKey(account.institutionKey))}
+                    variant="ghost"
+                  >
+                    Edit custom bank
+                  </Button>
+                )}
               </div>
               <Button
                 aria-label={`Edit ${account.name}`}
@@ -917,7 +1020,40 @@ export function FinancialAccountSetup({
         <Icon name="plus" />
         {allowAdditional ? "Add bank or wallet" : "Add your first account"}
       </Button>
-      {open && <AccountForm {...props} onClose={() => setOpen(false)} />}
+      {open && (
+        <AccountForm
+          {...props}
+          onClose={() => setOpen(false)}
+          onCreateCustom={() => {
+            setOpen(false);
+            setCustomMode("create");
+          }}
+        />
+      )}
+      {customMode && (
+        <CustomBankDialog
+          bank={customBank}
+          banks={customBanks}
+          disabled={Boolean(props.refreshRequired)}
+          key={customBank?.updatedAt ?? "create"}
+          mailboxes={mailboxes}
+          onCancel={() => setCustomMode(null)}
+          onSave={async (input) => {
+            await props.runMutation(async () => {
+              if (customBank)
+                await callFinanceOperation("update_custom_bank", {
+                  bankId: customBank.id,
+                  expectedUpdatedAt: customBank.updatedAt,
+                  name: input.name,
+                  senderEmails: input.senderEmails,
+                  logo: input.logo,
+                });
+              else await callFinanceOperation("create_custom_bank", input);
+            });
+            setCustomMode(null);
+          }}
+        />
+      )}
       {selected ? (
         <AccountEditor
           {...props}
@@ -1090,13 +1226,21 @@ export function DemoFinancialAccountSetup({
   accounts,
   onCreate,
   onUpdate,
+  customBanks,
+  onCreateCustom,
+  onUpdateCustom,
 }: {
   accounts: FinancialAccount[];
+  customBanks: CustomBank[];
+  onCreateCustom: (input: CreateCustomBankInput) => void;
+  onUpdateCustom: (input: UpdateCustomBankInput) => void;
   onCreate: (input: Omit<CreateFinancialAccountInput, "clientRequestId">) => void;
   onUpdate: (accountId: string, changes: DemoAccountChanges) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [customMode, setCustomMode] = useState<string | null>(null);
+  const customBank = customBanks.find((bank) => bank.id === customMode);
   const [draft, setDraft] = useState<AccountDraft>(() => draftOf());
   const [error, setError] = useState<string | null>(null);
   const selected = accounts.find((account) => account.id === selectedId);
@@ -1131,6 +1275,15 @@ export function DemoFinancialAccountSetup({
                 {account.institution ? ` · ${account.institution}` : ""}
                 {!account.isActive ? " · Inactive" : ""}
               </p>
+              {customBankIdForKey(account.institutionKey) && (
+                <Button
+                  className="min-h-11 justify-start px-0 text-xs"
+                  onPress={() => setCustomMode(customBankIdForKey(account.institutionKey))}
+                  variant="ghost"
+                >
+                  Edit custom bank
+                </Button>
+              )}
             </div>
             <Button
               aria-label={`Edit ${account.name}`}
@@ -1163,6 +1316,16 @@ export function DemoFinancialAccountSetup({
                 <Icon name="close" />
               </Button>
             </div>
+            <Button
+              className="min-h-11 justify-self-start rounded-full"
+              onPress={() => {
+                setOpen(false);
+                setCustomMode("create");
+              }}
+              variant="secondary"
+            >
+              Bank not listed? Create custom bank
+            </Button>
             <AccountFields
               disabled={false}
               draft={draft}
@@ -1186,6 +1349,26 @@ export function DemoFinancialAccountSetup({
             </div>
           </form>
         </ModalDialog>
+      )}
+      {customMode && (
+        <CustomBankDialog
+          bank={customBank}
+          banks={customBanks}
+          key={customBank?.updatedAt ?? "create"}
+          onCancel={() => setCustomMode(null)}
+          onSave={(input) => {
+            if (customBank)
+              onUpdateCustom({
+                bankId: customBank.id,
+                expectedUpdatedAt: customBank.updatedAt,
+                name: input.name,
+                senderEmails: input.senderEmails,
+                logo: input.logo,
+              });
+            else onCreateCustom(input);
+            setCustomMode(null);
+          }}
+        />
       )}
       {selected ? (
         <DemoAccountEditor

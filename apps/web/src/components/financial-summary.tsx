@@ -15,21 +15,26 @@ function SummaryMetric({
   icon,
   kind,
   scale,
+  compact,
 }: {
   label: string;
   amount: bigint;
   icon: IconName;
   kind: "spending" | "income" | "net";
   scale: bigint;
+  compact: boolean;
 }) {
-  const { formatRupiah } = useAmountDisplay();
+  const { formatRupiah, compactAmount } = useAmountDisplay();
   return (
     <div className={styles.metric} data-kind={kind}>
       <dt>
         <Icon className={styles.metricIcon} name={icon} />
         {label}
       </dt>
-      <dd data-amount>{formatRupiah(amount)}</dd>
+      <dd data-amount title={formatRupiah(amount)}>
+        <span className={styles.short}>{compactAmount(amount)}</span>
+        {compact ? null : <span className={styles.exact}>{formatRupiah(amount)}</span>}
+      </dd>
       {kind !== "net" ? (
         <span aria-hidden className={styles.track}>
           <span style={{ width: `${chartRatio(amount, scale) * 100}%` }} />
@@ -97,6 +102,7 @@ export function FinancialSummary({
           kind="spending"
           label="Spending"
           scale={scale}
+          compact={compact}
         />
         <SummaryMetric
           amount={summary.income}
@@ -104,6 +110,7 @@ export function FinancialSummary({
           kind="income"
           label="Income"
           scale={scale}
+          compact={compact}
         />
         <SummaryMetric
           amount={summary.difference}
@@ -111,6 +118,7 @@ export function FinancialSummary({
           kind="net"
           label="Net"
           scale={scale}
+          compact={compact}
         />
       </dl>
       <SummaryComparison comparison={model.comparison} />
