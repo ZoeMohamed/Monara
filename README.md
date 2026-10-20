@@ -39,7 +39,7 @@ Built for **FinTechathon 2026**, Monara combines a mobile-first PWA with a share
 - **Ask Monara.** Use natural-language questions and supported ledger operations in-app or through a verified WhatsApp link. WhatsApp receipt photos create pending entries for review.
 
 > [!NOTE]
-> The public demo runs without sign-in and resets on reload. The repository includes the backend and integration implementations, but real Google sign-in, Gmail, WhatsApp, model calls, and alerts require configured services and live acceptance. Recurring bills and personal reminders remain demo features. See the [runtime guide](apps/agent/README.md) for supported operations and remaining work.
+> The public demo runs without sign-in on synthetic data and resets on reload. The hosted app runs the full stack: Google sign-in, Gmail import through Composio, WhatsApp through Kapso, and the Cloudflare agent all passed live production checks on 20 October 2026, as recorded in the [execution evidence](https://drive.google.com/file/d/1N88a-duLdAgBbJ0hLvjRiXS2VzcVoucT/view). Recurring bills and personal reminders remain demo features. See the [runtime guide](apps/agent/README.md) for supported operations and remaining work.
 
 ## FinTechathon 2026 submission
 
