@@ -220,7 +220,7 @@ function MerchantField({
           enterKeyHint="done"
           name="merchant"
           onChange={(event) => onChange(event.target.value)}
-          placeholder={income ? "From, e.g. Monthly salary" : "Where, e.g. Kopi Kenangan"}
+          placeholder={income ? "From, e.g. Monthly salary" : "Where, e.g. Starbucks"}
           value={value}
         />
       </label>

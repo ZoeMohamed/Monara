@@ -279,7 +279,7 @@ function TransactionFields({
   const party =
     draft.kind === "income"
       ? { label: "Income source", placeholder: "e.g. Monthly salary" }
-      : { label: "Merchant", placeholder: "e.g. Kopi Kenangan" };
+      : { label: "Merchant", placeholder: "e.g. Starbucks" };
   return (
     <>
       <TextField

@@ -25,7 +25,7 @@ import {
 } from "@/lib/chat/session";
 
 const suggestions = [
-  "kopi 25rb",
+  "coffee 25k",
   "Summarize my spending this week",
   "Visualize my spending",
   "Can I afford a 300k dinner?",
@@ -148,7 +148,7 @@ function ConversationBody({
           <h2>Hey, I’m Monara.</h2>
         </div>
         <p>
-          Need a quick money check? Ask for a summary, or drop a note like “kopi 25rb”. I’ll work
+          Need a quick money check? Ask for a summary, or drop a note like “coffee 25k”. I’ll work
           from your confirmed records.
         </p>
       </div>
