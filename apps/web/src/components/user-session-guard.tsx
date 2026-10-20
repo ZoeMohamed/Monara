@@ -1,21 +1,36 @@
 "use client";
 
-import { useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   ACTIVE_USER_KEY,
+  beginConfirmedSessionExit,
   clearExpiredAuthCookies,
   clearLocalUserState,
+  isConfirmedSessionExiting,
   USER_DELETED_EVENT,
+  USER_SESSION_EXIT_EVENT,
 } from "@/lib/auth/local-user-state";
 
 /** Discard old rendered records across tabs and after another device deletes the User. */
-export function UserSessionGuard({ setupKey }: { setupKey: string }) {
+export function UserSessionGuard({
+  setupKey,
+  children,
+}: {
+  setupKey: string;
+  children: ReactNode;
+}) {
+  const [exiting, setExiting] = useState(isConfirmedSessionExiting);
   useEffect(() => {
     let disposed = false;
     const controller = new AbortController();
+    const hidePrivateState = () => {
+      if (isConfirmedSessionExiting()) setExiting(true);
+    };
+    window.addEventListener(USER_SESSION_EXIT_EVENT, hidePrivateState);
     function leave(destination: string) {
       if (disposed) return;
       disposed = true;
+      beginConfirmedSessionExit();
       try {
         clearLocalUserState(window.localStorage);
         clearLocalUserState(window.sessionStorage);
@@ -29,6 +44,7 @@ export function UserSessionGuard({ setupKey }: { setupKey: string }) {
       if (previous && previous !== setupKey) {
         clearLocalUserState(window.localStorage);
         window.localStorage.setItem(ACTIVE_USER_KEY, setupKey);
+        beginConfirmedSessionExit();
         window.location.reload();
       } else window.localStorage.setItem(ACTIVE_USER_KEY, setupKey);
     } catch {
@@ -41,7 +57,8 @@ export function UserSessionGuard({ setupKey }: { setupKey: string }) {
         "setupKey" in value &&
         value.setupKey === setupKey
       ) {
-        leave("/account-deletion");
+        // A browser event is a hint, never proof that the signed-in owner is invalid.
+        void check("/account-deletion");
       }
     }
     const onStorage = (event: StorageEvent) => {
@@ -59,7 +76,7 @@ export function UserSessionGuard({ setupKey }: { setupKey: string }) {
     } catch {
       /* Storage events and session checks remain available. */
     }
-    async function check() {
+    async function check(destination: "/account-deletion" | "/sign-in" = "/sign-in") {
       if (disposed || document.visibilityState === "hidden") return;
       try {
         const response = await fetch("/api/profile/status", {
@@ -72,20 +89,22 @@ export function UserSessionGuard({ setupKey }: { setupKey: string }) {
           typeof result === "object" &&
           result !== null &&
           "setupKey" in result &&
+          (result.setupKey === null || typeof result.setupKey === "string") &&
           result.setupKey !== setupKey
         ) {
           if (result.setupKey === null) clearExpiredAuthCookies();
-          leave("/sign-in");
+          leave(destination);
         }
       } catch {
         /* Do not treat an offline device as a deleted identity. */
       }
     }
+    const checkStatus = () => void check();
     window.addEventListener("storage", onStorage);
-    window.addEventListener("pageshow", check);
-    window.addEventListener("focus", check);
-    window.addEventListener("online", check);
-    document.addEventListener("visibilitychange", check);
+    window.addEventListener("pageshow", checkStatus);
+    window.addEventListener("focus", checkStatus);
+    window.addEventListener("online", checkStatus);
+    document.addEventListener("visibilitychange", checkStatus);
     const interval = setInterval(() => void check(), 30_000);
     void check();
     return () => {
@@ -93,12 +112,19 @@ export function UserSessionGuard({ setupKey }: { setupKey: string }) {
       controller.abort();
       clearInterval(interval);
       channel?.close();
+      window.removeEventListener(USER_SESSION_EXIT_EVENT, hidePrivateState);
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("pageshow", check);
-      window.removeEventListener("focus", check);
-      window.removeEventListener("online", check);
-      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("pageshow", checkStatus);
+      window.removeEventListener("focus", checkStatus);
+      window.removeEventListener("online", checkStatus);
+      document.removeEventListener("visibilitychange", checkStatus);
     };
   }, [setupKey]);
-  return null;
+  return exiting ? (
+    <main aria-busy="true" className="min-h-dvh bg-background p-6 text-muted">
+      <p role="status">Closing this account’s private view…</p>
+    </main>
+  ) : (
+    children
+  );
 }

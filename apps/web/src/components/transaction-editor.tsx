@@ -21,6 +21,7 @@ import {
   transactionErrors,
 } from "@/data/demo-ledger";
 import { demoTransactionSelection } from "@/data/demo-resources";
+import { protectUnsavedChanges } from "@/lib/auth/local-user-state";
 import { FinanceClientError } from "@/lib/finance/client";
 import { FinancePresentationError, parseDraftAmount } from "@/lib/finance/presentation";
 
@@ -130,13 +131,20 @@ function draftOf(
       : (transaction?.merchant ?? ""),
     amount: transaction?.amount?.toString() ?? "",
     date: transaction ? (transaction.date ?? "") : today,
-    time: transaction?.time ?? "",
+    // Time is not edited here; retain source seconds through unrelated corrections.
+    time: transaction?.backend
+      ? (transaction.backend.occurredTime ?? "")
+      : (transaction?.time ?? ""),
     kind: transaction?.kind ?? null,
     currency: transaction ? transaction.currency : "IDR",
     category: resources
       ? (transaction?.backend?.categoryId ??
         (resources.demo
-          ? resources.categories.find((category) => category.name === transaction?.category)?.id
+          ? resources.categories.find(
+              (category) =>
+                category.name === transaction?.category &&
+                category.kind === (transaction?.categoryKind ?? transaction?.kind),
+            )?.id
           : null) ??
         null)
       : (transaction?.category ?? null),
@@ -371,7 +379,8 @@ function validateDraft(
     throw error;
   }
   const validation = transactionErrors(values);
-  if (action !== "edit" && values.kind !== "exclusion" && !values.method)
+  // Confirming an exclusion needs no account; creating any transaction still does (below).
+  if (action !== "edit" && !values.method && values.kind !== "exclusion")
     validation.method = "Choose the account used for this transaction.";
   if (action === "edit") {
     for (const field of ["kind", "amount", "currency", "date", "method"] as const) {
@@ -386,8 +395,8 @@ function validateDraft(
       validation.merchant =
         values.kind === "income" ? "Enter an income source." : "Enter a merchant.";
     }
-    if ((values.kind !== "exclusion" || (resources && !resources.demo)) && !values.method)
-      validation.method = "Choose an account.";
+    if (!values.method) validation.method = "Choose an account.";
+    if (values.amount === null) validation.amount = "Enter the transaction amount.";
   }
   if (
     resources &&
@@ -399,17 +408,13 @@ function validateDraft(
     action === "edit" &&
     transaction?.status === "pending" &&
     draft.category === draftOf(transaction, resources).category;
-  if (
-    resources &&
-    draft.category &&
-    !resources.categories.some(
-      (category) =>
-        category.id === draft.category &&
-        (!category.isArchived || unchangedPendingCategory) &&
-        (draft.kind === null || category.kind === draft.kind),
-    )
-  )
-    validation.category = "Choose an available category matching this transaction type.";
+  if (resources && draft.category) {
+    const category = resources.categories.find((item) => item.id === draft.category);
+    if (!category || (category.isArchived && !unchangedPendingCategory))
+      validation.category = "Choose an available category. This category was archived or removed.";
+    else if (draft.kind !== null && category.kind !== draft.kind)
+      validation.category = "Choose an available category matching this transaction type.";
+  }
   return validation;
 }
 
@@ -654,7 +659,7 @@ function useTransactionEditorState({
   useEffect(() => {
     if (!dirty && !state.uncertain && state.phase !== "saving") return;
     const protectDraft = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
+      protectUnsavedChanges(event);
     };
     window.addEventListener("beforeunload", protectDraft);
     return () => window.removeEventListener("beforeunload", protectDraft);

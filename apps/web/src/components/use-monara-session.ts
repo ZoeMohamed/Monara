@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  type CreateCustomBankInput,
+  type CustomBank,
   calendarDateSchema,
   createFinancialAccountInputSchema,
   type ReversibleActionReceipt,
@@ -8,6 +10,7 @@ import {
 } from "@monara/contracts";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { AppSession } from "@/components/app-session-context";
+import type { DemoBudgetChanges } from "@/components/demo-budget-editor";
 import { useTransactionActions } from "@/components/transaction-actions";
 import type { TransactionDraft } from "@/components/transaction-editor";
 import { useAppNavigation } from "@/components/use-app-navigation";
@@ -36,16 +39,18 @@ import {
   type Transaction,
 } from "@/data/sample-data";
 import type { AuthenticatedProfile } from "@/lib/auth/identity";
+import { createDemoBank, editDemoBank } from "@/lib/finance/custom-banks";
 import type { FinanceSnapshot } from "@/lib/finance/presentation";
 
 export type SaveNotice = {
   message: string;
   tone?: "success" | "warning";
-  recovery?: "refresh" | "history";
+  recovery?: "refresh" | "history" | "budgets";
   undo?:
     | { kind: "update"; before: Transaction; expected: Transaction }
     | { kind: "delete"; transaction: Transaction; index: number }
     | { kind: "create"; transaction: Transaction }
+    | { kind: "budget"; before: Budget; expected: Budget; categoryIcon?: string }
     | { kind: "backend"; receipt: ReversibleActionReceipt };
 };
 
@@ -159,6 +164,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const [demoTransactions, setTransactions] = useState(initialTransactions);
   const [demoBudgets, setBudgets] = useState(initialBudgets);
   const [demoAccounts, setDemoAccounts] = useState(initialDemoAccounts);
+  const [demoCustomBanks, setDemoCustomBanks] = useState<CustomBank[]>([]);
   const [demoCategories, setDemoCategories] = useState(() => demoEditorCategories(initialBudgets));
   const [personalReminders, setPersonalReminders] = useState<PersonalReminder[]>([]);
   const [notificationStatuses, setNotificationStatuses] = useState<
@@ -183,6 +189,16 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
   const [amountsHidden, toggleAmounts] = useAmountsHidden();
   const [chatPrompt, setChatPrompt] = useState<string | null>(null);
   const tourMode: "live" | "demo" = live ? "live" : "demo";
+  const createDemoCustomBank = useCallback(
+    (input: CreateCustomBankInput) => {
+      if (live || demoCustomBanks.some((bank) => bank.id === input.bankId)) return;
+      const result = createDemoBank(input, demoCustomBanks);
+      setDemoCustomBanks((banks) => [...banks, result.customBank]);
+      setDemoAccounts((accounts) => [...accounts, result.financialAccount]);
+      setNotice({ message: "Custom bank added for this demo visit." });
+    },
+    [live, demoCustomBanks],
+  );
   const { onboarding, tourPending, startReplay, finishTour } = useFirstRun({
     live,
     email: profile.email,
@@ -191,6 +207,8 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     homeOpen: homeIsUncovered(view),
     homeScreen: view.screen === "home",
     refreshFinance: sync.refresh,
+    onDemoCreateBank: createDemoCustomBank,
+    runMutation: sync.runMutation,
   });
   const {
     transactions,
@@ -263,6 +281,49 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       editId: null,
       adding: false,
     });
+  const updateDemoBudget = (budgetId: string, changes: DemoBudgetChanges) => {
+    if (live) return;
+    const before = demoBudgets.find((budget) => budget.id === budgetId);
+    if (!before) throw new Error("This budget is no longer available. Choose another budget.");
+    if (
+      demoBudgets.some(
+        (budget) =>
+          budget.id !== budgetId &&
+          budget.category.toLowerCase() === before.category.toLowerCase() &&
+          budget.cadence === changes.cadence,
+      )
+    )
+      throw new Error(
+        `This category already has a ${changes.cadence} budget. Keep its current period or edit the other budget.`,
+      );
+    const expected = { ...before, ...changes };
+    const categoryIcon = demoCategories.find(
+      (category) => category.kind === "expense" && category.name === before.category,
+    )?.icon;
+    setBudgets((items) => items.map((budget) => (budget.id === budgetId ? expected : budget)));
+    if (changes.icon) {
+      setDemoCategories((categories) =>
+        categories.map((category) =>
+          category.kind === "expense" && category.name === before.category
+            ? { ...category, icon: changes.icon ?? category.icon }
+            : category,
+        ),
+      );
+      setTransactions((items) =>
+        items.map((transaction) =>
+          transaction.kind === "expense" &&
+          (transaction.categoryKind ?? transaction.kind) === "expense" &&
+          transaction.category === before.category
+            ? { ...transaction, categoryIcon: changes.icon ?? transaction.categoryIcon }
+            : transaction,
+        ),
+      );
+    }
+    setNotice({
+      message: "Budget updated.",
+      undo: { kind: "budget", before, expected, categoryIcon },
+    });
+  };
   const {
     confirm,
     save,
@@ -291,6 +352,31 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     setBills,
     setConfirmError,
     setRejectError,
+    budgets: demoBudgets,
+    restoreDemoBudget: (before, categoryIcon) => {
+      setBudgets((items) => items.map((budget) => (budget.id === before.id ? before : budget)));
+      if (categoryIcon) {
+        setDemoCategories((categories) =>
+          categories.map((category) =>
+            category.kind === "expense" &&
+            (category.id === before.categoryId ||
+              (!before.categoryId && category.name === before.category))
+              ? { ...category, icon: categoryIcon }
+              : category,
+          ),
+        );
+        setTransactions((items) =>
+          items.map((transaction) =>
+            transaction.kind === "expense" &&
+            (transaction.categoryKind ?? transaction.kind) === "expense" &&
+            (transaction.categoryId === before.categoryId ||
+              (!before.categoryId && transaction.category === before.category))
+              ? { ...transaction, categoryIcon }
+              : transaction,
+          ),
+        );
+      }
+    },
   });
 
   // Native history updates can settle after the ledger mutation. Suppress only the
@@ -312,6 +398,21 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     transactions,
     budgets: selectedBudgets,
     financialAccounts: resources.financialAccounts,
+    customBanks: financeSnapshot?.customBanks ?? demoCustomBanks,
+    createDemoCustomBank,
+    updateDemoCustomBank: (input) => {
+      if (live) return;
+      const bank = editDemoBank(input, demoCustomBanks);
+      setDemoCustomBanks((banks) => banks.map((item) => (item.id === bank.id ? bank : item)));
+      setDemoAccounts((accounts) =>
+        accounts.map((account) =>
+          account.institutionKey === bank.key
+            ? { ...account, institution: bank.name, institutionLogo: bank.logo }
+            : account,
+        ),
+      );
+      setNotice({ message: "Custom bank updated for this demo visit." });
+    },
     categories: resources.categories,
     createDemoCategory: (input) => {
       if (live) return;
@@ -319,9 +420,12 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       if (
         !name ||
         name.length > 100 ||
-        demoCategories.some((category) => category.name.toLowerCase() === name.toLowerCase())
+        demoCategories.some(
+          (category) =>
+            category.kind === input.kind && category.name.toLowerCase() === name.toLowerCase(),
+        )
       )
-        throw new Error("Choose a new category name, up to 100 characters.");
+        throw new Error("Choose a new name for this category type, up to 100 characters.");
       const id = crypto.randomUUID();
       const timestamp = new Date().toISOString();
       setDemoCategories((categories) => [
@@ -341,42 +445,53 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       ]);
       setNotice({ message: "Category added for this demo visit." });
     },
-    updateDemoCategory: (original, changes) => {
+    updateDemoCategory: (categoryId, changes) => {
       if (live) return;
+      const original = demoCategories.find((category) => category.id === categoryId);
+      if (!original || original.isArchived)
+        throw new Error("That category is no longer available.");
       const name = changes.name.trim();
       if (
         !name ||
         name.length > 100 ||
         demoCategories.some(
           (category) =>
-            category.name !== original && category.name.toLowerCase() === name.toLowerCase(),
+            category.id !== categoryId &&
+            category.kind === original.kind &&
+            category.name.toLowerCase() === name.toLowerCase(),
         )
       )
-        throw new Error("Choose a different category name, up to 100 characters.");
+        throw new Error("Choose a different name for this category type.");
       setDemoCategories((categories) =>
         categories.map((category) =>
-          category.name === original ? { ...category, name, icon: changes.icon } : category,
+          category.id === categoryId ? { ...category, name, icon: changes.icon } : category,
         ),
       );
       setBudgets((budgets) =>
         budgets.map((budget) =>
-          budget.category === original ? { ...budget, category: name, icon: changes.icon } : budget,
+          budget.categoryId === categoryId ||
+          (!budget.categoryId && budget.category === original.name && original.kind === "expense")
+            ? { ...budget, category: name, icon: changes.icon }
+            : budget,
         ),
       );
       setTransactions((transactions) =>
         transactions.map((transaction) =>
-          transaction.category === original
+          transaction.categoryId === categoryId ||
+          (!transaction.categoryId &&
+            transaction.category === original.name &&
+            (transaction.categoryKind ?? transaction.kind) === original.kind)
             ? { ...transaction, category: name, categoryIcon: changes.icon }
             : transaction,
         ),
       );
       setNotice({ message: "Category updated for this demo visit." });
     },
-    archiveDemoCategory: (name) => {
+    archiveDemoCategory: (categoryId) => {
       if (live) return;
       setDemoCategories((categories) =>
         categories.map((category) =>
-          category.name === name ? { ...category, isArchived: true } : category,
+          category.id === categoryId ? { ...category, isArchived: true } : category,
         ),
       );
       setNotice({ message: "Category removed from new payments and budgets for this demo visit." });
@@ -395,11 +510,13 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       )
         throw new Error("Choose a different account name.");
       const { clientRequestId, ...values } = parsed.data;
+      const customBank = demoCustomBanks.find((bank) => bank.key === values.institutionKey);
       const timestamp = new Date().toISOString();
       setDemoAccounts((accounts) => [
         ...accounts,
         {
           ...values,
+          ...(customBank ? { institution: customBank.name, institutionLogo: customBank.logo } : {}),
           id: clientRequestId,
           isActive: true,
           createdAt: timestamp,
@@ -425,9 +542,16 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
         )
       )
         throw new Error("Choose a different account name.");
+      const institutionKey =
+        parsed.data.changes.institutionKey !== undefined
+          ? parsed.data.changes.institutionKey
+          : account.institutionKey;
+      const customBank = demoCustomBanks.find((bank) => bank.key === institutionKey);
       const updated = {
         ...account,
         ...parsed.data.changes,
+        institutionLogo: customBank?.logo,
+        ...(customBank ? { institution: customBank.name } : {}),
         updatedAt: new Date().toISOString(),
       };
       setDemoAccounts((accounts) =>
@@ -522,6 +646,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
     },
     today,
     currentMonth,
+    notify: setNotice,
     dataMode: tourMode,
     financeSnapshot,
     refreshFinance,
@@ -537,42 +662,7 @@ export function useMonaraSession(profile: AuthenticatedProfile, initialFinance?:
       setAttentionStatuses((previous) => ({ ...previous, [id]: status })),
     reminderCount: updatesCount + duePersonalReminders(personalReminders, today),
     personalReminders,
-    updateDemoBudget: (budgetId, changes) => {
-      if (live) return;
-      const selected = demoBudgets.find((budget) => budget.id === budgetId);
-      if (
-        selected &&
-        demoBudgets.some(
-          (budget) =>
-            budget.id !== budgetId &&
-            budget.category.toLowerCase() === selected.category.toLowerCase() &&
-            budget.cadence === changes.cadence,
-        )
-      )
-        throw new Error(
-          `This category already has a ${changes.cadence} budget. Keep its current period or edit the other budget.`,
-        );
-      setBudgets((items) =>
-        items.map((budget) => (budget.id === budgetId ? { ...budget, ...changes } : budget)),
-      );
-      if (selected && changes.icon)
-        setDemoCategories((categories) =>
-          categories.map((category) =>
-            category.name === selected.category
-              ? { ...category, icon: changes.icon ?? category.icon }
-              : category,
-          ),
-        );
-      if (selected && changes.icon)
-        setTransactions((transactions) =>
-          transactions.map((transaction) =>
-            transaction.category === selected.category
-              ? { ...transaction, categoryIcon: changes.icon ?? transaction.categoryIcon }
-              : transaction,
-          ),
-        );
-      setNotice({ message: "Budget updated for this demo visit." });
-    },
+    updateDemoBudget,
     saveDemoReminder: (draft, id) => {
       if (live || Object.keys(personalReminderErrors(draft)).length > 0) return;
       const title = draft.title.trim();

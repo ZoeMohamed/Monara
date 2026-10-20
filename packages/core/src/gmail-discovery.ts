@@ -4,9 +4,9 @@
 // reaches it through the agent's discover operation.
 import {
   emailInstitutions,
-  findInstitutionBySender,
   type GmailConnectionId,
   type GmailDiscoveryFinding,
+  type Institution,
 } from "@monara/contracts";
 import {
   connectionNotActive,
@@ -71,11 +71,19 @@ function lastFoursIn(subject: string | null): string[] {
 }
 
 /** Tallies listed messages by the registry entry of their sender. */
-function tallyDiscovery(messages: readonly DiscoveryMessage[]): GmailDiscoveryFinding[] {
+function tallyDiscovery(
+  messages: readonly DiscoveryMessage[],
+  entries: readonly Institution[],
+): GmailDiscoveryFinding[] {
+  const bySender = new Map(
+    entries.flatMap((entry) =>
+      entry.senderEmails.map((sender) => [sender.toLowerCase(), entry] as const),
+    ),
+  );
   const found = new Map<string, GmailDiscoveryFinding>();
   for (const message of messages) {
     const institution = message.senderAddress
-      ? findInstitutionBySender(message.senderAddress)
+      ? bySender.get(message.senderAddress.trim().toLowerCase())
       : null;
     if (!institution) continue;
     const finding = found.get(institution.key) ?? {
@@ -142,7 +150,8 @@ export async function runGmailDiscovery(
   };
 
   try {
-    const allSenders = emailInstitutions.flatMap((entry) => entry.senderEmails);
+    const entries = [...emailInstitutions, ...(connection.customInstitutions ?? [])];
+    const allSenders = [...new Set(entries.flatMap((entry) => entry.senderEmails))];
     const messages: DiscoveryMessage[] = [];
     let pageToken: string | null = null;
     do {
@@ -151,11 +160,11 @@ export async function runGmailDiscovery(
       pageToken = page.nextPageToken;
     } while (pageToken && messages.length < MAX_DISCOVERY_MESSAGES);
 
-    let findings = tallyDiscovery(messages);
+    let findings = tallyDiscovery(messages, entries);
     // When the listing leaves out senders, ask Gmail once per entry instead.
     if (messages.some((message) => message.senderAddress === null)) {
       findings = [];
-      for (const entry of emailInstitutions) {
+      for (const entry of entries) {
         const page = await list(entry.senderEmails, null);
         if (page.messages.length === 0) continue;
         const lastFours = [...new Set(page.messages.flatMap((m) => lastFoursIn(m.subject)))];

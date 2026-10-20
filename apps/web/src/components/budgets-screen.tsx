@@ -2,12 +2,12 @@
 
 import type { Category, FinancialInsights } from "@monara/contracts";
 import { Button, Card, Chip, ProgressBar } from "@monara/ui";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
 
 import { BillCalendar } from "@/components/bill-calendar";
 import { BrandMark } from "@/components/brand-mark";
-import { BudgetDetails } from "@/components/budget-details";
+import { BudgetDetails, type BudgetDetailsRecord } from "@/components/budget-details";
 import budgetStyles from "@/components/budgets-screen.module.css";
 import { CategorySpendingGuide } from "@/components/category-spending-guide";
 import { CategoryAvatar } from "@/components/category-symbol";
@@ -18,18 +18,17 @@ import { MonthSelector } from "@/components/month-selector";
 import { RecurringBillSuggestion } from "@/components/recurring-bill-suggestion";
 import { useMerchantLogo } from "@/components/use-brand-logo";
 import { SectionTitle } from "@/components/visual";
+import { summarizeBudgetPeriod } from "@/data/budget-period-model";
 import { categoryColor, categoryIcon } from "@/data/category-style";
 import {
   type Budget,
   budgetUsage,
   daysBetween,
-  daysInMonth,
   demoMonth,
   demoToday,
   formatDay,
   formatMonth,
   type RecurringBill,
-  safeToSpendToday,
   type Transaction,
 } from "@/data/demo-ledger";
 
@@ -60,18 +59,20 @@ function BudgetProgress({
   label,
   color,
   state = "on-track",
+  periodLabel = "period",
 }: {
   percent: number;
   elapsedPercent?: number;
   label: string;
   color?: string;
   state?: "on-track" | "warning" | "at-limit" | "over";
+  periodLabel?: string;
 }) {
   return (
     <div className="relative">
       <ProgressBar
         aria-label={label}
-        aria-valuetext={`${percent}% used${elapsedPercent === undefined ? "" : `; ${elapsedPercent}% of the month elapsed`}`}
+        aria-valuetext={`${percent}% used${elapsedPercent === undefined ? "" : `; ${elapsedPercent}% of the ${periodLabel} elapsed`}`}
         value={Math.min(percent, 100)}
       >
         <ProgressBar.Track className="h-2 bg-surface-tertiary">
@@ -92,14 +93,130 @@ function BudgetProgress({
   );
 }
 
-function RowAction({ editing }: { editing: boolean }) {
-  return editing ? (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-accent">
-      <Icon className="h-3.5 w-3.5" name="compose" />
-      Edit
-    </span>
-  ) : (
-    <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+function BudgetRowAction({
+  budget,
+  onEdit,
+  onDelete,
+  description,
+  children,
+}: {
+  budget: Budget;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  description: string;
+  children: ReactNode;
+}) {
+  const descriptionId = `budget-${budget.id}-summary`;
+  return (
+    <li>
+      <div className="flex items-center gap-1">
+        <Button
+          aria-describedby={descriptionId}
+          aria-label={`View ${budget.category} budget details`}
+          className={`${budgetStyles.budgetRow} flex-1`}
+          onPress={onEdit}
+          variant="ghost"
+        >
+          <span className="sr-only" id={descriptionId}>
+            {description}
+          </span>
+          {children}
+        </Button>
+        {onDelete && (
+          <Button
+            aria-label={`Delete ${budget.category} budget`}
+            className="h-10 w-10 shrink-0 rounded-full text-muted"
+            isIconOnly
+            onPress={onDelete}
+            variant="ghost"
+          >
+            <Icon className="h-4 w-4" name="delete" />
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function UpcomingBudgetContent({ budget }: { budget: Budget }) {
+  const { formatRupiah } = useAmountDisplay();
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">
+          {budget.category}
+        </h3>
+        <strong className="text-sm tabular-nums">{formatRupiah(budget.limit)}</strong>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted">
+          Starts {budget.startsOn ? formatDay(budget.startsOn) : "later"}
+        </p>
+        <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+      </div>
+    </>
+  );
+}
+
+function ActiveBudgetContent({
+  budget,
+  usage,
+  color,
+  today,
+}: {
+  budget: Budget;
+  usage: ReturnType<typeof budgetUsage>;
+  color: string;
+  today: string;
+}) {
+  const { formatRupiah } = useAmountDisplay();
+  const over = usage.state === "over";
+  const remaining = over ? -usage.remaining : usage.remaining;
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold [overflow-wrap:anywhere]">
+          <CategoryAvatar
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-secondary"
+            icon={budget.icon}
+            iconClassName="h-4 w-4"
+            name={budget.category}
+            size={36}
+            style={{ color }}
+          />
+          {budget.category}
+        </h3>
+        <span className={`text-xs font-medium ${textByState[usage.state]}`}>
+          {labelByState[usage.state]}
+        </span>
+      </div>
+      <div className="mt-3">
+        <BudgetProgress
+          color={color}
+          label={`${budget.category} budget used`}
+          percent={usage.percent}
+          state={usage.state}
+        />
+      </div>
+      <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-2 text-xs tabular-nums">
+        <p className="min-w-0 text-muted [overflow-wrap:anywhere]">
+          <span className="font-medium text-foreground">{formatRupiah(usage.used)}</span> of{" "}
+          {formatRupiah(usage.limit)} spent · {usage.percent}%
+        </p>
+        <p
+          className={`min-w-0 text-sm font-bold [overflow-wrap:anywhere] ${over ? "text-danger" : "text-foreground"}`}
+        >
+          {formatRupiah(remaining)} {over ? "over" : "left"}
+        </p>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted">
+          {formatDay(usage.periodStartsOn ?? budget.startsOn ?? today)} –{" "}
+          {formatDay(usage.periodEndsOn ?? usage.periodStartsOn ?? budget.startsOn ?? today)}
+        </p>
+        <Icon className="h-4 w-4 shrink-0 text-muted" name="chevron-right" />
+      </div>
+    </div>
   );
 }
 
@@ -109,101 +226,38 @@ function BudgetRow({
   month,
   index,
   onEdit,
+  onDelete,
   today,
-  editing,
 }: {
   budget: Budget;
   transactions: Transaction[];
   month: string;
   index: number;
   onEdit?: () => void;
+  onDelete?: () => void;
   today: string;
-  editing: boolean;
 }) {
   const { formatRupiah } = useAmountDisplay();
   const usage = budgetUsage(transactions, budget, month, today);
   const color = categoryColor(budget.category, index);
+  const description = usage.periodStartsOn
+    ? `${formatRupiah(usage.used)} of ${formatRupiah(usage.limit)} spent. ${formatRupiah(usage.remaining < 0n ? -usage.remaining : usage.remaining)} ${usage.remaining < 0n ? "over" : "left"}. ${formatDay(usage.periodStartsOn)} to ${formatDay(usage.periodEndsOn ?? usage.periodStartsOn)}.`
+    : `${formatRupiah(budget.limit)} limit. ${budget.startsOn ? `Starts ${formatDay(budget.startsOn)}.` : "Not started yet."}`;
   if (usage.periodStartsOn === null)
     return (
-      <li>
-        <Button
-          aria-label={`${editing ? "Edit" : "View"} ${budget.category} budget${editing ? "" : " details"}`}
-          className={budgetStyles.budgetRow}
-          onPress={onEdit}
-          variant="ghost"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="min-w-0 text-sm font-semibold [overflow-wrap:anywhere]">
-              {budget.category}
-            </h3>
-            <strong className="text-sm tabular-nums">{formatRupiah(budget.limit)}</strong>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted">
-              Starts {budget.startsOn ? formatDay(budget.startsOn) : "later"}
-            </p>
-            <RowAction editing={editing} />
-          </div>
-        </Button>
-      </li>
+      <BudgetRowAction
+        budget={budget}
+        description={description}
+        onDelete={onDelete}
+        onEdit={onEdit}
+      >
+        <UpcomingBudgetContent budget={budget} />
+      </BudgetRowAction>
     );
   return (
-    <li>
-      <Button
-        aria-label={`${editing ? "Edit" : "View"} ${budget.category} budget${editing ? "" : " details"}`}
-        className={budgetStyles.budgetRow}
-        onPress={onEdit}
-        variant="ghost"
-      >
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold [overflow-wrap:anywhere]">
-              <CategoryAvatar
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-secondary"
-                icon={budget.icon}
-                iconClassName="h-4 w-4"
-                name={budget.category}
-                size={36}
-                style={{ color }}
-              />
-              {budget.category}
-            </h3>
-            <span className={`text-xs font-medium ${textByState[usage.state]}`}>
-              {labelByState[usage.state]}
-            </span>
-          </div>
-          <div className="mt-3">
-            <BudgetProgress
-              color={color}
-              label={`${budget.category} budget used`}
-              percent={usage.percent}
-              state={usage.state}
-            />
-          </div>
-          <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-2 text-xs tabular-nums">
-            <p className="min-w-0 text-muted [overflow-wrap:anywhere]">
-              <span className="font-medium text-foreground">{formatRupiah(usage.used)}</span> of{" "}
-              {formatRupiah(usage.limit)} spent · {usage.percent}%
-            </p>
-            <p
-              className={`min-w-0 text-sm font-bold [overflow-wrap:anywhere] ${usage.state === "over" ? "text-danger" : "text-foreground"}`}
-            >
-              {usage.state === "over"
-                ? `${formatRupiah(-usage.remaining)} over`
-                : `${formatRupiah(usage.remaining)} left`}
-            </p>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted">
-              {usage.periodStartsOn && usage.periodEndsOn
-                ? `${formatDay(usage.periodStartsOn)} – ${formatDay(usage.periodEndsOn)}`
-                : "Not started yet"}
-            </p>
-            <RowAction editing={editing} />
-          </div>
-        </div>
-      </Button>
-    </li>
+    <BudgetRowAction budget={budget} description={description} onDelete={onDelete} onEdit={onEdit}>
+      <ActiveBudgetContent budget={budget} color={color} today={today} usage={usage} />
+    </BudgetRowAction>
   );
 }
 
@@ -266,35 +320,19 @@ function BillRow({ bill, today }: { bill: RecurringBill; today: string }) {
   );
 }
 
-function summarizeBudgets(
-  transactions: Transaction[],
-  budgets: Budget[],
-  month: string,
-  today: string,
-) {
-  let totalLimit = BigInt(0);
-  let totalUsed = BigInt(0);
-  let remaining = BigInt(0);
-  let overBudget = BigInt(0);
-  for (const budget of budgets) {
-    const usage = budgetUsage(transactions, budget, month, today);
-    if (usage.periodStartsOn === null) continue;
-    totalLimit += usage.limit;
-    totalUsed += usage.used;
-    if (usage.remaining > BigInt(0)) remaining += usage.remaining;
-    if (usage.remaining < BigInt(0)) overBudget -= usage.remaining;
-  }
-  const usedPercent = totalLimit > BigInt(0) ? Number((totalUsed * BigInt(100)) / totalLimit) : 0;
-  let elapsedPercent = month < today.slice(0, 7) ? 100 : 0;
-  if (month === today.slice(0, 7)) {
-    elapsedPercent = Math.round((Number(today.slice(8, 10)) / daysInMonth(month)) * 100);
-  }
-  return { totalLimit, totalUsed, remaining, overBudget, usedPercent, elapsedPercent };
-}
+type BudgetSummary = ReturnType<typeof summarizeBudgetPeriod>;
 
-type BudgetSummary = ReturnType<typeof summarizeBudgets>;
-
-function BudgetGauge({ used, elapsed, over }: { used: number; elapsed?: number; over: boolean }) {
+function BudgetGauge({
+  used,
+  elapsed,
+  over,
+  cadence,
+}: {
+  used: number;
+  elapsed?: number;
+  over: boolean;
+  cadence: Budget["cadence"];
+}) {
   const angle = Math.PI * (1 - Math.min(elapsed ?? 0, 100) / 100);
   // Rounded coordinates keep the server and browser render identical.
   const at = (radius: number) => ({
@@ -303,15 +341,11 @@ function BudgetGauge({ used, elapsed, over }: { used: number; elapsed?: number; 
   });
   const inner = at(66);
   const outer = at(92);
-  const stroke = over
-    ? "var(--danger)"
-    : elapsed !== undefined && used > elapsed
-      ? "#b37b15"
-      : "var(--accent)";
+  const stroke = over ? "var(--danger)" : "var(--accent)";
   return (
-    <figure className="w-32 shrink-0 sm:w-36">
+    <figure className="w-24 shrink-0 sm:w-28">
       <svg
-        aria-label={`${used}% of category budgets used${elapsed === undefined ? "" : `; needle shows ${elapsed}% of the month elapsed`}`}
+        aria-label={`${used}% of category budgets used${elapsed === undefined ? "" : `; needle shows ${elapsed}% of the budget ${cadence === "weekly" ? "week" : "month"} elapsed`}`}
         className="w-full"
         role="img"
         viewBox="0 0 200 108"
@@ -354,102 +388,56 @@ function BudgetGauge({ used, elapsed, over }: { used: number; elapsed?: number; 
           {used > 999 ? "999%+" : `${used}%`}
         </text>
       </svg>
-      <figcaption className="mt-1 text-center text-xs text-muted">Budgets used</figcaption>
+      <figcaption className="mt-1 text-center text-xs text-muted">Used</figcaption>
     </figure>
   );
 }
 
-function BudgetSummaryProgress({
-  summary,
-  elapsedPercent,
-}: {
-  summary: BudgetSummary;
-  elapsedPercent?: number;
-}) {
-  const state =
-    summary.totalUsed > summary.totalLimit
-      ? "over"
-      : summary.totalLimit > 0n && summary.totalUsed === summary.totalLimit
-        ? "at-limit"
-        : "on-track";
-  return (
-    <div className="mt-4">
-      <BudgetProgress
-        elapsedPercent={elapsedPercent}
-        label="Total category budget used"
-        percent={summary.usedPercent}
-        state={state}
-      />
-      <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-muted tabular-nums">
-        <span>{summary.usedPercent}% of budgets used</span>
-        {elapsedPercent !== undefined && (
-          <span>Needle / marker: {elapsedPercent}% of month elapsed</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DailyBudgetGuide({ safe }: { safe: ReturnType<typeof safeToSpendToday> }) {
-  const { formatRupiah } = useAmountDisplay();
-  return (
-    <div className="mt-5 border-t border-separator pt-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="text-sm font-medium">Daily budget guide</p>
-        <p className="text-sm font-semibold tabular-nums [overflow-wrap:anywhere]">
-          {formatRupiah(safe.perDay)}
-          <span className="font-normal text-muted"> / day</span>
-        </p>
-      </div>
-      <p className="mt-1 text-xs text-muted">
-        {formatRupiah(safe.remaining)} overall remaining ÷ {safe.daysLeft}{" "}
-        {safe.daysLeft === 1 ? "day" : "days"} left, including today.
-      </p>
-      <p className="mt-1 text-xs text-muted">
-        Total limits minus all confirmed expenses, with a minimum of Rp0.
-      </p>
-    </div>
-  );
-}
-
 function BudgetSummaryCard({
-  transactions,
   budgets,
-  month,
   summary,
-  today,
-  monthlyOnly,
-  calendarPeriods,
+  cadence,
 }: {
-  transactions: Transaction[];
   budgets: Budget[];
-  month: string;
   summary: BudgetSummary;
-  today: string;
-  monthlyOnly: boolean;
-  calendarPeriods: boolean;
+  cadence: Budget["cadence"];
 }) {
   const { formatRupiah } = useAmountDisplay();
-  const currentMonth = month === today.slice(0, 7);
-  const safe = safeToSpendToday(transactions, budgets, today);
-  const elapsedPercent = currentMonth && calendarPeriods ? summary.elapsedPercent : undefined;
+  const elapsedPercent = summary.elapsedPercent;
+  if (budgets.length === 0)
+    return (
+      <div className="px-5 py-4">
+        <h2 className="text-base font-semibold">
+          {cadence === "weekly" ? "Weekly" : "Monthly"} budgets
+        </h2>
+        <p className="mt-1 text-sm text-muted">Set a limit to start tracking this period.</p>
+      </div>
+    );
   return (
-    <Card className="block min-w-0 gap-0 rounded-2xl border border-border p-5 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-4">
-        <div className="min-w-0 flex-1 basis-[13rem]">
+    <div className="px-5 pb-2 pt-5 sm:px-6">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+        <div className="min-w-0">
           <h2 className="text-sm font-medium text-muted">
-            {monthlyOnly ? "Monthly category budgets remaining" : "Remaining in category budgets"}
+            {cadence === "weekly" ? "Weekly budgets remaining" : "Monthly budgets remaining"}
           </h2>
           <p className="mt-2 text-3xl font-extrabold leading-tight tracking-[-0.03em] tabular-nums [overflow-wrap:anywhere] sm:text-4xl">
             {formatRupiah(summary.remaining)}
           </p>
         </div>
         <BudgetGauge
+          cadence={cadence}
           elapsed={elapsedPercent}
           over={summary.overBudget > BigInt(0)}
           used={summary.usedPercent}
         />
       </div>
+      <p className="mt-3 text-xs leading-5 text-muted">
+        {summary.sharedPeriod
+          ? `${formatDay(summary.sharedPeriod.startsOn)} – ${formatDay(summary.sharedPeriod.endsOn)}`
+          : summary.activeCount > 0
+            ? "Different reset dates"
+            : "Not started yet"}
+      </p>
       <dl className="mt-5 grid grid-cols-2 gap-4">
         <div className="min-w-0">
           <dt className="text-xs text-muted">Spent</dt>
@@ -464,23 +452,18 @@ function BudgetSummaryCard({
           </dd>
         </div>
       </dl>
-      <BudgetSummaryProgress elapsedPercent={elapsedPercent} summary={summary} />
       {summary.overBudget > BigInt(0) ? (
         <div className="mt-4 rounded-xl bg-warning-soft p-3 text-sm leading-6 text-warning-soft-foreground">
           <p>
             <span className="font-semibold tabular-nums">
               {formatRupiah(summary.overBudget)} over
             </span>{" "}
-            across categories above their limits.
+            across categories.
           </p>
-          <p className="mt-1">
-            You can still make a plan. Open a category below to check its spending or adjust the
-            limit for the rest of the period.
-          </p>
+          <p className="mt-1">Review spending or adjust a category limit.</p>
         </div>
       ) : null}
-      {currentMonth && calendarPeriods ? <DailyBudgetGuide safe={safe} /> : null}
-    </Card>
+    </div>
   );
 }
 
@@ -489,123 +472,59 @@ function CategoryBudgets({
   budgets,
   month,
   onOpenBudget,
-  onEditBudget,
+  onDeleteBudget,
   today,
   onCreate,
+  cadence,
 }: {
   transactions: Transaction[];
   budgets: Budget[];
   month: string;
+  cadence: Budget["cadence"];
   onOpenBudget: (budget: Budget) => void;
-  onEditBudget: (budget: Budget) => void;
+  onDeleteBudget?: (budget: Budget) => void;
   today: string;
   onCreate: () => void;
 }) {
-  // Editing turns each row into a direct edit and reveals adding a budget in place.
-  const [editing, setEditing] = useState(false);
-  const empty = budgets.length === 0;
   return (
-    <section aria-labelledby="category-budgets" className="mt-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionTitle
-          id="category-budgets"
-          meta={`${budgets.length} ${budgets.length === 1 ? "category" : "categories"}`}
-          title="By category"
-        />
-        {empty ? null : (
-          <Button
-            aria-pressed={editing}
-            className="min-h-11 rounded-full px-4 text-sm"
-            onPress={() => setEditing((value) => !value)}
-            variant={editing ? "primary" : "secondary"}
-          >
-            {editing ? (
-              "Done"
-            ) : (
-              <>
-                <Icon className="h-4 w-4" name="compose" />
-                Edit budgets
-              </>
-            )}
-          </Button>
-        )}
+    <section
+      aria-labelledby={`${cadence}-category-budgets`}
+      className={budgetStyles.categorySection}
+    >
+      <div className="flex items-baseline justify-between gap-3 px-5 pb-2 pt-4">
+        <h3 className="text-sm font-semibold" id={`${cadence}-category-budgets`}>
+          Categories
+        </h3>
+        <span className="text-xs text-muted">{budgets.length}</span>
       </div>
-      <Card className={`${budgetStyles.categoryCard} mt-2`}>
-        {empty ? (
-          <p className="px-5 pt-6 pb-3 text-center text-sm text-muted">No category budgets yet.</p>
-        ) : (
-          <ul className={budgetStyles.budgetList}>
-            {budgets.map((budget, index) => (
-              <BudgetRow
-                budget={budget}
-                editing={editing}
-                index={index}
-                key={budget.id}
-                month={month}
-                transactions={transactions}
-                today={today}
-                onEdit={() => (editing ? onEditBudget(budget) : onOpenBudget(budget))}
-              />
-            ))}
-          </ul>
-        )}
-        {editing || empty ? (
-          <Button className={budgetStyles.addRow} onPress={onCreate} variant="ghost">
-            <Icon className="h-4 w-4" name="plus" />
-            Add budget
-          </Button>
-        ) : null}
-      </Card>
-      <p className="mt-2 text-xs text-muted">
-        Confirmed expenses only. Each budget follows its chosen start date.
-      </p>
+      {budgets.length > 0 && (
+        <ul className={`${budgetStyles.budgetList} px-2`}>
+          {budgets.map((budget, index) => (
+            <BudgetRow
+              budget={budget}
+              index={index}
+              key={budget.id}
+              month={month}
+              transactions={transactions}
+              today={today}
+              onEdit={() => onOpenBudget(budget)}
+              onDelete={onDeleteBudget ? () => onDeleteBudget(budget) : undefined}
+            />
+          ))}
+        </ul>
+      )}
+      <div className="border-t border-separator p-3">
+        <Button
+          aria-label={`Add ${cadence} budget`}
+          className="min-h-11 w-full rounded-full text-sm"
+          onPress={onCreate}
+          variant="secondary"
+        >
+          <Icon className="h-4 w-4" name="plus" />
+          Add {cadence} budget
+        </Button>
+      </div>
     </section>
-  );
-}
-
-function BudgetDetailsPanel({
-  budget,
-  transactions,
-  month,
-  today,
-  onClose,
-  onEdit,
-  onDelete,
-}: {
-  budget?: Budget;
-  transactions: Transaction[];
-  month: string;
-  today: string;
-  onClose: () => void;
-  onEdit: () => void;
-  onDelete?: (id: string) => void;
-}) {
-  if (!budget) return null;
-  const usage = budgetUsage(transactions, budget, month, today);
-  return (
-    <BudgetDetails
-      record={{
-        name: budget.backend?.name ?? budget.category,
-        category: budget.category,
-        icon: budget.icon,
-        cadence: budget.cadence,
-        limit: BigInt(budget.limit),
-        warningPercent: budget.warningPercent,
-        startsOn: budget.startsOn,
-        status: usage.periodStartsOn ? labelByState[usage.state] : "Not started",
-        usage: usage.periodStartsOn ? usage : undefined,
-      }}
-      onClose={onClose}
-      onEdit={onEdit}
-      onDelete={
-        onDelete
-          ? () => {
-              onClose();
-              onDelete(budget.id);
-            }
-          : undefined
-      }
-    />
   );
 }
 
@@ -653,6 +572,50 @@ function RecurringBills({
   );
 }
 
+function DemoBudgetDetails({
+  budget,
+  transactions,
+  month,
+  today,
+  onClose,
+  onEdit,
+}: {
+  budget: Budget;
+  transactions: Transaction[];
+  month: string;
+  today: string;
+  onClose: () => void;
+  onEdit: () => void;
+}) {
+  const progress = budgetUsage(transactions, budget, month, today);
+  const status = progress.periodStartsOn
+    ? labelByState[progress.state]
+    : budget.startsOn && budget.startsOn > today
+      ? "Not started"
+      : "Progress unavailable";
+  const record: BudgetDetailsRecord = {
+    name: budget.category,
+    category: budget.category,
+    icon: budget.icon ?? categoryIcon(budget.category),
+    cadence: budget.cadence,
+    limit: BigInt(budget.limit),
+    warningPercent: budget.warningPercent,
+    startsOn: budget.startsOn,
+    status,
+    ...(progress.periodStartsOn && progress.periodEndsOn
+      ? {
+          usage: {
+            used: progress.used,
+            remaining: progress.remaining,
+            periodStartsOn: progress.periodStartsOn,
+            periodEndsOn: progress.periodEndsOn,
+          },
+        }
+      : {}),
+  };
+  return <BudgetDetails record={record} onClose={onClose} onEdit={onEdit} />;
+}
+
 export function BudgetsScreen({
   transactions,
   budgets,
@@ -666,7 +629,7 @@ export function BudgetsScreen({
   onConfirmBill,
   onDismissBill,
   onEditBudget,
-  onRequestEditBudget,
+  onRequestBudgetDetails,
   onRequestDeleteBudget,
   onCreateBudget,
   onRequestCreateBudget,
@@ -684,93 +647,24 @@ export function BudgetsScreen({
   onConfirmBill: (id: string) => void;
   onDismissBill: (id: string) => void;
   onEditBudget?: (budgetId: string, changes: DemoBudgetChanges) => void;
-  onRequestEditBudget?: (budgetId: string) => void;
+  onRequestBudgetDetails?: (budgetId: string) => void;
   onRequestDeleteBudget?: (budgetId: string) => void;
   onCreateBudget?: (input: CreateDemoBudgetInput) => void;
-  onRequestCreateBudget?: () => void;
+  onRequestCreateBudget?: (cadence: Budget["cadence"]) => void;
   demoCategories?: Category[];
 }) {
-  const summary = summarizeBudgets(transactions, budgets, month, today);
+  const periods = (["weekly", "monthly"] as const).map((cadence) => ({
+    cadence,
+    summary: summarizeBudgetPeriod(transactions, budgets, cadence, month, today),
+  }));
+  const monthly = periods[1].summary;
   const [editing, setEditing] = useState<Budget | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{
-    message: string;
-    category?: string;
-    undo?: { budgetId: string; before: DemoBudgetChanges; after: DemoBudgetChanges };
-    error?: string;
-  } | null>(null);
-  const feedbackRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!feedback) return;
-    feedbackRef.current?.scrollIntoView({ block: "center" });
-    feedbackRef.current?.focus({ preventScroll: true });
-  }, [feedback]);
-  const saveDemoBudget = (budgetId: string, changes: DemoBudgetChanges) => {
-    const current = budgets.find((budget) => budget.id === budgetId);
-    if (!current || !onEditBudget)
-      throw new Error(
-        "This budget is no longer available. Close the form and choose another budget.",
-      );
-    onEditBudget(budgetId, changes);
-    setFeedback({
-      message: `${current.category} budget updated. Its progress uses your saved settings.`,
-      category: current.category,
-      undo: {
-        budgetId,
-        before: {
-          cadence: current.cadence,
-          limit: current.limit,
-          startsOn: current.startsOn ?? `${today.slice(0, 7)}-01`,
-          warningPercent: current.warningPercent,
-          icon: current.icon,
-        },
-        after: changes,
-      },
-    });
+  const [viewingBudget, setViewingBudget] = useState<Budget | null>(null);
+  const [creating, setCreating] = useState<Budget["cadence"] | null>(null);
+  const openBudget = (budget: Budget) => {
+    if (onRequestBudgetDetails) onRequestBudgetDetails(budget.id);
+    else setViewingBudget(budget);
   };
-  const undoDemoBudget = () => {
-    if (!feedback?.undo || !onEditBudget) return;
-    const { budgetId, before, after } = feedback.undo;
-    const current = budgets.find((budget) => budget.id === budgetId);
-    if (
-      !current ||
-      current.limit !== after.limit ||
-      current.startsOn !== after.startsOn ||
-      current.warningPercent !== after.warningPercent ||
-      current.cadence !== after.cadence ||
-      current.icon !== after.icon
-    ) {
-      setFeedback({
-        message: "This budget changed again. Open its latest details before making another change.",
-        category: feedback.category,
-      });
-      return;
-    }
-    try {
-      onEditBudget(budgetId, before);
-      setFeedback({
-        message: "Budget changes undone. Your previous limit and start date are back.",
-        category: feedback.category,
-      });
-    } catch {
-      setFeedback({
-        ...feedback,
-        error:
-          "We couldn’t undo that change. Your current budget is still in place. Try again or open its details.",
-      });
-    }
-  };
-  const detail = budgets.find((budget) => budget.id === detailId);
-  const editDetail = () => {
-    if (!detail) return;
-    setDetailId(null);
-    if (onRequestEditBudget) onRequestEditBudget(detail.id);
-    else setEditing(detail);
-  };
-  const calendarPeriods = budgets.every(
-    (budget) => !budget.startsOn || budget.startsOn.endsWith("-01"),
-  );
   const suggested = bills.filter((bill) => bill.status === "suggested");
   const active = bills
     .filter((bill) => bill.status === "active")
@@ -790,79 +684,41 @@ export function BudgetsScreen({
         )}
       </div>
 
-      {feedback && (
-        <div
-          className="mt-4 rounded-2xl border border-border bg-surface p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          ref={feedbackRef}
-          role="status"
-          tabIndex={-1}
-        >
-          <p className="text-sm leading-6">{feedback.message}</p>
-          {feedback.error && (
-            <p className="mt-2 text-sm text-danger" role="alert">
-              {feedback.error}
-            </p>
-          )}
-          <div className="mt-2 flex flex-wrap gap-2">
-            {feedback.undo && (
-              <Button
-                className="min-h-11 rounded-full"
-                onPress={undoDemoBudget}
-                variant="secondary"
-              >
-                Undo change
-              </Button>
-            )}
-            {feedback.category && (
-              <Button
-                className="min-h-11 rounded-full"
-                onPress={() => {
-                  const budget = budgets.find((item) => item.category === feedback.category);
-                  if (budget) setDetailId(budget.id);
-                }}
-                variant="ghost"
-              >
-                View budget
-              </Button>
-            )}
-            <Button
-              aria-label="Dismiss budget update"
-              className="min-h-11 rounded-full"
-              onPress={() => setFeedback(null)}
-              variant="ghost"
-            >
-              Dismiss
-            </Button>
-          </div>
-        </div>
-      )}
-
       <div
         className={`mt-4 grid min-w-0 gap-5 ${showBills ? "lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" : ""} lg:gap-6`}
       >
         <div className="min-w-0">
-          <BudgetSummaryCard
-            budgets={budgets}
+          <div className={budgetStyles.periodGrid}>
+            {periods.map(({ cadence, summary }) => (
+              <Card
+                className={budgetStyles.periodGroup}
+                aria-label={`${cadence === "weekly" ? "Weekly" : "Monthly"} budgets`}
+                key={cadence}
+              >
+                <BudgetSummaryCard budgets={summary.budgets} cadence={cadence} summary={summary} />
+                <CategoryBudgets
+                  cadence={cadence}
+                  budgets={summary.budgets}
+                  month={month}
+                  transactions={transactions}
+                  today={today}
+                  onOpenBudget={openBudget}
+                  onDeleteBudget={
+                    onRequestDeleteBudget ? (budget) => onRequestDeleteBudget(budget.id) : undefined
+                  }
+                  onCreate={() =>
+                    onRequestCreateBudget ? onRequestCreateBudget(cadence) : setCreating(cadence)
+                  }
+                />
+              </Card>
+            ))}
+          </div>
+          <CategorySpendingGuide
+            budgetIds={monthly.budgets.map((budget) => budget.id)}
+            insights={insights}
             month={month}
-            summary={summary}
             today={today}
-            monthlyOnly={demo || Boolean(management)}
-            calendarPeriods={calendarPeriods}
-            transactions={transactions}
           />
-          <CategoryBudgets
-            budgets={budgets}
-            month={month}
-            transactions={transactions}
-            today={today}
-            onOpenBudget={(budget) => setDetailId(budget.id)}
-            onEditBudget={(budget) => {
-              if (onRequestEditBudget) onRequestEditBudget(budget.id);
-              else setEditing(budget);
-            }}
-            onCreate={onRequestCreateBudget ?? (() => setCreating(true))}
-          />
-          <CategorySpendingGuide insights={insights} month={month} today={today} />
           {management}
         </div>
         {showBills && (
@@ -878,38 +734,37 @@ export function BudgetsScreen({
           </div>
         )}
       </div>
-      <BudgetDetailsPanel
-        budget={detail}
-        transactions={transactions}
-        month={month}
-        today={today}
-        onClose={() => setDetailId(null)}
-        onEdit={editDetail}
-        onDelete={onRequestDeleteBudget}
-      />
       {editing && onEditBudget && (
         <DemoBudgetEditor
           budget={editing}
           key={editing.id}
           onClose={() => setEditing(null)}
-          onSave={saveDemoBudget}
+          onSave={onEditBudget}
           today={today}
           transactions={transactions}
+        />
+      )}
+      {viewingBudget && (
+        <DemoBudgetDetails
+          budget={viewingBudget}
+          month={month}
+          today={today}
+          transactions={transactions}
+          onClose={() => setViewingBudget(null)}
+          onEdit={() => {
+            setEditing(viewingBudget);
+            setViewingBudget(null);
+          }}
         />
       )}
       {creating && onCreateBudget && (
         <DemoBudgetCreator
           budgets={budgets}
+          initialCadence={creating}
           transactions={transactions}
           today={today}
-          onSave={(input) => {
-            onCreateBudget(input);
-            setFeedback({
-              message: `${input.category} budget added. Confirmed expenses in its period now count toward this limit.`,
-              category: input.category,
-            });
-          }}
-          onClose={() => setCreating(false)}
+          onSave={onCreateBudget}
+          onClose={() => setCreating(null)}
           demoCategories={demoCategories}
         />
       )}

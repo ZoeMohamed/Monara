@@ -27,6 +27,8 @@ export function createUserDeletionService(deps: {
   revokeConnection: (id: string) => Promise<void>;
   /** Returns true only when the User has no remaining upstream resources. */
   cleanProviderUser: (userId: string) => Promise<boolean>;
+  /** Removes an owned Storage batch; true requires an empty inventory. */
+  cleanStorageUser: (userId: string) => Promise<boolean>;
 }) {
   return {
     async processNext(userId?: string): Promise<"idle" | "progress" | "retry" | "complete"> {
@@ -43,6 +45,10 @@ export function createUserDeletionService(deps: {
           await deps.revokeConnection(job.connectedAccountIds[0]);
           job.connectedAccountIds.shift();
         } else {
+          if (!(await deps.cleanStorageUser(job.userId))) {
+            await deps.repository.checkpoint(job, false);
+            return "progress";
+          }
           if (!(await deps.cleanProviderUser(job.userId))) {
             await deps.repository.checkpoint(job, false);
             return "progress";

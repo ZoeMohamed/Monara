@@ -12,6 +12,14 @@ _Avoid_: Account when referring to a person's identity
 A bank account, wallet, or cash balance whose transactions and balance a User tracks in Monara.
 _Avoid_: User account, login account
 
+**Custom Bank**:
+A reusable bank, credit-card product, or wallet definition created by and available only to one User, with a name, transaction-notification sender addresses, and an optional icon. Several of that User's Financial Accounts may belong to the same Custom Bank.
+_Avoid_: Financial Account when referring to the shared bank definition, globally available bank
+
+**Bank Sender Address**:
+An exact email address a bank uses to send transaction notifications. It identifies an email source for Gmail discovery and imports, rather than a customer-service contact or proof of bank authenticity.
+_Avoid_: Gmail mailbox, support email, sender domain
+
 **User Deletion**:
 The permanent removal of a User's Monara identity and all their personal Monara data, including Financial Accounts, transactions, settings, connections, and conversations. It has no recovery grace period or undo.
 _Avoid_: Financial Account deletion when referring to deleting the entire identity

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { chatExchangeSchema, webChatBridgeResponseSchema } from "./chat-history.ts";
+import { chatHistoryMaxBytes, chatStorageByteLength } from "./chat-limits.ts";
 import {
   chatReceiptRequestSchema,
   chatVisualAttachmentSchema,
@@ -56,6 +58,81 @@ describe("chat media contracts", () => {
     assert.equal(
       webChatResponseSchema.safeParse({ ...text, visuals: [{ ...visual, height: -1 }] }).success,
       false,
+    );
+  });
+
+  it("keeps live accepted replies within the private history character and action limits", () => {
+    const action = {
+      actionId: id,
+      resourceType: "transaction",
+      resourceId: id,
+      changedAt: "2026-10-18T00:00:00Z",
+      undoExpiresAt: "2026-10-18T01:00:00Z",
+    };
+    const reply = webChatResponseSchema.parse({
+      reply: "x".repeat(12_000),
+      actions: Array.from({ length: 20 }, () => action),
+      confirmation: null,
+    });
+    const input = {
+      conversationId: id,
+      exchangeId: id,
+      createdAt: "2026-10-18T12:00:00Z",
+      text: "hi",
+      response: reply,
+    };
+    assert.deepEqual(chatExchangeSchema.parse(input), input);
+    assert.ok(chatStorageByteLength(input) <= chatHistoryMaxBytes);
+    assert.equal(
+      webChatResponseSchema.safeParse({ ...reply, reply: "x".repeat(12_001) }).success,
+      false,
+    );
+    assert.equal(
+      webChatResponseSchema.safeParse({ ...reply, actions: [...reply.actions, action] }).success,
+      false,
+    );
+  });
+
+  it("does not count a pending recovery receipt against the verified reply size limit", () => {
+    const response = {
+      reply: "A concise verified answer.",
+      actions: [],
+      confirmation: null,
+      historySave: {
+        status: "pending",
+        exchangeId: id,
+        recoveryToken: "x".repeat(190_000),
+        expiresAt: "2026-10-19T12:00:00Z",
+      },
+    };
+    assert.equal(webChatBridgeResponseSchema.safeParse(response).success, true);
+  });
+
+  it("rejects replies whose encoded history exceeds the byte limit without truncating content", () => {
+    const escaped = { reply: "\u0001".repeat(12_000), actions: [], confirmation: null };
+    assert.equal(webChatResponseSchema.safeParse(escaped).success, false);
+    const unicodeAndImages = {
+      reply: "界".repeat(12_000),
+      actions: [],
+      confirmation: null,
+      visuals: Array.from({ length: 4 }, () => ({
+        ...visual,
+        url: `${visual.url}${"x".repeat(15_000)}`,
+      })),
+    };
+    assert.equal(webChatResponseSchema.safeParse(unicodeAndImages).success, false);
+    const valid = { ...unicodeAndImages, visuals: [visual] };
+    const accepted = webChatResponseSchema.parse(valid);
+    assert.equal(accepted.reply, valid.reply);
+    assert.deepEqual(accepted.visuals, valid.visuals);
+    assert.doesNotThrow(() =>
+      chatExchangeSchema.parse({
+        conversationId: id,
+        exchangeId: id,
+        createdAt: "2026-10-18T12:00:00Z",
+        text: "hi",
+        response: accepted,
+      }),
     );
   });
 });

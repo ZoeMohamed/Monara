@@ -12,8 +12,14 @@ function harness() {
   };
   const calls = [];
   let unavailable = null;
+  let storageRemaining = false;
   const deps = {
     cleanProviderUser: async () => true,
+    cleanStorageUser: async () => {
+      calls.push("storage");
+      if (unavailable === "storage") throw new Error("Unavailable");
+      return !storageRemaining;
+    },
     repository: {
       claim: async () => (stored ? structuredClone(stored) : null),
       checkpoint: async (job, retry) => {
@@ -44,6 +50,9 @@ function harness() {
     fail: (value) => {
       unavailable = value;
     },
+    storageRemaining: (value) => {
+      storageRemaining = value;
+    },
     stored: () => stored,
   };
 }
@@ -58,7 +67,7 @@ it("hard-deletes Auth only after every cleanup step, including disconnected Gmai
   assert.equal(await h.service.processNext(), "idle");
   assert.deepEqual(
     h.calls.filter((value) => value !== "checkpoint"),
-    ["whatsapp", "trigger", "old-disconnected", "active", "auth-delete"],
+    ["whatsapp", "trigger", "old-disconnected", "active", "storage", "auth-delete"],
   );
 });
 
@@ -81,4 +90,20 @@ it("an unavailable conversation store is never treated as purged", async () => {
   assert.equal(await h.service.processNext(), "retry");
   assert.equal(h.stored().whatsappPurged, false);
   assert.deepEqual(h.calls, ["whatsapp", "retry"]);
+});
+
+it("keeps the deletion durable until image inventory is empty and Storage recovers", async () => {
+  const h = harness();
+  for (let step = 0; step < 4; step++) await h.service.processNext();
+  h.storageRemaining(true);
+  assert.equal(await h.service.processNext(), "progress");
+  assert.ok(h.stored());
+  assert.ok(!h.calls.includes("auth-delete"));
+  h.fail("storage");
+  assert.equal(await h.service.processNext(), "retry");
+  assert.ok(!h.calls.includes("auth-delete"));
+  h.fail(null);
+  h.storageRemaining(false);
+  assert.equal(await h.service.processNext(), "complete");
+  assert.equal(h.calls.filter((value) => value === "auth-delete").length, 1);
 });

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ChatHistorySaveStatus } from "@monara/contracts";
 import {
   createContext,
   type ReactNode,
@@ -10,7 +11,8 @@ import {
   useRef,
   useState,
 } from "react";
-
+import { useChatHistory } from "@/components/use-chat-history";
+import { protectUnsavedChanges } from "@/lib/auth/local-user-state";
 import {
   type ChatSessionAction,
   type ChatSessionState,
@@ -24,31 +26,48 @@ type ChatSession = {
   dispatch: (action: ChatSessionAction) => void;
   beginSend: () => boolean;
   endSend: () => void;
+  rememberSave: (status: ChatHistorySaveStatus) => void;
+  history: {
+    persistent: boolean;
+    loading: boolean;
+    saving: boolean;
+    error: string | null;
+    notice: string | null;
+    copyRequired: boolean;
+    dismissNotice: () => void;
+    retry: () => void;
+  };
 };
 
 const ChatSessionContext = createContext<ChatSession | null>(null);
 
-/**
- * The working copy of the User's chats. Signed-in chats are saved by the server after each
- * answer and merged back in here; drafts and receipt photos stay in this page only.
- */
-export function ChatSessionProvider({ children }: { children: ReactNode }) {
+/** Saved chats use the backend's private store; drafts and recovery receipts stay in memory. */
+export function ChatSessionProvider({
+  children,
+  persistent = false,
+}: {
+  children: ReactNode;
+  persistent?: boolean;
+}) {
   const [state, setState] = useState(initialChatSession);
   const [pending, setPending] = useState(false);
   const sending = useRef(false);
-  const hasUnsentWork =
-    pending ||
-    state.conversations.some((conversation) => conversation.draft.trim() || conversation.receipt);
-  useEffect(() => {
-    if (!hasUnsentWork) return;
-    const protectDraft = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener("beforeunload", protectDraft);
-    return () => window.removeEventListener("beforeunload", protectDraft);
-  }, [hasUnsentWork]);
   const dispatch = useCallback(
     (action: ChatSessionAction) => setState((current) => reduceChatSession(current, action)),
     [],
   );
+  const { loading, saving, error, notice, copyRequired, dismissNotice, retry, remember, unsaved } =
+    useChatHistory(persistent);
+  const hasUnsentWork =
+    pending ||
+    unsaved ||
+    state.conversations.some((conversation) => conversation.draft.trim() || conversation.receipt);
+  useEffect(() => {
+    if (!hasUnsentWork) return;
+    const protectDraft = (event: BeforeUnloadEvent) => protectUnsavedChanges(event);
+    window.addEventListener("beforeunload", protectDraft);
+    return () => window.removeEventListener("beforeunload", protectDraft);
+  }, [hasUnsentWork]);
   const beginSend = useCallback(() => {
     if (sending.current) return false;
     sending.current = true;
@@ -59,9 +78,21 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     sending.current = false;
     setPending(false);
   }, []);
+  const historyStatus = useMemo(
+    () => ({ persistent, loading, saving, error, notice, copyRequired, dismissNotice, retry }),
+    [persistent, loading, saving, error, notice, copyRequired, dismissNotice, retry],
+  );
   const value = useMemo(
-    () => ({ state, pending, dispatch, beginSend, endSend }),
-    [state, pending, dispatch, beginSend, endSend],
+    () => ({
+      state,
+      pending,
+      dispatch,
+      beginSend,
+      endSend,
+      rememberSave: remember,
+      history: historyStatus,
+    }),
+    [state, pending, dispatch, beginSend, endSend, remember, historyStatus],
   );
   return <ChatSessionContext value={value}>{children}</ChatSessionContext>;
 }

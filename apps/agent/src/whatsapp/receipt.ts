@@ -158,13 +158,11 @@ function toReceiptValues(
   if (amountMinor === null) return null;
   // Compared as a local date, so a receipt from this morning in Jakarta is never "tomorrow".
   const localNow = new Date(context.now.getTime() + UTC_OFFSET_MS);
-  const statedDate = guardDate(reading.occurredOn, localNow);
-  const rejectedDate = reading.occurredOn !== null && statedDate === null;
-  const occurredOn = statedDate ?? localNow.toISOString().slice(0, 10);
+  const occurredOn = guardDate(reading.occurredOn, localNow);
   const time = reading.occurredTime?.trim() ?? null;
   const occurredTime =
-    !rejectedDate && time && localTimeSchema.safeParse(time).success ? time : null;
-  const guarded = rejectedDate;
+    occurredOn !== null && time && localTimeSchema.safeParse(time).success ? time : null;
+  const guarded = occurredOn === null;
   let confidence =
     reading.confidence === null || !Number.isFinite(reading.confidence)
       ? null
@@ -227,6 +225,9 @@ function receiptReply(
   const category = categories.find((candidate) => candidate.id === values.categoryId);
   const details = [account?.name, category?.name].filter(Boolean).join(", ");
   const read = `Got your receipt: ${parts.join(" ")}${details ? ` (${details})` : ""}.`;
+  if (!values.occurredOn) {
+    return `${read} I couldn't read the date clearly. What date was this? It's saved in your Review Queue.`;
+  }
   if (!account) {
     return `${read} Which account paid for it? Tell me and I'll add it, or check it in your Review Queue.`;
   }

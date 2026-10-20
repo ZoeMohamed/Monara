@@ -380,8 +380,8 @@ export function CategoryManager(props: FinanceManagerProps) {
 
 type DemoCategoryManagerProps = {
   categories: Category[];
-  onEdit: (original: string, changes: { name: string; icon: string }) => void;
-  onDelete: (name: string) => void;
+  onEdit: (categoryId: string, changes: { name: string; icon: string }) => void;
+  onDelete: (categoryId: string) => void;
   onCreate: (input: { name: string; icon: string; kind: Category["kind"] }) => void;
 };
 
@@ -411,14 +411,21 @@ function DemoCategoryForm({
     }
     if (
       categories.some(
-        (item) => item.id !== category?.id && item.name.toLowerCase() === name.toLowerCase(),
+        (item) =>
+          item.id !== category?.id &&
+          item.kind === draft.kind &&
+          item.name.toLowerCase() === name.toLowerCase(),
       )
     ) {
-      setError("A category with this name already exists.");
+      setError("A category with this name already exists for this type.");
       return;
     }
-    onSave({ name, kind: draft.kind, icon: categoryIconChoice(name, draft.icon) });
-    onClose();
+    try {
+      onSave({ name, kind: draft.kind, icon: categoryIconChoice(name, draft.icon) });
+      onClose();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Couldn't save this category. Try again.");
+    }
   };
   return (
     <ModalDialog labelledBy="demo-category-title" onClose={onClose}>
@@ -477,7 +484,7 @@ function DemoCategoryDelete({
   onClose,
 }: {
   category: Category;
-  onDelete: (name: string) => void;
+  onDelete: (categoryId: string) => void;
   onClose: () => void;
 }) {
   return (
@@ -497,7 +504,7 @@ function DemoCategoryDelete({
           <Button
             className="min-h-11"
             onPress={() => {
-              onDelete(category.name);
+              onDelete(category.id);
               onClose();
             }}
             variant="danger"
@@ -538,7 +545,7 @@ export function DemoCategoryManager(props: DemoCategoryManagerProps) {
           category={selected}
           categories={props.categories}
           key={selected.id}
-          onSave={(changes) => props.onEdit(selected.name, changes)}
+          onSave={(changes) => props.onEdit(selected.id, changes)}
           onClose={close}
         />
       )}
