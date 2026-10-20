@@ -41,7 +41,7 @@ const DOCUMENTS = {
   evidence: {
     output: "Team808-Execution-Evidence.pdf",
     kind: "Execution Evidence",
-    subtitle: "Ideal acceptance cases, evidence rules and release sign-off",
+    subtitle: "Production verification, measured results and security outcomes",
     toc: true,
     files: ["execution-evidence"],
   },
