@@ -117,7 +117,10 @@ function useCustomBankForm({
     } catch (failure) {
       const uncertain =
         failure instanceof FinanceClientError ? failure.actionMayHaveCompleted : true;
-      if (!uncertain && !state.uncertain) submitted.current = null;
+      if (!uncertain && !state.uncertain) {
+        submitted.current = null;
+        if (identity.current) identity.current.clientRequestId = crypto.randomUUID();
+      }
       setState((previous) => ({
         ...previous,
         pending: false,
@@ -378,7 +381,7 @@ function BankLogoFields({ model }: { model: BankFormModel }) {
           suggestionQuery={draft.name}
         />
       )}
-      {logo && (
+      {draft.logo && (
         <Button
           className="min-h-11 justify-self-start"
           isDisabled={locked}

@@ -6,6 +6,7 @@ import {
   findInstitutionBySender,
   type Institution,
   institutionPlatformSchema,
+  storedBankLogoSchema,
 } from "./institutions.ts";
 import { financialAccountSchema } from "./ledger.ts";
 
@@ -45,6 +46,7 @@ export const customBankSchema = z
     ...bankFields,
     // An app catalog update must not make a previously saved bank unreadable.
     senderEmails: z.array(senderSchema).min(1).max(20),
+    logo: storedBankLogoSchema.nullable(),
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,
   })

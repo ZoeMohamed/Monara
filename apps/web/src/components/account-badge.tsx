@@ -24,9 +24,7 @@ function useAccountVisual(name: string | null, account?: BadgeAccount) {
   const label = (account?.institution ?? name)?.trim();
   const local = useInstitutionLogo(account ? account.institution : name);
   const candidate =
-    account?.institutionLogo === null
-      ? undefined
-      : (brandLogoFromChoice(account?.institutionLogo) ?? local);
+    account?.institutionLogo === undefined ? local : brandLogoFromChoice(account.institutionLogo);
   // A registered bank never decorates a wallet (or the reverse); picked catalog logos follow the user.
   const registered =
     candidate && !candidate.startsWith("si:")

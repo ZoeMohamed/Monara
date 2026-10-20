@@ -129,16 +129,13 @@ export function customBankIdForKey(key: string | null | undefined): string | nul
   return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
 }
 
-export const bankLogoSchema = z
-  .string()
-  .max(100)
-  .refine(
-    (value) => {
-      if (/^si:[a-z0-9]{1,60}$/.test(value)) return true;
-      return value.startsWith("brand:") && Object.hasOwn(brands, value.slice(6));
-    },
-    { message: "Choose a logo from the search results." },
-  );
+/** Persisted choices survive catalog removals, while new choices require a current brand. */
+export const storedBankLogoSchema = z.string().regex(/^(brand:[a-z0-9-]{1,60}|si:[a-z0-9]{1,60})$/);
+
+export const bankLogoSchema = storedBankLogoSchema.refine(
+  (value) => value.startsWith("si:") || Object.hasOwn(brands, value.slice(6)),
+  { message: "Choose a logo from the search results." },
+);
 
 /** Current, owner-resolved source configuration supplied to the Worker. */
 export const resolvedInstitutionSchema = registryEntrySchema.extend({ key: institutionKeySchema });
