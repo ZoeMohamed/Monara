@@ -15,7 +15,7 @@ export function initialDemoAccounts(): FinancialAccount[] {
     id: `a0000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
     name,
     institution: name === "Cash" ? null : name,
-    accountType: name === "Cash" ? "cash" : name === "GoPay" ? "wallet" : "bank",
+    accountType: name === "Cash" ? "cash" : name === "ShopeePay" ? "wallet" : "bank",
     currency: "IDR",
     lastFour: null,
     institutionKey: null,
@@ -26,7 +26,7 @@ export function initialDemoAccounts(): FinancialAccount[] {
   }));
 }
 
-// Demo category IDs are editor choices only; the synthetic ledger groups by name.
+// Demo categories use the same stable identity as the signed-in ledger.
 export function demoEditorCategories(budgets: Budget[]): Category[] {
   const presets = [
     ...expenseCategoryPresets.map((preset) => ({ ...preset, kind: "expense" as const })),
@@ -76,6 +76,7 @@ export function demoTransactionSelection(
   const category = resources.categories.find((item) => item.id === draft.category);
   return {
     category: category?.name ?? null,
+    categoryId: category?.id ?? null,
     categoryIcon: category?.icon,
     categoryKind: category?.kind,
     method: payment?.name ?? null,

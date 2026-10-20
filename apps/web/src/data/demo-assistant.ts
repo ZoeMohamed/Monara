@@ -127,7 +127,7 @@ export function demoReply(text: string, context: DemoContext): DemoReply {
       message,
     );
   const unsupportedDetails =
-    /\b(income|salary|gaji|transfer|save|savings|deposit|delete|remove|undo|edit|change|receive|received|refund|yesterday|tomorrow|kemarin|besok|last|next|usd|eur|dollar|dollars|bca|gopay|jago|mandiri|via|using|rekening|account)\b/i.test(
+    /\b(income|salary|gaji|transfer|save|savings|deposit|delete|remove|undo|edit|change|receive|received|refund|yesterday|tomorrow|kemarin|besok|last|next|usd|eur|dollar|dollars|bca|gopay|shopeepay|jago|mandiri|via|using|rekening|account)\b/i.test(
       message,
     ) || /\d{4}-\d{2}-\d{2}/.test(message);
 
@@ -140,7 +140,7 @@ export function demoReply(text: string, context: DemoContext): DemoReply {
     const merchant = logMatch[1].replace(/^(log|add|paid|bayar)\s+/i, "").trim();
     if (/^(log|add|paid|bayar)$/i.test(merchant)) {
       return {
-        reply: "Tell me what you paid for, like “kopi 25rb”, for a cash payment today.",
+        reply: "Tell me what you paid for, like “coffee 25k”, for a cash payment today.",
       };
     }
     const name = merchant.charAt(0).toUpperCase() + merchant.slice(1);
@@ -221,6 +221,6 @@ export function demoReply(text: string, context: DemoContext): DemoReply {
 
   return {
     reply:
-      "Try logging a cash payment (“kopi 25rb”) or asking about your spending, budgets, bills or what you can afford.",
+      "Try logging a cash payment (“coffee 25k”) or asking about your spending, budgets, bills or what you can afford.",
   };
 }

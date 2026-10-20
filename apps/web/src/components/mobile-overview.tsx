@@ -3,7 +3,14 @@
 import type { FinancialInsights } from "@monara/contracts";
 import { Button, Input, Label, ListBox, Select, TextField } from "@monara/ui";
 import Image from "next/image";
-import { type CSSProperties, type ReactNode, useId, useState, useSyncExternalStore } from "react";
+import {
+  type CSSProperties,
+  type FocusEvent,
+  type ReactNode,
+  useId,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useAmountDisplay } from "@/components/app-session-context";
 import { CategoryAvatar } from "@/components/category-symbol";
 
@@ -52,6 +59,18 @@ const prompts: { text: string; icon: IconName; prompt: string }[] = [
   { text: "Where did it go?", icon: "pie", prompt: "Where did my money go this month?" },
   { text: "Can I afford it?", icon: "sparkle", prompt: "Can I afford a 300k dinner?" },
 ];
+
+function revealFocusedPrompt(event: FocusEvent<HTMLElement>) {
+  const scroller = event.currentTarget;
+  if (scroller.scrollWidth <= scroller.clientWidth) return;
+  const viewport = scroller.getBoundingClientRect();
+  const target = event.target.getBoundingClientRect();
+  const padding = getComputedStyle(scroller);
+  const start = viewport.left + Number.parseFloat(padding.paddingLeft);
+  const end = viewport.right - Number.parseFloat(padding.paddingRight);
+  const left = target.left < start ? target.left - start : Math.max(0, target.right - end);
+  if (left) scroller.scrollBy({ left, behavior: "instant" });
+}
 
 function OverviewComposer({ openChat }: { openChat: (prompt?: string) => void }) {
   const [draft, setDraft] = useState("");
@@ -212,7 +231,11 @@ function SceneHero({
           <MonaraMascot className={styles.mascot} pose="peek" />
           <OverviewComposer openChat={openChat} />
         </div>
-        <nav aria-label="Ask Monara" className={styles.prompts}>
+        <nav
+          aria-label="Ask Monara"
+          className={styles.prompts}
+          onFocusCapture={revealFocusedPrompt}
+        >
           {prompts.map((item) => (
             <Button
               variant="ghost"
@@ -536,6 +559,10 @@ function AttentionLine({ model }: { model: OverviewModel }) {
 }
 
 function paceOf(model: OverviewModel) {
+  if (model.budgetGuide) {
+    if (model.budgetGuide.spending > model.budgetGuide.limit) return "over";
+    return model.budgetGuide.percent > model.elapsedPercent ? "ahead" : "on-track";
+  }
   if (model.overBudgetCount > 0) return "over";
   return model.percent > model.elapsedPercent ? "ahead" : "on-track";
 }
@@ -550,7 +577,7 @@ function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
       type="button"
     >
       <span className={styles.featureName}>
-        <SectionLabel icon="budgets">Safe to spend today</SectionLabel>
+        <SectionLabel icon="budgets">Daily budget guide</SectionLabel>
       </span>
       <strong className={styles.safeEmpty}>Set monthly budgets</strong>
       <span className={styles.safeNote}>Monara will turn them into a daily spending guide.</span>
@@ -559,10 +586,10 @@ function SafeToSpendSetup({ openBudgets }: { openBudgets: () => void }) {
 }
 
 // Explains the headline: the daily split this month, or the budget total for a past month.
-function SafeToSpendNote({ month, model }: { month: string; model: OverviewModel }) {
+function BudgetGuideNote({ month, model }: { month: string; model: OverviewModel }) {
   const { formatRupiah } = useAmountDisplay();
-  const safe = model.safeToSpend;
-  if (!safe) {
+  const guide = model.budgetGuide;
+  if (!guide) {
     return (
       <span className={styles.safeNote}>
         of <strong data-amount>{formatRupiah(model.budgetTotal)}</strong>{" "}
@@ -572,23 +599,54 @@ function SafeToSpendNote({ month, model }: { month: string; model: OverviewModel
       </span>
     );
   }
-  if (safe.shortfall > BigInt(0)) {
+  if (guide.shortfall > BigInt(0)) {
     return (
       <span className={styles.safeNote}>
-        Spending is <strong data-amount>{formatRupiah(safe.shortfall)}</strong> over your total
-        limits.
+        Budgeted categories are <strong data-amount>{formatRupiah(guide.shortfall)}</strong> over
+        their limits.
       </span>
     );
   }
   return (
     <span className={styles.safeNote}>
-      <strong data-amount>{formatRupiah(safe.remaining)}</strong> left in budgets ÷ {safe.daysLeft}{" "}
-      {safe.daysLeft === 1 ? "day" : "days"}, including today
+      <strong data-amount>{formatRupiah(guide.remaining)}</strong> left in monthly budgets ÷{" "}
+      {guide.daysLeft} {guide.daysLeft === 1 ? "day" : "days"}, including today
     </span>
   );
 }
 
-// The daily guide: what can still be spent today without breaking the month's total limits.
+function BudgetGuidePace({ model }: { model: OverviewModel }) {
+  const guide = model.budgetGuide;
+  const percent = guide?.percent ?? model.percent;
+  const hasCalendarProgress = model.isCurrentMonth && model.calendarBudgetPeriods;
+  return (
+    <>
+      <span
+        aria-hidden
+        className={styles.pace}
+        data-pace={model.calendarBudgetPeriods ? paceOf(model) : undefined}
+      >
+        <span className={styles.paceFill} style={{ width: `${Math.min(percent, 100)}%` }} />
+        {hasCalendarProgress ? (
+          <span className={styles.paceMarker} style={{ left: `${model.elapsedPercent}%` }} />
+        ) : null}
+      </span>
+      <span className={styles.paceCaption}>
+        <span>
+          <strong>{percent}%</strong> of budgets used
+          {hasCalendarProgress ? ` · ${model.elapsedPercent}% of month gone` : ""}
+        </span>
+        {!guide ? (
+          <span data-state={model.attentionBudget?.state ?? "on-track"}>
+            <AttentionLine model={model} />
+          </span>
+        ) : null}
+      </span>
+    </>
+  );
+}
+
+// The daily allowance describes the monthly categories the User chose to budget.
 function SafeToSpendCard({
   month,
   model,
@@ -600,7 +658,7 @@ function SafeToSpendCard({
 }) {
   const { formatRupiah } = useAmountDisplay();
   if (model.budgetTotal === BigInt(0)) return <SafeToSpendSetup openBudgets={openBudgets} />;
-  const safe = model.safeToSpend;
+  const guide = model.budgetGuide;
   return (
     <Button
       variant="ghost"
@@ -610,34 +668,14 @@ function SafeToSpendCard({
       type="button"
     >
       <span className={styles.featureName}>
-        <SectionLabel icon="budgets">{safe ? "Safe to spend today" : "Budgets left"}</SectionLabel>
+        <SectionLabel icon="budgets">{guide ? "Daily budget guide" : "Budgets left"}</SectionLabel>
       </span>
       <span className={styles.safeAmount}>
-        <strong data-amount>{formatRupiah(safe ? safe.perDay : model.remaining)}</strong>
-        {safe ? <small>/day</small> : null}
+        <strong data-amount>{formatRupiah(guide ? guide.perDay : model.remaining)}</strong>
+        {guide ? <small>/day</small> : null}
       </span>
-      <SafeToSpendNote model={model} month={month} />
-      <span
-        aria-hidden
-        className={styles.pace}
-        data-pace={model.calendarBudgetPeriods ? paceOf(model) : undefined}
-      >
-        <span className={styles.paceFill} style={{ width: `${Math.min(model.percent, 100)}%` }} />
-        {model.isCurrentMonth && model.calendarBudgetPeriods ? (
-          <span className={styles.paceMarker} style={{ left: `${model.elapsedPercent}%` }} />
-        ) : null}
-      </span>
-      <span className={styles.paceCaption}>
-        <span>
-          <strong>{model.percent}%</strong> of budgets used
-          {model.isCurrentMonth && model.calendarBudgetPeriods
-            ? ` · ${model.elapsedPercent}% of month gone`
-            : ""}
-        </span>
-        <span data-state={model.attentionBudget?.state ?? "on-track"}>
-          <AttentionLine model={model} />
-        </span>
-      </span>
+      <BudgetGuideNote model={model} month={month} />
+      <BudgetGuidePace model={model} />
     </Button>
   );
 }
@@ -920,19 +958,6 @@ export function MobileOverview({
                 <SpendingForecastCard month={month} today={today} transactions={transactions} />
               </div>
             ) : null}
-            <BackendInsightsCard
-              insights={insights}
-              openBudgets={openBudgets}
-              openTransaction={openTransaction}
-              transactions={transactions}
-            />
-            {model.isCurrentMonth ? (
-              <AttentionCard
-                items={model.attention}
-                openBudgets={openBudgets}
-                openReview={openReview}
-              />
-            ) : null}
             {model.isCurrentMonth || model.recent.length > 0 ? (
               <div className={styles.slotActivity}>
                 <ActivityCard
@@ -962,6 +987,19 @@ export function MobileOverview({
             <div className={styles.slotSafe}>
               <SafeToSpendCard model={model} month={month} openBudgets={openBudgets} />
             </div>
+            <BackendInsightsCard
+              insights={insights}
+              openBudgets={openBudgets}
+              openTransaction={openTransaction}
+              transactions={transactions}
+            />
+            {model.isCurrentMonth ? (
+              <AttentionCard
+                items={model.attention}
+                openBudgets={openBudgets}
+                openReview={openReview}
+              />
+            ) : null}
           </div>
         </div>
       </div>

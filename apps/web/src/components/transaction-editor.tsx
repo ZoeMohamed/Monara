@@ -144,7 +144,11 @@ function draftOf(
     category: resources
       ? (transaction?.backend?.categoryId ??
         (resources.demo
-          ? resources.categories.find((category) => category.name === transaction?.category)?.id
+          ? resources.categories.find(
+              (category) =>
+                category.name === transaction?.category &&
+                category.kind === (transaction?.categoryKind ?? transaction?.kind),
+            )?.id
           : null) ??
         null)
       : (transaction?.category ?? null),

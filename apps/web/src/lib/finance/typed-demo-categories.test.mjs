@@ -22,6 +22,7 @@ it("keeps Person and Misc identities distinct when display names are shared", ()
     );
     assert.equal(selection.categoryKind, category.kind);
     assert.equal(selection.category, "Misc");
+    assert.equal(selection.categoryId, category.id);
   }
 });
 

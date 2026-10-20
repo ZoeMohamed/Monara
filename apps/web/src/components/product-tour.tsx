@@ -27,7 +27,7 @@ const steps: TourStep[] = [
   {
     target: "add",
     title: "Add in seconds",
-    body: "Paid cash? Log it here, or just tell Monara “kopi 25rb”.",
+    body: "Paid cash? Log it here, or just tell Monara “coffee 25k”.",
   },
 ];
 
