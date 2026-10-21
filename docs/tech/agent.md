@@ -1,14 +1,14 @@
 # Agent design
 
-Owner: Argya. Features: F10, F11, F12. Status: Draft.
+Owner: Argya. Features: F10, F11, F12, F13, F14. Status: Implemented and reviewed.
 
 ## Purpose
 
-The Agent is designed to let a User log spending and income, correct or undo changes, review imports, set Budgets and ask what they spent. One shared loop serves in-app chat (F11) and WhatsApp (F12). Recurring bills and Reminder settings are not offered in chat yet.
+The Agent lets a User log spending and income, correct or undo changes, review imports, set Budgets and ask what they spent or can afford. One shared loop serves in-app chat (F11) and WhatsApp (F12). On WhatsApp it also turns a receipt photo into a pending transaction (F14) and sends budget alerts (F13). Recurring bills and Reminder settings are not offered in chat yet.
 
 It is built to show the five qualities in PRD section 6.1. It understands colloquial requests and asks when something is missing. It plans multi-step requests across tools. It executes safely through Permission Tiers. Its controls are receipts, Undo and explicit confirmation. Its value is measured by the scenario suite described under How to verify.
 
-Synthetic model scenarios run against an in-memory ledger. The [web Chat bridge](../../apps/web/src/app/api/chat/route.ts), [Agent operation route](../../apps/web/src/app/api/agent/operations/[operation]/route.ts) and [owned financial services](../../apps/web/src/lib/finance/service.ts) now exist. Their allowlist is narrower than the worker tool catalog. The following reconciliation describes source on 14 October 2026; configured-provider and integrated acceptance remain unverified, and this section stays Draft pending Argya's review.
+This section describes `main` at `d8f081c` (18 October 2026) and was reviewed by its owner on that date. The Agent reaches data only through the [web Chat bridge](../../apps/web/src/app/api/chat/route.ts), the [Agent operation route](../../apps/web/src/app/api/agent/operations/[operation]/route.ts) and the [owned financial services](../../apps/web/src/lib/finance/service.ts), whose allowlist is narrower than the worker tool catalog.
 
 ## How it works
 
@@ -45,7 +45,7 @@ sequenceDiagram
 
 | Tier | Tools | What the registry does |
 | --- | --- | --- |
-| T0 read | `get_summary`, `suggest_budget`, five `list_*` tools (`read-tools.ts`) | Runs the tool. |
+| T0 read | `get_summary`, `get_dashboard`, `suggest_budget`, five `list_*` tools (`read-tools.ts`) | Runs the tool. |
 | T1 reversible write | `add_transaction`, `edit_transaction`, `confirm_pending`, `exclude_pending`, `create_budget`, `edit_budget`, `undo_action` (`write-tools.ts`) | Runs the tool and collects the action receipts it returns. |
 | T2 destructive | `delete_transaction`, `delete_budget` (`destructive-tools.ts`) | Never runs anything. Asks the backend for a confirmation. |
 | T3 never in chat | none | The type has no T3, so such a tool cannot be registered. |
@@ -53,6 +53,8 @@ sequenceDiagram
 **Add-transaction conversation.** The prompt tells the model to ask only for what is missing, infer the type from the wording, default the date and time to now, pick the closest Category, and record a clearly stated transaction at once. `add_transaction` accepts only the fields the User gave, fills the rest with null, and parses the result with `createTransactionInputSchema` from `packages/contracts`. A missing Financial Account or amount is rejected there and returned to the model, which then asks the User.
 
 **Echo, correction, and undo.** Supported transaction/budget writes return receipts; the Channel sends these back with history so later corrections can identify the record. The [repository](../../packages/core/src/supabase-finance-repository.ts) stores action logs and reversal state. `undo_action` sends a receipt's `actionId` back; the backend's `undoAction` (`packages/core/src/finance.ts`) reverses an add, an edit, a review decision, or a Budget create or edit within ten minutes. The reversal carries the version the change produced, so it fails with CONFLICT if the record changed since, and each receipt works once. Account and Category changes cannot be undone from chat.
+
+**Voice.** The prompt asks for a relaxed, short reply (one to three lines, at most one emoji) with no stock assistant phrases, and never lets tone change an amount, date or what was saved. Replies never contain an em or en dash: the prompt forbids them and `tidyReply` (`agent.ts`) replaces any the model still writes, keeping ranges such as 10-12.
 
 **Totals.** `get_summary` reads every page of confirmed transactions and adds them up in integer rupiah with `BigInt`. The model is told not to do arithmetic on amounts.
 
@@ -70,7 +72,9 @@ sequenceDiagram
 | `get_summary` | Computed by the worker using supported paginated transaction reads |
 | `suggest_budget` | Implemented as a read-only proposal from the previous three full months of confirmed owned records |
 | Transaction/budget destructive requests and confirmation | Implemented; direct Agent deletion is denied |
+| `get_dashboard` | Implemented; returns the backend's safe-to-spend, overspend, unusual-transaction and savings-rate insights |
 | `undo_action`, `list_reminders` | Implemented; Undo covers transaction and Budget changes |
+| `add_receipt_transaction` | Implemented; Agent-only and WhatsApp-only, always saves a pending transaction |
 | WhatsApp `resolve-sender` and link start, status, unlink | Implemented |
 
 Recurring bills (`list_recurring_bills`, `delete_bill`, `confirm_recurring_bill`), `set_reminder_preferences` and `bulk_edit` have no backend operation, so the Agent does not offer them and says so when asked. T1 and destructive-confirmation action logs exist; complete per-tool/failure audit coverage remains Planned. Voice notes get a fixed reply.
@@ -104,7 +108,8 @@ Open risks:
 - History for in-app chat comes from the caller, rebuilt from the saved chat after a reload. A forged history cannot confirm a delete without a confirmation id the backend issued, but the backend must check every id.
 - The model runs with reasoning switched off, because the provider does not accept function tools with reasoning on its chat completions endpoint.
 - WhatsApp conversation turns sit in Durable Object storage for up to 30 minutes, including the User's number while a reply is waiting to be sent.
-- The webhook, Durable Object and Kapso send path were tested once against the real Kapso number on 13 October, with a local Worker behind a tunnel and every sender unlinked. A linked conversation has not yet run end to end against the real backend.
+- On 16 October a number was linked from Settings and chatted with the deployed Worker and the real backend: the code verified the link, and spending questions and a follow-up were answered from the User's records. Receipt photos and WhatsApp budget alerts were merged on 18 October and have not yet been tried against a real number; they are covered by tests with a fake backend, and the receipt reader by a live model run on a synthetic receipt.
+- Replies are plain text. The model sometimes writes Markdown bold (`**...**`), which WhatsApp shows with the asterisks.
 
 ## How to verify
 
@@ -119,7 +124,7 @@ The tests in `apps/agent/test` use a scripted model and a fake backend. They cov
 
 `sandbox` plays the scenarios in `apps/agent/sandbox/scenarios.ts` against the real model and the in-memory ledger in `sandbox/ledger.ts`. Each scenario checks what happened to the ledger, not the wording. It prints PASS or FAIL per scenario and exits non-zero on any failure.
 
-The following measured results are the owner's historical 13 October record, preserved without a new model/provider run in this continuation.
+The first measured results, from 13 October:
 
 | Suite | Cases | Result on 13 Oct 2026, model `gpt-6-luna` |
 | --- | --- | --- |
@@ -128,6 +133,6 @@ The following measured results are the owner's historical 13 October record, pre
 
 Earlier runs the same day failed on transfers and on T3 escalation before the prompt and tool descriptions were tightened, so the suite is not deterministic. On 16 October, after recurring bills and Reminder preferences were removed from the catalog (the bills and stop-Reminders tasks now check that the Agent says it cannot do them), a full run passed 12 of 12 tasks and 7 of 7 attacks. That came after one run in which the provider began rejecting a prompt-extraction attempt with a new `cyber_policy` code, now treated as a refusal, and the model called a read tool for a cross-User request; the prompt now tells it to refuse those without any tool. These figures are for the in-memory ledger; they are not evidence about the real backend.
 
-The current suite contains 11 tasks and 7 attacks after removing the transfer-writing scenario. No model/provider result has been recorded for that exact suite yet.
+The current suite has 11 tasks and 7 attacks, after the transfer-writing scenario was removed. It passed 11 of 11 tasks and 7 of 7 attacks on 17 October after the casual voice was added, and in each of three runs on 18 October at `00700cd`, whose logs are kept with the evaluation section of the technical documentation.
 
-Run the supported operations against a disposable local Supabase stack and verify owned reads/writes, stale versions, expired/reused confirmations, cross-user rejection and failure recovery before accepting live Chat. Test Google-session identity injection and foreign-origin denial at the web bridge, then configured model/Kapso scenarios separately. Complete the missing backend operations and owner evaluation evidence before claiming every PRD scenario works in both Channels.
+To try it live, link a number from Settings, then on WhatsApp log an expense, undo it, send a receipt photo and reply confirm, and push a Budget past its warning percent between 07:00 and 22:00 Jakarta time to receive the `budget_alert` template.
